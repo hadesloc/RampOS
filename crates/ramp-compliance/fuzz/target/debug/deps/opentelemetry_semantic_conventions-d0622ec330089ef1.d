@@ -1,0 +1,7 @@
+C:\Users\hades\OneDrive\Desktop\New folder (6)\crates\ramp-compliance\fuzz\target\debug\deps\opentelemetry_semantic_conventions-d0622ec330089ef1.d: C:\Users\hades\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-semantic-conventions-0.13.0\src\lib.rs C:\Users\hades\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-semantic-conventions-0.13.0\src\resource.rs C:\Users\hades\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-semantic-conventions-0.13.0\src\trace.rs
+
+C:\Users\hades\OneDrive\Desktop\New folder (6)\crates\ramp-compliance\fuzz\target\debug\deps\libopentelemetry_semantic_conventions-d0622ec330089ef1.rmeta: C:\Users\hades\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-semantic-conventions-0.13.0\src\lib.rs C:\Users\hades\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-semantic-conventions-0.13.0\src\resource.rs C:\Users\hades\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-semantic-conventions-0.13.0\src\trace.rs
+
+C:\Users\hades\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-semantic-conventions-0.13.0\src\lib.rs:
+C:\Users\hades\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-semantic-conventions-0.13.0\src\resource.rs:
+C:\Users\hades\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-semantic-conventions-0.13.0\src\trace.rs:

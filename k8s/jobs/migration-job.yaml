@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rampos-migration
+  namespace: rampos
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  template:
+    spec:
+      containers:
+      - name: migration
+        image: ghcr.io/rampos/rampos:latest
+        command: ["/app/rampos-server", "migrate"]
+        envFrom:
+        - configMapRef:
+            name: rampos-config
+        - secretRef:
+            name: rampos-secret
+      restartPolicy: OnFailure

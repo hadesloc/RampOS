@@ -1,0 +1,113 @@
+{
+  "generated_at": "2026-01-26T09:36:00.258853",
+  "plugins_dir": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow",
+  "plugins_dirs": [
+    "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow",
+    "C:\\Users\\hades\\.claude\\plugins"
+  ],
+  "plugins": [
+    {
+      "name": "ultimate-workflow",
+      "version": "0.2.0",
+      "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0",
+      "skills": [
+        {
+          "name": "build",
+          "description": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build\\SKILL.md"
+        },
+        {
+          "name": "build-approve",
+          "description": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-approve\\SKILL.md"
+        },
+        {
+          "name": "build-development",
+          "description": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-development\\SKILL.md"
+        },
+        {
+          "name": "build-discovery",
+          "description": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-discovery\\SKILL.md"
+        },
+        {
+          "name": "build-gap-detect",
+          "description": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-gap-detect\\SKILL.md"
+        },
+        {
+          "name": "build-memory",
+          "description": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-memory\\SKILL.md"
+        },
+        {
+          "name": "build-planning",
+          "description": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-planning\\SKILL.md"
+        },
+        {
+          "name": "build-qa",
+          "description": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-qa\\SKILL.md"
+        },
+        {
+          "name": "build-resume",
+          "description": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-resume\\SKILL.md"
+        },
+        {
+          "name": "build-status",
+          "description": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-status\\SKILL.md"
+        }
+      ],
+      "agents": [
+        {
+          "name": "fast-helper-agent",
+          "description": "",
+          "model": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\agents\\fast-helper-agent.md"
+        },
+        {
+          "name": "orchestrator-rules",
+          "description": "",
+          "model": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\agents\\orchestrator-rules.md"
+        },
+        {
+          "name": "plan-auditor-agent",
+          "description": "",
+          "model": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\agents\\plan-auditor-agent.md"
+        },
+        {
+          "name": "planner-agent",
+          "description": "",
+          "model": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\agents\\planner-agent.md"
+        },
+        {
+          "name": "product-tester-agent",
+          "description": "",
+          "model": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\agents\\product-tester-agent.md"
+        },
+        {
+          "name": "worker-agent",
+          "description": "",
+          "model": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\agents\\worker-agent.md"
+        }
+      ],
+      "commands": [
+        {
+          "name": "build",
+          "description": "",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\commands\\build.md"
+        }
+      ],
+      "mcp_servers": []
+    }
+  ]
+}

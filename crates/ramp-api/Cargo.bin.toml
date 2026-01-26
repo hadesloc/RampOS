@@ -1,0 +1,3 @@
+[[bin]]
+name = "rampos-server"
+path = "src/main.rs"

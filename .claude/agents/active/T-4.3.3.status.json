@@ -1,0 +1,11 @@
+{
+  "taskId": "T-4.3.3",
+  "status": "completed",
+  "progress": 100,
+  "artifacts": [
+    "tests/load/config.js",
+    "tests/load/payin.js",
+    "tests/load/payout.js",
+    "tests/load/README.md"
+  ]
+}

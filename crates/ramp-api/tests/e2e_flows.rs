@@ -1,0 +1,450 @@
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+    Router,
+};
+use chrono::Utc;
+use ramp_api::{create_router, AppState};
+use ramp_common::{
+    ledger::{AccountType, LedgerCurrency, EntryDirection},
+    types::{IntentId, TenantId, UserId},
+};
+use ramp_core::{
+    event::InMemoryEventPublisher,
+    repository::{tenant::TenantRow, user::UserRow},
+    service::{
+        ledger::LedgerService, payin::PayinService, payout::{PayoutService, ConfirmPayoutRequest, PayoutBankStatus}, trade::TradeService,
+        onboarding::OnboardingService,
+    },
+    test_utils::*,
+};
+use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
+use serde_json::json;
+use sha2::{Digest, Sha256};
+use std::sync::Arc;
+use tower::ServiceExt; // for oneshot
+use uuid::Uuid;
+
+/// Test fixtures and helpers
+mod fixtures {
+    use super::*;
+
+    pub fn test_tenant_id() -> String {
+        "tenant_e2e_flow".to_string()
+    }
+
+    pub fn test_user_id() -> String {
+        "user_e2e_flow".to_string()
+    }
+
+    pub fn test_payin_request(
+        tenant_id: &str,
+        user_id: &str,
+        amount_vnd: i64,
+    ) -> serde_json::Value {
+        json!({
+            "tenantId": tenant_id,
+            "userId": user_id,
+            "amountVnd": amount_vnd,
+            "railsProvider": "VIETCOMBANK",
+            "metadata": {
+                "source": "e2e_flow_test"
+            }
+        })
+    }
+
+    pub fn test_payout_request(
+        tenant_id: &str,
+        user_id: &str,
+        amount_vnd: i64,
+    ) -> serde_json::Value {
+        json!({
+            "tenantId": tenant_id,
+            "userId": user_id,
+            "amountVnd": amount_vnd,
+            "railsProvider": "VIETCOMBANK",
+            "bankAccount": {
+                "bankCode": "VCB",
+                "accountNumber": "1234567890",
+                "accountName": "NGUYEN VAN A"
+            },
+            "metadata": {
+                "source": "e2e_flow_test"
+            }
+        })
+    }
+
+    pub fn test_trade_request(
+        tenant_id: &str,
+        user_id: &str,
+        trade_id: &str,
+        symbol: &str,
+        vnd_delta: i64,
+        crypto_delta: Decimal,
+    ) -> serde_json::Value {
+        json!({
+            "tenantId": tenant_id,
+            "userId": user_id,
+            "tradeId": trade_id,
+            "symbol": symbol,
+            "price": "50000000",
+            "vndDelta": vnd_delta,
+            "cryptoDelta": crypto_delta.to_string(),
+            "timestamp": Utc::now().to_rfc3339(),
+            "metadata": {
+                "source": "e2e_flow_test"
+            }
+        })
+    }
+}
+
+struct TestContext {
+    app: Router,
+    intent_repo: Arc<MockIntentRepository>,
+    ledger_repo: Arc<MockLedgerRepository>,
+    event_publisher: Arc<InMemoryEventPublisher>,
+    payout_service: Arc<PayoutService>,
+    api_key: String,
+    tenant_id: String,
+    user_id: String,
+}
+
+async fn setup_test_app() -> TestContext {
+    // Setup repositories
+    let intent_repo = Arc::new(MockIntentRepository::new());
+    let ledger_repo = Arc::new(MockLedgerRepository::new());
+    let user_repo = Arc::new(MockUserRepository::new());
+    let tenant_repo = Arc::new(MockTenantRepository::new());
+    let event_publisher = Arc::new(InMemoryEventPublisher::new());
+
+    // Constants
+    let tenant_id = fixtures::test_tenant_id();
+    let user_id = fixtures::test_user_id();
+    let api_key = "test_api_key_e2e";
+
+    // Setup tenant
+    let mut hasher = Sha256::new();
+    hasher.update(api_key.as_bytes());
+    let api_key_hash = hex::encode(hasher.finalize());
+
+    tenant_repo.add_tenant(TenantRow {
+        id: tenant_id.clone(),
+        name: "E2E Flow Tenant".to_string(),
+        status: "ACTIVE".to_string(),
+        api_key_hash,
+        webhook_secret_hash: "secret".to_string(),
+        webhook_url: Some("http://localhost:3000/webhook".to_string()),
+        config: serde_json::json!({}),
+        daily_payin_limit_vnd: None,
+        daily_payout_limit_vnd: None,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    });
+
+    // Setup user
+    user_repo.add_user(UserRow {
+        id: user_id.clone(),
+        tenant_id: tenant_id.clone(),
+        status: "ACTIVE".to_string(),
+        kyc_tier: 1,
+        kyc_status: "VERIFIED".to_string(),
+        kyc_verified_at: Some(Utc::now()),
+        risk_score: None,
+        risk_flags: serde_json::json!({}),
+        daily_payin_limit_vnd: None,
+        daily_payout_limit_vnd: None,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    });
+
+    // Setup services
+    let payin_service = Arc::new(PayinService::new(
+        intent_repo.clone(),
+        ledger_repo.clone(),
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let payout_service = Arc::new(PayoutService::new(
+        intent_repo.clone(),
+        ledger_repo.clone(),
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let trade_service = Arc::new(TradeService::new(
+        intent_repo.clone(),
+        ledger_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let ledger_service = Arc::new(LedgerService::new(ledger_repo.clone()));
+    let onboarding_service = Arc::new(OnboardingService::new(
+        tenant_repo.clone(),
+        user_repo.clone(),
+    ));
+
+    let app_state = AppState {
+        payin_service,
+        payout_service: payout_service.clone(),
+        trade_service,
+        ledger_service,
+        onboarding_service,
+        tenant_repo: tenant_repo.clone(),
+        intent_repo: intent_repo.clone(),
+        rate_limiter: None,
+        idempotency_handler: None,
+    };
+
+    let app = create_router(app_state);
+
+    TestContext {
+        app,
+        intent_repo,
+        ledger_repo,
+        event_publisher,
+        payout_service,
+        api_key: api_key.to_string(),
+        tenant_id,
+        user_id,
+    }
+}
+
+/// 1. test_payin_e2e_flow - Full pay-in cycle
+#[tokio::test]
+async fn test_payin_e2e_flow() {
+    let ctx = setup_test_app().await;
+    let amount = 2_000_000i64;
+
+    // Action: POST /v1/intents/payin with valid payload
+    let create_request = fixtures::test_payin_request(&ctx.tenant_id, &ctx.user_id, amount);
+    let request = Request::builder()
+        .uri("/v1/intents/payin")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", ctx.api_key))
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&create_request).unwrap()))
+        .unwrap();
+
+    let response = ctx.app.clone().oneshot(request).await.unwrap();
+
+    // Assert: Response 201 (or 200 OK)
+    assert!(response.status() == StatusCode::CREATED || response.status() == StatusCode::OK);
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+    let intent_id = intent_resp["intentId"].as_str().unwrap().to_string();
+    let reference_code = intent_resp["referenceCode"].as_str().unwrap().to_string();
+
+    // Assert: Intent in Pending state (INSTRUCTION_ISSUED)
+    let status = intent_resp["status"].as_str().unwrap();
+    assert_eq!(status, "INSTRUCTION_ISSUED");
+
+    // Action: POST /v1/intents/payin/{id}/confirm (Simulated via helper or endpoint if available)
+    // The previous tests used /v1/intents/payin/confirm which is likely the webhook callback
+    let confirm_request = json!({
+        "tenantId": ctx.tenant_id,
+        "referenceCode": reference_code,
+        "status": "FUNDS_CONFIRMED",
+        "bankTxId": format!("BANK_TX_{}", Uuid::new_v4()),
+        "amountVnd": amount,
+        "settledAt": Utc::now().to_rfc3339(),
+        "rawPayloadHash": "test_hash"
+    });
+
+    let request_confirm = Request::builder()
+        .uri("/v1/intents/payin/confirm")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", ctx.api_key))
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&confirm_request).unwrap()))
+        .unwrap();
+
+    let response_confirm = ctx.app.clone().oneshot(request_confirm).await.unwrap();
+    assert_eq!(response_confirm.status(), StatusCode::OK);
+
+    // Assert: State transitions to Settled (COMPLETED)
+    let intents = ctx.intent_repo.intents.lock().unwrap();
+    let intent = intents.iter().find(|i| i.id == intent_id).unwrap();
+    assert_eq!(intent.state, "COMPLETED");
+
+    // Assert: Ledger entry exists with correct amounts
+    let txs = ctx.ledger_repo.transactions.lock().unwrap();
+    assert!(!txs.is_empty(), "Ledger should have transactions");
+
+    // Find transaction for this intent
+    let tx = txs.iter().find(|t| t.intent_id.0 == intent_id).expect("Transaction not found");
+
+    // Verify Credit to User Liability
+    let user_credit = tx.entries.iter().find(|e|
+        (e.account_type == AccountType::LiabilityUserVnd || e.account_type.to_string().contains("User")) &&
+        e.direction == EntryDirection::Credit &&
+        e.amount == Decimal::from(amount)
+    );
+    assert!(user_credit.is_some(), "Should have credited user liability");
+
+    // Assert: Webhook event queued
+    // We check the event publisher
+    drop(intents); // Unlock before async call if needed (Mock locks are std::sync::Mutex, safe if no await inside lock)
+    drop(txs);
+
+    let events = ctx.event_publisher.get_events().await;
+    let completed_event = events.iter().find(|e|
+        e["type"] == "intent.status_changed" &&
+        e["new_status"] == "COMPLETED" &&
+        e["intent_id"] == intent_id
+    );
+    assert!(completed_event.is_some(), "Webhook event should be queued");
+}
+
+/// 2. test_payout_e2e_flow - Full pay-out cycle
+#[tokio::test]
+async fn test_payout_e2e_flow() {
+    let ctx = setup_test_app().await;
+    let amount = 500_000i64;
+
+    // Setup: Fund balance
+    ctx.ledger_repo.set_balance(
+        &TenantId::new(&ctx.tenant_id),
+        Some(&UserId::new(&ctx.user_id)),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        Decimal::from(1_000_000), // Sufficient funds
+    );
+
+    // Action: POST /v1/intents/payout
+    let create_request = fixtures::test_payout_request(&ctx.tenant_id, &ctx.user_id, amount);
+    let request = Request::builder()
+        .uri("/v1/intents/payout")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", ctx.api_key))
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&create_request).unwrap()))
+        .unwrap();
+
+    let response = ctx.app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+    let intent_id_str = intent_resp["intentId"].as_str().unwrap().to_string();
+
+    // Assert: State transitions through workflow
+    // Initially should be PAYOUT_SUBMITTED
+    assert_eq!(intent_resp["status"], "PAYOUT_SUBMITTED");
+
+    // Assert: Balance correctly deducted (Hold)
+    // Check pending balance or just check that a Hold transaction was recorded
+    let txs = ctx.ledger_repo.transactions.lock().unwrap();
+    let hold_tx = txs.iter().find(|t| t.intent_id.0 == intent_id_str);
+    assert!(hold_tx.is_some(), "Hold transaction should exist");
+
+    // Complete the payout manually via service (Simulating bank callback/poll)
+    let intent_id = IntentId::new(&intent_id_str);
+    let confirm_req = ConfirmPayoutRequest {
+        tenant_id: TenantId::new(&ctx.tenant_id),
+        intent_id: intent_id.clone(),
+        bank_tx_id: format!("BANK_TX_{}", Uuid::new_v4()),
+        status: PayoutBankStatus::Success,
+    };
+
+    ctx.payout_service.confirm_payout(confirm_req).await.expect("Failed to confirm payout");
+
+    // Verify final state
+    let intents = ctx.intent_repo.intents.lock().unwrap();
+    let intent = intents.iter().find(|i| i.id == intent_id_str).unwrap();
+    assert_eq!(intent.state, "COMPLETED");
+
+    // Assert: Balance deducted
+    drop(txs);
+    let balance = ctx.ledger_repo.get_balance(
+        &TenantId::new(&ctx.tenant_id),
+        Some(&UserId::new(&ctx.user_id)),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND
+    ).await.unwrap();
+
+    // 1M - 500k = 500k
+    assert_eq!(balance, dec!(500_000));
+
+
+    // Sub-test: AML Compliance Check
+    // Action: Trigger AML check (Large amount)
+    let large_amount = 200_000_000i64;
+
+    // Fund enough to cover it so we hit AML not Insufficient Funds
+    ctx.ledger_repo.set_balance(
+        &TenantId::new(&ctx.tenant_id),
+        Some(&UserId::new(&ctx.user_id)),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        Decimal::from(300_000_000),
+    );
+
+    let aml_request = fixtures::test_payout_request(&ctx.tenant_id, &ctx.user_id, large_amount);
+    let request_aml = Request::builder()
+        .uri("/v1/intents/payout")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", ctx.api_key))
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&aml_request).unwrap()))
+        .unwrap();
+
+    let response_aml = ctx.app.clone().oneshot(request_aml).await.unwrap();
+    assert_eq!(response_aml.status(), StatusCode::OK);
+
+    let body_bytes_aml = axum::body::to_bytes(response_aml.into_body(), usize::MAX).await.unwrap();
+    let intent_resp_aml: serde_json::Value = serde_json::from_slice(&body_bytes_aml).unwrap();
+
+    // Assert: AML compliance check triggered -> REJECTED_BY_POLICY
+    assert_eq!(intent_resp_aml["status"], "REJECTED_BY_POLICY");
+}
+
+/// 3. test_trade_e2e_flow - Trade recording
+#[tokio::test]
+async fn test_trade_e2e_flow() {
+    let ctx = setup_test_app().await;
+
+    // Action: POST /v1/events/trade-executed
+    let trade_request = fixtures::test_trade_request(
+        &ctx.tenant_id,
+        &ctx.user_id,
+        "trade_e2e_001",
+        "BTC/VND",
+        -50_000_000, // User sells 50M VND
+        dec!(0.05)   // User buys 0.05 BTC
+    );
+
+    let request = Request::builder()
+        .uri("/v1/events/trade-executed")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", ctx.api_key))
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&trade_request).unwrap()))
+        .unwrap();
+
+    let response = ctx.app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Assert: Ledger entries balanced (sum debits = sum credits)
+    let txs = ctx.ledger_repo.transactions.lock().unwrap();
+    assert!(!txs.is_empty());
+
+    // Get the transaction
+    let tx = txs.iter().find(|t| t.metadata["tradeId"] == "trade_e2e_001" || t.intent_id.0.len() > 0).unwrap();
+
+    // Verify VND Balance
+    let vnd_entries: Vec<_> = tx.entries.iter().filter(|e| e.currency == LedgerCurrency::VND).collect();
+    let vnd_debits: Decimal = vnd_entries.iter().filter(|e| e.direction == EntryDirection::Debit).map(|e| e.amount).sum();
+    let vnd_credits: Decimal = vnd_entries.iter().filter(|e| e.direction == EntryDirection::Credit).map(|e| e.amount).sum();
+
+    assert_eq!(vnd_debits, vnd_credits, "VND entries should be balanced");
+    assert!(vnd_debits > Decimal::ZERO, "Should have VND movement");
+
+    // Verify BTC Balance
+    let btc_entries: Vec<_> = tx.entries.iter().filter(|e| e.currency == LedgerCurrency::BTC).collect();
+    let btc_debits: Decimal = btc_entries.iter().filter(|e| e.direction == EntryDirection::Debit).map(|e| e.amount).sum();
+    let btc_credits: Decimal = btc_entries.iter().filter(|e| e.direction == EntryDirection::Credit).map(|e| e.amount).sum();
+
+    assert_eq!(btc_debits, btc_credits, "BTC entries should be balanced");
+    assert!(btc_debits > Decimal::ZERO, "Should have BTC movement");
+}

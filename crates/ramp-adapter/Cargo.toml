@@ -1,0 +1,17 @@
+[package]
+name = "ramp-adapter"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+ramp-common = { path = "../ramp-common" }
+
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+rust_decimal = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }

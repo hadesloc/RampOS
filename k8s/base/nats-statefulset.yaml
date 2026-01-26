@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rampos-nats
+  namespace: rampos
+spec:
+  serviceName: rampos-nats
+  replicas: 3
+  selector:
+    matchLabels:
+      app: rampos-nats
+  template:
+    metadata:
+      labels:
+        app: rampos-nats
+    spec:
+      containers:
+      - name: nats
+        image: nats:2.10-alpine
+        args:
+        - "-js"
+        ports:
+        - containerPort: 4222
+        - containerPort: 8222 # Monitor
+        - containerPort: 6222 # Cluster
+        volumeMounts:
+        - name: nats-data
+          mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+  volumeClaimTemplates:
+  - metadata:
+      name: nats-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rampos-nats
+  namespace: rampos
+spec:
+  ports:
+  - port: 4222
+    name: client
+  - port: 8222
+    name: monitor
+  clusterIP: None
+  selector:
+    app: rampos-nats

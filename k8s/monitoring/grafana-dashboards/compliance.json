@@ -1,0 +1,60 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": 3,
+  "links": [],
+  "panels": [
+    {
+      "title": "AML Check Volume",
+      "type": "graph",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(ramp_aml_check_total[1h]))",
+          "legendFormat": "Checks/hr"
+        }
+      ]
+    },
+    {
+      "title": "Flagged Transactions Rate",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(ramp_aml_flagged_total[1h])) / sum(rate(ramp_aml_check_total[1h])) * 100",
+          "legendFormat": "Flagged %"
+        }
+      ]
+    },
+    {
+      "title": "KYC Verifications",
+      "type": "bar-gauge",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(increase(ramp_kyc_verification_total[24h]))",
+          "legendFormat": "Daily KYC"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": ["ramp-os", "compliance"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "RampOS - Compliance",
+  "uid": "rampos-compliance",
+  "version": 1
+}

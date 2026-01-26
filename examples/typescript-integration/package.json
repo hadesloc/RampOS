@@ -1,0 +1,24 @@
+{
+  "name": "rampos-ts-example",
+  "version": "1.0.0",
+  "description": "Example integration with RampOS using TypeScript SDK",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "ts-node src/index.ts",
+    "webhook": "ts-node src/webhook-server.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@rampos/sdk": "file:../../sdk",
+    "axios": "^1.6.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.18.0",
+    "body-parser": "^1.20.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.0",
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  }
+}

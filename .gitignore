@@ -1,0 +1,16 @@
+/target
+/out
+/cache
+/node_modules
+/.env
+*.log
+*.pem
+*.key
+.DS_Store
+Thumbs.db
+
+# Kubernetes Secrets
+k8s/**/secret.yaml
+k8s/base/secret.yaml
+!k8s/base/secret.example.yaml
+

@@ -1,0 +1,541 @@
+warning: field `webhook_secret` is never read
+  --> crates\ramp-adapter\src\adapters\vietqr.rs:11:5
+   |
+ 9 | pub struct VietQRAdapter {
+   |            ------------- field in this struct
+10 |     provider_code: String,
+11 |     webhook_secret: String,
+   |     ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `webhook_secret` is never read
+  --> crates\ramp-adapter\src\adapters\napas.rs:11:5
+   |
+ 9 | pub struct NapasAdapter {
+   |            ------------ field in this struct
+10 |     provider_code: String,
+11 |     webhook_secret: String,
+   |     ^^^^^^^^^^^^^^
+
+warning: `ramp-adapter` (lib) generated 2 warnings
+warning: unused import: `CaseStatus`
+ --> crates\ramp-compliance\src\actions.rs:2:34
+  |
+2 | use crate::types::{CaseSeverity, CaseStatus, CaseType, RiskScore};
+  |                                  ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `Deserialize`
+  --> crates\ramp-compliance\src\aml.rs:14:13
+   |
+14 | use serde::{Deserialize, Serialize};
+   |             ^^^^^^^^^^^
+
+warning: unused imports: `TenantId` and `UserId`
+ --> crates\ramp-compliance\src\kyc\workflow.rs:3:26
+  |
+3 | use ramp_common::types::{TenantId, UserId};
+  |                          ^^^^^^^^  ^^^^^^
+
+warning: unused import: `std::time::Duration`
+ --> crates\ramp-compliance\src\kyc\workflow.rs:5:5
+  |
+5 | use std::time::Duration;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `warn`
+ --> crates\ramp-compliance\src\kyc\workflow.rs:6:40
+  |
+6 | use tracing::{error, info, instrument, warn};
+  |                                        ^^^^
+
+warning: unused import: `std::sync::Arc`
+  --> crates\ramp-compliance\src\reconciliation.rs:11:5
+   |
+11 | use std::sync::Arc;
+   |     ^^^^^^^^^^^^^^
+
+warning: unused imports: `error` and `warn`
+  --> crates\ramp-compliance\src\reconciliation.rs:13:15
+   |
+13 | use tracing::{error, info, warn};
+   |               ^^^^^        ^^^^
+
+warning: unused imports: `IntentId` and `TenantId`
+  --> crates\ramp-compliance\src\reconciliation.rs:16:26
+   |
+16 | use ramp_common::types::{IntentId, TenantId};
+   |                          ^^^^^^^^  ^^^^^^^^
+
+warning: unused import: `error`
+  --> crates\ramp-compliance\src\reports\generator.rs:10:15
+   |
+10 | use tracing::{error, info};
+   |               ^^^^^
+
+warning: unused import: `uuid::Uuid`
+  --> crates\ramp-compliance\src\reports\generator.rs:11:5
+   |
+11 | use uuid::Uuid;
+   |     ^^^^^^^^^^
+
+warning: unused import: `uuid::Uuid`
+ --> crates\ramp-compliance\src\reports\types.rs:5:5
+  |
+5 | use uuid::Uuid;
+  |     ^^^^^^^^^^
+
+warning: unused import: `std::sync::Arc`
+ --> crates\ramp-compliance\src\sanctions\opensanctions.rs:6:5
+  |
+6 | use std::sync::Arc;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `uuid::Uuid`
+ --> crates\ramp-compliance\src\storage\mod.rs:4:5
+  |
+4 | use uuid::Uuid;
+  |     ^^^^^^^^^^
+
+warning: unused import: `config::Region`
+ --> crates\ramp-compliance\src\storage\s3.rs:5:5
+  |
+5 |     config::Region, presigning::PresigningConfig, primitives::ByteStream,
+  |     ^^^^^^^^^^^^^^
+
+warning: use of deprecated function `aws_config::load_from_env`: Use the `aws_config::load_defaults` function. If you don't care about future default behavior changes, you can continue to use this function by enabling the `behavior-version-latest` feature. Doing so will make this deprecation notice go away.
+  --> crates\ramp-compliance\src\storage\s3.rs:23:34
+   |
+23 |         let config = aws_config::load_from_env().await;
+   |                                  ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: unused variable: `case`
+  --> crates\ramp-compliance\src\case.rs:56:13
+   |
+56 |         let case = AmlCase {
+   |             ^^^^ help: if this is intentional, prefix it with an underscore: `_case`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `ctx`
+   --> crates\ramp-compliance\src\aml.rs:290:30
+    |
+290 |     async fn evaluate(&self, ctx: &RuleContext) -> Result<RuleResult> {
+    |                              ^^^ help: if this is intentional, prefix it with an underscore: `_ctx`
+
+warning: unused variable: `ctx`
+   --> crates\ramp-compliance\src\aml.rs:324:30
+    |
+324 |     async fn evaluate(&self, ctx: &RuleContext) -> Result<RuleResult> {
+    |                              ^^^ help: if this is intentional, prefix it with an underscore: `_ctx`
+
+warning: unused variable: `case_id`
+  --> crates\ramp-compliance\src\case\notes.rs:84:35
+   |
+84 |     pub async fn get_notes(&self, case_id: &str) -> Result<Vec<CaseNote>> {
+   |                                   ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_case_id`
+
+warning: unused variable: `case_id`
+  --> crates\ramp-compliance\src\case\notes.rs:90:42
+   |
+90 |     pub async fn get_public_notes(&self, case_id: &str) -> Result<Vec<CaseNote>> {
+   |                                          ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_case_id`
+
+warning: unused variable: `tenant_id`
+   --> crates\ramp-compliance\src\case.rs:152:9
+    |
+152 |         tenant_id: &TenantId,
+    |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_tenant_id`
+
+warning: unused variable: `user_id`
+   --> crates\ramp-compliance\src\case.rs:153:9
+    |
+153 |         user_id: &UserId,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_user_id`
+
+warning: unused variable: `tenant_id`
+   --> crates\ramp-compliance\src\case.rs:160:40
+    |
+160 |     pub async fn get_open_cases(&self, tenant_id: &TenantId) -> Result<Vec<AmlCase>> {
+    |                                        ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_tenant_id`
+
+warning: unused variable: `documents`
+  --> crates\ramp-compliance\src\kyc\workflow.rs:54:9
+   |
+54 |         documents: &[KycDocument],
+   |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_documents`
+
+warning: unused variable: `def`
+   --> crates\ramp-compliance\src\rule_parser.rs:500:27
+    |
+500 |     fn create_custom_rule(def: &RuleDefinition) -> Result<CompiledRule, RuleParseError> {
+    |                           ^^^ help: if this is intentional, prefix it with an underscore: `_def`
+
+warning: fields `max_count`, `window`, and `min_total` are never read
+   --> crates\ramp-compliance\src\aml.rs:265:5
+    |
+264 | pub struct VelocityRule {
+    |            ------------ fields in this struct
+265 |     max_count: u32,
+    |     ^^^^^^^^^
+266 |     window: Duration,
+    |     ^^^^^^
+267 |     min_total: Decimal,
+    |     ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `max_count`, `window`, and `threshold` are never read
+   --> crates\ramp-compliance\src\aml.rs:299:5
+    |
+298 | pub struct StructuringRule {
+    |            --------------- fields in this struct
+299 |     max_count: u32,
+    |     ^^^^^^^^^
+300 |     window: Duration,
+    |     ^^^^^^
+301 |     threshold: Decimal,
+    |     ^^^^^^^^^
+
+warning: field `min_time_between` is never read
+   --> crates\ramp-compliance\src\aml.rs:371:5
+    |
+370 | pub struct UnusualPayoutRule {
+    |            ----------------- field in this struct
+371 |     min_time_between: Duration,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: field `max_history_items` is never read
+  --> crates\ramp-compliance\src\aml\device_anomaly.rs:89:5
+   |
+87 | pub struct DeviceAnomalyRule {
+   |            ----------------- field in this struct
+88 |     store: Arc<dyn DeviceHistoryStore>,
+89 |     max_history_items: usize,
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: `ramp-compliance` (lib) generated 29 warnings (run `cargo fix --lib -p ramp-compliance` to apply 24 suggestions)
+    Checking ramp-core v0.1.0 (C:\Users\hades\OneDrive\Desktop\New folder (6)\crates\ramp-core)
+error[E0433]: failed to resolve: use of undeclared type `Duration`
+  --> crates\ramp-core\src\service\trade.rs:78:32
+   |
+78 |         let expires_at = now + Duration::minutes(5);
+   |                                ^^^^^^^^ use of undeclared type `Duration`
+   |
+   = note: struct `crate::workflows::trade_activities::Duration` exists but is inaccessible
+help: consider importing one of these items
+   |
+ 1 + use std::time::Duration;
+   |
+ 1 + use chrono::Duration;
+   |
+ 1 + use tokio::time::Duration;
+   |
+
+error[E0433]: failed to resolve: use of unresolved module or unlinked crate `patterns`
+   --> crates\ramp-core\src\workflows\payout.rs:299:18
+    |
+299 |         let tx = patterns::payout_vnd_initiated(
+    |                  ^^^^^^^^ use of unresolved module or unlinked crate `patterns`
+    |
+    = help: if you wanted to use a crate named `patterns`, use `cargo add patterns` to add it to your `Cargo.toml`
+help: consider importing one of these modules
+    |
+  1 + use ramp_common::ledger::patterns;
+    |
+  1 + use ramp_ledger::patterns;
+    |
+
+error[E0433]: failed to resolve: use of unresolved module or unlinked crate `patterns`
+   --> crates\ramp-core\src\workflows\payout.rs:320:18
+    |
+320 |         let tx = patterns::payout_vnd_confirmed(
+    |                  ^^^^^^^^ use of unresolved module or unlinked crate `patterns`
+    |
+    = help: if you wanted to use a crate named `patterns`, use `cargo add patterns` to add it to your `Cargo.toml`
+help: consider importing one of these modules
+    |
+  1 + use ramp_common::ledger::patterns;
+    |
+  1 + use ramp_ledger::patterns;
+    |
+
+error[E0433]: failed to resolve: could not find `LedgerEntryId` in `types`
+   --> crates\ramp-core\src\workflows\payout.rs:347:45
+    |
+347 |                     id: ramp_common::types::LedgerEntryId::new(),
+    |                                             ^^^^^^^^^^^^^ could not find `LedgerEntryId` in `types`
+    |
+help: consider importing one of these structs
+    |
+  1 + use ramp_common::ledger::LedgerEntryId;
+    |
+  1 + use ramp_ledger::LedgerEntryId;
+    |
+help: if you import `LedgerEntryId`, refer to it directly
+    |
+347 -                     id: ramp_common::types::LedgerEntryId::new(),
+347 +                     id: LedgerEntryId::new(),
+    |
+
+error[E0433]: failed to resolve: could not find `LedgerEntryId` in `types`
+   --> crates\ramp-core\src\workflows\payout.rs:362:45
+    |
+362 |                     id: ramp_common::types::LedgerEntryId::new(),
+    |                                             ^^^^^^^^^^^^^ could not find `LedgerEntryId` in `types`
+    |
+help: consider importing one of these structs
+    |
+  1 + use ramp_common::ledger::LedgerEntryId;
+    |
+  1 + use ramp_ledger::LedgerEntryId;
+    |
+help: if you import `LedgerEntryId`, refer to it directly
+    |
+362 -                     id: ramp_common::types::LedgerEntryId::new(),
+362 +                     id: LedgerEntryId::new(),
+    |
+
+warning: unused import: `crate::repository::audit::AuditRepository`
+ --> crates\ramp-core\src\repository\mod.rs:3:5
+  |
+3 | use crate::repository::audit::AuditRepository;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `UserId`
+ --> crates\ramp-core\src\repository\mod.rs:4:36
+  |
+4 | use ramp_common::types::{TenantId, UserId};
+  |                                    ^^^^^^
+
+warning: unused imports: `IntentType`, `PayinState`, `PayoutState`, `TradeState`, and `VndAmount`
+ --> crates\ramp-core\src\repository\intent.rs:4:14
+  |
+4 |     intent::{IntentType, PayinState, PayoutState, TradeState},
+  |              ^^^^^^^^^^  ^^^^^^^^^^  ^^^^^^^^^^^  ^^^^^^^^^^
+5 |     types::{IdempotencyKey, IntentId, ReferenceCode, TenantId, UserId, VndAmount},
+  |                                                                        ^^^^^^^^^
+
+warning: unused import: `LedgerEntry`
+ --> crates\ramp-core\src\repository\ledger.rs:4:59
+  |
+4 |     ledger::{AccountType, EntryDirection, LedgerCurrency, LedgerEntry, LedgerTransaction},
+  |                                                           ^^^^^^^^^^^
+
+warning: unused imports: `AccountType`, `LedgerCurrency`, and `PayinIntent`
+ --> crates\ramp-core\src\service\payin.rs:3:14
+  |
+3 |     intent::{PayinIntent, PayinState},
+  |              ^^^^^^^^^^^
+4 |     ledger::{patterns, AccountType, LedgerCurrency},
+  |                        ^^^^^^^^^^^  ^^^^^^^^^^^^^^
+
+warning: unused imports: `PgIntentRepository`, `PgLedgerRepository`, and `PgUserRepository`
+  --> crates\ramp-core\src\service\payin.rs:13:43
+   |
+13 |     intent::{IntentRepository, IntentRow, PgIntentRepository},
+   |                                           ^^^^^^^^^^^^^^^^^^
+14 |     ledger::{LedgerRepository, PgLedgerRepository},
+   |                                ^^^^^^^^^^^^^^^^^^
+15 |     user::{UserRepository, PgUserRepository},
+   |                            ^^^^^^^^^^^^^^^^
+
+warning: unused import: `IntentId`
+ --> crates\ramp-core\src\service\ledger.rs:3:13
+  |
+3 |     types::{IntentId, TenantId, UserId},
+  |             ^^^^^^^^
+
+warning: unused import: `crypto::generate_webhook_signature`
+ --> crates\ramp-core\src\service\webhook.rs:9:5
+  |
+9 |     crypto::generate_webhook_signature,
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `intent::IntentType`
+ --> crates\ramp-core\src\service\timeout.rs:4:5
+  |
+4 |     intent::IntentType,
+  |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `AccountType`, `LedgerCurrency`, `LedgerTransactionBuilder`, and `LedgerTransaction`
+ --> crates\ramp-core\src\service\onboarding.rs:3:14
+  |
+3 |     ledger::{AccountType, LedgerCurrency, LedgerTransaction, LedgerTransactionBuilder},
+  |              ^^^^^^^^^^^  ^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `rand::Rng`
+ --> crates\ramp-core\src\service\onboarding.rs:7:5
+  |
+7 | use rand::Rng;
+  |     ^^^^^^^^^
+
+warning: unused import: `Deserialize`
+ --> crates\ramp-core\src\service\onboarding.rs:9:13
+  |
+9 | use serde::{Deserialize, Serialize};
+  |             ^^^^^^^^^^^
+
+warning: unused import: `ramp_common::types::*`
+  --> crates\ramp-core\src\workflows\mod.rs:12:5
+   |
+12 | use ramp_common::types::*;
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Instrument` and `warn`
+  --> crates\ramp-core\src\workflows\worker.rs:14:28
+   |
+14 | use tracing::{error, info, warn, instrument, Instrument};
+   |                            ^^^^              ^^^^^^^^^^
+
+warning: unused imports: `RetryPolicy`, `WorkflowConfig`, and `trade_activities`
+  --> crates\ramp-core\src\workflows\worker.rs:21:5
+   |
+21 |     WorkflowConfig, RetryPolicy,
+   |     ^^^^^^^^^^^^^^  ^^^^^^^^^^^
+22 |     payin_activities, trade_activities, // payout_activities removed
+   |                       ^^^^^^^^^^^^^^^^
+
+warning: unused import: `Error`
+  --> crates\ramp-core\src\workflows\worker.rs:29:27
+   |
+29 | use ramp_common::{Result, Error};
+   |                           ^^^^^
+
+warning: unused import: `std::time::Duration`
+  --> crates\ramp-core\src\workflows\trade.rs:10:5
+   |
+10 | use std::time::Duration;
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Instrument`
+  --> crates\ramp-core\src\temporal_worker.rs:14:46
+   |
+14 | use tracing::{error, info, warn, instrument, Instrument};
+   |                                              ^^^^^^^^^^
+
+warning: unused imports: `RetryPolicy` and `WorkflowConfig`
+  --> crates\ramp-core\src\temporal_worker.rs:21:5
+   |
+21 |     WorkflowConfig, RetryPolicy,
+   |     ^^^^^^^^^^^^^^  ^^^^^^^^^^^
+
+warning: unused import: `Error`
+  --> crates\ramp-core\src\temporal_worker.rs:28:27
+   |
+28 | use ramp_common::{Result, Error};
+   |                           ^^^^^
+
+warning: unused import: `intent::*`
+  --> crates\ramp-core\src\test_utils.rs:4:5
+   |
+ 4 |     intent::*,
+   |     ^^^^^^^^^
+   |
+help: if this is a test module, consider adding a `#[cfg(test)]` to the containing module
+  --> crates\ramp-core\src\lib.rs:20:1
+   |
+20 | pub mod test_utils;
+   | ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `DateTime`
+  --> crates\ramp-core\src\test_utils.rs:10:14
+   |
+10 | use chrono::{DateTime, Utc};
+   |              ^^^^^^^^
+   |
+help: if this is a test module, consider adding a `#[cfg(test)]` to the containing module
+  --> crates\ramp-core\src\lib.rs:20:1
+   |
+20 | pub mod test_utils;
+   | ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Row`
+  --> crates\ramp-core\src\repository\ledger.rs:10:29
+   |
+10 | use sqlx::{FromRow, PgPool, Row};
+   |                             ^^^
+
+warning: unused variable: `api_key_pair`
+  --> crates\ramp-core\src\service\onboarding.rs:51:14
+   |
+51 |         let (api_key_pair, api_key_hash) = self.generate_api_key_internal();
+   |              ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_api_key_pair`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `webhook_secret`
+  --> crates\ramp-core\src\service\onboarding.rs:54:14
+   |
+54 |         let (webhook_secret, webhook_secret_hash) = self.generate_secret_internal();
+   |              ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_webhook_secret`
+
+warning: unused variable: `wf_result`
+   --> crates\ramp-core\src\workflows\worker.rs:342:16
+    |
+342 |             Ok(wf_result) => {
+    |                ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_wf_result`
+
+warning: unused variable: `reference`
+   --> crates\ramp-core\src\workflows\worker.rs:382:13
+    |
+382 |         let reference = match payin_activities::issue_instruction(&input).await {
+    |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_reference`
+
+warning: unused variable: `e`
+   --> crates\ramp-core\src\workflows\worker.rs:384:17
+    |
+384 |             Err(e) => {
+    |                 ^ help: if this is intentional, prefix it with an underscore: `_e`
+
+warning: unused variable: `tenant_id`
+  --> crates\ramp-core\src\workflows\mod.rs:73:9
+   |
+73 |         tenant_id: &str,
+   |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_tenant_id`
+
+warning: unused variable: `user_id`
+  --> crates\ramp-core\src\workflows\mod.rs:74:9
+   |
+74 |         user_id: &str,
+   |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_user_id`
+
+warning: unused variable: `payload`
+  --> crates\ramp-core\src\workflows\mod.rs:90:9
+   |
+90 |         payload: serde_json::Value,
+   |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_payload`
+
+warning: unused variable: `timeout`
+  --> crates\ramp-core\src\workflows\mod.rs:59:9
+   |
+59 |         timeout: Duration,
+   |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_timeout`
+
+warning: unused variable: `wf_result`
+   --> crates\ramp-core\src\temporal_worker.rs:342:16
+    |
+342 |             Ok(wf_result) => {
+    |                ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_wf_result`
+
+warning: unused variable: `reference`
+   --> crates\ramp-core\src\temporal_worker.rs:382:13
+    |
+382 |         let reference = match payin_activities::issue_instruction(&input).await {
+    |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_reference`
+
+warning: unused variable: `e`
+   --> crates\ramp-core\src\temporal_worker.rs:384:17
+    |
+384 |             Err(e) => {
+    |                 ^ help: if this is intentional, prefix it with an underscore: `_e`
+
+For more information about this error, try `rustc --explain E0433`.
+warning: `ramp-core` (lib) generated 35 warnings
+error: could not compile `ramp-core` (lib) due to 5 previous errors; 35 warnings emitted

@@ -1,0 +1,75 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": 2,
+  "links": [],
+  "panels": [
+    {
+      "title": "Intent Volume (Payin vs Payout)",
+      "type": "graph",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(ramp_payin_total[1m]))",
+          "legendFormat": "Payins"
+        },
+        {
+          "expr": "sum(rate(ramp_payout_total[1m]))",
+          "legendFormat": "Payouts"
+        }
+      ]
+    },
+    {
+      "title": "Intent Completion Rate",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(ramp_intent_completed_total[1h])) / sum(rate(ramp_intent_created_total[1h])) * 100",
+          "legendFormat": "Completion %"
+        }
+      ]
+    },
+    {
+      "title": "Failed Intents",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(ramp_intent_failed_total[1h]))",
+          "legendFormat": "Failures/hr"
+        }
+      ]
+    },
+    {
+      "title": "Intent Processing Duration",
+      "type": "heatmap",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(ramp_intent_duration_seconds_bucket[5m])",
+          "format": "heatmap"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": ["ramp-os", "business"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "RampOS - Intent Flow",
+  "uid": "rampos-intent-flow",
+  "version": 1
+}

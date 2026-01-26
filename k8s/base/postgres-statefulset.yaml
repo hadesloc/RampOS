@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rampos-postgres
+  namespace: rampos
+spec:
+  serviceName: rampos-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rampos-postgres
+  template:
+    metadata:
+      labels:
+        app: rampos-postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        env:
+        - name: POSTGRES_USER
+          value: rampos
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rampos-secret
+              key: DATABASE_PASSWORD
+        - name: POSTGRES_DB
+          value: rampos
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rampos-postgres
+  namespace: rampos
+spec:
+  ports:
+  - port: 5432
+  clusterIP: None
+  selector:
+    app: rampos-postgres

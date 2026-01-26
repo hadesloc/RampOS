@@ -1,0 +1,59 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rampos-alerts
+  namespace: monitoring
+  labels:
+    prometheus: k8s
+    role: alert-rules
+spec:
+  groups:
+  - name: rampos.rules
+    rules:
+    # API Alerts
+    - alert: APIHighLatency
+      expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 0.5
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High API Latency (p99 > 500ms)"
+        description: "API p99 latency is {{ $value }}s for more than 5 minutes."
+
+    - alert: APIHighErrorRate
+      expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) * 100 > 1
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "High API Error Rate (> 1%)"
+        description: "API 5xx error rate is {{ $value }}% for more than 5 minutes."
+
+    # Intent Alerts
+    - alert: IntentFailureSpike
+      expr: sum(rate(ramp_intent_failed_total[5m])) > 10
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Spike in Failed Intents"
+        description: "Intent failure rate is {{ $value }} per second."
+
+    # Infrastructure Alerts
+    - alert: HighPodRestarts
+      expr: increase(kube_pod_container_status_restarts_total[15m]) > 3
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Frequent Pod Restarts"
+        description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in 15 minutes."
+
+    - alert: PVCUsageHigh
+      expr: kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes * 100 > 80
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: "PVC Disk Usage High"
+        description: "PVC {{ $labels.persistentvolumeclaim }} is at {{ $value }}% usage."

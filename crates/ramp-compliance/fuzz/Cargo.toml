@@ -1,0 +1,21 @@
+[package]
+name = "ramp-compliance-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+ramp-compliance = { path = ".." }
+serde_json = "1.0"
+
+[[bin]]
+name = "rule_parser_target"
+path = "fuzz_targets/rule_parser_target.rs"
+test = false
+doc = false

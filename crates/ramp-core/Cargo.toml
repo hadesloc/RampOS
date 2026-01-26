@@ -1,0 +1,44 @@
+[package]
+name = "ramp-core"
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = []
+nats = ["async-nats"]
+# Enable full HTTP client for webhook delivery (requires gcc on Windows for rustls)
+http-client = ["reqwest"]
+
+[dependencies]
+ramp-common = { path = "../ramp-common" }
+ramp-compliance = { path = "../ramp-compliance" }
+ramp-adapter = { path = "../ramp-adapter" }
+ramp-ledger = { path = "../ramp-ledger" }
+
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+rust_decimal = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+config = { workspace = true }
+hex = { workspace = true }
+
+sqlx = { workspace = true }
+redis = { workspace = true }
+
+# Optional dependencies (require additional tooling on Windows)
+async-nats = { workspace = true, optional = true }
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"], optional = true }
+sha2.workspace = true
+rand.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+rust_decimal_macros = "1.33"
+wiremock = "0.6.5"
+mockall = "0.14.0"

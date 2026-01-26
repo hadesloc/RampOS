@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: rampos-postgres
+    environment:
+      POSTGRES_USER: rampos
+      POSTGRES_PASSWORD: rampos_secret
+      POSTGRES_DB: rampos
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rampos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: rampos-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # NATS JetStream
+  nats:
+    image: nats:2.10-alpine
+    container_name: rampos-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: --jetstream --store_dir /data
+    volumes:
+      - nats_data:/data
+
+  # ClickHouse Analytics
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: rampos-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  # RampOS API Server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rampos-api
+    ports:
+      - "8080:8080"
+    environment:
+      RAMPOS__DATABASE__URL: postgres://rampos:rampos_secret@postgres:5432/rampos
+      RAMPOS__REDIS__URL: redis://redis:6379
+      RAMPOS__NATS__URL: nats://nats:4222
+      RAMPOS__SERVER__HOST: 0.0.0.0
+      RAMPOS__SERVER__PORT: 8080
+      RUST_LOG: info,ramp_api=debug,ramp_core=debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+  nats_data:
+  clickhouse_data:

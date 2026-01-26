@@ -1,0 +1,1649 @@
+{
+  "generated_at": "2026-01-26T09:36:12.975666",
+  "enabled_plugins": [
+    [
+      "pyright-lsp",
+      "claude-plugins-official"
+    ],
+    [
+      "audit-context-building",
+      "trailofbits"
+    ],
+    [
+      "feature-dev",
+      "claude-plugins-official"
+    ],
+    [
+      "plugin-super-factory",
+      "hades-local"
+    ],
+    [
+      "rlm-agent",
+      "rlm-local"
+    ],
+    [
+      "property-based-testing",
+      "trailofbits"
+    ],
+    [
+      "frontend-design",
+      "claude-plugins-official"
+    ],
+    [
+      "spec-to-code-compliance",
+      "trailofbits"
+    ],
+    [
+      "entry-point-analyzer",
+      "trailofbits"
+    ],
+    [
+      "super-meta-factory",
+      "trailofbits"
+    ],
+    [
+      "testing-handbook-skills",
+      "trailofbits"
+    ],
+    [
+      "plugin-factory",
+      "ultimate-workflow-local"
+    ],
+    [
+      "content-skills",
+      "baoyu-skills"
+    ],
+    [
+      "rust-analyzer-lsp",
+      "claude-plugins-official"
+    ],
+    [
+      "utility-skills",
+      "baoyu-skills"
+    ],
+    [
+      "culture-index",
+      "trailofbits"
+    ],
+    [
+      "document-skills",
+      "anthropic-agent-skills"
+    ],
+    [
+      "context7",
+      "claude-plugins-official"
+    ],
+    [
+      "ultimate-workflow",
+      "ultimate-workflow-local"
+    ],
+    [
+      "fix-review",
+      "trailofbits"
+    ],
+    [
+      "code-simplifier",
+      "claude-plugins-official"
+    ],
+    [
+      "constant-time-analysis",
+      "trailofbits"
+    ],
+    [
+      "ai-generation-skills",
+      "baoyu-skills"
+    ],
+    [
+      "typescript-lsp",
+      "claude-plugins-official"
+    ],
+    [
+      "differential-review",
+      "trailofbits"
+    ],
+    [
+      "semgrep-rule-variant-creator",
+      "trailofbits"
+    ],
+    [
+      "dwarf-expert",
+      "trailofbits"
+    ],
+    [
+      "variant-analysis",
+      "trailofbits"
+    ],
+    [
+      "local-plugin-installer",
+      "trailofbits"
+    ],
+    [
+      "ask-questions-if-underspecified",
+      "trailofbits"
+    ],
+    [
+      "burpsuite-project-parser",
+      "trailofbits"
+    ],
+    [
+      "static-analysis",
+      "trailofbits"
+    ],
+    [
+      "sharp-edges",
+      "trailofbits"
+    ],
+    [
+      "example-skills",
+      "anthropic-agent-skills"
+    ],
+    [
+      "code-review",
+      "claude-plugins-official"
+    ],
+    [
+      "playwright",
+      "claude-plugins-official"
+    ],
+    [
+      "plugin-dev",
+      "claude-plugins-official"
+    ],
+    [
+      "plugin-factory",
+      "trailofbits"
+    ],
+    [
+      "superpowers",
+      "claude-plugins-official"
+    ],
+    [
+      "building-secure-contracts",
+      "trailofbits"
+    ],
+    [
+      "semgrep-rule-creator",
+      "trailofbits"
+    ],
+    [
+      "greptile",
+      "claude-plugins-official"
+    ]
+  ],
+  "plugins": [
+    {
+      "name": "document-skills",
+      "description": "Collection of document processing suite including Excel, Word, PowerPoint, and PDF capabilities",
+      "marketplace": "anthropic-agent-skills",
+      "category": ""
+    },
+    {
+      "name": "example-skills",
+      "description": "Collection of example skills demonstrating various capabilities including skill creation, MCP building, visual design, algorithmic art, internal communications, web testing, artifact building, Slack GIFs, and theme styling",
+      "marketplace": "anthropic-agent-skills",
+      "category": ""
+    },
+    {
+      "name": "content-skills",
+      "description": "Content generation and publishing skills",
+      "marketplace": "baoyu-skills",
+      "category": ""
+    },
+    {
+      "name": "ai-generation-skills",
+      "description": "AI-powered generation backends",
+      "marketplace": "baoyu-skills",
+      "category": ""
+    },
+    {
+      "name": "utility-skills",
+      "description": "Utility tools for content processing",
+      "marketplace": "baoyu-skills",
+      "category": ""
+    },
+    {
+      "name": "typescript-lsp",
+      "description": "TypeScript/JavaScript language server for enhanced code intelligence",
+      "marketplace": "claude-plugins-official",
+      "category": "development"
+    },
+    {
+      "name": "pyright-lsp",
+      "description": "Python language server (Pyright) for type checking and code intelligence",
+      "marketplace": "claude-plugins-official",
+      "category": "development"
+    },
+    {
+      "name": "rust-analyzer-lsp",
+      "description": "Rust language server for code intelligence and analysis",
+      "marketplace": "claude-plugins-official",
+      "category": "development"
+    },
+    {
+      "name": "feature-dev",
+      "description": "Comprehensive feature development workflow with specialized agents for codebase exploration, architecture design, and quality review",
+      "marketplace": "claude-plugins-official",
+      "category": "development"
+    },
+    {
+      "name": "code-review",
+      "description": "Automated code review for pull requests using multiple specialized agents with confidence-based scoring to filter false positives",
+      "marketplace": "claude-plugins-official",
+      "category": "productivity"
+    },
+    {
+      "name": "code-simplifier",
+      "description": "Agent that simplifies and refines code for clarity, consistency, and maintainability while preserving functionality. Focuses on recently modified code.",
+      "marketplace": "claude-plugins-official",
+      "category": "productivity"
+    },
+    {
+      "name": "frontend-design",
+      "description": "Create distinctive, production-grade frontend interfaces with high design quality. Generates creative, polished code that avoids generic AI aesthetics.",
+      "marketplace": "claude-plugins-official",
+      "category": "development"
+    },
+    {
+      "name": "plugin-dev",
+      "description": "Comprehensive toolkit for developing Claude Code plugins. Includes 7 expert skills covering hooks, MCP integration, commands, agents, and best practices. AI-assisted plugin creation and validation.",
+      "marketplace": "claude-plugins-official",
+      "category": "development"
+    },
+    {
+      "name": "greptile",
+      "description": "AI-powered codebase search and understanding. Query your repositories using natural language to find relevant code, understand dependencies, and get contextual answers about your codebase architecture.",
+      "marketplace": "claude-plugins-official",
+      "category": "development"
+    },
+    {
+      "name": "playwright",
+      "description": "Browser automation and end-to-end testing MCP server by Microsoft. Enables Claude to interact with web pages, take screenshots, fill forms, click elements, and perform automated browser testing workflows.",
+      "marketplace": "claude-plugins-official",
+      "category": "testing"
+    },
+    {
+      "name": "context7",
+      "description": "Upstash Context7 MCP server for up-to-date documentation lookup. Pull version-specific documentation and code examples directly from source repositories into your LLM context.",
+      "marketplace": "claude-plugins-official",
+      "category": "development"
+    },
+    {
+      "name": "superpowers",
+      "description": "Superpowers teaches Claude brainstorming, subagent driven development with built in code review, systematic debugging, and red/green TDD. Additionally, it teaches Claude how to author and test new skills.",
+      "marketplace": "claude-plugins-official",
+      "category": "development"
+    },
+    {
+      "name": "rlm-agent",
+      "description": "Recursive Language Model integration for handling near-infinite context tasks",
+      "marketplace": "rlm-local",
+      "category": "development"
+    },
+    {
+      "name": "ask-questions-if-underspecified",
+      "description": "Clarify requirements before implementing. When doubting, ask questions.",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "audit-context-building",
+      "description": "Build deep architectural context through ultra-granular code analysis before vulnerability hunting",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "building-secure-contracts",
+      "description": "Comprehensive smart contract security toolkit based on Trail of Bits' Building Secure Contracts framework. Includes vulnerability scanners for 6 blockchains and 5 development guideline assistants.",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "burpsuite-project-parser",
+      "description": "Search and extract data from Burp Suite project files (.burp) for use in Claude",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "constant-time-analysis",
+      "description": "Detect compiler-induced timing side-channels in cryptographic code",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "culture-index",
+      "description": "Interprets Culture Index survey results for individuals and teams",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "differential-review",
+      "description": "Security-focused differential review of code changes with git history analysis and blast radius estimation",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "fix-review",
+      "description": "Verify fix commits address audit findings without introducing bugs",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "dwarf-expert",
+      "description": "Interact with and understand the DWARF debugging format",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "entry-point-analyzer",
+      "description": "Analyzes smart contract codebases to identify state-changing entry points for security auditing. Detects externally callable functions that modify state, categorizes them by access level, and generates structured audit reports.",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "property-based-testing",
+      "description": "Property-based testing guidance for multiple languages and smart contracts",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "semgrep-rule-creator",
+      "description": "Create custom Semgrep rules for detecting bug patterns and security vulnerabilities",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "semgrep-rule-variant-creator",
+      "description": "Creates language variants of existing Semgrep rules with proper applicability analysis and test-driven validation",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "sharp-edges",
+      "description": "Identify error-prone APIs, dangerous configurations, and footgun designs that enable security mistakes",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "static-analysis",
+      "description": "Static analysis toolkit with CodeQL, Semgrep, and SARIF parsing for security vulnerability detection",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "spec-to-code-compliance",
+      "description": "Specification-to-code compliance checker for blockchain audits with evidence-based alignment analysis",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "testing-handbook-skills",
+      "description": "Skills from the Trail of Bits Application Security Testing Handbook (appsec.guide)",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "variant-analysis",
+      "description": "Find similar vulnerabilities and bugs across codebases using pattern-based analysis",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "ultimate-workflow",
+      "description": "Biến Claude Code thành công ty dev ảo - cho phép người non-code xây dựng sản phẩm phần mềm production-ready",
+      "marketplace": "ultimate-workflow-local",
+      "category": ""
+    },
+    {
+      "name": "plugin-factory",
+      "description": "Unified factory for creating, validating, registering, and installing Claude Code plugins and skills",
+      "marketplace": "ultimate-workflow-local",
+      "category": ""
+    },
+    {
+      "name": "plugin-super-factory",
+      "description": "Generates production-ready Claude Code plugins and skills using Trail of Bits methodology patterns",
+      "marketplace": "hades-local",
+      "category": ""
+    },
+    {
+      "name": "rlm-agent",
+      "description": "Recursive Language Model integration for handling near-infinite context tasks",
+      "marketplace": "rlm-local",
+      "category": "development"
+    }
+  ],
+  "skills": [
+    {
+      "name": "algorithmic-art",
+      "description": "Creating algorithmic art using p5.js with seeded randomness and interactive parameter exploration. Use this when users request creating art using code, generative art, algorithmic art, flow fields, or particle systems. Create original algorithmic art rather than copying existing artists' work to avoid copyright violations.",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: algorithmic-art"
+    },
+    {
+      "name": "brand-guidelines",
+      "description": "Applies Anthropic's official brand colors and typography to any sort of artifact that may benefit from having Anthropic's look-and-feel. Use it when brand colors or style guidelines, visual formatting, or company design standards apply.",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: brand-guidelines"
+    },
+    {
+      "name": "canvas-design",
+      "description": "Create beautiful visual art in .png and .pdf documents using design philosophy. You should use this skill when the user asks to create a poster, piece of art, design, or other static piece. Create original visual designs, never copying existing artists' work to avoid copyright violations.",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: canvas-design"
+    },
+    {
+      "name": "doc-coauthoring",
+      "description": "Guide users through a structured workflow for co-authoring documentation. Use when user wants to write documentation, proposals, technical specs, decision docs, or similar structured content. This workflow helps users efficiently transfer context, refine content through iteration, and verify the doc works for readers. Trigger when user mentions writing docs, creating proposals, drafting specs, or similar documentation tasks.",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: doc-coauthoring"
+    },
+    {
+      "name": "docx",
+      "description": "Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. When Claude needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: docx"
+    },
+    {
+      "name": "frontend-design",
+      "description": "Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: frontend-design"
+    },
+    {
+      "name": "internal-comms",
+      "description": "A set of resources to help me write all kinds of internal communications, using the formats that my company likes to use. Claude should use this skill whenever asked to write some sort of internal communications (status reports, leadership updates, 3P updates, company newsletters, FAQs, incident reports, project updates, etc.).",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: internal-comms"
+    },
+    {
+      "name": "mcp-builder",
+      "description": "Guide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. Use when building MCP servers to integrate external APIs or services, whether in Python (FastMCP) or Node/TypeScript (MCP SDK).",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: mcp-builder"
+    },
+    {
+      "name": "pdf",
+      "description": "Comprehensive PDF manipulation toolkit for extracting text and tables, creating new PDFs, merging/splitting documents, and handling forms. When Claude needs to fill in a PDF form or programmatically process, generate, or analyze PDF documents at scale.",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: pdf"
+    },
+    {
+      "name": "pptx",
+      "description": "Presentation creation, editing, and analysis. When Claude needs to work with presentations (.pptx files) for: (1) Creating new presentations, (2) Modifying or editing content, (3) Working with layouts, (4) Adding comments or speaker notes, or any other presentation tasks",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: pptx"
+    },
+    {
+      "name": "skill-creator",
+      "description": "Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Claude's capabilities with specialized knowledge, workflows, or tool integrations.",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: skill-creator"
+    },
+    {
+      "name": "slack-gif-creator",
+      "description": "Knowledge and utilities for creating animated GIFs optimized for Slack. Provides constraints, validation tools, and animation concepts. Use when users request animated GIFs for Slack like \"make me a GIF of X doing Y for Slack.",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: slack-gif-creator"
+    },
+    {
+      "name": "theme-factory",
+      "description": "Toolkit for styling artifacts with a theme. These artifacts can be slides, docs, reportings, HTML landing pages, etc. There are 10 pre-set themes with colors/fonts that you can apply to any artifact that has been creating, or can generate a new theme on-the-fly.",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: theme-factory"
+    },
+    {
+      "name": "web-artifacts-builder",
+      "description": "Suite of tools for creating elaborate, multi-component claude.ai HTML artifacts using modern frontend web technologies (React, Tailwind CSS, shadcn/ui). Use for complex artifacts requiring state management, routing, or shadcn/ui components - not for simple single-file HTML/JSX artifacts.",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: web-artifacts-builder"
+    },
+    {
+      "name": "webapp-testing",
+      "description": "Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browser logs.",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: webapp-testing"
+    },
+    {
+      "name": "xlsx",
+      "description": "Comprehensive spreadsheet creation, editing, and analysis with support for formulas, formatting, data analysis, and visualization. When Claude needs to work with spreadsheets (.xlsx, .xlsm, .csv, .tsv, etc) for: (1) Creating new spreadsheets with formulas and formatting, (2) Reading or analyzing data, (3) Modify existing spreadsheets while preserving formulas, (4) Data analysis and visualization in spreadsheets, or (5) Recalculating formulas",
+      "plugin": "document-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: xlsx"
+    },
+    {
+      "name": "algorithmic-art",
+      "description": "Creating algorithmic art using p5.js with seeded randomness and interactive parameter exploration. Use this when users request creating art using code, generative art, algorithmic art, flow fields, or particle systems. Create original algorithmic art rather than copying existing artists' work to avoid copyright violations.",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: algorithmic-art"
+    },
+    {
+      "name": "brand-guidelines",
+      "description": "Applies Anthropic's official brand colors and typography to any sort of artifact that may benefit from having Anthropic's look-and-feel. Use it when brand colors or style guidelines, visual formatting, or company design standards apply.",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: brand-guidelines"
+    },
+    {
+      "name": "canvas-design",
+      "description": "Create beautiful visual art in .png and .pdf documents using design philosophy. You should use this skill when the user asks to create a poster, piece of art, design, or other static piece. Create original visual designs, never copying existing artists' work to avoid copyright violations.",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: canvas-design"
+    },
+    {
+      "name": "doc-coauthoring",
+      "description": "Guide users through a structured workflow for co-authoring documentation. Use when user wants to write documentation, proposals, technical specs, decision docs, or similar structured content. This workflow helps users efficiently transfer context, refine content through iteration, and verify the doc works for readers. Trigger when user mentions writing docs, creating proposals, drafting specs, or similar documentation tasks.",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: doc-coauthoring"
+    },
+    {
+      "name": "docx",
+      "description": "Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. When Claude needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: docx"
+    },
+    {
+      "name": "frontend-design",
+      "description": "Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: frontend-design"
+    },
+    {
+      "name": "internal-comms",
+      "description": "A set of resources to help me write all kinds of internal communications, using the formats that my company likes to use. Claude should use this skill whenever asked to write some sort of internal communications (status reports, leadership updates, 3P updates, company newsletters, FAQs, incident reports, project updates, etc.).",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: internal-comms"
+    },
+    {
+      "name": "mcp-builder",
+      "description": "Guide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. Use when building MCP servers to integrate external APIs or services, whether in Python (FastMCP) or Node/TypeScript (MCP SDK).",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: mcp-builder"
+    },
+    {
+      "name": "pdf",
+      "description": "Comprehensive PDF manipulation toolkit for extracting text and tables, creating new PDFs, merging/splitting documents, and handling forms. When Claude needs to fill in a PDF form or programmatically process, generate, or analyze PDF documents at scale.",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: pdf"
+    },
+    {
+      "name": "pptx",
+      "description": "Presentation creation, editing, and analysis. When Claude needs to work with presentations (.pptx files) for: (1) Creating new presentations, (2) Modifying or editing content, (3) Working with layouts, (4) Adding comments or speaker notes, or any other presentation tasks",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: pptx"
+    },
+    {
+      "name": "skill-creator",
+      "description": "Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Claude's capabilities with specialized knowledge, workflows, or tool integrations.",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: skill-creator"
+    },
+    {
+      "name": "slack-gif-creator",
+      "description": "Knowledge and utilities for creating animated GIFs optimized for Slack. Provides constraints, validation tools, and animation concepts. Use when users request animated GIFs for Slack like \"make me a GIF of X doing Y for Slack.",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: slack-gif-creator"
+    },
+    {
+      "name": "theme-factory",
+      "description": "Toolkit for styling artifacts with a theme. These artifacts can be slides, docs, reportings, HTML landing pages, etc. There are 10 pre-set themes with colors/fonts that you can apply to any artifact that has been creating, or can generate a new theme on-the-fly.",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: theme-factory"
+    },
+    {
+      "name": "web-artifacts-builder",
+      "description": "Suite of tools for creating elaborate, multi-component claude.ai HTML artifacts using modern frontend web technologies (React, Tailwind CSS, shadcn/ui). Use for complex artifacts requiring state management, routing, or shadcn/ui components - not for simple single-file HTML/JSX artifacts.",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: web-artifacts-builder"
+    },
+    {
+      "name": "webapp-testing",
+      "description": "Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browser logs.",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: webapp-testing"
+    },
+    {
+      "name": "xlsx",
+      "description": "Comprehensive spreadsheet creation, editing, and analysis with support for formulas, formatting, data analysis, and visualization. When Claude needs to work with spreadsheets (.xlsx, .xlsm, .csv, .tsv, etc) for: (1) Creating new spreadsheets with formulas and formatting, (2) Reading or analyzing data, (3) Modify existing spreadsheets while preserving formulas, (4) Data analysis and visualization in spreadsheets, or (5) Recalculating formulas",
+      "plugin": "example-skills",
+      "marketplace": "anthropic-agent-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: xlsx"
+    },
+    {
+      "name": "baoyu-article-illustrator",
+      "description": "Analyzes article structure, identifies positions requiring visual aids, generates illustrations with Type × Style two-dimension approach. Use when user asks to \"illustrate article\", \"add images\", \"generate images for article\", or \"为文章配图\".",
+      "plugin": "content-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-article-illustrator"
+    },
+    {
+      "name": "baoyu-comic",
+      "description": "Knowledge comic creator supporting multiple art styles and tones. Creates original educational comics with detailed panel layouts and sequential image generation. Use when user asks to create \"知识漫画\", \"教育漫画\", \"biography comic\", \"tutorial comic\", or \"Logicomix-style comic\".",
+      "plugin": "content-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-comic"
+    },
+    {
+      "name": "baoyu-compress-image",
+      "description": "Compresses images to WebP (default) or PNG with automatic tool selection. Use when user asks to \"compress image\", \"optimize image\", \"convert to webp\", or reduce image file size.",
+      "plugin": "content-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-compress-image"
+    },
+    {
+      "name": "baoyu-cover-image",
+      "description": "Generates article cover images with 4 dimensions (type, style, text, mood) and 20 hand-drawn styles. Supports cinematic (2.35:1), widescreen (16:9), and square (1:1) aspects. Use when user asks to \"generate cover image\", \"create article cover\", \"make cover\", or mentions \"封面图\".",
+      "plugin": "content-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-cover-image"
+    },
+    {
+      "name": "baoyu-danger-gemini-web",
+      "description": "Generates images and text via reverse-engineered Gemini Web API. Supports text generation, image generation from prompts, reference images for vision input, and multi-turn conversations. Use when other skills need image generation backend, or when user requests \"generate image with Gemini\", \"Gemini text generation\", or needs vision-capable AI generation.",
+      "plugin": "content-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-danger-gemini-web"
+    },
+    {
+      "name": "baoyu-danger-x-to-markdown",
+      "description": "Converts X (Twitter) tweets and articles to markdown with YAML front matter. Uses reverse-engineered API requiring user consent. Use when user mentions \"X to markdown\", \"tweet to markdown\", \"save tweet\", or provides x.com/twitter.com URLs for conversion.",
+      "plugin": "content-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-danger-x-to-markdown"
+    },
+    {
+      "name": "baoyu-image-gen",
+      "description": "AI image generation with OpenAI and Google APIs. Supports text-to-image, reference images, aspect ratios, and parallel generation (recommended 4 concurrent subagents). Use when user asks to generate, create, or draw images.",
+      "plugin": "content-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-image-gen"
+    },
+    {
+      "name": "baoyu-infographic",
+      "description": "Generates professional infographics with 20 layout types and 17 visual styles. Analyzes content, recommends layout×style combinations, and generates publication-ready infographics. Use when user asks to create \"infographic\", \"信息图\", \"visual summary\", or \"可视化\".",
+      "plugin": "content-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-infographic"
+    },
+    {
+      "name": "baoyu-post-to-wechat",
+      "description": "Posts content to WeChat Official Account (微信公众号) via Chrome CDP automation. Supports article posting (文章) with full markdown formatting and image-text posting (图文) with multiple images. Use when user mentions \"发布公众号\", \"post to wechat\", \"微信公众号\", or \"图文/文章\".",
+      "plugin": "content-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-post-to-wechat"
+    },
+    {
+      "name": "baoyu-post-to-x",
+      "description": "Posts content and articles to X (Twitter). Supports regular posts with images/videos and X Articles (long-form Markdown). Uses real Chrome with CDP to bypass anti-automation. Use when user asks to \"post to X\", \"tweet\", \"publish to Twitter\", or \"share on X\".",
+      "plugin": "content-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-post-to-x"
+    },
+    {
+      "name": "baoyu-slide-deck",
+      "description": "Generates professional slide deck images from content. Creates outlines with style instructions, then generates individual slide images. Use when user asks to \"create slides\", \"make a presentation\", \"generate deck\", \"slide deck\", or \"PPT\".",
+      "plugin": "content-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-slide-deck"
+    },
+    {
+      "name": "baoyu-url-to-markdown",
+      "description": "Fetch any URL and convert to markdown using Chrome CDP. Supports two modes - auto-capture on page load, or wait for user signal (for pages requiring login). Use when user wants to save a webpage as markdown.",
+      "plugin": "content-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-url-to-markdown"
+    },
+    {
+      "name": "baoyu-xhs-images",
+      "description": "Generates Xiaohongshu (Little Red Book) infographic series with 9 visual styles and 6 layouts. Breaks content into 1-10 cartoon-style images optimized for XHS engagement. Use when user mentions \"小红书图片\", \"XHS images\", \"RedNote infographics\", \"小红书种草\", or wants social media infographics for Chinese platforms.",
+      "plugin": "content-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-xhs-images"
+    },
+    {
+      "name": "baoyu-article-illustrator",
+      "description": "Analyzes article structure, identifies positions requiring visual aids, generates illustrations with Type × Style two-dimension approach. Use when user asks to \"illustrate article\", \"add images\", \"generate images for article\", or \"为文章配图\".",
+      "plugin": "ai-generation-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-article-illustrator"
+    },
+    {
+      "name": "baoyu-comic",
+      "description": "Knowledge comic creator supporting multiple art styles and tones. Creates original educational comics with detailed panel layouts and sequential image generation. Use when user asks to create \"知识漫画\", \"教育漫画\", \"biography comic\", \"tutorial comic\", or \"Logicomix-style comic\".",
+      "plugin": "ai-generation-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-comic"
+    },
+    {
+      "name": "baoyu-compress-image",
+      "description": "Compresses images to WebP (default) or PNG with automatic tool selection. Use when user asks to \"compress image\", \"optimize image\", \"convert to webp\", or reduce image file size.",
+      "plugin": "ai-generation-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-compress-image"
+    },
+    {
+      "name": "baoyu-cover-image",
+      "description": "Generates article cover images with 4 dimensions (type, style, text, mood) and 20 hand-drawn styles. Supports cinematic (2.35:1), widescreen (16:9), and square (1:1) aspects. Use when user asks to \"generate cover image\", \"create article cover\", \"make cover\", or mentions \"封面图\".",
+      "plugin": "ai-generation-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-cover-image"
+    },
+    {
+      "name": "baoyu-danger-gemini-web",
+      "description": "Generates images and text via reverse-engineered Gemini Web API. Supports text generation, image generation from prompts, reference images for vision input, and multi-turn conversations. Use when other skills need image generation backend, or when user requests \"generate image with Gemini\", \"Gemini text generation\", or needs vision-capable AI generation.",
+      "plugin": "ai-generation-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-danger-gemini-web"
+    },
+    {
+      "name": "baoyu-danger-x-to-markdown",
+      "description": "Converts X (Twitter) tweets and articles to markdown with YAML front matter. Uses reverse-engineered API requiring user consent. Use when user mentions \"X to markdown\", \"tweet to markdown\", \"save tweet\", or provides x.com/twitter.com URLs for conversion.",
+      "plugin": "ai-generation-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-danger-x-to-markdown"
+    },
+    {
+      "name": "baoyu-image-gen",
+      "description": "AI image generation with OpenAI and Google APIs. Supports text-to-image, reference images, aspect ratios, and parallel generation (recommended 4 concurrent subagents). Use when user asks to generate, create, or draw images.",
+      "plugin": "ai-generation-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-image-gen"
+    },
+    {
+      "name": "baoyu-infographic",
+      "description": "Generates professional infographics with 20 layout types and 17 visual styles. Analyzes content, recommends layout×style combinations, and generates publication-ready infographics. Use when user asks to create \"infographic\", \"信息图\", \"visual summary\", or \"可视化\".",
+      "plugin": "ai-generation-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-infographic"
+    },
+    {
+      "name": "baoyu-post-to-wechat",
+      "description": "Posts content to WeChat Official Account (微信公众号) via Chrome CDP automation. Supports article posting (文章) with full markdown formatting and image-text posting (图文) with multiple images. Use when user mentions \"发布公众号\", \"post to wechat\", \"微信公众号\", or \"图文/文章\".",
+      "plugin": "ai-generation-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-post-to-wechat"
+    },
+    {
+      "name": "baoyu-post-to-x",
+      "description": "Posts content and articles to X (Twitter). Supports regular posts with images/videos and X Articles (long-form Markdown). Uses real Chrome with CDP to bypass anti-automation. Use when user asks to \"post to X\", \"tweet\", \"publish to Twitter\", or \"share on X\".",
+      "plugin": "ai-generation-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-post-to-x"
+    },
+    {
+      "name": "baoyu-slide-deck",
+      "description": "Generates professional slide deck images from content. Creates outlines with style instructions, then generates individual slide images. Use when user asks to \"create slides\", \"make a presentation\", \"generate deck\", \"slide deck\", or \"PPT\".",
+      "plugin": "ai-generation-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-slide-deck"
+    },
+    {
+      "name": "baoyu-url-to-markdown",
+      "description": "Fetch any URL and convert to markdown using Chrome CDP. Supports two modes - auto-capture on page load, or wait for user signal (for pages requiring login). Use when user wants to save a webpage as markdown.",
+      "plugin": "ai-generation-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-url-to-markdown"
+    },
+    {
+      "name": "baoyu-xhs-images",
+      "description": "Generates Xiaohongshu (Little Red Book) infographic series with 9 visual styles and 6 layouts. Breaks content into 1-10 cartoon-style images optimized for XHS engagement. Use when user mentions \"小红书图片\", \"XHS images\", \"RedNote infographics\", \"小红书种草\", or wants social media infographics for Chinese platforms.",
+      "plugin": "ai-generation-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-xhs-images"
+    },
+    {
+      "name": "baoyu-article-illustrator",
+      "description": "Analyzes article structure, identifies positions requiring visual aids, generates illustrations with Type × Style two-dimension approach. Use when user asks to \"illustrate article\", \"add images\", \"generate images for article\", or \"为文章配图\".",
+      "plugin": "utility-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-article-illustrator"
+    },
+    {
+      "name": "baoyu-comic",
+      "description": "Knowledge comic creator supporting multiple art styles and tones. Creates original educational comics with detailed panel layouts and sequential image generation. Use when user asks to create \"知识漫画\", \"教育漫画\", \"biography comic\", \"tutorial comic\", or \"Logicomix-style comic\".",
+      "plugin": "utility-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-comic"
+    },
+    {
+      "name": "baoyu-compress-image",
+      "description": "Compresses images to WebP (default) or PNG with automatic tool selection. Use when user asks to \"compress image\", \"optimize image\", \"convert to webp\", or reduce image file size.",
+      "plugin": "utility-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-compress-image"
+    },
+    {
+      "name": "baoyu-cover-image",
+      "description": "Generates article cover images with 4 dimensions (type, style, text, mood) and 20 hand-drawn styles. Supports cinematic (2.35:1), widescreen (16:9), and square (1:1) aspects. Use when user asks to \"generate cover image\", \"create article cover\", \"make cover\", or mentions \"封面图\".",
+      "plugin": "utility-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-cover-image"
+    },
+    {
+      "name": "baoyu-danger-gemini-web",
+      "description": "Generates images and text via reverse-engineered Gemini Web API. Supports text generation, image generation from prompts, reference images for vision input, and multi-turn conversations. Use when other skills need image generation backend, or when user requests \"generate image with Gemini\", \"Gemini text generation\", or needs vision-capable AI generation.",
+      "plugin": "utility-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-danger-gemini-web"
+    },
+    {
+      "name": "baoyu-danger-x-to-markdown",
+      "description": "Converts X (Twitter) tweets and articles to markdown with YAML front matter. Uses reverse-engineered API requiring user consent. Use when user mentions \"X to markdown\", \"tweet to markdown\", \"save tweet\", or provides x.com/twitter.com URLs for conversion.",
+      "plugin": "utility-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-danger-x-to-markdown"
+    },
+    {
+      "name": "baoyu-image-gen",
+      "description": "AI image generation with OpenAI and Google APIs. Supports text-to-image, reference images, aspect ratios, and parallel generation (recommended 4 concurrent subagents). Use when user asks to generate, create, or draw images.",
+      "plugin": "utility-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-image-gen"
+    },
+    {
+      "name": "baoyu-infographic",
+      "description": "Generates professional infographics with 20 layout types and 17 visual styles. Analyzes content, recommends layout×style combinations, and generates publication-ready infographics. Use when user asks to create \"infographic\", \"信息图\", \"visual summary\", or \"可视化\".",
+      "plugin": "utility-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-infographic"
+    },
+    {
+      "name": "baoyu-post-to-wechat",
+      "description": "Posts content to WeChat Official Account (微信公众号) via Chrome CDP automation. Supports article posting (文章) with full markdown formatting and image-text posting (图文) with multiple images. Use when user mentions \"发布公众号\", \"post to wechat\", \"微信公众号\", or \"图文/文章\".",
+      "plugin": "utility-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-post-to-wechat"
+    },
+    {
+      "name": "baoyu-post-to-x",
+      "description": "Posts content and articles to X (Twitter). Supports regular posts with images/videos and X Articles (long-form Markdown). Uses real Chrome with CDP to bypass anti-automation. Use when user asks to \"post to X\", \"tweet\", \"publish to Twitter\", or \"share on X\".",
+      "plugin": "utility-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-post-to-x"
+    },
+    {
+      "name": "baoyu-slide-deck",
+      "description": "Generates professional slide deck images from content. Creates outlines with style instructions, then generates individual slide images. Use when user asks to \"create slides\", \"make a presentation\", \"generate deck\", \"slide deck\", or \"PPT\".",
+      "plugin": "utility-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-slide-deck"
+    },
+    {
+      "name": "baoyu-url-to-markdown",
+      "description": "Fetch any URL and convert to markdown using Chrome CDP. Supports two modes - auto-capture on page load, or wait for user signal (for pages requiring login). Use when user wants to save a webpage as markdown.",
+      "plugin": "utility-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-url-to-markdown"
+    },
+    {
+      "name": "baoyu-xhs-images",
+      "description": "Generates Xiaohongshu (Little Red Book) infographic series with 9 visual styles and 6 layouts. Breaks content into 1-10 cartoon-style images optimized for XHS engagement. Use when user mentions \"小红书图片\", \"XHS images\", \"RedNote infographics\", \"小红书种草\", or wants social media infographics for Chinese platforms.",
+      "plugin": "utility-skills",
+      "marketplace": "baoyu-skills",
+      "user_invocable": false,
+      "invoke": "Skill tool: baoyu-xhs-images"
+    },
+    {
+      "name": "frontend-design",
+      "description": "Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, or applications. Generates creative, polished code that avoids generic AI aesthetics.",
+      "plugin": "frontend-design",
+      "marketplace": "claude-plugins-official",
+      "user_invocable": false,
+      "invoke": "Skill tool: frontend-design"
+    },
+    {
+      "name": "Agent Development",
+      "description": "This skill should be used when the user asks to \"create an agent\", \"add an agent\", \"write a subagent\", \"agent frontmatter\", \"when to use description\", \"agent examples\", \"agent tools\", \"agent colors\", \"autonomous agent\", or needs guidance on agent structure, system prompts, triggering conditions, or agent development best practices for Claude Code plugins.",
+      "plugin": "plugin-dev",
+      "marketplace": "claude-plugins-official",
+      "user_invocable": false,
+      "invoke": "Skill tool: Agent Development"
+    },
+    {
+      "name": "Command Development",
+      "description": "This skill should be used when the user asks to \"create a slash command\", \"add a command\", \"write a custom command\", \"define command arguments\", \"use command frontmatter\", \"organize commands\", \"create command with file references\", \"interactive command\", \"use AskUserQuestion in command\", or needs guidance on slash command structure, YAML frontmatter fields, dynamic arguments, bash execution in commands, user interaction patterns, or command development best practices for Claude Code.",
+      "plugin": "plugin-dev",
+      "marketplace": "claude-plugins-official",
+      "user_invocable": false,
+      "invoke": "Skill tool: Command Development"
+    },
+    {
+      "name": "Hook Development",
+      "description": "This skill should be used when the user asks to \"create a hook\", \"add a PreToolUse/PostToolUse/Stop hook\", \"validate tool use\", \"implement prompt-based hooks\", \"use ${CLAUDE_PLUGIN_ROOT}\", \"set up event-driven automation\", \"block dangerous commands\", or mentions hook events (PreToolUse, PostToolUse, Stop, SubagentStop, SessionStart, SessionEnd, UserPromptSubmit, PreCompact, Notification). Provides comprehensive guidance for creating and implementing Claude Code plugin hooks with focus on advanced prompt-based hooks API.",
+      "plugin": "plugin-dev",
+      "marketplace": "claude-plugins-official",
+      "user_invocable": false,
+      "invoke": "Skill tool: Hook Development"
+    },
+    {
+      "name": "MCP Integration",
+      "description": "This skill should be used when the user asks to \"add MCP server\", \"integrate MCP\", \"configure MCP in plugin\", \"use .mcp.json\", \"set up Model Context Protocol\", \"connect external service\", mentions \"${CLAUDE_PLUGIN_ROOT} with MCP\", or discusses MCP server types (SSE, stdio, HTTP, WebSocket). Provides comprehensive guidance for integrating Model Context Protocol servers into Claude Code plugins for external tool and service integration.",
+      "plugin": "plugin-dev",
+      "marketplace": "claude-plugins-official",
+      "user_invocable": false,
+      "invoke": "Skill tool: MCP Integration"
+    },
+    {
+      "name": "Plugin Settings",
+      "description": "This skill should be used when the user asks about \"plugin settings\", \"store plugin configuration\", \"user-configurable plugin\", \".local.md files\", \"plugin state files\", \"read YAML frontmatter\", \"per-project plugin settings\", or wants to make plugin behavior configurable. Documents the .claude/plugin-name.local.md pattern for storing plugin-specific configuration with YAML frontmatter and markdown content.",
+      "plugin": "plugin-dev",
+      "marketplace": "claude-plugins-official",
+      "user_invocable": false,
+      "invoke": "Skill tool: Plugin Settings"
+    },
+    {
+      "name": "Plugin Structure",
+      "description": "This skill should be used when the user asks to \"create a plugin\", \"scaffold a plugin\", \"understand plugin structure\", \"organize plugin components\", \"set up plugin.json\", \"use ${CLAUDE_PLUGIN_ROOT}\", \"add commands/agents/skills/hooks\", \"configure auto-discovery\", or needs guidance on plugin directory layout, manifest configuration, component organization, file naming conventions, or Claude Code plugin architecture best practices.",
+      "plugin": "plugin-dev",
+      "marketplace": "claude-plugins-official",
+      "user_invocable": false,
+      "invoke": "Skill tool: Plugin Structure"
+    },
+    {
+      "name": "Skill Development",
+      "description": "This skill should be used when the user wants to \"create a skill\", \"add a skill to plugin\", \"write a new skill\", \"improve skill description\", \"organize skill content\", or needs guidance on skill structure, progressive disclosure, or skill development best practices for Claude Code plugins.",
+      "plugin": "plugin-dev",
+      "marketplace": "claude-plugins-official",
+      "user_invocable": false,
+      "invoke": "Skill tool: Skill Development"
+    },
+    {
+      "name": "ask-questions-if-underspecified",
+      "description": "Clarify requirements before implementing. Use when serious doubts araise.",
+      "plugin": "ask-questions-if-underspecified",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: ask-questions-if-underspecified"
+    },
+    {
+      "name": "audit-context-building",
+      "description": "Enables ultra-granular, line-by-line code analysis to build deep architectural context before vulnerability or bug finding.",
+      "plugin": "audit-context-building",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: audit-context-building"
+    },
+    {
+      "name": "constant-time-analysis",
+      "description": "Detects timing side-channel vulnerabilities in cryptographic code. Use when implementing or reviewing crypto code, encountering division on secrets, secret-dependent branches, or constant-time programming questions in C, C++, Go, Rust, Swift, Java, Kotlin, C#, PHP, JavaScript, TypeScript, Python, or Ruby.",
+      "plugin": "constant-time-analysis",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: constant-time-analysis"
+    },
+    {
+      "name": "interpreting-culture-index",
+      "description": "Use when interpreting Culture Index surveys, CI profiles, behavioral assessments, or personality data. Supports individual interpretation, team composition (gas/brake/glue), burnout detection, profile comparison, hiring profiles, manager coaching, interview transcript analysis for trait prediction, candidate debrief, onboarding planning, and conflict mediation. Handles PDF vision or JSON input.",
+      "plugin": "culture-index",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: interpreting-culture-index"
+    },
+    {
+      "name": "differential-review",
+      "description": ">",
+      "plugin": "differential-review",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: differential-review"
+    },
+    {
+      "name": "fix-review",
+      "description": ">",
+      "plugin": "fix-review",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: fix-review"
+    },
+    {
+      "name": "dwarf-expert",
+      "description": "Provides expertise for analyzing DWARF debug files and understanding the DWARF debug format/standard (v3-v5). Triggers when understanding DWARF information, interacting with DWARF files, answering DWARF-related questions, or working with code that parses DWARF data.",
+      "plugin": "dwarf-expert",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: dwarf-expert"
+    },
+    {
+      "name": "entry-point-analyzer",
+      "description": "Analyzes smart contract codebases to identify state-changing entry points for security auditing. Detects externally callable functions that modify state, categorizes them by access level (public, admin, role-restricted, contract-only), and generates structured audit reports. Excludes view/pure/read-only functions. Use when auditing smart contracts (Solidity, Vyper, Solana/Rust, Move, TON, CosmWasm) or when asked to find entry points, audit flows, external functions, access control patterns, or privileged operations.",
+      "plugin": "entry-point-analyzer",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: entry-point-analyzer"
+    },
+    {
+      "name": "property-based-testing",
+      "description": "Provides guidance for property-based testing across multiple languages and smart contracts. Use when writing tests, reviewing code with serialization/validation/parsing patterns, designing features, or when property-based testing would provide stronger coverage than example-based tests.",
+      "plugin": "property-based-testing",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: property-based-testing"
+    },
+    {
+      "name": "semgrep-rule-creator",
+      "description": "Create custom Semgrep rules for detecting bug patterns and security vulnerabilities. This skill should be used when the user explicitly asks to \"create a Semgrep rule\", \"write a Semgrep rule\", \"make a Semgrep rule\", \"build a Semgrep rule\", or requests detection of a specific bug pattern, vulnerability, or insecure code pattern using Semgrep.",
+      "plugin": "semgrep-rule-creator",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: semgrep-rule-creator"
+    },
+    {
+      "name": "semgrep-rule-variant-creator",
+      "description": "Creates language variants of existing Semgrep rules. Use when porting a Semgrep rule to specified target languages. Takes an existing rule and target languages as input, produces independent rule+test directories for each language.",
+      "plugin": "semgrep-rule-variant-creator",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: semgrep-rule-variant-creator"
+    },
+    {
+      "name": "sharp-edges",
+      "description": "Identifies error-prone APIs, dangerous configurations, and footgun designs that enable security mistakes. Use when reviewing API designs, configuration schemas, cryptographic library ergonomics, or evaluating whether code follows 'secure by default' and 'pit of success' principles. Triggers: footgun, misuse-resistant, secure defaults, API usability, dangerous configuration.",
+      "plugin": "sharp-edges",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: sharp-edges"
+    },
+    {
+      "name": "codeql",
+      "description": "Run CodeQL static analysis for security vulnerability detection, taint tracking, and data flow analysis. Use when asked to analyze code with CodeQL, create CodeQL databases, write custom QL queries, perform security audits, or set up CodeQL in CI/CD pipelines.",
+      "plugin": "static-analysis",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: codeql"
+    },
+    {
+      "name": "sarif-parsing",
+      "description": "Parse, analyze, and process SARIF (Static Analysis Results Interchange Format) files. Use when reading security scan results, aggregating findings from multiple tools, deduplicating alerts, extracting specific vulnerabilities, or integrating SARIF data into CI/CD pipelines.",
+      "plugin": "static-analysis",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: sarif-parsing"
+    },
+    {
+      "name": "semgrep",
+      "description": "Run Semgrep static analysis for fast security scanning and pattern matching. Use when asked to scan code with Semgrep, write custom YAML rules, find vulnerabilities quickly, use taint mode, or set up Semgrep in CI/CD pipelines.",
+      "plugin": "static-analysis",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: semgrep"
+    },
+    {
+      "name": "spec-to-code-compliance",
+      "description": "Verifies code implements exactly what documentation specifies for blockchain audits. Use when comparing code against whitepapers, finding gaps between specs and implementation, or performing compliance checks for protocol implementations.",
+      "plugin": "spec-to-code-compliance",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: spec-to-code-compliance"
+    },
+    {
+      "name": "address-sanitizer",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: address-sanitizer"
+    },
+    {
+      "name": "aflpp",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: aflpp"
+    },
+    {
+      "name": "atheris",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: atheris"
+    },
+    {
+      "name": "cargo-fuzz",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: cargo-fuzz"
+    },
+    {
+      "name": "codeql",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: codeql"
+    },
+    {
+      "name": "constant-time-testing",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: constant-time-testing"
+    },
+    {
+      "name": "coverage-analysis",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: coverage-analysis"
+    },
+    {
+      "name": "fuzzing-dictionary",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: fuzzing-dictionary"
+    },
+    {
+      "name": "fuzzing-obstacles",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: fuzzing-obstacles"
+    },
+    {
+      "name": "harness-writing",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: harness-writing"
+    },
+    {
+      "name": "libafl",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: libafl"
+    },
+    {
+      "name": "libfuzzer",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: libfuzzer"
+    },
+    {
+      "name": "ossfuzz",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: ossfuzz"
+    },
+    {
+      "name": "ruzzy",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: ruzzy"
+    },
+    {
+      "name": "semgrep",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: semgrep"
+    },
+    {
+      "name": "testing-handbook-generator",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: testing-handbook-generator"
+    },
+    {
+      "name": "wycheproof",
+      "description": ">",
+      "plugin": "testing-handbook-skills",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: wycheproof"
+    },
+    {
+      "name": "variant-analysis",
+      "description": "Find similar vulnerabilities and bugs across codebases using pattern-based analysis. Use when hunting bug variants, building CodeQL/Semgrep queries, analyzing security vulnerabilities, or performing systematic code audits after finding an initial issue.",
+      "plugin": "variant-analysis",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: variant-analysis"
+    },
+    {
+      "name": "build",
+      "description": "",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: build"
+    },
+    {
+      "name": "build-approve",
+      "description": "",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: build-approve"
+    },
+    {
+      "name": "build-development",
+      "description": "",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: build-development"
+    },
+    {
+      "name": "build-discovery",
+      "description": "",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: build-discovery"
+    },
+    {
+      "name": "build-gap-detect",
+      "description": "",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: build-gap-detect"
+    },
+    {
+      "name": "build-memory",
+      "description": "",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: build-memory"
+    },
+    {
+      "name": "build-planning",
+      "description": "",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: build-planning"
+    },
+    {
+      "name": "build-qa",
+      "description": "",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: build-qa"
+    },
+    {
+      "name": "build-resume",
+      "description": "",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: build-resume"
+    },
+    {
+      "name": "build-status",
+      "description": "",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: build-status"
+    },
+    {
+      "name": "Agent Development",
+      "description": "This skill should be used when the user asks to \"create an agent\", \"add an agent\", \"write a subagent\", \"agent frontmatter\", \"when to use description\", \"agent examples\", \"agent tools\", \"agent colors\", \"autonomous agent\", or needs guidance on agent structure, system prompts, triggering conditions, or agent development best practices for Claude Code plugins.",
+      "plugin": "plugin-factory",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: Agent Development"
+    },
+    {
+      "name": "Command Development",
+      "description": "This skill should be used when the user asks to \"create a slash command\", \"add a command\", \"write a custom command\", \"define command arguments\", \"use command frontmatter\", \"organize commands\", \"create command with file references\", \"interactive command\", \"use AskUserQuestion in command\", or needs guidance on slash command structure, YAML frontmatter fields, dynamic arguments, bash execution in commands, user interaction patterns, or command development best practices for Claude Code.",
+      "plugin": "plugin-factory",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: Command Development"
+    },
+    {
+      "name": "Hook Development",
+      "description": "This skill should be used when the user asks to \"create a hook\", \"add a PreToolUse/PostToolUse/Stop hook\", \"validate tool use\", \"implement prompt-based hooks\", \"use ${CLAUDE_PLUGIN_ROOT}\", \"set up event-driven automation\", \"block dangerous commands\", or mentions hook events (PreToolUse, PostToolUse, Stop, SubagentStop, SessionStart, SessionEnd, UserPromptSubmit, PreCompact, Notification). Provides comprehensive guidance for creating and implementing Claude Code plugin hooks with focus on advanced prompt-based hooks API.",
+      "plugin": "plugin-factory",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: Hook Development"
+    },
+    {
+      "name": "installing-local-plugins",
+      "description": "Installs and troubleshoots local Claude Code plugin marketplaces and plugins. Use when local plugin installation fails, Claude Code cannot find a marketplace path, or schema validation errors occur.",
+      "plugin": "plugin-factory",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: installing-local-plugins"
+    },
+    {
+      "name": "MCP Integration",
+      "description": "This skill should be used when the user asks to \"add MCP server\", \"integrate MCP\", \"configure MCP in plugin\", \"use .mcp.json\", \"set up Model Context Protocol\", \"connect external service\", mentions \"${CLAUDE_PLUGIN_ROOT} with MCP\", or discusses MCP server types (SSE, stdio, HTTP, WebSocket). Provides comprehensive guidance for integrating Model Context Protocol servers into Claude Code plugins for external tool and service integration.",
+      "plugin": "plugin-factory",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: MCP Integration"
+    },
+    {
+      "name": "plugin-factory-wizard",
+      "description": "Creates and validates Claude Code plugins and skills using Trail of Bits standards. Use when creating a new plugin, adding skills, or registering a plugin in a marketplace.",
+      "plugin": "plugin-factory",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: plugin-factory-wizard"
+    },
+    {
+      "name": "Plugin Settings",
+      "description": "This skill should be used when the user asks about \"plugin settings\", \"store plugin configuration\", \"user-configurable plugin\", \".local.md files\", \"plugin state files\", \"read YAML frontmatter\", \"per-project plugin settings\", or wants to make plugin behavior configurable. Documents the .claude/plugin-name.local.md pattern for storing plugin-specific configuration with YAML frontmatter and markdown content.",
+      "plugin": "plugin-factory",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: Plugin Settings"
+    },
+    {
+      "name": "Plugin Structure",
+      "description": "This skill should be used when the user asks to \"create a plugin\", \"scaffold a plugin\", \"understand plugin structure\", \"organize plugin components\", \"set up plugin.json\", \"use ${CLAUDE_PLUGIN_ROOT}\", \"add commands/agents/skills/hooks\", \"configure auto-discovery\", or needs guidance on plugin directory layout, manifest configuration, component organization, file naming conventions, or Claude Code plugin architecture best practices.",
+      "plugin": "plugin-factory",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: Plugin Structure"
+    },
+    {
+      "name": "Skill Development",
+      "description": "This skill should be used when the user wants to \"create a skill\", \"add a skill to plugin\", \"write a new skill\", \"improve skill description\", \"organize skill content\", or needs guidance on skill structure, progressive disclosure, or skill development best practices for Claude Code plugins.",
+      "plugin": "plugin-factory",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: Skill Development"
+    }
+  ],
+  "agents": [
+    {
+      "name": "code-architect",
+      "description": "Designs feature architectures by analyzing existing codebase patterns and conventions, then providing comprehensive implementation blueprints with specific files to create/modify, component designs, data flows, and build sequences",
+      "model": "sonnet",
+      "plugin": "feature-dev",
+      "marketplace": "claude-plugins-official",
+      "invoke": "Task tool with subagent_type: \"feature-dev:code-architect\""
+    },
+    {
+      "name": "code-explorer",
+      "description": "Deeply analyzes existing codebase features by tracing execution paths, mapping architecture layers, understanding patterns and abstractions, and documenting dependencies to inform new development",
+      "model": "sonnet",
+      "plugin": "feature-dev",
+      "marketplace": "claude-plugins-official",
+      "invoke": "Task tool with subagent_type: \"feature-dev:code-explorer\""
+    },
+    {
+      "name": "code-reviewer",
+      "description": "Reviews code for bugs, logic errors, security vulnerabilities, code quality issues, and adherence to project conventions, using confidence-based filtering to report only high-priority issues that truly matter",
+      "model": "sonnet",
+      "plugin": "feature-dev",
+      "marketplace": "claude-plugins-official",
+      "invoke": "Task tool with subagent_type: \"feature-dev:code-reviewer\""
+    },
+    {
+      "name": "code-simplifier",
+      "description": "Simplifies and refines code for clarity, consistency, and maintainability while preserving all functionality. Focuses on recently modified code unless instructed otherwise.",
+      "model": "opus",
+      "plugin": "code-simplifier",
+      "marketplace": "claude-plugins-official",
+      "invoke": "Task tool with subagent_type: \"code-simplifier:code-simplifier\""
+    },
+    {
+      "name": "agent-creator",
+      "description": "Use this agent when the user asks to \"create an agent\", \"generate an agent\", \"build a new agent\", \"make me an agent that...\", or describes agent functionality they need. Trigger when user wants to create autonomous agents for plugins. Examples:",
+      "model": "sonnet",
+      "plugin": "plugin-dev",
+      "marketplace": "claude-plugins-official",
+      "invoke": "Task tool with subagent_type: \"plugin-dev:agent-creator\""
+    },
+    {
+      "name": "plugin-validator",
+      "description": "Use this agent when the user asks to \"validate my plugin\", \"check plugin structure\", \"verify plugin is correct\", \"validate plugin.json\", \"check plugin files\", or mentions plugin validation. Also trigger proactively after user creates or modifies plugin components. Examples:",
+      "model": "inherit",
+      "plugin": "plugin-dev",
+      "marketplace": "claude-plugins-official",
+      "invoke": "Task tool with subagent_type: \"plugin-dev:plugin-validator\""
+    },
+    {
+      "name": "skill-reviewer",
+      "description": "Use this agent when the user has created or modified a skill and needs quality review, asks to \"review my skill\", \"check skill quality\", \"improve skill description\", or wants to ensure skill follows best practices. Trigger proactively after skill creation. Examples:",
+      "model": "inherit",
+      "plugin": "plugin-dev",
+      "marketplace": "claude-plugins-official",
+      "invoke": "Task tool with subagent_type: \"plugin-dev:skill-reviewer\""
+    },
+    {
+      "name": "recursive-agent",
+      "description": "|",
+      "model": "inherit",
+      "plugin": "rlm-agent",
+      "marketplace": "rlm-local",
+      "invoke": "Task tool with subagent_type: \"rlm-agent:recursive-agent\""
+    },
+    {
+      "name": "fast-helper-agent",
+      "description": "",
+      "model": "sonnet",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "invoke": "Task tool with subagent_type: \"ultimate-workflow:fast-helper-agent\""
+    },
+    {
+      "name": "orchestrator-rules",
+      "description": "",
+      "model": "sonnet",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "invoke": "Task tool with subagent_type: \"ultimate-workflow:orchestrator-rules\""
+    },
+    {
+      "name": "plan-auditor-agent",
+      "description": "",
+      "model": "sonnet",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "invoke": "Task tool with subagent_type: \"ultimate-workflow:plan-auditor-agent\""
+    },
+    {
+      "name": "planner-agent",
+      "description": "",
+      "model": "sonnet",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "invoke": "Task tool with subagent_type: \"ultimate-workflow:planner-agent\""
+    },
+    {
+      "name": "product-tester-agent",
+      "description": "",
+      "model": "sonnet",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "invoke": "Task tool with subagent_type: \"ultimate-workflow:product-tester-agent\""
+    },
+    {
+      "name": "worker-agent",
+      "description": "",
+      "model": "sonnet",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "invoke": "Task tool with subagent_type: \"ultimate-workflow:worker-agent\""
+    },
+    {
+      "name": "agent-creator",
+      "description": "Use this agent when the user asks to \"create an agent\", \"generate an agent\", \"build a new agent\", \"make me an agent that...\", or describes agent functionality they need. Trigger when user wants to create autonomous agents for plugins. Examples:",
+      "model": "sonnet",
+      "plugin": "plugin-factory",
+      "marketplace": "ultimate-workflow-local",
+      "invoke": "Task tool with subagent_type: \"plugin-factory:agent-creator\""
+    },
+    {
+      "name": "plugin-validator",
+      "description": "Use this agent when the user asks to \"validate my plugin\", \"check plugin structure\", \"verify plugin is correct\", \"validate plugin.json\", \"check plugin files\", or mentions plugin validation. Also trigger proactively after user creates or modifies plugin components. Examples:",
+      "model": "inherit",
+      "plugin": "plugin-factory",
+      "marketplace": "ultimate-workflow-local",
+      "invoke": "Task tool with subagent_type: \"plugin-factory:plugin-validator\""
+    },
+    {
+      "name": "skill-reviewer",
+      "description": "Use this agent when the user has created or modified a skill and needs quality review, asks to \"review my skill\", \"check skill quality\", \"improve skill description\", or wants to ensure skill follows best practices. Trigger proactively after skill creation. Examples:",
+      "model": "inherit",
+      "plugin": "plugin-factory",
+      "marketplace": "ultimate-workflow-local",
+      "invoke": "Task tool with subagent_type: \"plugin-factory:skill-reviewer\""
+    },
+    {
+      "name": "recursive-agent",
+      "description": "|",
+      "model": "inherit",
+      "plugin": "rlm-agent",
+      "marketplace": "rlm-local",
+      "invoke": "Task tool with subagent_type: \"rlm-agent:recursive-agent\""
+    }
+  ],
+  "mcp_servers": [
+    {
+      "name": "context7",
+      "full_name": "plugin:context7:context7",
+      "command": "npx -y @upstash/context7-mcp",
+      "connected": true,
+      "status": "âœ“ Connected"
+    },
+    {
+      "name": "greptile",
+      "full_name": "plugin:greptile:greptile",
+      "command": "https://api.greptile.com/mcp (HTTP)",
+      "connected": true,
+      "status": "âœ“ Connected"
+    },
+    {
+      "name": "playwright",
+      "full_name": "plugin:playwright:playwright",
+      "command": "npx @playwright/mcp@latest",
+      "connected": true,
+      "status": "âœ“ Connected"
+    },
+    {
+      "name": "exa",
+      "full_name": "exa",
+      "command": "npx -y exa-mcp-server",
+      "connected": true,
+      "status": "âœ“ Connected"
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": 4,
+  "links": [],
+  "panels": [
+    {
+      "title": "Cluster CPU Usage",
+      "type": "graph",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"ramp-os\"}[5m]))",
+          "legendFormat": "CPU Cores"
+        }
+      ]
+    },
+    {
+      "title": "Cluster Memory Usage",
+      "type": "graph",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(container_memory_usage_bytes{namespace=\"ramp-os\"})",
+          "legendFormat": "Memory"
+        }
+      ]
+    },
+    {
+      "title": "Pod Restarts",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 8, "w": 8, "h": 6 },
+      "targets": [
+        {
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"ramp-os\"}[1h]))",
+          "legendFormat": "Restarts/hr"
+        }
+      ]
+    },
+    {
+      "title": "Disk Usage (PVC)",
+      "type": "bar-gauge",
+      "gridPos": { "x": 8, "y": 8, "w": 16, "h": 6 },
+      "targets": [
+        {
+          "expr": "kubelet_volume_stats_used_bytes{namespace=\"ramp-os\"} / kubelet_volume_stats_capacity_bytes{namespace=\"ramp-os\"} * 100",
+          "legendFormat": "{{persistentvolumeclaim}}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": ["ramp-os", "infra"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "RampOS - Infrastructure",
+  "uid": "rampos-infra",
+  "version": 1
+}

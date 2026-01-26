@@ -1,0 +1,377 @@
+# Installed Claude Code Resources
+
+Generated: 2026-01-26T09:36:12.973922
+
+**This list shows ONLY resources that are currently ENABLED in Claude Code settings.**
+
+---
+
+## Enabled Plugins (40)
+
+- **ai-generation-skills** (baoyu-skills): AI-powered generation backends
+- **ask-questions-if-underspecified** (trailofbits): Clarify requirements before implementing. When doubting, ask questions.
+- **audit-context-building** (trailofbits): Build deep architectural context through ultra-granular code analysis before vulnerability hunting
+- **building-secure-contracts** (trailofbits): Comprehensive smart contract security toolkit based on Trail of Bits' Building Secure Contracts framework. Includes vulnerability scanners for 6 blockchains and 5 development guideline assistants.
+- **burpsuite-project-parser** (trailofbits): Search and extract data from Burp Suite project files (.burp) for use in Claude
+- **code-review** (claude-plugins-official): Automated code review for pull requests using multiple specialized agents with confidence-based scoring to filter false positives
+- **code-simplifier** (claude-plugins-official): Agent that simplifies and refines code for clarity, consistency, and maintainability while preserving functionality. Focuses on recently modified code.
+- **constant-time-analysis** (trailofbits): Detect compiler-induced timing side-channels in cryptographic code
+- **content-skills** (baoyu-skills): Content generation and publishing skills
+- **context7** (claude-plugins-official): Upstash Context7 MCP server for up-to-date documentation lookup. Pull version-specific documentation and code examples directly from source repositories into your LLM context.
+- **culture-index** (trailofbits): Interprets Culture Index survey results for individuals and teams
+- **differential-review** (trailofbits): Security-focused differential review of code changes with git history analysis and blast radius estimation
+- **document-skills** (anthropic-agent-skills): Collection of document processing suite including Excel, Word, PowerPoint, and PDF capabilities
+- **dwarf-expert** (trailofbits): Interact with and understand the DWARF debugging format
+- **entry-point-analyzer** (trailofbits): Analyzes smart contract codebases to identify state-changing entry points for security auditing. Detects externally callable functions that modify state, categorizes them by access level, and generates structured audit reports.
+- **example-skills** (anthropic-agent-skills): Collection of example skills demonstrating various capabilities including skill creation, MCP building, visual design, algorithmic art, internal communications, web testing, artifact building, Slack GIFs, and theme styling
+- **feature-dev** (claude-plugins-official): Comprehensive feature development workflow with specialized agents for codebase exploration, architecture design, and quality review
+- **fix-review** (trailofbits): Verify fix commits address audit findings without introducing bugs
+- **frontend-design** (claude-plugins-official): Create distinctive, production-grade frontend interfaces with high design quality. Generates creative, polished code that avoids generic AI aesthetics.
+- **greptile** (claude-plugins-official): AI-powered codebase search and understanding. Query your repositories using natural language to find relevant code, understand dependencies, and get contextual answers about your codebase architecture.
+- **playwright** (claude-plugins-official): Browser automation and end-to-end testing MCP server by Microsoft. Enables Claude to interact with web pages, take screenshots, fill forms, click elements, and perform automated browser testing workflows.
+- **plugin-dev** (claude-plugins-official): Comprehensive toolkit for developing Claude Code plugins. Includes 7 expert skills covering hooks, MCP integration, commands, agents, and best practices. AI-assisted plugin creation and validation.
+- **plugin-factory** (ultimate-workflow-local): Unified factory for creating, validating, registering, and installing Claude Code plugins and skills
+- **plugin-super-factory** (hades-local): Generates production-ready Claude Code plugins and skills using Trail of Bits methodology patterns
+- **property-based-testing** (trailofbits): Property-based testing guidance for multiple languages and smart contracts
+- **pyright-lsp** (claude-plugins-official): Python language server (Pyright) for type checking and code intelligence
+- **rlm-agent** (rlm-local): Recursive Language Model integration for handling near-infinite context tasks
+- **rlm-agent** (rlm-local): Recursive Language Model integration for handling near-infinite context tasks
+- **rust-analyzer-lsp** (claude-plugins-official): Rust language server for code intelligence and analysis
+- **semgrep-rule-creator** (trailofbits): Create custom Semgrep rules for detecting bug patterns and security vulnerabilities
+- **semgrep-rule-variant-creator** (trailofbits): Creates language variants of existing Semgrep rules with proper applicability analysis and test-driven validation
+- **sharp-edges** (trailofbits): Identify error-prone APIs, dangerous configurations, and footgun designs that enable security mistakes
+- **spec-to-code-compliance** (trailofbits): Specification-to-code compliance checker for blockchain audits with evidence-based alignment analysis
+- **static-analysis** (trailofbits): Static analysis toolkit with CodeQL, Semgrep, and SARIF parsing for security vulnerability detection
+- **superpowers** (claude-plugins-official): Superpowers teaches Claude brainstorming, subagent driven development with built in code review, systematic debugging, and red/green TDD. Additionally, it teaches Claude how to author and test new skills.
+- **testing-handbook-skills** (trailofbits): Skills from the Trail of Bits Application Security Testing Handbook (appsec.guide)
+- **typescript-lsp** (claude-plugins-official): TypeScript/JavaScript language server for enhanced code intelligence
+- **ultimate-workflow** (ultimate-workflow-local): Biến Claude Code thành công ty dev ảo - cho phép người non-code xây dựng sản phẩm phần mềm production-ready
+- **utility-skills** (baoyu-skills): Utility tools for content processing
+- **variant-analysis** (trailofbits): Find similar vulnerabilities and bugs across codebases using pattern-based analysis
+
+## Skills (132)
+
+### Internal Skills (use Skill tool)
+- **Agent Development**: This skill should be used when the user asks to "create an agent", "add an agent", "write a subagent", "agent frontmatter", "when to use description", "agent examples", "agent tools", "agent colors", "autonomous agent", or needs guidance on agent structure, system prompts, triggering conditions, or agent development best practices for Claude Code plugins.
+  - Plugin: plugin-dev (claude-plugins-official)
+- **Agent Development**: This skill should be used when the user asks to "create an agent", "add an agent", "write a subagent", "agent frontmatter", "when to use description", "agent examples", "agent tools", "agent colors", "autonomous agent", or needs guidance on agent structure, system prompts, triggering conditions, or agent development best practices for Claude Code plugins.
+  - Plugin: plugin-factory (ultimate-workflow-local)
+- **Command Development**: This skill should be used when the user asks to "create a slash command", "add a command", "write a custom command", "define command arguments", "use command frontmatter", "organize commands", "create command with file references", "interactive command", "use AskUserQuestion in command", or needs guidance on slash command structure, YAML frontmatter fields, dynamic arguments, bash execution in commands, user interaction patterns, or command development best practices for Claude Code.
+  - Plugin: plugin-dev (claude-plugins-official)
+- **Command Development**: This skill should be used when the user asks to "create a slash command", "add a command", "write a custom command", "define command arguments", "use command frontmatter", "organize commands", "create command with file references", "interactive command", "use AskUserQuestion in command", or needs guidance on slash command structure, YAML frontmatter fields, dynamic arguments, bash execution in commands, user interaction patterns, or command development best practices for Claude Code.
+  - Plugin: plugin-factory (ultimate-workflow-local)
+- **Hook Development**: This skill should be used when the user asks to "create a hook", "add a PreToolUse/PostToolUse/Stop hook", "validate tool use", "implement prompt-based hooks", "use ${CLAUDE_PLUGIN_ROOT}", "set up event-driven automation", "block dangerous commands", or mentions hook events (PreToolUse, PostToolUse, Stop, SubagentStop, SessionStart, SessionEnd, UserPromptSubmit, PreCompact, Notification). Provides comprehensive guidance for creating and implementing Claude Code plugin hooks with focus on advanced prompt-based hooks API.
+  - Plugin: plugin-dev (claude-plugins-official)
+- **Hook Development**: This skill should be used when the user asks to "create a hook", "add a PreToolUse/PostToolUse/Stop hook", "validate tool use", "implement prompt-based hooks", "use ${CLAUDE_PLUGIN_ROOT}", "set up event-driven automation", "block dangerous commands", or mentions hook events (PreToolUse, PostToolUse, Stop, SubagentStop, SessionStart, SessionEnd, UserPromptSubmit, PreCompact, Notification). Provides comprehensive guidance for creating and implementing Claude Code plugin hooks with focus on advanced prompt-based hooks API.
+  - Plugin: plugin-factory (ultimate-workflow-local)
+- **MCP Integration**: This skill should be used when the user asks to "add MCP server", "integrate MCP", "configure MCP in plugin", "use .mcp.json", "set up Model Context Protocol", "connect external service", mentions "${CLAUDE_PLUGIN_ROOT} with MCP", or discusses MCP server types (SSE, stdio, HTTP, WebSocket). Provides comprehensive guidance for integrating Model Context Protocol servers into Claude Code plugins for external tool and service integration.
+  - Plugin: plugin-dev (claude-plugins-official)
+- **MCP Integration**: This skill should be used when the user asks to "add MCP server", "integrate MCP", "configure MCP in plugin", "use .mcp.json", "set up Model Context Protocol", "connect external service", mentions "${CLAUDE_PLUGIN_ROOT} with MCP", or discusses MCP server types (SSE, stdio, HTTP, WebSocket). Provides comprehensive guidance for integrating Model Context Protocol servers into Claude Code plugins for external tool and service integration.
+  - Plugin: plugin-factory (ultimate-workflow-local)
+- **Plugin Settings**: This skill should be used when the user asks about "plugin settings", "store plugin configuration", "user-configurable plugin", ".local.md files", "plugin state files", "read YAML frontmatter", "per-project plugin settings", or wants to make plugin behavior configurable. Documents the .claude/plugin-name.local.md pattern for storing plugin-specific configuration with YAML frontmatter and markdown content.
+  - Plugin: plugin-dev (claude-plugins-official)
+- **Plugin Settings**: This skill should be used when the user asks about "plugin settings", "store plugin configuration", "user-configurable plugin", ".local.md files", "plugin state files", "read YAML frontmatter", "per-project plugin settings", or wants to make plugin behavior configurable. Documents the .claude/plugin-name.local.md pattern for storing plugin-specific configuration with YAML frontmatter and markdown content.
+  - Plugin: plugin-factory (ultimate-workflow-local)
+- **Plugin Structure**: This skill should be used when the user asks to "create a plugin", "scaffold a plugin", "understand plugin structure", "organize plugin components", "set up plugin.json", "use ${CLAUDE_PLUGIN_ROOT}", "add commands/agents/skills/hooks", "configure auto-discovery", or needs guidance on plugin directory layout, manifest configuration, component organization, file naming conventions, or Claude Code plugin architecture best practices.
+  - Plugin: plugin-dev (claude-plugins-official)
+- **Plugin Structure**: This skill should be used when the user asks to "create a plugin", "scaffold a plugin", "understand plugin structure", "organize plugin components", "set up plugin.json", "use ${CLAUDE_PLUGIN_ROOT}", "add commands/agents/skills/hooks", "configure auto-discovery", or needs guidance on plugin directory layout, manifest configuration, component organization, file naming conventions, or Claude Code plugin architecture best practices.
+  - Plugin: plugin-factory (ultimate-workflow-local)
+- **Skill Development**: This skill should be used when the user wants to "create a skill", "add a skill to plugin", "write a new skill", "improve skill description", "organize skill content", or needs guidance on skill structure, progressive disclosure, or skill development best practices for Claude Code plugins.
+  - Plugin: plugin-dev (claude-plugins-official)
+- **Skill Development**: This skill should be used when the user wants to "create a skill", "add a skill to plugin", "write a new skill", "improve skill description", "organize skill content", or needs guidance on skill structure, progressive disclosure, or skill development best practices for Claude Code plugins.
+  - Plugin: plugin-factory (ultimate-workflow-local)
+- **address-sanitizer**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **aflpp**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **algorithmic-art**: Creating algorithmic art using p5.js with seeded randomness and interactive parameter exploration. Use this when users request creating art using code, generative art, algorithmic art, flow fields, or particle systems. Create original algorithmic art rather than copying existing artists' work to avoid copyright violations.
+  - Plugin: document-skills (anthropic-agent-skills)
+- **algorithmic-art**: Creating algorithmic art using p5.js with seeded randomness and interactive parameter exploration. Use this when users request creating art using code, generative art, algorithmic art, flow fields, or particle systems. Create original algorithmic art rather than copying existing artists' work to avoid copyright violations.
+  - Plugin: example-skills (anthropic-agent-skills)
+- **ask-questions-if-underspecified**: Clarify requirements before implementing. Use when serious doubts araise.
+  - Plugin: ask-questions-if-underspecified (trailofbits)
+- **atheris**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **audit-context-building**: Enables ultra-granular, line-by-line code analysis to build deep architectural context before vulnerability or bug finding.
+  - Plugin: audit-context-building (trailofbits)
+- **baoyu-article-illustrator**: Analyzes article structure, identifies positions requiring visual aids, generates illustrations with Type × Style two-dimension approach. Use when user asks to "illustrate article", "add images", "generate images for article", or "为文章配图".
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-article-illustrator**: Analyzes article structure, identifies positions requiring visual aids, generates illustrations with Type × Style two-dimension approach. Use when user asks to "illustrate article", "add images", "generate images for article", or "为文章配图".
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-article-illustrator**: Analyzes article structure, identifies positions requiring visual aids, generates illustrations with Type × Style two-dimension approach. Use when user asks to "illustrate article", "add images", "generate images for article", or "为文章配图".
+  - Plugin: utility-skills (baoyu-skills)
+- **baoyu-comic**: Knowledge comic creator supporting multiple art styles and tones. Creates original educational comics with detailed panel layouts and sequential image generation. Use when user asks to create "知识漫画", "教育漫画", "biography comic", "tutorial comic", or "Logicomix-style comic".
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-comic**: Knowledge comic creator supporting multiple art styles and tones. Creates original educational comics with detailed panel layouts and sequential image generation. Use when user asks to create "知识漫画", "教育漫画", "biography comic", "tutorial comic", or "Logicomix-style comic".
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-comic**: Knowledge comic creator supporting multiple art styles and tones. Creates original educational comics with detailed panel layouts and sequential image generation. Use when user asks to create "知识漫画", "教育漫画", "biography comic", "tutorial comic", or "Logicomix-style comic".
+  - Plugin: utility-skills (baoyu-skills)
+- **baoyu-compress-image**: Compresses images to WebP (default) or PNG with automatic tool selection. Use when user asks to "compress image", "optimize image", "convert to webp", or reduce image file size.
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-compress-image**: Compresses images to WebP (default) or PNG with automatic tool selection. Use when user asks to "compress image", "optimize image", "convert to webp", or reduce image file size.
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-compress-image**: Compresses images to WebP (default) or PNG with automatic tool selection. Use when user asks to "compress image", "optimize image", "convert to webp", or reduce image file size.
+  - Plugin: utility-skills (baoyu-skills)
+- **baoyu-cover-image**: Generates article cover images with 4 dimensions (type, style, text, mood) and 20 hand-drawn styles. Supports cinematic (2.35:1), widescreen (16:9), and square (1:1) aspects. Use when user asks to "generate cover image", "create article cover", "make cover", or mentions "封面图".
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-cover-image**: Generates article cover images with 4 dimensions (type, style, text, mood) and 20 hand-drawn styles. Supports cinematic (2.35:1), widescreen (16:9), and square (1:1) aspects. Use when user asks to "generate cover image", "create article cover", "make cover", or mentions "封面图".
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-cover-image**: Generates article cover images with 4 dimensions (type, style, text, mood) and 20 hand-drawn styles. Supports cinematic (2.35:1), widescreen (16:9), and square (1:1) aspects. Use when user asks to "generate cover image", "create article cover", "make cover", or mentions "封面图".
+  - Plugin: utility-skills (baoyu-skills)
+- **baoyu-danger-gemini-web**: Generates images and text via reverse-engineered Gemini Web API. Supports text generation, image generation from prompts, reference images for vision input, and multi-turn conversations. Use when other skills need image generation backend, or when user requests "generate image with Gemini", "Gemini text generation", or needs vision-capable AI generation.
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-danger-gemini-web**: Generates images and text via reverse-engineered Gemini Web API. Supports text generation, image generation from prompts, reference images for vision input, and multi-turn conversations. Use when other skills need image generation backend, or when user requests "generate image with Gemini", "Gemini text generation", or needs vision-capable AI generation.
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-danger-gemini-web**: Generates images and text via reverse-engineered Gemini Web API. Supports text generation, image generation from prompts, reference images for vision input, and multi-turn conversations. Use when other skills need image generation backend, or when user requests "generate image with Gemini", "Gemini text generation", or needs vision-capable AI generation.
+  - Plugin: utility-skills (baoyu-skills)
+- **baoyu-danger-x-to-markdown**: Converts X (Twitter) tweets and articles to markdown with YAML front matter. Uses reverse-engineered API requiring user consent. Use when user mentions "X to markdown", "tweet to markdown", "save tweet", or provides x.com/twitter.com URLs for conversion.
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-danger-x-to-markdown**: Converts X (Twitter) tweets and articles to markdown with YAML front matter. Uses reverse-engineered API requiring user consent. Use when user mentions "X to markdown", "tweet to markdown", "save tweet", or provides x.com/twitter.com URLs for conversion.
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-danger-x-to-markdown**: Converts X (Twitter) tweets and articles to markdown with YAML front matter. Uses reverse-engineered API requiring user consent. Use when user mentions "X to markdown", "tweet to markdown", "save tweet", or provides x.com/twitter.com URLs for conversion.
+  - Plugin: utility-skills (baoyu-skills)
+- **baoyu-image-gen**: AI image generation with OpenAI and Google APIs. Supports text-to-image, reference images, aspect ratios, and parallel generation (recommended 4 concurrent subagents). Use when user asks to generate, create, or draw images.
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-image-gen**: AI image generation with OpenAI and Google APIs. Supports text-to-image, reference images, aspect ratios, and parallel generation (recommended 4 concurrent subagents). Use when user asks to generate, create, or draw images.
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-image-gen**: AI image generation with OpenAI and Google APIs. Supports text-to-image, reference images, aspect ratios, and parallel generation (recommended 4 concurrent subagents). Use when user asks to generate, create, or draw images.
+  - Plugin: utility-skills (baoyu-skills)
+- **baoyu-infographic**: Generates professional infographics with 20 layout types and 17 visual styles. Analyzes content, recommends layout×style combinations, and generates publication-ready infographics. Use when user asks to create "infographic", "信息图", "visual summary", or "可视化".
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-infographic**: Generates professional infographics with 20 layout types and 17 visual styles. Analyzes content, recommends layout×style combinations, and generates publication-ready infographics. Use when user asks to create "infographic", "信息图", "visual summary", or "可视化".
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-infographic**: Generates professional infographics with 20 layout types and 17 visual styles. Analyzes content, recommends layout×style combinations, and generates publication-ready infographics. Use when user asks to create "infographic", "信息图", "visual summary", or "可视化".
+  - Plugin: utility-skills (baoyu-skills)
+- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via Chrome CDP automation. Supports article posting (文章) with full markdown formatting and image-text posting (图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "图文/文章".
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via Chrome CDP automation. Supports article posting (文章) with full markdown formatting and image-text posting (图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "图文/文章".
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via Chrome CDP automation. Supports article posting (文章) with full markdown formatting and image-text posting (图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "图文/文章".
+  - Plugin: utility-skills (baoyu-skills)
+- **baoyu-post-to-x**: Posts content and articles to X (Twitter). Supports regular posts with images/videos and X Articles (long-form Markdown). Uses real Chrome with CDP to bypass anti-automation. Use when user asks to "post to X", "tweet", "publish to Twitter", or "share on X".
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-post-to-x**: Posts content and articles to X (Twitter). Supports regular posts with images/videos and X Articles (long-form Markdown). Uses real Chrome with CDP to bypass anti-automation. Use when user asks to "post to X", "tweet", "publish to Twitter", or "share on X".
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-post-to-x**: Posts content and articles to X (Twitter). Supports regular posts with images/videos and X Articles (long-form Markdown). Uses real Chrome with CDP to bypass anti-automation. Use when user asks to "post to X", "tweet", "publish to Twitter", or "share on X".
+  - Plugin: utility-skills (baoyu-skills)
+- **baoyu-slide-deck**: Generates professional slide deck images from content. Creates outlines with style instructions, then generates individual slide images. Use when user asks to "create slides", "make a presentation", "generate deck", "slide deck", or "PPT".
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-slide-deck**: Generates professional slide deck images from content. Creates outlines with style instructions, then generates individual slide images. Use when user asks to "create slides", "make a presentation", "generate deck", "slide deck", or "PPT".
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-slide-deck**: Generates professional slide deck images from content. Creates outlines with style instructions, then generates individual slide images. Use when user asks to "create slides", "make a presentation", "generate deck", "slide deck", or "PPT".
+  - Plugin: utility-skills (baoyu-skills)
+- **baoyu-url-to-markdown**: Fetch any URL and convert to markdown using Chrome CDP. Supports two modes - auto-capture on page load, or wait for user signal (for pages requiring login). Use when user wants to save a webpage as markdown.
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-url-to-markdown**: Fetch any URL and convert to markdown using Chrome CDP. Supports two modes - auto-capture on page load, or wait for user signal (for pages requiring login). Use when user wants to save a webpage as markdown.
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-url-to-markdown**: Fetch any URL and convert to markdown using Chrome CDP. Supports two modes - auto-capture on page load, or wait for user signal (for pages requiring login). Use when user wants to save a webpage as markdown.
+  - Plugin: utility-skills (baoyu-skills)
+- **baoyu-xhs-images**: Generates Xiaohongshu (Little Red Book) infographic series with 9 visual styles and 6 layouts. Breaks content into 1-10 cartoon-style images optimized for XHS engagement. Use when user mentions "小红书图片", "XHS images", "RedNote infographics", "小红书种草", or wants social media infographics for Chinese platforms.
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-xhs-images**: Generates Xiaohongshu (Little Red Book) infographic series with 9 visual styles and 6 layouts. Breaks content into 1-10 cartoon-style images optimized for XHS engagement. Use when user mentions "小红书图片", "XHS images", "RedNote infographics", "小红书种草", or wants social media infographics for Chinese platforms.
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-xhs-images**: Generates Xiaohongshu (Little Red Book) infographic series with 9 visual styles and 6 layouts. Breaks content into 1-10 cartoon-style images optimized for XHS engagement. Use when user mentions "小红书图片", "XHS images", "RedNote infographics", "小红书种草", or wants social media infographics for Chinese platforms.
+  - Plugin: utility-skills (baoyu-skills)
+- **brand-guidelines**: Applies Anthropic's official brand colors and typography to any sort of artifact that may benefit from having Anthropic's look-and-feel. Use it when brand colors or style guidelines, visual formatting, or company design standards apply.
+  - Plugin: document-skills (anthropic-agent-skills)
+- **brand-guidelines**: Applies Anthropic's official brand colors and typography to any sort of artifact that may benefit from having Anthropic's look-and-feel. Use it when brand colors or style guidelines, visual formatting, or company design standards apply.
+  - Plugin: example-skills (anthropic-agent-skills)
+- **build**: 
+  - Plugin: ultimate-workflow (ultimate-workflow-local)
+- **build-approve**: 
+  - Plugin: ultimate-workflow (ultimate-workflow-local)
+- **build-development**: 
+  - Plugin: ultimate-workflow (ultimate-workflow-local)
+- **build-discovery**: 
+  - Plugin: ultimate-workflow (ultimate-workflow-local)
+- **build-gap-detect**: 
+  - Plugin: ultimate-workflow (ultimate-workflow-local)
+- **build-memory**: 
+  - Plugin: ultimate-workflow (ultimate-workflow-local)
+- **build-planning**: 
+  - Plugin: ultimate-workflow (ultimate-workflow-local)
+- **build-qa**: 
+  - Plugin: ultimate-workflow (ultimate-workflow-local)
+- **build-resume**: 
+  - Plugin: ultimate-workflow (ultimate-workflow-local)
+- **build-status**: 
+  - Plugin: ultimate-workflow (ultimate-workflow-local)
+- **canvas-design**: Create beautiful visual art in .png and .pdf documents using design philosophy. You should use this skill when the user asks to create a poster, piece of art, design, or other static piece. Create original visual designs, never copying existing artists' work to avoid copyright violations.
+  - Plugin: document-skills (anthropic-agent-skills)
+- **canvas-design**: Create beautiful visual art in .png and .pdf documents using design philosophy. You should use this skill when the user asks to create a poster, piece of art, design, or other static piece. Create original visual designs, never copying existing artists' work to avoid copyright violations.
+  - Plugin: example-skills (anthropic-agent-skills)
+- **cargo-fuzz**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **codeql**: Run CodeQL static analysis for security vulnerability detection, taint tracking, and data flow analysis. Use when asked to analyze code with CodeQL, create CodeQL databases, write custom QL queries, perform security audits, or set up CodeQL in CI/CD pipelines.
+  - Plugin: static-analysis (trailofbits)
+- **codeql**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **constant-time-analysis**: Detects timing side-channel vulnerabilities in cryptographic code. Use when implementing or reviewing crypto code, encountering division on secrets, secret-dependent branches, or constant-time programming questions in C, C++, Go, Rust, Swift, Java, Kotlin, C#, PHP, JavaScript, TypeScript, Python, or Ruby.
+  - Plugin: constant-time-analysis (trailofbits)
+- **constant-time-testing**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **coverage-analysis**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **differential-review**: >
+  - Plugin: differential-review (trailofbits)
+- **doc-coauthoring**: Guide users through a structured workflow for co-authoring documentation. Use when user wants to write documentation, proposals, technical specs, decision docs, or similar structured content. This workflow helps users efficiently transfer context, refine content through iteration, and verify the doc works for readers. Trigger when user mentions writing docs, creating proposals, drafting specs, or similar documentation tasks.
+  - Plugin: document-skills (anthropic-agent-skills)
+- **doc-coauthoring**: Guide users through a structured workflow for co-authoring documentation. Use when user wants to write documentation, proposals, technical specs, decision docs, or similar structured content. This workflow helps users efficiently transfer context, refine content through iteration, and verify the doc works for readers. Trigger when user mentions writing docs, creating proposals, drafting specs, or similar documentation tasks.
+  - Plugin: example-skills (anthropic-agent-skills)
+- **docx**: Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. When Claude needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks
+  - Plugin: document-skills (anthropic-agent-skills)
+- **docx**: Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. When Claude needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks
+  - Plugin: example-skills (anthropic-agent-skills)
+- **dwarf-expert**: Provides expertise for analyzing DWARF debug files and understanding the DWARF debug format/standard (v3-v5). Triggers when understanding DWARF information, interacting with DWARF files, answering DWARF-related questions, or working with code that parses DWARF data.
+  - Plugin: dwarf-expert (trailofbits)
+- **entry-point-analyzer**: Analyzes smart contract codebases to identify state-changing entry points for security auditing. Detects externally callable functions that modify state, categorizes them by access level (public, admin, role-restricted, contract-only), and generates structured audit reports. Excludes view/pure/read-only functions. Use when auditing smart contracts (Solidity, Vyper, Solana/Rust, Move, TON, CosmWasm) or when asked to find entry points, audit flows, external functions, access control patterns, or privileged operations.
+  - Plugin: entry-point-analyzer (trailofbits)
+- **fix-review**: >
+  - Plugin: fix-review (trailofbits)
+- **frontend-design**: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.
+  - Plugin: document-skills (anthropic-agent-skills)
+- **frontend-design**: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.
+  - Plugin: example-skills (anthropic-agent-skills)
+- **frontend-design**: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, or applications. Generates creative, polished code that avoids generic AI aesthetics.
+  - Plugin: frontend-design (claude-plugins-official)
+- **fuzzing-dictionary**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **fuzzing-obstacles**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **harness-writing**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **installing-local-plugins**: Installs and troubleshoots local Claude Code plugin marketplaces and plugins. Use when local plugin installation fails, Claude Code cannot find a marketplace path, or schema validation errors occur.
+  - Plugin: plugin-factory (ultimate-workflow-local)
+- **internal-comms**: A set of resources to help me write all kinds of internal communications, using the formats that my company likes to use. Claude should use this skill whenever asked to write some sort of internal communications (status reports, leadership updates, 3P updates, company newsletters, FAQs, incident reports, project updates, etc.).
+  - Plugin: document-skills (anthropic-agent-skills)
+- **internal-comms**: A set of resources to help me write all kinds of internal communications, using the formats that my company likes to use. Claude should use this skill whenever asked to write some sort of internal communications (status reports, leadership updates, 3P updates, company newsletters, FAQs, incident reports, project updates, etc.).
+  - Plugin: example-skills (anthropic-agent-skills)
+- **interpreting-culture-index**: Use when interpreting Culture Index surveys, CI profiles, behavioral assessments, or personality data. Supports individual interpretation, team composition (gas/brake/glue), burnout detection, profile comparison, hiring profiles, manager coaching, interview transcript analysis for trait prediction, candidate debrief, onboarding planning, and conflict mediation. Handles PDF vision or JSON input.
+  - Plugin: culture-index (trailofbits)
+- **libafl**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **libfuzzer**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **mcp-builder**: Guide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. Use when building MCP servers to integrate external APIs or services, whether in Python (FastMCP) or Node/TypeScript (MCP SDK).
+  - Plugin: document-skills (anthropic-agent-skills)
+- **mcp-builder**: Guide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. Use when building MCP servers to integrate external APIs or services, whether in Python (FastMCP) or Node/TypeScript (MCP SDK).
+  - Plugin: example-skills (anthropic-agent-skills)
+- **ossfuzz**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **pdf**: Comprehensive PDF manipulation toolkit for extracting text and tables, creating new PDFs, merging/splitting documents, and handling forms. When Claude needs to fill in a PDF form or programmatically process, generate, or analyze PDF documents at scale.
+  - Plugin: document-skills (anthropic-agent-skills)
+- **pdf**: Comprehensive PDF manipulation toolkit for extracting text and tables, creating new PDFs, merging/splitting documents, and handling forms. When Claude needs to fill in a PDF form or programmatically process, generate, or analyze PDF documents at scale.
+  - Plugin: example-skills (anthropic-agent-skills)
+- **plugin-factory-wizard**: Creates and validates Claude Code plugins and skills using Trail of Bits standards. Use when creating a new plugin, adding skills, or registering a plugin in a marketplace.
+  - Plugin: plugin-factory (ultimate-workflow-local)
+- **pptx**: Presentation creation, editing, and analysis. When Claude needs to work with presentations (.pptx files) for: (1) Creating new presentations, (2) Modifying or editing content, (3) Working with layouts, (4) Adding comments or speaker notes, or any other presentation tasks
+  - Plugin: document-skills (anthropic-agent-skills)
+- **pptx**: Presentation creation, editing, and analysis. When Claude needs to work with presentations (.pptx files) for: (1) Creating new presentations, (2) Modifying or editing content, (3) Working with layouts, (4) Adding comments or speaker notes, or any other presentation tasks
+  - Plugin: example-skills (anthropic-agent-skills)
+- **property-based-testing**: Provides guidance for property-based testing across multiple languages and smart contracts. Use when writing tests, reviewing code with serialization/validation/parsing patterns, designing features, or when property-based testing would provide stronger coverage than example-based tests.
+  - Plugin: property-based-testing (trailofbits)
+- **ruzzy**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **sarif-parsing**: Parse, analyze, and process SARIF (Static Analysis Results Interchange Format) files. Use when reading security scan results, aggregating findings from multiple tools, deduplicating alerts, extracting specific vulnerabilities, or integrating SARIF data into CI/CD pipelines.
+  - Plugin: static-analysis (trailofbits)
+- **semgrep**: Run Semgrep static analysis for fast security scanning and pattern matching. Use when asked to scan code with Semgrep, write custom YAML rules, find vulnerabilities quickly, use taint mode, or set up Semgrep in CI/CD pipelines.
+  - Plugin: static-analysis (trailofbits)
+- **semgrep**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **semgrep-rule-creator**: Create custom Semgrep rules for detecting bug patterns and security vulnerabilities. This skill should be used when the user explicitly asks to "create a Semgrep rule", "write a Semgrep rule", "make a Semgrep rule", "build a Semgrep rule", or requests detection of a specific bug pattern, vulnerability, or insecure code pattern using Semgrep.
+  - Plugin: semgrep-rule-creator (trailofbits)
+- **semgrep-rule-variant-creator**: Creates language variants of existing Semgrep rules. Use when porting a Semgrep rule to specified target languages. Takes an existing rule and target languages as input, produces independent rule+test directories for each language.
+  - Plugin: semgrep-rule-variant-creator (trailofbits)
+- **sharp-edges**: Identifies error-prone APIs, dangerous configurations, and footgun designs that enable security mistakes. Use when reviewing API designs, configuration schemas, cryptographic library ergonomics, or evaluating whether code follows 'secure by default' and 'pit of success' principles. Triggers: footgun, misuse-resistant, secure defaults, API usability, dangerous configuration.
+  - Plugin: sharp-edges (trailofbits)
+- **skill-creator**: Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Claude's capabilities with specialized knowledge, workflows, or tool integrations.
+  - Plugin: document-skills (anthropic-agent-skills)
+- **skill-creator**: Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Claude's capabilities with specialized knowledge, workflows, or tool integrations.
+  - Plugin: example-skills (anthropic-agent-skills)
+- **slack-gif-creator**: Knowledge and utilities for creating animated GIFs optimized for Slack. Provides constraints, validation tools, and animation concepts. Use when users request animated GIFs for Slack like "make me a GIF of X doing Y for Slack.
+  - Plugin: document-skills (anthropic-agent-skills)
+- **slack-gif-creator**: Knowledge and utilities for creating animated GIFs optimized for Slack. Provides constraints, validation tools, and animation concepts. Use when users request animated GIFs for Slack like "make me a GIF of X doing Y for Slack.
+  - Plugin: example-skills (anthropic-agent-skills)
+- **spec-to-code-compliance**: Verifies code implements exactly what documentation specifies for blockchain audits. Use when comparing code against whitepapers, finding gaps between specs and implementation, or performing compliance checks for protocol implementations.
+  - Plugin: spec-to-code-compliance (trailofbits)
+- **testing-handbook-generator**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **theme-factory**: Toolkit for styling artifacts with a theme. These artifacts can be slides, docs, reportings, HTML landing pages, etc. There are 10 pre-set themes with colors/fonts that you can apply to any artifact that has been creating, or can generate a new theme on-the-fly.
+  - Plugin: document-skills (anthropic-agent-skills)
+- **theme-factory**: Toolkit for styling artifacts with a theme. These artifacts can be slides, docs, reportings, HTML landing pages, etc. There are 10 pre-set themes with colors/fonts that you can apply to any artifact that has been creating, or can generate a new theme on-the-fly.
+  - Plugin: example-skills (anthropic-agent-skills)
+- **variant-analysis**: Find similar vulnerabilities and bugs across codebases using pattern-based analysis. Use when hunting bug variants, building CodeQL/Semgrep queries, analyzing security vulnerabilities, or performing systematic code audits after finding an initial issue.
+  - Plugin: variant-analysis (trailofbits)
+- **web-artifacts-builder**: Suite of tools for creating elaborate, multi-component claude.ai HTML artifacts using modern frontend web technologies (React, Tailwind CSS, shadcn/ui). Use for complex artifacts requiring state management, routing, or shadcn/ui components - not for simple single-file HTML/JSX artifacts.
+  - Plugin: document-skills (anthropic-agent-skills)
+- **web-artifacts-builder**: Suite of tools for creating elaborate, multi-component claude.ai HTML artifacts using modern frontend web technologies (React, Tailwind CSS, shadcn/ui). Use for complex artifacts requiring state management, routing, or shadcn/ui components - not for simple single-file HTML/JSX artifacts.
+  - Plugin: example-skills (anthropic-agent-skills)
+- **webapp-testing**: Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browser logs.
+  - Plugin: document-skills (anthropic-agent-skills)
+- **webapp-testing**: Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browser logs.
+  - Plugin: example-skills (anthropic-agent-skills)
+- **wycheproof**: >
+  - Plugin: testing-handbook-skills (trailofbits)
+- **xlsx**: Comprehensive spreadsheet creation, editing, and analysis with support for formulas, formatting, data analysis, and visualization. When Claude needs to work with spreadsheets (.xlsx, .xlsm, .csv, .tsv, etc) for: (1) Creating new spreadsheets with formulas and formatting, (2) Reading or analyzing data, (3) Modify existing spreadsheets while preserving formulas, (4) Data analysis and visualization in spreadsheets, or (5) Recalculating formulas
+  - Plugin: document-skills (anthropic-agent-skills)
+- **xlsx**: Comprehensive spreadsheet creation, editing, and analysis with support for formulas, formatting, data analysis, and visualization. When Claude needs to work with spreadsheets (.xlsx, .xlsm, .csv, .tsv, etc) for: (1) Creating new spreadsheets with formulas and formatting, (2) Reading or analyzing data, (3) Modify existing spreadsheets while preserving formulas, (4) Data analysis and visualization in spreadsheets, or (5) Recalculating formulas
+  - Plugin: example-skills (anthropic-agent-skills)
+
+## Agents (18)
+
+- **agent-creator** (sonnet): Use this agent when the user asks to "create an agent", "generate an agent", "build a new agent", "make me an agent that...", or describes agent functionality they need. Trigger when user wants to create autonomous agents for plugins. Examples:
+  - Invoke: `Task tool with subagent_type: "plugin-dev:agent-creator"`
+- **agent-creator** (sonnet): Use this agent when the user asks to "create an agent", "generate an agent", "build a new agent", "make me an agent that...", or describes agent functionality they need. Trigger when user wants to create autonomous agents for plugins. Examples:
+  - Invoke: `Task tool with subagent_type: "plugin-factory:agent-creator"`
+- **code-architect** (sonnet): Designs feature architectures by analyzing existing codebase patterns and conventions, then providing comprehensive implementation blueprints with specific files to create/modify, component designs, data flows, and build sequences
+  - Invoke: `Task tool with subagent_type: "feature-dev:code-architect"`
+- **code-explorer** (sonnet): Deeply analyzes existing codebase features by tracing execution paths, mapping architecture layers, understanding patterns and abstractions, and documenting dependencies to inform new development
+  - Invoke: `Task tool with subagent_type: "feature-dev:code-explorer"`
+- **code-reviewer** (sonnet): Reviews code for bugs, logic errors, security vulnerabilities, code quality issues, and adherence to project conventions, using confidence-based filtering to report only high-priority issues that truly matter
+  - Invoke: `Task tool with subagent_type: "feature-dev:code-reviewer"`
+- **code-simplifier** (opus): Simplifies and refines code for clarity, consistency, and maintainability while preserving all functionality. Focuses on recently modified code unless instructed otherwise.
+  - Invoke: `Task tool with subagent_type: "code-simplifier:code-simplifier"`
+- **fast-helper-agent** (sonnet): 
+  - Invoke: `Task tool with subagent_type: "ultimate-workflow:fast-helper-agent"`
+- **orchestrator-rules** (sonnet): 
+  - Invoke: `Task tool with subagent_type: "ultimate-workflow:orchestrator-rules"`
+- **plan-auditor-agent** (sonnet): 
+  - Invoke: `Task tool with subagent_type: "ultimate-workflow:plan-auditor-agent"`
+- **planner-agent** (sonnet): 
+  - Invoke: `Task tool with subagent_type: "ultimate-workflow:planner-agent"`
+- **plugin-validator** (inherit): Use this agent when the user asks to "validate my plugin", "check plugin structure", "verify plugin is correct", "validate plugin.json", "check plugin files", or mentions plugin validation. Also trigger proactively after user creates or modifies plugin components. Examples:
+  - Invoke: `Task tool with subagent_type: "plugin-dev:plugin-validator"`
+- **plugin-validator** (inherit): Use this agent when the user asks to "validate my plugin", "check plugin structure", "verify plugin is correct", "validate plugin.json", "check plugin files", or mentions plugin validation. Also trigger proactively after user creates or modifies plugin components. Examples:
+  - Invoke: `Task tool with subagent_type: "plugin-factory:plugin-validator"`
+- **product-tester-agent** (sonnet): 
+  - Invoke: `Task tool with subagent_type: "ultimate-workflow:product-tester-agent"`
+- **recursive-agent** (inherit): |
+  - Invoke: `Task tool with subagent_type: "rlm-agent:recursive-agent"`
+- **recursive-agent** (inherit): |
+  - Invoke: `Task tool with subagent_type: "rlm-agent:recursive-agent"`
+- **skill-reviewer** (inherit): Use this agent when the user has created or modified a skill and needs quality review, asks to "review my skill", "check skill quality", "improve skill description", or wants to ensure skill follows best practices. Trigger proactively after skill creation. Examples:
+  - Invoke: `Task tool with subagent_type: "plugin-dev:skill-reviewer"`
+- **skill-reviewer** (inherit): Use this agent when the user has created or modified a skill and needs quality review, asks to "review my skill", "check skill quality", "improve skill description", or wants to ensure skill follows best practices. Trigger proactively after skill creation. Examples:
+  - Invoke: `Task tool with subagent_type: "plugin-factory:skill-reviewer"`
+- **worker-agent** (sonnet): 
+  - Invoke: `Task tool with subagent_type: "ultimate-workflow:worker-agent"`
+
+## MCP Servers (4 connected)
+
+- **context7**: `npx -y @upstash/context7-mcp`
+- **greptile**: `https://api.greptile.com/mcp (HTTP)`
+- **playwright**: `npx @playwright/mcp@latest`
+- **exa**: `npx -y exa-mcp-server`
+
+---
+
+## RESOURCE-FIRST Rule
+
+```
+1. SCAN this list for matching capability
+2. USE existing resource if match found
+3. Call build-gap-detect if no match but plugin could help
+4. ONLY CODE if no resource can do it
+```
+
+**Violation**: Writing code when a resource exists = ANTI-PATTERN

@@ -1,0 +1,80 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ramp-core",
+    "crates/ramp-api",
+    "crates/ramp-ledger",
+    "crates/ramp-compliance",
+    "crates/ramp-aa",
+    "crates/ramp-adapter",
+    "crates/ramp-common",
+]
+
+exclude = ["crates/ramp-compliance/fuzz"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["RampOS Team"]
+license = "MIT"
+repository = "https://github.com/rampos/rampos"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+tokio-util = "0.7"
+
+# Web framework
+axum = { version = "0.7", features = ["macros", "ws"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace", "timeout", "request-id"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Database (TLS handled by external proxy in production)
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "uuid", "chrono", "rust_decimal", "macros", "migrate"] }
+redis = { version = "0.24", default-features = false, features = ["tokio-comp", "connection-manager", "script"] }
+
+# Crypto & Security
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+jsonwebtoken = "9.2"
+argon2 = "0.5"
+rand = "0.8"
+
+# Ethereum/AA
+ethers = { version = "2.0", default-features = false, features = ["abigen", "ws"] }
+alloy = { version = "0.1", default-features = false, features = ["full"] }
+
+# NATS (without TLS for development, production uses external TLS termination)
+async-nats = { version = "0.33", default-features = false }
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+opentelemetry = "0.21"
+opentelemetry-otlp = "0.14"
+
+# Utils
+uuid = { version = "1.6", features = ["v4", "v7", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+rust_decimal = { version = "1.33", features = ["serde", "macros"] }
+rust_decimal_macros = "1.33"
+thiserror = "1.0"
+anyhow = "1.0"
+async-trait = "0.1"
+config = "0.14"
+dotenvy = "0.15"
+validator = { version = "0.16", features = ["derive"] }
+aws-sdk-s3 = "1.13"
+aws-config = "1.1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

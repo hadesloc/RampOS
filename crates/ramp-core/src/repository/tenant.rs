@@ -1,0 +1,169 @@
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use ramp_common::{types::TenantId, Result};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
+use sqlx::{FromRow, PgPool};
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct TenantRow {
+    pub id: String,
+    pub name: String,
+    pub status: String,
+    pub api_key_hash: String,
+    pub webhook_secret_hash: String,
+    pub webhook_url: Option<String>,
+    pub config: serde_json::Value,
+    pub daily_payin_limit_vnd: Option<Decimal>,
+    pub daily_payout_limit_vnd: Option<Decimal>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[async_trait]
+pub trait TenantRepository: Send + Sync {
+    async fn get_by_id(&self, id: &TenantId) -> Result<Option<TenantRow>>;
+    async fn get_by_api_key_hash(&self, hash: &str) -> Result<Option<TenantRow>>;
+    async fn create(&self, tenant: &TenantRow) -> Result<()>;
+    async fn update_status(&self, id: &TenantId, status: &str) -> Result<()>;
+    async fn update_webhook_url(&self, id: &TenantId, url: &str) -> Result<()>;
+    async fn update_api_key_hash(&self, id: &TenantId, hash: &str) -> Result<()>;
+    async fn update_limits(&self, id: &TenantId, daily_payin: Option<Decimal>, daily_payout: Option<Decimal>) -> Result<()>;
+    async fn update_config(&self, id: &TenantId, config: &serde_json::Value) -> Result<()>;
+    async fn list_ids(&self) -> Result<Vec<TenantId>>;
+}
+
+pub struct PgTenantRepository {
+    pool: PgPool,
+}
+
+impl PgTenantRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl TenantRepository for PgTenantRepository {
+    async fn get_by_id(&self, id: &TenantId) -> Result<Option<TenantRow>> {
+        let row = sqlx::query_as::<_, TenantRow>("SELECT * FROM tenants WHERE id = $1")
+            .bind(&id.0)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(row)
+    }
+
+    async fn get_by_api_key_hash(&self, hash: &str) -> Result<Option<TenantRow>> {
+        let row = sqlx::query_as::<_, TenantRow>(
+            "SELECT * FROM tenants WHERE api_key_hash = $1 AND status = 'ACTIVE'",
+        )
+        .bind(hash)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(row)
+    }
+
+    async fn create(&self, tenant: &TenantRow) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO tenants (
+                id, name, status, api_key_hash, webhook_secret_hash,
+                webhook_url, config, daily_payin_limit_vnd, daily_payout_limit_vnd,
+                created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            "#,
+        )
+        .bind(&tenant.id)
+        .bind(&tenant.name)
+        .bind(&tenant.status)
+        .bind(&tenant.api_key_hash)
+        .bind(&tenant.webhook_secret_hash)
+        .bind(&tenant.webhook_url)
+        .bind(&tenant.config)
+        .bind(&tenant.daily_payin_limit_vnd)
+        .bind(&tenant.daily_payout_limit_vnd)
+        .bind(&tenant.created_at)
+        .bind(&tenant.updated_at)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn update_status(&self, id: &TenantId, status: &str) -> Result<()> {
+        sqlx::query("UPDATE tenants SET status = $1 WHERE id = $2")
+            .bind(status)
+            .bind(&id.0)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn update_webhook_url(&self, id: &TenantId, url: &str) -> Result<()> {
+        sqlx::query("UPDATE tenants SET webhook_url = $1 WHERE id = $2")
+            .bind(url)
+            .bind(&id.0)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn update_api_key_hash(&self, id: &TenantId, hash: &str) -> Result<()> {
+        sqlx::query("UPDATE tenants SET api_key_hash = $1 WHERE id = $2")
+            .bind(hash)
+            .bind(&id.0)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn update_limits(
+        &self,
+        id: &TenantId,
+        daily_payin: Option<Decimal>,
+        daily_payout: Option<Decimal>,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE tenants SET daily_payin_limit_vnd = $1, daily_payout_limit_vnd = $2 WHERE id = $3",
+        )
+        .bind(daily_payin)
+        .bind(daily_payout)
+        .bind(&id.0)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn update_config(&self, id: &TenantId, config: &serde_json::Value) -> Result<()> {
+        sqlx::query("UPDATE tenants SET config = $1 WHERE id = $2")
+            .bind(config)
+            .bind(&id.0)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn list_ids(&self) -> Result<Vec<TenantId>> {
+        let rows = sqlx::query_scalar::<_, String>("SELECT id FROM tenants")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(rows.into_iter().map(TenantId).collect())
+    }
+}
