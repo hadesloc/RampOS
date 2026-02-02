@@ -277,6 +277,101 @@ impl UserRepository for MockUserRepository {
         }
         Ok(())
     }
+
+    async fn update_limits(
+        &self,
+        _tenant_id: &TenantId,
+        user_id: &UserId,
+        daily_payin_limit_vnd: Option<Decimal>,
+        daily_payout_limit_vnd: Option<Decimal>,
+    ) -> Result<()> {
+        let mut users = self.users.lock().unwrap();
+        if let Some(user) = users.iter_mut().find(|u| u.id == user_id.0) {
+            if daily_payin_limit_vnd.is_some() {
+                user.daily_payin_limit_vnd = daily_payin_limit_vnd;
+            }
+            if daily_payout_limit_vnd.is_some() {
+                user.daily_payout_limit_vnd = daily_payout_limit_vnd;
+            }
+        }
+        Ok(())
+    }
+
+    async fn list_users(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+        kyc_tier: Option<i16>,
+        status: Option<&str>,
+        search: Option<&str>,
+    ) -> Result<Vec<UserRow>> {
+        let users = self.users.lock().unwrap();
+        let mut filtered: Vec<UserRow> = users
+            .iter()
+            .filter(|user| user.tenant_id == tenant_id.0)
+            .filter(|user| kyc_tier.map_or(true, |tier| user.kyc_tier == tier))
+            .filter(|user| status.map_or(true, |status| user.status == status))
+            .filter(|user| search.map_or(true, |query| user.id.contains(query)))
+            .cloned()
+            .collect();
+
+        filtered.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        let start = offset.max(0) as usize;
+        let end = (start + limit.max(0) as usize).min(filtered.len());
+
+        if start >= filtered.len() {
+            return Ok(vec![]);
+        }
+
+        Ok(filtered[start..end].to_vec())
+    }
+
+    async fn count_users(
+        &self,
+        tenant_id: &TenantId,
+        kyc_tier: Option<i16>,
+        status: Option<&str>,
+        search: Option<&str>,
+    ) -> Result<i64> {
+        let users = self.users.lock().unwrap();
+        let count = users
+            .iter()
+            .filter(|user| user.tenant_id == tenant_id.0)
+            .filter(|user| kyc_tier.map_or(true, |tier| user.kyc_tier == tier))
+            .filter(|user| status.map_or(true, |status| user.status == status))
+            .filter(|user| search.map_or(true, |query| user.id.contains(query)))
+            .count();
+        Ok(count as i64)
+    }
+
+    async fn count_users_by_kyc_status(
+        &self,
+        tenant_id: &TenantId,
+        kyc_status: &str,
+    ) -> Result<i64> {
+        let users = self.users.lock().unwrap();
+        let count = users
+            .iter()
+            .filter(|user| user.tenant_id == tenant_id.0)
+            .filter(|user| user.kyc_status == kyc_status)
+            .count();
+        Ok(count as i64)
+    }
+
+    async fn count_users_created_since(
+        &self,
+        tenant_id: &TenantId,
+        since: DateTime<Utc>,
+    ) -> Result<i64> {
+        let users = self.users.lock().unwrap();
+        let count = users
+            .iter()
+            .filter(|user| user.tenant_id == tenant_id.0)
+            .filter(|user| user.created_at >= since)
+            .count();
+        Ok(count as i64)
+    }
 }
 
 #[derive(Clone)]

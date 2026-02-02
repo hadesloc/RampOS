@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::HeaderMap,
     Json,
 };
@@ -40,9 +40,14 @@ pub type PayinServiceState = Arc<PayinService>;
 #[instrument(skip_all, fields(tenant_id, user_id, intent_id, amount))]
 pub async fn create_payin(
     State(service): State<PayinServiceState>,
+    Extension(tenant_ctx): Extension<TenantContext>,
     headers: HeaderMap,
     ValidatedJson(req): ValidatedJson<CreatePayinRequest>,
 ) -> Result<(HeaderMap, Json<CreatePayinResponse>), ApiError> {
+    if tenant_ctx.tenant_id.0 != req.tenant_id {
+        return Err(ApiError::Forbidden("Tenant mismatch".to_string()));
+    }
+
     tracing::Span::current()
         .record("tenant_id", &req.tenant_id)
         .record("user_id", &req.user_id)
@@ -119,8 +124,21 @@ pub async fn create_payin(
 #[instrument(skip_all, fields(tenant_id, reference_code, intent_id))]
 pub async fn confirm_payin(
     State(service): State<PayinServiceState>,
+    headers: HeaderMap,
     ValidatedJson(req): ValidatedJson<ConfirmPayinRequest>,
 ) -> Result<Json<ConfirmPayinResponse>, ApiError> {
+    // Verify internal secret to prevent unauthorized access
+    let internal_secret = std::env::var("INTERNAL_SERVICE_SECRET")
+        .map_err(|_| ApiError::Internal("Internal secret not configured".to_string()))?;
+
+    let provided_secret = headers
+        .get("X-Internal-Secret")
+        .and_then(|v| v.to_str().ok());
+
+    if provided_secret != Some(&internal_secret) {
+        return Err(ApiError::Forbidden("Missing or invalid internal secret".to_string()));
+    }
+
     tracing::Span::current()
         .record("tenant_id", &req.tenant_id)
         .record("reference_code", &req.reference_code);

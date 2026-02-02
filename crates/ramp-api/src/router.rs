@@ -1,11 +1,15 @@
+use axum::http::{header, HeaderValue};
 use axum::{
     middleware,
     routing::{get, patch, post},
     Router,
 };
 use std::sync::Arc;
+use tower::ServiceBuilder;
 use tower_http::{
     cors::{Any, CorsLayer},
+    sensitive_headers::{SetSensitiveRequestHeadersLayer, SetSensitiveResponseHeadersLayer},
+    set_header::SetResponseHeaderLayer,
     timeout::TimeoutLayer,
     trace::TraceLayer,
 };
@@ -15,22 +19,18 @@ use utoipa_swagger_ui::SwaggerUi;
 use ramp_core::repository::intent::IntentRepository;
 use ramp_core::repository::tenant::TenantRepository;
 use ramp_core::service::{
-    ledger::LedgerService,
-    payin::PayinService,
-    payout::PayoutService,
-    trade::TradeService,
-    onboarding::OnboardingService,
-    user::UserService,
+    ledger::LedgerService, onboarding::OnboardingService, payin::PayinService,
+    payout::PayoutService, trade::TradeService, user::UserService,
 };
 
 use crate::handlers;
 use crate::middleware::{
-    auth_middleware, request_id_middleware,
-    RateLimiter, rate_limit_middleware,
-    IdempotencyHandler, idempotency_middleware,
+    auth_middleware, idempotency_middleware, rate_limit_middleware, request_id_middleware,
+    IdempotencyHandler, RateLimiter,
 };
 use crate::openapi::ApiDoc;
 
+use ramp_compliance::case::CaseManager;
 use ramp_compliance::reports::ReportGenerator;
 
 /// Application state shared across handlers
@@ -45,6 +45,7 @@ pub struct AppState {
     pub tenant_repo: Arc<dyn TenantRepository>,
     pub intent_repo: Arc<dyn IntentRepository>,
     pub report_generator: Arc<ReportGenerator>,
+    pub case_manager: Arc<CaseManager>,
     pub rate_limiter: Option<Arc<RateLimiter>>,
     pub idempotency_handler: Option<Arc<IdempotencyHandler>>,
 }
@@ -84,18 +85,21 @@ pub fn create_router(state: AppState) -> Router {
 
     // Balance routes (auth required)
     let balance_routes = Router::new()
-        .route(
-            "/:user_id",
-            get(handlers::get_user_balances),
-        )
+        .route("/:user_id", get(handlers::get_user_balances))
         .with_state(state.ledger_service.clone());
 
     // Report routes
     let report_routes = Router::new()
         .route("/aml", get(handlers::admin::reports::generate_aml_report))
-        .route("/aml/export", get(handlers::admin::reports::export_aml_report))
+        .route(
+            "/aml/export",
+            get(handlers::admin::reports::export_aml_report),
+        )
         .route("/kyc", get(handlers::admin::reports::generate_kyc_report))
-        .route("/kyc/export", get(handlers::admin::reports::export_kyc_report))
+        .route(
+            "/kyc/export",
+            get(handlers::admin::reports::export_kyc_report),
+        )
         .with_state(state.report_generator.clone());
 
     // Admin routes (auth required + admin role)
@@ -122,7 +126,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/cases/stats", get(handlers::get_case_stats))
         .route("/cases/:id", get(handlers::get_case))
         .route("/cases/:id", patch(handlers::update_case))
-        .route("/cases/:id/sar", post(handlers::admin::reports::generate_sar))
+        .route(
+            "/cases/:id/sar",
+            post(handlers::admin::reports::generate_sar),
+        )
         // Users
         .route("/users", get(handlers::list_users))
         .route("/users/:id", get(handlers::get_user))
@@ -167,10 +174,16 @@ pub fn create_router(state: AppState) -> Router {
     let tier_routes = Router::new()
         .route("/tiers", get(handlers::list_tiers))
         .route("/users/:user_id/tier", get(handlers::get_user_tier))
-        .route("/users/:user_id/tier/upgrade", post(handlers::upgrade_user_tier))
-        .route("/users/:user_id/tier/downgrade", post(handlers::downgrade_user_tier))
+        .route(
+            "/users/:user_id/tier/upgrade",
+            post(handlers::upgrade_user_tier),
+        )
+        .route(
+            "/users/:user_id/tier/downgrade",
+            post(handlers::downgrade_user_tier),
+        )
         .route("/users/:user_id/limits", get(handlers::get_user_limits))
-        .with_state(state.user_service.clone());
+        .with_state(state.clone());
 
     // Combine them
     let admin_routes = Router::new()
@@ -215,12 +228,58 @@ pub fn create_router(state: AppState) -> Router {
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
         .nest("/v1", api_v1)
         .layer(middleware::from_fn(request_id_middleware))
-        .layer(TraceLayer::new_for_http())
+        .layer({
+            let request_headers = Arc::new([
+                header::AUTHORIZATION,
+                header::PROXY_AUTHORIZATION,
+                header::COOKIE,
+                header::SET_COOKIE,
+            ]);
+            let response_headers = Arc::new([header::SET_COOKIE]);
+            ServiceBuilder::new()
+                .layer(SetSensitiveRequestHeadersLayer::from_shared(
+                    request_headers,
+                ))
+                .layer(TraceLayer::new_for_http())
+                .layer(SetSensitiveResponseHeadersLayer::from_shared(
+                    response_headers,
+                ))
+        })
         .layer(TimeoutLayer::new(std::time::Duration::from_secs(30)))
-        .layer(
+        .layer(SetResponseHeaderLayer::overriding(
+            header::STRICT_TRANSPORT_SECURITY,
+            HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_FRAME_OPTIONS,
+            HeaderValue::from_static("DENY"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CONTENT_SECURITY_POLICY,
+            HeaderValue::from_static("default-src 'self'"),
+        ))
+        .layer({
+            let cors_origins = std::env::var("CORS_ALLOWED_ORIGINS")
+                .unwrap_or_else(|_| "http://localhost:3000".to_string());
+
+            let origins: Vec<HeaderValue> = cors_origins
+                .split(',')
+                .filter_map(|s| s.trim().parse::<HeaderValue>().ok())
+                .collect();
+
+            let origins = if origins.is_empty() {
+                vec![HeaderValue::from_static("http://localhost:3000")]
+            } else {
+                origins
+            };
+
             CorsLayer::new()
-                .allow_origin(Any)
+                .allow_origin(origins)
                 .allow_methods(Any)
-                .allow_headers(Any),
-        )
+                .allow_headers(Any)
+        })
 }

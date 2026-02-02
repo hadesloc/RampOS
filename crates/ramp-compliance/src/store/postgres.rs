@@ -4,8 +4,7 @@ use ramp_common::{
     types::{IntentId, TenantId, UserId},
     Result,
 };
-use sqlx::{PgPool, Row};
-use uuid::Uuid;
+use sqlx::{PgPool, QueryBuilder, Row};
 
 use crate::{
     case::{AmlCase, CaseNote, NoteType},
@@ -16,6 +15,25 @@ use crate::{
 pub trait CaseStore: Send + Sync {
     async fn create_case(&self, case: &AmlCase) -> Result<String>;
     async fn get_case(&self, case_id: &str) -> Result<Option<AmlCase>>;
+    async fn list_cases(
+        &self,
+        tenant_id: &TenantId,
+        status: Option<CaseStatus>,
+        severity: Option<CaseSeverity>,
+        assigned_to: Option<&str>,
+        user_id: Option<&UserId>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<AmlCase>>;
+    async fn count_cases(
+        &self,
+        tenant_id: &TenantId,
+        status: Option<CaseStatus>,
+        severity: Option<CaseSeverity>,
+        assigned_to: Option<&str>,
+        user_id: Option<&UserId>,
+    ) -> Result<i64>;
+    async fn avg_resolution_hours(&self, tenant_id: &TenantId) -> Result<f64>;
     async fn update_status(
         &self,
         case_id: &str,
@@ -106,9 +124,13 @@ impl CaseStore for PostgresCaseStore {
 
             Ok(Some(AmlCase {
                 id: row.try_get("id")?,
-                tenant_id: TenantId::from(row.try_get::<String, _>("tenant_id")?),
-                user_id: row.try_get::<Option<String>, _>("user_id")?.map(UserId::from),
-                intent_id: row.try_get::<Option<String>, _>("intent_id")?.map(IntentId::from),
+                tenant_id: TenantId::new(row.try_get::<String, _>("tenant_id")?),
+                user_id: row
+                    .try_get::<Option<String>, _>("user_id")?
+                    .map(UserId::new),
+                intent_id: row
+                    .try_get::<Option<String>, _>("intent_id")?
+                    .map(IntentId::new),
                 case_type,
                 severity,
                 status,
@@ -122,6 +144,113 @@ impl CaseStore for PostgresCaseStore {
         } else {
             Ok(None)
         }
+    }
+
+    async fn list_cases(
+        &self,
+        tenant_id: &TenantId,
+        status: Option<CaseStatus>,
+        severity: Option<CaseSeverity>,
+        assigned_to: Option<&str>,
+        user_id: Option<&UserId>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<AmlCase>> {
+        let mut builder = QueryBuilder::new(
+            "SELECT id, tenant_id, user_id, intent_id, case_type, severity, status, \
+             detection_data, assigned_to, resolution, created_at, updated_at, resolved_at \
+             FROM compliance_cases WHERE tenant_id = ",
+        );
+        builder.push_bind(tenant_id.to_string());
+
+        if let Some(status) = status {
+            let status_str = serde_json::to_string(&status).unwrap_or_default();
+            builder.push(" AND status = ").push_bind(status_str);
+        }
+
+        if let Some(severity) = severity {
+            let severity_str = serde_json::to_string(&severity).unwrap_or_default();
+            builder.push(" AND severity = ").push_bind(severity_str);
+        }
+
+        if let Some(assigned_to) = assigned_to {
+            builder.push(" AND assigned_to = ").push_bind(assigned_to);
+        }
+
+        if let Some(user_id) = user_id {
+            builder.push(" AND user_id = ").push_bind(user_id.to_string());
+        }
+
+        builder
+            .push(" ORDER BY created_at DESC LIMIT ")
+            .push_bind(limit)
+            .push(" OFFSET ")
+            .push_bind(offset);
+
+        let rows = builder
+            .build()
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        self.map_rows_to_cases(rows)
+    }
+
+    async fn count_cases(
+        &self,
+        tenant_id: &TenantId,
+        status: Option<CaseStatus>,
+        severity: Option<CaseSeverity>,
+        assigned_to: Option<&str>,
+        user_id: Option<&UserId>,
+    ) -> Result<i64> {
+        let mut builder = QueryBuilder::new(
+            "SELECT COUNT(*) as count FROM compliance_cases WHERE tenant_id = ",
+        );
+        builder.push_bind(tenant_id.to_string());
+
+        if let Some(status) = status {
+            let status_str = serde_json::to_string(&status).unwrap_or_default();
+            builder.push(" AND status = ").push_bind(status_str);
+        }
+
+        if let Some(severity) = severity {
+            let severity_str = serde_json::to_string(&severity).unwrap_or_default();
+            builder.push(" AND severity = ").push_bind(severity_str);
+        }
+
+        if let Some(assigned_to) = assigned_to {
+            builder.push(" AND assigned_to = ").push_bind(assigned_to);
+        }
+
+        if let Some(user_id) = user_id {
+            builder.push(" AND user_id = ").push_bind(user_id.to_string());
+        }
+
+        let row = builder
+            .build()
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        let count: i64 = row.try_get("count").unwrap_or(0);
+        Ok(count)
+    }
+
+    async fn avg_resolution_hours(&self, tenant_id: &TenantId) -> Result<f64> {
+        let row = sqlx::query(
+            r#"
+            SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600) as avg_hours
+            FROM compliance_cases
+            WHERE tenant_id = $1 AND resolved_at IS NOT NULL
+            "#,
+        )
+        .bind(tenant_id.to_string())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        let avg: Option<f64> = row.try_get("avg_hours").unwrap_or(None);
+        Ok(avg.unwrap_or(0.0))
     }
 
     async fn update_status(
@@ -283,9 +412,13 @@ impl PostgresCaseStore {
 
             cases.push(AmlCase {
                 id: row.try_get("id")?,
-                tenant_id: TenantId::from(row.try_get::<String, _>("tenant_id")?),
-                user_id: row.try_get::<Option<String>, _>("user_id")?.map(UserId::from),
-                intent_id: row.try_get::<Option<String>, _>("intent_id")?.map(IntentId::from),
+                tenant_id: TenantId::new(row.try_get::<String, _>("tenant_id")?),
+                user_id: row
+                    .try_get::<Option<String>, _>("user_id")?
+                    .map(UserId::new),
+                intent_id: row
+                    .try_get::<Option<String>, _>("intent_id")?
+                    .map(IntentId::new),
                 case_type,
                 severity,
                 status,

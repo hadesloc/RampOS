@@ -1,4 +1,4 @@
-use axum::{extract::State, http::HeaderMap, Json};
+use axum::{extract::{Extension, State}, http::HeaderMap, Json};
 use ramp_common::types::*;
 use ramp_core::service::payout::{CreatePayoutRequest as ServiceRequest, PayoutService};
 use std::sync::Arc;
@@ -8,6 +8,7 @@ use validator::Validate;
 use crate::dto::{CreatePayoutRequest, CreatePayoutResponse};
 use crate::error::ApiError;
 use crate::extract::ValidatedJson;
+use crate::middleware::TenantContext;
 
 pub type PayoutServiceState = Arc<PayoutService>;
 
@@ -32,9 +33,14 @@ pub type PayoutServiceState = Arc<PayoutService>;
 #[instrument(skip_all, fields(tenant_id, user_id, intent_id, amount))]
 pub async fn create_payout(
     State(service): State<PayoutServiceState>,
+    Extension(tenant_ctx): Extension<TenantContext>,
     headers: HeaderMap,
     ValidatedJson(req): ValidatedJson<CreatePayoutRequest>,
 ) -> Result<(HeaderMap, Json<CreatePayoutResponse>), ApiError> {
+    if tenant_ctx.tenant_id.0 != req.tenant_id {
+        return Err(ApiError::Forbidden("Tenant mismatch".to_string()));
+    }
+
     tracing::Span::current()
         .record("tenant_id", &req.tenant_id)
         .record("user_id", &req.user_id)

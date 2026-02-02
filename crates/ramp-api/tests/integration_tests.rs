@@ -16,6 +16,10 @@ use ramp_core::service::{
 use ramp_core::repository::tenant::TenantRow;
 use ramp_core::repository::user::UserRow;
 use ramp_api::{create_router, AppState};
+use ramp_common::ledger::{AccountType, LedgerCurrency};
+use ramp_core::repository::{IntentRepository, LedgerRepository};
+use ramp_compliance::{case::CaseManager, InMemoryCaseStore, reports::ReportGenerator, storage::MockDocumentStorage};
+use sqlx::PgPool;
 use ramp_api::middleware::{RateLimiter, RateLimitConfig, IdempotencyHandler, IdempotencyConfig};
 use ramp_common::types::*;
 use sha2::{Digest, Sha256};
@@ -102,8 +106,19 @@ async fn setup_app() -> TestApp {
     let ledger_service = Arc::new(LedgerService::new(ledger_repo.clone()));
     let onboarding_service = Arc::new(OnboardingService::new(
         tenant_repo.clone(),
-        user_repo.clone(),
+        ledger_service.clone(),
     ));
+    let user_service = Arc::new(ramp_core::service::user::UserService::new(
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let pool = PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
+        .expect("Failed to create lazy pool");
+    let report_generator = Arc::new(ReportGenerator::new(
+        pool,
+        Arc::new(MockDocumentStorage::new()),
+    ));
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
 
     // Setup middleware
     let rate_limiter = Some(Arc::new(RateLimiter::with_memory(RateLimitConfig {
@@ -125,8 +140,11 @@ async fn setup_app() -> TestApp {
         trade_service,
         ledger_service,
         onboarding_service,
+        user_service,
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
+        report_generator,
+        case_manager,
         rate_limiter,
         idempotency_handler,
     };
@@ -225,7 +243,7 @@ async fn test_payout_creation() {
         &TenantId::new("tenant1"),
         Some(&UserId::new("user1")),
         &AccountType::LiabilityUserVnd,
-        &LedgerCurrency::new("VND"),
+        &LedgerCurrency::VND,
         Decimal::from(500000)
     );
 
@@ -331,8 +349,8 @@ async fn test_get_balances() {
     app.ledger_repo.set_balance(
         &TenantId::new("tenant1"),
         Some(&UserId::new("user1")),
-        &AccountType::UserAvailable,
-        &LedgerCurrency::new("VND"),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
         Decimal::from(500_000)
     );
 

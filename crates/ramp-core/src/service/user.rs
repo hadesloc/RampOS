@@ -9,7 +9,8 @@ use ramp_compliance::types::{KycTier, KycStatus};
 use tracing::info;
 use std::sync::Arc;
 
-use crate::repository::user::UserRepository;
+use crate::event::EventPublisher;
+use crate::repository::user::{UserRepository, UserRow};
 
 // Assuming UserRepository needs to be cloneable or shared.
 // In a real application, we'd use Arc<dyn UserRepository> instead of Box.
@@ -19,17 +20,21 @@ use crate::repository::user::UserRepository;
 
 pub struct UserService {
     repo: Arc<dyn UserRepository>,
-    // TODO: EventBus for emitting events
+    event_publisher: Arc<dyn EventPublisher>,
 }
 
 impl UserService {
-    pub fn new(repo: Arc<dyn UserRepository>) -> Self {
-        Self { repo }
+    pub fn new(repo: Arc<dyn UserRepository>, event_publisher: Arc<dyn EventPublisher>) -> Self {
+        Self {
+            repo,
+            event_publisher,
+        }
     }
 
     pub fn tier_manager(&self) -> TierManager {
         let provider = Box::new(UserServiceTierProvider {
             repo: self.repo.clone(),
+            event_publisher: self.event_publisher.clone(),
         });
         TierManager::new(provider)
     }
@@ -47,14 +52,95 @@ impl UserService {
     pub async fn get_user_kyc_info(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<UserKycInfo> {
         let provider = UserServiceTierProvider {
             repo: self.repo.clone(),
+            event_publisher: self.event_publisher.clone(),
         };
         provider.get_user_kyc_info(tenant_id, user_id).await
+    }
+
+    pub async fn get_user(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<UserRow> {
+        self.repo
+            .get_by_id(tenant_id, user_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("User {}", user_id)))
+    }
+
+    pub async fn list_users(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+        kyc_tier: Option<i16>,
+        status: Option<&str>,
+        search: Option<&str>,
+    ) -> Result<(Vec<UserRow>, i64)> {
+        let users = self
+            .repo
+            .list_users(tenant_id, limit, offset, kyc_tier, status, search)
+            .await?;
+        let total = self
+            .repo
+            .count_users(tenant_id, kyc_tier, status, search)
+            .await?;
+        Ok((users, total))
+    }
+
+    pub async fn count_users_by_status(
+        &self,
+        tenant_id: &TenantId,
+        status: &str,
+    ) -> Result<i64> {
+        self.repo
+            .count_users(tenant_id, None, Some(status), None)
+            .await
+    }
+
+    pub async fn count_users_by_kyc_status(
+        &self,
+        tenant_id: &TenantId,
+        kyc_status: &str,
+    ) -> Result<i64> {
+        self.repo.count_users_by_kyc_status(tenant_id, kyc_status).await
+    }
+
+    pub async fn count_users_created_since(
+        &self,
+        tenant_id: &TenantId,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> Result<i64> {
+        self.repo.count_users_created_since(tenant_id, since).await
+    }
+
+    pub async fn update_user(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        status: Option<String>,
+        kyc_tier: Option<i16>,
+        daily_payin_limit_vnd: Option<i64>,
+        daily_payout_limit_vnd: Option<i64>,
+    ) -> Result<()> {
+        if let Some(tier) = kyc_tier {
+            self.repo.update_kyc_tier(tenant_id, user_id, tier).await?;
+        }
+
+        if let Some(status) = status.as_deref() {
+            self.repo.update_status(tenant_id, user_id, status).await?;
+        }
+
+        if daily_payin_limit_vnd.is_some() || daily_payout_limit_vnd.is_some() {
+            let payin = daily_payin_limit_vnd.map(rust_decimal::Decimal::from);
+            let payout = daily_payout_limit_vnd.map(rust_decimal::Decimal::from);
+            self.repo.update_limits(tenant_id, user_id, payin, payout).await?;
+        }
+
+        Ok(())
     }
 }
 
 // Adapter for TierDataProvider
 struct UserServiceTierProvider {
     repo: Arc<dyn UserRepository>,
+    event_publisher: Arc<dyn EventPublisher>,
 }
 
 #[async_trait]
@@ -119,7 +205,8 @@ impl TierDataProvider for UserServiceTierProvider {
             reason = ?reason,
             "Tier changed event emitted"
         );
-        // In real impl, send to EventBus
-        Ok(())
+        self.event_publisher
+            .publish_user_tier_changed(tenant_id, user_id, old_tier, new_tier, reason)
+            .await
     }
 }

@@ -8,14 +8,14 @@ use crate::types::*;
 
 pub struct VietQRAdapter {
     provider_code: String,
-    // webhook_secret: String, // Unused
+    webhook_secret: String,
 }
 
 impl VietQRAdapter {
-    pub fn new(provider_code: impl Into<String>, _webhook_secret: impl Into<String>) -> Self {
+    pub fn new(provider_code: impl Into<String>, webhook_secret: impl Into<String>) -> Self {
         Self {
             provider_code: provider_code.into(),
-            // webhook_secret: webhook_secret.into(), // Unused
+            webhook_secret: webhook_secret.into(),
         }
     }
 }
@@ -55,8 +55,14 @@ impl RailsAdapter for VietQRAdapter {
     async fn parse_payin_webhook(
         &self,
         payload: &[u8],
-        _signature: Option<&str>,
+        signature: Option<&str>,
     ) -> Result<PayinConfirmation> {
+        let signature = signature
+            .ok_or_else(|| ramp_common::Error::Validation("Missing webhook signature".to_string()))?;
+        if !self.verify_webhook_signature(payload, signature) {
+            return Err(ramp_common::Error::Validation("Invalid webhook signature".to_string()));
+        }
+
         let data: serde_json::Value = serde_json::from_slice(payload)
             .map_err(|e| ramp_common::Error::Validation(e.to_string()))?;
 
@@ -87,7 +93,13 @@ impl RailsAdapter for VietQRAdapter {
         Err(ramp_common::Error::NotImplemented("Payout not supported for VietQR".to_string()))
     }
 
-    fn verify_webhook_signature(&self, _payload: &[u8], _signature: &str) -> bool {
-        true
+    fn verify_webhook_signature(&self, payload: &[u8], signature: &str) -> bool {
+        ramp_common::crypto::verify_webhook_signature(
+            self.webhook_secret.as_bytes(),
+            signature,
+            payload,
+            300,
+        )
+        .is_ok()
     }
 }

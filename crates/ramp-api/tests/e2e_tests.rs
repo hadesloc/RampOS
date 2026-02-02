@@ -11,13 +11,15 @@ use ramp_common::{
 };
 use ramp_core::{
     event::InMemoryEventPublisher,
-    repository::{tenant::TenantRow, user::UserRow},
+    repository::{tenant::TenantRow, user::UserRow, LedgerRepository},
     service::{
         ledger::LedgerService, payin::PayinService, payout::{PayoutService, ConfirmPayoutRequest, PayoutBankStatus}, trade::TradeService,
         onboarding::OnboardingService,
     },
     test_utils::*,
 };
+use ramp_compliance::{case::CaseManager, InMemoryCaseStore, reports::ReportGenerator, storage::MockDocumentStorage};
+use sqlx::PgPool;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde_json::json;
@@ -181,8 +183,19 @@ async fn setup_test_app() -> TestContext {
     let ledger_service = Arc::new(LedgerService::new(ledger_repo.clone()));
     let onboarding_service = Arc::new(OnboardingService::new(
         tenant_repo.clone(),
-        user_repo.clone(),
+        ledger_service.clone(),
     ));
+    let user_service = Arc::new(ramp_core::service::user::UserService::new(
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let pool = PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
+        .expect("Failed to create lazy pool");
+    let report_generator = Arc::new(ReportGenerator::new(
+        pool,
+        Arc::new(MockDocumentStorage::new()),
+    ));
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
 
     let app_state = AppState {
         payin_service,
@@ -190,8 +203,11 @@ async fn setup_test_app() -> TestContext {
         trade_service,
         ledger_service,
         onboarding_service,
+        user_service,
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
+        report_generator,
+        case_manager,
         rate_limiter: None,
         idempotency_handler: None,
     };

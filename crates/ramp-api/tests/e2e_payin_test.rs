@@ -21,7 +21,8 @@ use ramp_common::types::*;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use tower::ServiceExt; // for oneshot
-use testcontainers::{clients, images::postgres::Postgres};
+use testcontainers::clients;
+use testcontainers_modules::postgres::Postgres;
 use serde_json::json;
 use chrono::Utc;
 use uuid::Uuid;
@@ -31,6 +32,7 @@ use ramp_core::repository::user::UserRow;
 use rust_decimal::Decimal;
 use ramp_compliance::reports::ReportGenerator;
 use ramp_compliance::storage::mock::MockDocumentStorage;
+use ramp_compliance::{case::CaseManager, InMemoryCaseStore};
 
 #[tokio::test]
 async fn test_e2e_payin_flow() {
@@ -140,16 +142,17 @@ async fn test_e2e_payin_flow() {
 
     let onboarding_service = Arc::new(OnboardingService::new(
         tenant_repo.clone(),
-        user_repo.clone(),
+        ledger_service.clone(),
     ));
 
     let user_service = Arc::new(UserService::new(
         user_repo.clone(),
-        tenant_repo.clone(),
+        event_publisher.clone(),
     ));
 
     let document_storage = Arc::new(MockDocumentStorage::new());
     let report_generator = Arc::new(ReportGenerator::new(pool.clone(), document_storage));
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
 
     let app_state = AppState {
         payin_service,
@@ -161,6 +164,7 @@ async fn test_e2e_payin_flow() {
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
         report_generator: report_generator,
+        case_manager,
         rate_limiter: None,
         idempotency_handler: None,
     };
@@ -234,7 +238,13 @@ async fn test_e2e_payin_flow() {
     assert_eq!(resp_json["status"], "COMPLETED");
 
     // Step 3: Verify Ledger
-    let entries = ledger_repo.get_entries_by_intent(&IntentId(intent_id.clone())).await.unwrap();
+    let entries = ledger_repo
+        .get_entries_by_intent(
+            &TenantId::new(tenant_id),
+            &IntentId(intent_id.clone()),
+        )
+        .await
+        .unwrap();
     assert!(entries.len() >= 2); // Debit Provider, Credit User
 
     // Check for Credit to LIABILITY_USER_MAIN or LIABILITY_USER_VND depending on logic

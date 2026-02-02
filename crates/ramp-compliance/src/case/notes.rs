@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
 
-use crate::{store::postgres::CaseStore, types::CaseStatus};
+use crate::{store::CaseStore, types::CaseStatus};
 
 /// Note Type
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

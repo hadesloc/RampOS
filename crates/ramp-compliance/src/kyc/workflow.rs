@@ -38,9 +38,9 @@ pub mod activities {
     use super::*;
     use ramp_common::Result;
 
-    pub async fn validate_documents(documents: &[KycDocument]) -> Result<bool> {
-        info!("Validating {} documents", documents.len());
-        if documents.is_empty() {
+    pub async fn validate_documents(_documents: &[KycDocument]) -> Result<bool> {
+        info!("Validating {} documents", _documents.len());
+        if _documents.is_empty() {
             return Ok(false);
         }
         Ok(true)
@@ -49,7 +49,7 @@ pub mod activities {
     pub async fn submit_to_provider(
         tenant_id: &str,
         user_id: &str,
-        documents: &[KycDocument],
+        _documents: &[KycDocument],
     ) -> Result<String> {
         info!(%tenant_id, %user_id, "Submitting to KYC provider");
         Ok(format!(

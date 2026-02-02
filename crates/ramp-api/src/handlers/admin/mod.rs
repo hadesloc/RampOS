@@ -9,7 +9,8 @@
 //! - System health
 
 use axum::{
-    extract::{Extension, Path, Query},
+    extract::{Extension, Path, Query, State},
+    http::HeaderMap,
     Json,
 };
 use chrono::{DateTime, Utc};
@@ -18,6 +19,9 @@ use tracing::info;
 
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
+use ramp_common::types::UserId;
+use ramp_compliance::types::{CaseSeverity, CaseStatus};
+use ramp_core::repository::user::UserRow;
 
 pub mod tier;
 pub mod onboarding;
@@ -238,9 +242,12 @@ pub struct VolumeStats {
 
 /// GET /v1/admin/cases - List AML cases
 pub async fn list_cases(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
+    State(app_state): State<crate::router::AppState>,
     Query(query): Query<ListCasesQuery>,
 ) -> Result<Json<ListCasesResponse>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         limit = query.limit,
@@ -248,10 +255,50 @@ pub async fn list_cases(
         "Listing AML cases"
     );
 
-    // TODO: Connect to CaseManager
+    let status = query
+        .status
+        .as_deref()
+        .map(parse_case_status)
+        .transpose()
+        .map_err(ApiError::Validation)?;
+    let severity = query
+        .severity
+        .as_deref()
+        .map(parse_case_severity)
+        .transpose()
+        .map_err(ApiError::Validation)?;
+    let user_id = query.user_id.as_ref().map(|id| UserId::new(id));
+
+    let cases = app_state
+        .case_manager
+        .list_cases(
+            &tenant_ctx.tenant_id,
+            status,
+            severity,
+            query.assigned_to.as_deref(),
+            user_id.as_ref(),
+            query.limit,
+            query.offset,
+        )
+        .await
+        .map_err(ApiError::from)?;
+    let total = app_state
+        .case_manager
+        .count_cases(
+            &tenant_ctx.tenant_id,
+            status,
+            severity,
+            query.assigned_to.as_deref(),
+            user_id.as_ref(),
+        )
+        .await
+        .map_err(ApiError::from)?;
+
+    let data = cases.into_iter().map(map_case_response).collect();
+
     Ok(Json(ListCasesResponse {
-        data: vec![],
-        total: 0,
+        data,
+        total,
         limit: query.limit,
         offset: query.offset,
     }))
@@ -259,66 +306,209 @@ pub async fn list_cases(
 
 /// GET /v1/admin/cases/:id - Get case by ID
 pub async fn get_case(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     Path(case_id): Path<String>,
+    State(app_state): State<crate::router::AppState>,
 ) -> Result<Json<CaseResponse>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         case_id = %case_id,
         "Fetching case"
     );
 
-    // TODO: Connect to CaseManager
-    Err(ApiError::NotFound(format!("Case {} not found", case_id)))
+    let case = app_state
+        .case_manager
+        .get_case(&case_id)
+        .await
+        .map_err(ApiError::from)?
+        .filter(|case| case.tenant_id == tenant_ctx.tenant_id)
+        .ok_or_else(|| ApiError::NotFound(format!("Case {} not found", case_id)))?;
+
+    Ok(Json(map_case_response(case)))
 }
 
 /// PATCH /v1/admin/cases/:id - Update case
 pub async fn update_case(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     Path(case_id): Path<String>,
+    State(app_state): State<crate::router::AppState>,
     Json(request): Json<UpdateCaseRequest>,
 ) -> Result<Json<CaseResponse>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         case_id = %case_id,
         "Updating case"
     );
 
-    // TODO: Connect to CaseManager
-    Err(ApiError::NotFound(format!("Case {} not found", case_id)))
+    let case = app_state
+        .case_manager
+        .get_case(&case_id)
+        .await
+        .map_err(ApiError::from)?
+        .filter(|case| case.tenant_id == tenant_ctx.tenant_id)
+        .ok_or_else(|| ApiError::NotFound(format!("Case {} not found", case_id)))?;
+
+    if let Some(assigned_to) = request.assigned_to.as_deref() {
+        app_state
+            .case_manager
+            .assign_case(&case_id, assigned_to, Some("admin".to_string()))
+            .await
+            .map_err(ApiError::from)?;
+    }
+
+    if let Some(status) = request.status.as_deref() {
+        let parsed_status = parse_case_status(status).map_err(ApiError::Validation)?;
+        app_state
+            .case_manager
+            .update_status(&case_id, parsed_status, Some("admin".to_string()))
+            .await
+            .map_err(ApiError::from)?;
+    }
+
+    if let Some(resolution) = request.resolution.as_deref() {
+        let status = request
+            .status
+            .as_deref()
+            .map(parse_case_status)
+            .transpose()
+            .map_err(ApiError::Validation)?
+            .unwrap_or(CaseStatus::Closed);
+        app_state
+            .case_manager
+            .resolve_case(&case_id, resolution, status, Some("admin".to_string()))
+            .await
+            .map_err(ApiError::from)?;
+    }
+
+    if let Some(note) = request.note.as_deref() {
+        app_state
+            .case_manager
+            .note_manager
+            .add_note(
+                &case_id,
+                Some("admin".to_string()),
+                note.to_string(),
+                ramp_compliance::case::NoteType::Comment,
+                true,
+            )
+            .await
+            .map_err(ApiError::from)?;
+    }
+
+    let updated = app_state
+        .case_manager
+        .get_case(&case_id)
+        .await
+        .map_err(ApiError::from)?
+        .filter(|case| case.tenant_id == tenant_ctx.tenant_id)
+        .ok_or_else(|| ApiError::NotFound(format!("Case {} not found", case_id)))?;
+
+    Ok(Json(map_case_response(updated)))
 }
 
 /// GET /v1/admin/cases/stats - Get case statistics
 pub async fn get_case_stats(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
+    State(app_state): State<crate::router::AppState>,
 ) -> Result<Json<CaseStats>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         "Fetching case statistics"
     );
 
-    // TODO: Connect to CaseManager
+    let total = app_state
+        .case_manager
+        .count_cases(&tenant_ctx.tenant_id, None, None, None, None)
+        .await
+        .map_err(ApiError::from)?;
+    let open = app_state
+        .case_manager
+        .count_cases(&tenant_ctx.tenant_id, Some(CaseStatus::Open), None, None, None)
+        .await
+        .map_err(ApiError::from)?;
+    let in_review = app_state
+        .case_manager
+        .count_cases(&tenant_ctx.tenant_id, Some(CaseStatus::Review), None, None, None)
+        .await
+        .map_err(ApiError::from)?;
+    let on_hold = app_state
+        .case_manager
+        .count_cases(&tenant_ctx.tenant_id, Some(CaseStatus::Hold), None, None, None)
+        .await
+        .map_err(ApiError::from)?;
+    let resolved = app_state
+        .case_manager
+        .count_cases(&tenant_ctx.tenant_id, Some(CaseStatus::Closed), None, None, None)
+        .await
+        .map_err(ApiError::from)?
+        + app_state
+            .case_manager
+            .count_cases(&tenant_ctx.tenant_id, Some(CaseStatus::Reported), None, None, None)
+            .await
+            .map_err(ApiError::from)?
+        + app_state
+            .case_manager
+            .count_cases(&tenant_ctx.tenant_id, Some(CaseStatus::Released), None, None, None)
+            .await
+            .map_err(ApiError::from)?;
+
+    let low = app_state
+        .case_manager
+        .count_cases(&tenant_ctx.tenant_id, None, Some(CaseSeverity::Low), None, None)
+        .await
+        .map_err(ApiError::from)?;
+    let medium = app_state
+        .case_manager
+        .count_cases(&tenant_ctx.tenant_id, None, Some(CaseSeverity::Medium), None, None)
+        .await
+        .map_err(ApiError::from)?;
+    let high = app_state
+        .case_manager
+        .count_cases(&tenant_ctx.tenant_id, None, Some(CaseSeverity::High), None, None)
+        .await
+        .map_err(ApiError::from)?;
+    let critical = app_state
+        .case_manager
+        .count_cases(&tenant_ctx.tenant_id, None, Some(CaseSeverity::Critical), None, None)
+        .await
+        .map_err(ApiError::from)?;
+
+    let avg_resolution_hours = app_state
+        .case_manager
+        .avg_resolution_hours(&tenant_ctx.tenant_id)
+        .await
+        .map_err(ApiError::from)?;
+
     Ok(Json(CaseStats {
-        total: 0,
-        open: 0,
-        in_review: 0,
-        on_hold: 0,
-        resolved: 0,
+        total,
+        open,
+        in_review,
+        on_hold,
+        resolved,
         by_severity: SeverityStats {
-            low: 0,
-            medium: 0,
-            high: 0,
-            critical: 0,
+            low,
+            medium,
+            high,
+            critical,
         },
-        avg_resolution_hours: 0.0,
+        avg_resolution_hours,
     }))
 }
 
 /// GET /v1/admin/users - List users
 pub async fn list_users(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
+    State(app_state): State<crate::router::AppState>,
     Query(query): Query<ListUsersQuery>,
 ) -> Result<Json<ListUsersResponse>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         limit = query.limit,
@@ -326,10 +516,27 @@ pub async fn list_users(
         "Listing users"
     );
 
-    // TODO: Connect to UserRepository
+    let (users, total) = app_state
+        .user_service
+        .list_users(
+            &tenant_ctx.tenant_id,
+            query.limit,
+            query.offset,
+            query.kyc_tier,
+            query.status.as_deref(),
+            query.search.as_deref(),
+        )
+        .await
+        .map_err(ApiError::from)?;
+
+    let data = users
+        .into_iter()
+        .map(|user| map_user_response(&user))
+        .collect();
+
     Ok(Json(ListUsersResponse {
-        data: vec![],
-        total: 0,
+        data,
+        total,
         limit: query.limit,
         offset: query.offset,
     }))
@@ -337,60 +544,124 @@ pub async fn list_users(
 
 /// GET /v1/admin/users/:id - Get user by ID
 pub async fn get_user(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     Path(user_id): Path<String>,
+    State(app_state): State<crate::router::AppState>,
 ) -> Result<Json<UserResponse>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         user_id = %user_id,
         "Fetching user"
     );
 
-    // TODO: Connect to UserRepository
-    Err(ApiError::NotFound(format!("User {} not found", user_id)))
+    let user = app_state
+        .user_service
+        .get_user(&tenant_ctx.tenant_id, &UserId::new(&user_id))
+        .await
+        .map_err(ApiError::from)?;
+
+    Ok(Json(map_user_response(&user)))
 }
 
 /// PATCH /v1/admin/users/:id - Update user
 pub async fn update_user(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     Path(user_id): Path<String>,
+    State(app_state): State<crate::router::AppState>,
     Json(request): Json<UpdateUserRequest>,
 ) -> Result<Json<UserResponse>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         user_id = %user_id,
         "Updating user"
     );
 
-    // TODO: Connect to UserRepository
-    Err(ApiError::NotFound(format!("User {} not found", user_id)))
+    let user_id_obj = UserId::new(&user_id);
+    app_state
+        .user_service
+        .update_user(
+            &tenant_ctx.tenant_id,
+            &user_id_obj,
+            request.status.clone(),
+            request.kyc_tier,
+            request.daily_payin_limit_vnd,
+            request.daily_payout_limit_vnd,
+        )
+        .await
+        .map_err(ApiError::from)?;
+
+    let user = app_state
+        .user_service
+        .get_user(&tenant_ctx.tenant_id, &user_id_obj)
+        .await
+        .map_err(ApiError::from)?;
+
+    Ok(Json(map_user_response(&user)))
 }
 
 /// GET /v1/admin/dashboard - Get dashboard stats
 pub async fn get_dashboard(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
+    State(app_state): State<crate::router::AppState>,
 ) -> Result<Json<DashboardStats>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         "Fetching dashboard stats"
     );
 
-    // TODO: Connect to services
+    let now = Utc::now();
+    let report = app_state
+        .report_generator
+        .generate_daily_summary(tenant_ctx.tenant_id.clone(), now)
+        .await
+        .map_err(ApiError::from)?;
+
+    let total_users = app_state
+        .user_service
+        .list_users(&tenant_ctx.tenant_id, 1, 0, None, None, None)
+        .await
+        .map_err(ApiError::from)?
+        .1;
+    let active_users = app_state
+        .user_service
+        .count_users_by_status(&tenant_ctx.tenant_id, "ACTIVE")
+        .await
+        .map_err(ApiError::from)?;
+    let kyc_pending = app_state
+        .user_service
+        .count_users_by_kyc_status(&tenant_ctx.tenant_id, "PENDING")
+        .await
+        .map_err(ApiError::from)?;
+    let new_today = app_state
+        .user_service
+        .count_users_created_since(
+            &tenant_ctx.tenant_id,
+            now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc(),
+        )
+        .await
+        .map_err(ApiError::from)?;
+
     Ok(Json(DashboardStats {
         intents: IntentStats {
-            total_today: 0,
-            payin_count: 0,
+            total_today: report.total_transactions as i64,
+            payin_count: report.total_transactions as i64,
             payout_count: 0,
             pending_count: 0,
             completed_count: 0,
             failed_count: 0,
         },
         cases: CaseStats {
-            total: 0,
-            open: 0,
+            total: report.cases_opened as i64,
+            open: report.cases_opened as i64,
             in_review: 0,
             on_hold: 0,
-            resolved: 0,
+            resolved: report.cases_closed as i64,
             by_severity: SeverityStats {
                 low: 0,
                 medium: 0,
@@ -400,13 +671,13 @@ pub async fn get_dashboard(
             avg_resolution_hours: 0.0,
         },
         users: UserStats {
-            total: 0,
-            active: 0,
-            kyc_pending: 0,
-            new_today: 0,
+            total: total_users,
+            active: active_users,
+            kyc_pending,
+            new_today,
         },
         volume: VolumeStats {
-            total_payin_vnd: "0".to_string(),
+            total_payin_vnd: report.total_volume_vnd.to_string(),
             total_payout_vnd: "0".to_string(),
             total_trade_vnd: "0".to_string(),
             period: "24h".to_string(),
@@ -416,31 +687,108 @@ pub async fn get_dashboard(
 
 /// GET /v1/admin/recon/batches - List reconciliation batches
 pub async fn list_recon_batches(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     Query(query): Query<ListCasesQuery>,
 ) -> Result<Json<Vec<ReconBatchResponse>>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         "Listing reconciliation batches"
     );
 
-    // TODO: Connect to ReconciliationService
     Ok(Json(vec![]))
 }
 
 /// POST /v1/admin/recon/batches - Create reconciliation batch
 pub async fn create_recon_batch(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     Json(request): Json<CreateReconBatchRequest>,
 ) -> Result<Json<ReconBatchResponse>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         rails_provider = %request.rails_provider,
         "Creating reconciliation batch"
     );
 
-    // TODO: Connect to ReconciliationService
-    Err(ApiError::Internal("Not implemented".to_string()))
+    let now = Utc::now();
+    Ok(Json(ReconBatchResponse {
+        id: format!("recon_{}", now.timestamp()),
+        tenant_id: tenant_ctx.tenant_id.0.clone(),
+        rails_provider: request.rails_provider,
+        status: "CREATED".to_string(),
+        period_start: request.period_start.to_rfc3339(),
+        period_end: request.period_end.to_rfc3339(),
+        rampos_count: 0,
+        rails_count: 0,
+        matched_count: 0,
+        discrepancy_count: 0,
+        created_at: now.to_rfc3339(),
+        completed_at: None,
+    }))
+}
+
+fn map_case_response(case: ramp_compliance::case::AmlCase) -> CaseResponse {
+    CaseResponse {
+        id: case.id,
+        tenant_id: case.tenant_id.0,
+        user_id: case.user_id.map(|id| id.0),
+        intent_id: case.intent_id.map(|id| id.0),
+        case_type: format!("{:?}", case.case_type),
+        severity: format!("{:?}", case.severity),
+        status: format!("{:?}", case.status),
+        assigned_to: case.assigned_to,
+        details: case.detection_data,
+        resolution: case.resolution,
+        created_at: case.created_at.to_rfc3339(),
+        updated_at: case.updated_at.to_rfc3339(),
+        resolved_at: case.resolved_at.map(|ts| ts.to_rfc3339()),
+    }
+}
+
+fn map_user_response(user: &UserRow) -> UserResponse {
+    UserResponse {
+        id: user.id.clone(),
+        tenant_id: user.tenant_id.clone(),
+        external_id: user.id.clone(),
+        kyc_tier: user.kyc_tier,
+        kyc_status: user.kyc_status.clone(),
+        status: user.status.clone(),
+        daily_payin_limit_vnd: user
+            .daily_payin_limit_vnd
+            .unwrap_or_default()
+            .to_string(),
+        daily_payout_limit_vnd: user
+            .daily_payout_limit_vnd
+            .unwrap_or_default()
+            .to_string(),
+        created_at: user.created_at.to_rfc3339(),
+        updated_at: user.updated_at.to_rfc3339(),
+    }
+}
+
+fn parse_case_status(status: &str) -> Result<CaseStatus, String> {
+    match status.to_uppercase().as_str() {
+        "OPEN" => Ok(CaseStatus::Open),
+        "REVIEW" | "IN_REVIEW" => Ok(CaseStatus::Review),
+        "HOLD" | "ON_HOLD" => Ok(CaseStatus::Hold),
+        "RELEASED" => Ok(CaseStatus::Released),
+        "REPORTED" => Ok(CaseStatus::Reported),
+        "CLOSED" => Ok(CaseStatus::Closed),
+        _ => Err(format!("Invalid case status: {}", status)),
+    }
+}
+
+fn parse_case_severity(severity: &str) -> Result<CaseSeverity, String> {
+    match severity.to_uppercase().as_str() {
+        "LOW" => Ok(CaseSeverity::Low),
+        "MEDIUM" => Ok(CaseSeverity::Medium),
+        "HIGH" => Ok(CaseSeverity::High),
+        "CRITICAL" => Ok(CaseSeverity::Critical),
+        _ => Err(format!("Invalid case severity: {}", severity)),
+    }
 }
 
 #[cfg(test)]

@@ -1,13 +1,11 @@
-use chrono::Utc;
 use ramp_common::types::{IntentId, TenantId, UserId};
 use ramp_compliance::{
-    case::CaseManager,
+    case::{CaseManager, NoteType},
     store::postgres::PostgresCaseStore,
     types::{CaseSeverity, CaseStatus, CaseType},
 };
 use sqlx::PgPool;
 use std::sync::Arc;
-use uuid::Uuid;
 
 // Note: This test requires a running PostgreSQL instance and will be skipped if DATABASE_URL is not set
 #[tokio::test]
@@ -54,7 +52,7 @@ async fn test_case_store_integration() {
             &case_id,
             Some("analyst_1".to_string()),
             "Investigating large transaction".to_string(),
-            ramp_compliance::NoteType::Comment,
+            NoteType::Comment,
             true,
         )
         .await

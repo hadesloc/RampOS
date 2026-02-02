@@ -1,6 +1,6 @@
 use axum::{
     extract::{Extension, Path, Query, State},
-    http::header,
+    http::{header, HeaderMap},
     response::{IntoResponse, Response},
     Json,
 };
@@ -69,10 +69,12 @@ pub struct DownloadQueryParams {
 
 /// GET /v1/admin/reports/aml
 pub async fn generate_aml_report(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     State(report_generator): State<Arc<ReportGenerator>>,
     Query(params): Query<ReportQueryParams>,
 ) -> Result<Json<AmlReport>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         "Generating AML report"
@@ -92,10 +94,12 @@ pub async fn generate_aml_report(
 
 /// GET /v1/admin/reports/kyc
 pub async fn generate_kyc_report(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     State(report_generator): State<Arc<ReportGenerator>>,
     Query(params): Query<ReportQueryParams>,
 ) -> Result<Json<KycReport>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         "Generating KYC report"
@@ -170,11 +174,13 @@ pub async fn generate_kyc_report(
 /// I'll stick to the "Generate and Export" pattern for now as it fits the `ReportGenerator` API best.
 
 pub async fn export_aml_report(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     State(report_generator): State<Arc<ReportGenerator>>,
     Query(params): Query<ReportQueryParams>,
     Query(download): Query<DownloadQueryParams>,
 ) -> Result<Response, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         "Exporting AML report"
@@ -212,11 +218,13 @@ pub async fn export_aml_report(
 }
 
 pub async fn export_kyc_report(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     State(report_generator): State<Arc<ReportGenerator>>,
     Query(params): Query<ReportQueryParams>,
     Query(download): Query<DownloadQueryParams>,
 ) -> Result<Response, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         "Exporting KYC report"
@@ -255,10 +263,12 @@ pub async fn export_kyc_report(
 
 /// POST /v1/admin/cases/{id}/sar
 pub async fn generate_sar(
+    headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     State(app_state): State<crate::router::AppState>, // Changed to AppState
     Path(case_id): Path<String>,
 ) -> Result<Json<SarReport>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         case_id = %case_id,

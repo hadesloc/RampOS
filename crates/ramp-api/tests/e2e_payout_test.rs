@@ -10,13 +10,16 @@ use ramp_core::service::{payin::PayinService, payout::{PayoutService, ConfirmPay
 use ramp_core::repository::tenant::TenantRow;
 use ramp_core::repository::user::UserRow;
 use ramp_api::{create_router, AppState};
+use ramp_common::ledger::{AccountType, LedgerCurrency, EntryDirection};
+use ramp_core::repository::LedgerRepository;
 use ramp_api::middleware::{RateLimiter, RateLimitConfig, IdempotencyHandler, IdempotencyConfig};
 use ramp_common::types::*;
 use sha2::{Digest, Sha256};
 use chrono::Utc;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use ramp_common::ledger::{AccountType, LedgerCurrency, EntryDirection};
+use ramp_compliance::{case::CaseManager, InMemoryCaseStore, reports::ReportGenerator, storage::MockDocumentStorage};
+use sqlx::PgPool;
 
 // --- Helper Functions ---
 
@@ -99,6 +102,21 @@ async fn setup_app() -> TestApp {
         event_publisher.clone(),
     ));
     let ledger_service = Arc::new(LedgerService::new(ledger_repo.clone()));
+    let onboarding_service = Arc::new(ramp_core::service::onboarding::OnboardingService::new(
+        tenant_repo.clone(),
+        ledger_service.clone(),
+    ));
+    let user_service = Arc::new(ramp_core::service::user::UserService::new(
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let pool = PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
+        .expect("Failed to create lazy pool");
+    let report_generator = Arc::new(ReportGenerator::new(
+        pool,
+        Arc::new(MockDocumentStorage::new()),
+    ));
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
 
     // Setup middleware
     let rate_limiter = Some(Arc::new(RateLimiter::with_memory(RateLimitConfig {
@@ -119,8 +137,12 @@ async fn setup_app() -> TestApp {
         payout_service: payout_service.clone(),
         trade_service,
         ledger_service,
+        onboarding_service,
+        user_service,
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
+        report_generator,
+        case_manager,
         rate_limiter,
         idempotency_handler,
     };
@@ -259,18 +281,32 @@ async fn test_payout_success_flow() {
 
     // 9. Verify webhook events sent
     // We check the event publisher
-    let events = app.event_publisher.get_events();
+    let events = app.event_publisher.get_events().await;
     // Should have: IntentCreated, IntentStatusChanged (COMPLETED)
     // Actually create_payout emits IntentCreated.
     // confirm_payout emits IntentStatusChanged.
     assert!(events.len() >= 2);
 
-    let created_event = events.iter().find(|e| e.topic == "intent.created").expect("Should have intent.created event");
-    assert_eq!(created_event.key, intent_id_str);
+    let created_event = events
+        .iter()
+        .find(|e| e.get("type").and_then(|v| v.as_str()) == Some("intent.created"))
+        .expect("Should have intent.created event");
+    assert_eq!(
+        created_event.get("intent_id").and_then(|v| v.as_str()),
+        Some(intent_id_str)
+    );
 
-    let completed_event = events.iter().find(|e| e.topic == "intent.status_changed" && e.payload.contains("COMPLETED"))
+    let completed_event = events
+        .iter()
+        .find(|e| {
+            e.get("type").and_then(|v| v.as_str()) == Some("intent.status_changed")
+                && e.get("new_status").and_then(|v| v.as_str()) == Some("COMPLETED")
+        })
         .expect("Should have intent.status_changed event for COMPLETED");
-    assert_eq!(completed_event.key, intent_id_str);
+    assert_eq!(
+        completed_event.get("intent_id").and_then(|v| v.as_str()),
+        Some(intent_id_str)
+    );
 }
 
 #[tokio::test]
@@ -410,8 +446,11 @@ async fn test_payout_bank_rejection() {
     assert_eq!(intent.state, "BANK_REJECTED");
 
     // Check event
-    let events = app.event_publisher.get_events();
-    let reject_event = events.iter().find(|e| e.topic == "intent.status_changed" && e.payload.contains("BANK_REJECTED"));
+    let events = app.event_publisher.get_events().await;
+    let reject_event = events.iter().find(|e| {
+        e.get("type").and_then(|v| v.as_str()) == Some("intent.status_changed")
+            && e.get("new_status").and_then(|v| v.as_str()) == Some("BANK_REJECTED")
+    });
     assert!(reject_event.is_some());
 
     // Note: Reversal ledger entry is not yet implemented in mock service (see comment in payout.rs),

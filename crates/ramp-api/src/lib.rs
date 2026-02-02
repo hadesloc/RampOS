@@ -8,5 +8,5 @@ pub mod router;
 pub mod extract;
 pub mod openapi;
 
-pub use router::create_router;
+pub use router::{create_router, AppState};
 pub use error::ApiError;

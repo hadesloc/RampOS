@@ -44,8 +44,7 @@ impl AmlRule for SanctionsRule {
                     if result.matched {
                         matched = true;
                         reason = format!(
-                            "Sanctions match for name '{}' in list '{}' (Score: {})",
-                            name,
+                            "Sanctions match for name '***' in list '{}' (Score: {})",
                             result.list_name.unwrap_or_default(),
                             result.score
                         );
@@ -54,15 +53,25 @@ impl AmlRule for SanctionsRule {
                         warn!(
                             rule = self.name(),
                             user_id = %ctx.user_id,
-                            name = %name,
+                            name = "***",
                             "Sanctions match detected"
                         );
                     }
                 }
                 Err(e) => {
-                    warn!("Sanctions check failed for name {}: {}", name, e);
+                    warn!("Sanctions check failed for name ***: {}", e);
                 }
             }
+        } else {
+            // FAIL-SAFE: If name is missing, we cannot properly screen sanctions.
+            // This is a critical failure.
+            return Ok(RuleResult {
+                passed: false,
+                reason: "Sanctions screening failed: Missing user full name".to_string(),
+                risk_score: Some(RiskScore::new(100.0)),
+                severity: Some(CaseSeverity::Critical),
+                create_case: true,
+            });
         }
 
         // Check address if available and not already matched
@@ -73,8 +82,7 @@ impl AmlRule for SanctionsRule {
                         if result.matched {
                             matched = true;
                             reason = format!(
-                                "Sanctions match for address '{}' in list '{}' (Score: {})",
-                                address,
+                                "Sanctions match for address '***' in list '{}' (Score: {})",
                                 result.list_name.unwrap_or_default(),
                                 result.score
                             );
@@ -83,13 +91,13 @@ impl AmlRule for SanctionsRule {
                             warn!(
                                 rule = self.name(),
                                 user_id = %ctx.user_id,
-                                address = %address,
+                                address = "***",
                                 "Sanctions match detected"
                             );
                         }
                     }
                     Err(e) => {
-                        warn!("Sanctions check failed for address {}: {}", address, e);
+                        warn!("Sanctions check failed for address ***: {}", e);
                     }
                 }
             }

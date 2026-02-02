@@ -11,6 +11,9 @@ use ramp_core::repository::tenant::TenantRow;
 use ramp_core::repository::user::UserRow;
 use ramp_core::repository::intent::IntentRow;
 use ramp_api::{create_router, AppState};
+use ramp_core::repository::IntentRepository;
+use ramp_compliance::{case::CaseManager, InMemoryCaseStore, reports::ReportGenerator, storage::MockDocumentStorage};
+use sqlx::PgPool;
 use ramp_common::types::*;
 use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
@@ -92,14 +95,108 @@ async fn test_get_intent_endpoint() {
         event_publisher.clone(),
     ));
     let ledger_service = Arc::new(LedgerService::new(ledger_repo.clone()));
+    let onboarding_service = Arc::new(ramp_core::service::onboarding::OnboardingService::new(
+        tenant_repo.clone(),
+        ledger_service.clone(),
+    ));
+    let user_service = Arc::new(ramp_core::service::user::UserService::new(
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let pool = PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
+        .expect("Failed to create lazy pool");
+    let report_generator = Arc::new(ReportGenerator::new(
+        pool,
+        Arc::new(MockDocumentStorage::new()),
+    ));
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
+    let onboarding_service = Arc::new(ramp_core::service::onboarding::OnboardingService::new(
+        tenant_repo.clone(),
+        ledger_service.clone(),
+    ));
+    let user_service = Arc::new(ramp_core::service::user::UserService::new(
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let pool = PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
+        .expect("Failed to create lazy pool");
+    let report_generator = Arc::new(ReportGenerator::new(
+        pool,
+        Arc::new(MockDocumentStorage::new()),
+    ));
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
+    let onboarding_service = Arc::new(ramp_core::service::onboarding::OnboardingService::new(
+        tenant_repo.clone(),
+        ledger_service.clone(),
+    ));
+    let user_service = Arc::new(ramp_core::service::user::UserService::new(
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let pool = PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
+        .expect("Failed to create lazy pool");
+    let report_generator = Arc::new(ReportGenerator::new(
+        pool,
+        Arc::new(MockDocumentStorage::new()),
+    ));
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
+    let onboarding_service = Arc::new(ramp_core::service::onboarding::OnboardingService::new(
+        tenant_repo.clone(),
+        ledger_service.clone(),
+    ));
+    let user_service = Arc::new(ramp_core::service::user::UserService::new(
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let pool = PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
+        .expect("Failed to create lazy pool");
+    let report_generator = Arc::new(ReportGenerator::new(
+        pool,
+        Arc::new(MockDocumentStorage::new()),
+    ));
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
+    let onboarding_service = Arc::new(ramp_core::service::onboarding::OnboardingService::new(
+        tenant_repo.clone(),
+        ledger_service.clone(),
+    ));
+    let user_service = Arc::new(ramp_core::service::user::UserService::new(
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let pool = PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
+        .expect("Failed to create lazy pool");
+    let report_generator = Arc::new(ReportGenerator::new(
+        pool,
+        Arc::new(MockDocumentStorage::new()),
+    ));
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
+    let onboarding_service = Arc::new(ramp_core::service::onboarding::OnboardingService::new(
+        tenant_repo.clone(),
+        ledger_service.clone(),
+    ));
+    let user_service = Arc::new(ramp_core::service::user::UserService::new(
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let pool = PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
+        .expect("Failed to create lazy pool");
+    let report_generator = Arc::new(ReportGenerator::new(
+        pool,
+        Arc::new(MockDocumentStorage::new()),
+    ));
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
 
     let app_state = AppState {
         payin_service,
         payout_service,
         trade_service,
         ledger_service,
+        onboarding_service,
+        user_service,
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
+        report_generator,
+        case_manager,
         rate_limiter: None,
         idempotency_handler: None,
     };
@@ -176,14 +273,33 @@ async fn test_get_intent_not_found() {
         event_publisher.clone(),
     ));
     let ledger_service = Arc::new(LedgerService::new(ledger_repo.clone()));
+    let onboarding_service = Arc::new(ramp_core::service::onboarding::OnboardingService::new(
+        tenant_repo.clone(),
+        ledger_service.clone(),
+    ));
+    let user_service = Arc::new(ramp_core::service::user::UserService::new(
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let pool = PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
+        .expect("Failed to create lazy pool");
+    let report_generator = Arc::new(ReportGenerator::new(
+        pool,
+        Arc::new(MockDocumentStorage::new()),
+    ));
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
 
     let app_state = AppState {
         payin_service,
         payout_service,
         trade_service,
         ledger_service,
+        onboarding_service,
+        user_service,
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
+        report_generator,
+        case_manager,
         rate_limiter: None,
         idempotency_handler: None,
     };
@@ -302,8 +418,12 @@ async fn test_get_intent_wrong_tenant() {
         payout_service,
         trade_service,
         ledger_service,
+        onboarding_service,
+        user_service,
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
+        report_generator,
+        case_manager,
         rate_limiter: None,
         idempotency_handler: None,
     };

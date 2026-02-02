@@ -1,4 +1,5 @@
 use axum::{extract::State, http::HeaderMap, Json};
+use axum::extract::Extension;
 use ramp_common::types::*;
 use ramp_core::service::trade::{TradeExecutedRequest as ServiceRequest, TradeService};
 use std::sync::Arc;
@@ -8,6 +9,7 @@ use validator::Validate;
 use crate::dto::{TradeExecutedRequest, TradeExecutedResponse};
 use crate::error::ApiError;
 use crate::extract::ValidatedJson;
+use crate::middleware::TenantContext;
 
 pub type TradeServiceState = Arc<TradeService>;
 
@@ -32,9 +34,14 @@ pub type TradeServiceState = Arc<TradeService>;
 #[instrument(skip_all, fields(tenant_id, user_id, trade_id, symbol))]
 pub async fn record_trade(
     State(service): State<TradeServiceState>,
+    Extension(tenant_ctx): Extension<TenantContext>,
     headers: HeaderMap,
     ValidatedJson(req): ValidatedJson<TradeExecutedRequest>,
 ) -> Result<Json<TradeExecutedResponse>, ApiError> {
+    if tenant_ctx.tenant_id.0 != req.tenant_id {
+        return Err(ApiError::Forbidden("Tenant mismatch".to_string()));
+    }
+
     tracing::Span::current()
         .record("tenant_id", &req.tenant_id)
         .record("user_id", &req.user_id)

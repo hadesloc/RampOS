@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     Json,
 };
 use ramp_common::types::TenantId;
@@ -10,7 +10,6 @@ use std::sync::Arc;
 use tracing::info;
 
 use crate::error::ApiError;
-use crate::middleware::tenant::TenantContext;
 use ramp_core::service::onboarding::{ApiKeyPair, OnboardingService};
 
 // ============================================================================
@@ -54,9 +53,11 @@ pub struct SuspendTenantRequest {
 
 /// POST /v1/admin/tenants - Create a new tenant
 pub async fn create_tenant(
+    headers: HeaderMap,
     State(onboarding_service): State<Arc<OnboardingService>>,
     Json(request): Json<CreateTenantRequest>,
 ) -> Result<Json<TenantResponse>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(name = %request.name, "Creating new tenant");
 
     let tenant = onboarding_service
@@ -75,9 +76,11 @@ pub async fn create_tenant(
 
 /// POST /v1/admin/tenants/:id/api-keys - Generate new API keys
 pub async fn generate_api_keys(
+    headers: HeaderMap,
     State(onboarding_service): State<Arc<OnboardingService>>,
     Path(tenant_id): Path<String>,
 ) -> Result<Json<ApiKeyPair>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(tenant_id = %tenant_id, "Generating API keys");
 
     let keys = onboarding_service
@@ -90,9 +93,11 @@ pub async fn generate_api_keys(
 
 /// POST /v1/admin/tenants/:id/activate - Activate tenant
 pub async fn activate_tenant(
+    headers: HeaderMap,
     State(onboarding_service): State<Arc<OnboardingService>>,
     Path(tenant_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(tenant_id = %tenant_id, "Activating tenant");
 
     onboarding_service
@@ -105,10 +110,12 @@ pub async fn activate_tenant(
 
 /// POST /v1/admin/tenants/:id/suspend - Suspend tenant
 pub async fn suspend_tenant(
+    headers: HeaderMap,
     State(onboarding_service): State<Arc<OnboardingService>>,
     Path(tenant_id): Path<String>,
     Json(request): Json<SuspendTenantRequest>,
 ) -> Result<StatusCode, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(tenant_id = %tenant_id, reason = %request.reason, "Suspending tenant");
 
     onboarding_service
@@ -121,10 +128,12 @@ pub async fn suspend_tenant(
 
 /// PATCH /v1/admin/tenants/:id - Update tenant config
 pub async fn update_tenant(
+    headers: HeaderMap,
     State(onboarding_service): State<Arc<OnboardingService>>,
     Path(tenant_id): Path<String>,
     Json(request): Json<UpdateTenantRequest>,
 ) -> Result<StatusCode, ApiError> {
+    super::tier::check_admin_key(&headers)?;
     info!(tenant_id = %tenant_id, "Updating tenant");
 
     let id = TenantId::new(tenant_id);

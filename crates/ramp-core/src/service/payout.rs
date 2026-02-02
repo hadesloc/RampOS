@@ -85,11 +85,36 @@ impl PayoutService {
                 .get_by_idempotency_key(&req.tenant_id, key)
                 .await?
             {
+                let user = self
+                    .user_repo
+                    .get_by_id(&req.tenant_id, &req.user_id)
+                    .await?
+                    .ok_or_else(|| Error::UserNotFound(req.user_id.0.clone()))?;
+
+                let tier = KycTier::from_i16(user.kyc_tier);
+                let daily_limit = user
+                    .daily_payout_limit_vnd
+                    .unwrap_or_else(|| tier.daily_payout_limit_vnd());
+                let daily_usage = self
+                    .intent_repo
+                    .get_daily_payout_amount(&req.tenant_id, &req.user_id)
+                    .await?;
+                let daily_remaining = if daily_limit == Decimal::MAX {
+                    Decimal::MAX
+                } else {
+                    let remaining = daily_limit - daily_usage;
+                    if remaining < Decimal::ZERO {
+                        Decimal::ZERO
+                    } else {
+                        remaining
+                    }
+                };
+
                 return Ok(CreatePayoutResponse {
                     intent_id: IntentId(existing.id),
-                    status: PayoutState::Created,
-                    daily_limit: Decimal::MAX, // TODO: fetch actual
-                    daily_remaining: Decimal::MAX, // TODO: fetch actual
+                    status: parse_payout_state(&existing.state),
+                    daily_limit,
+                    daily_remaining,
                 });
             }
         }
@@ -322,6 +347,22 @@ impl PayoutService {
 
         // For now, approve all payouts under 100M VND
         Ok(req.amount_vnd.0 <= Decimal::from(100_000_000))
+    }
+}
+
+fn parse_payout_state(state: &str) -> PayoutState {
+    match state {
+        "CREATED" | "PAYOUT_CREATED" => PayoutState::Created,
+        "POLICY_APPROVED" => PayoutState::PolicyApproved,
+        "PAYOUT_SUBMITTED" | "SUBMITTED" => PayoutState::Submitted,
+        "PAYOUT_CONFIRMED" | "CONFIRMED" => PayoutState::Confirmed,
+        "COMPLETED" => PayoutState::Completed,
+        "REJECTED_BY_POLICY" => PayoutState::RejectedByPolicy,
+        "BANK_REJECTED" => PayoutState::BankRejected,
+        "TIMEOUT" => PayoutState::Timeout,
+        "MANUAL_REVIEW" => PayoutState::ManualReview,
+        "CANCELLED" => PayoutState::Cancelled,
+        _ => PayoutState::Created,
     }
 }
 

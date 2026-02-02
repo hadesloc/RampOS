@@ -671,7 +671,11 @@ mod tests {
     use crate::test_utils::{MockIntentRepository, MockLedgerRepository};
     use crate::event::InMemoryEventPublisher;
     use crate::workflows::BankAccountInfo;
-    use ramp_compliance::case::CaseManager;
+    use ramp_compliance::{
+        case::CaseManager,
+        InMemoryCaseStore,
+        MockTransactionHistoryStore,
+    };
 
     #[tokio::test]
     async fn test_start_payin_workflow() {
@@ -679,10 +683,12 @@ mod tests {
         let intent_repo = Arc::new(MockIntentRepository::new());
         let ledger_repo = Arc::new(MockLedgerRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
+        let case_store = Arc::new(InMemoryCaseStore::new());
         let aml_engine = Arc::new(AmlEngine::new(
-            Arc::new(CaseManager::new()),
+            Arc::new(CaseManager::new(case_store)),
             None,
             Arc::new(ramp_compliance::aml::MockDeviceHistoryStore::new()),
+            Arc::new(MockTransactionHistoryStore::new()),
         ));
 
         let worker = Arc::new(TemporalWorker::new(
@@ -716,10 +722,12 @@ mod tests {
         let intent_repo = Arc::new(MockIntentRepository::new());
         let ledger_repo = Arc::new(MockLedgerRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
+        let case_store = Arc::new(InMemoryCaseStore::new());
         let aml_engine = Arc::new(AmlEngine::new(
-            Arc::new(CaseManager::new()),
+            Arc::new(CaseManager::new(case_store)),
             None,
             Arc::new(ramp_compliance::aml::MockDeviceHistoryStore::new()),
+            Arc::new(MockTransactionHistoryStore::new()),
         ));
 
         let worker = Arc::new(TemporalWorker::new(

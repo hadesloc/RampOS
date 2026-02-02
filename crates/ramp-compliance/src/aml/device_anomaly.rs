@@ -144,7 +144,17 @@ impl AmlRule for DeviceAnomalyRule {
                 .unwrap_or(serde_json::Value::Null),
         ) {
             Ok(d) => d,
-            Err(_) => return Ok(RuleResult::pass()), // No device info, skip rule
+            Err(_) => {
+                // FAIL-SAFE: If device info is missing, REJECT or REQUIRE REVIEW
+                // Do NOT pass silently.
+                 return Ok(RuleResult {
+                    passed: false,
+                    reason: "Missing device information".to_string(),
+                    risk_score: Some(RiskScore::new(80.0)),
+                    severity: Some(CaseSeverity::High),
+                    create_case: true,
+                });
+            }
         };
 
         let mut risk_score = 0.0;

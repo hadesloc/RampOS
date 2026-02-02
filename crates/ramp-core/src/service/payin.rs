@@ -84,14 +84,50 @@ impl PayinService {
                 .await?
             {
                 info!("Returning existing intent for idempotency key");
+                let user = self
+                    .user_repo
+                    .get_by_id(&req.tenant_id, &req.user_id)
+                    .await?
+                    .ok_or_else(|| Error::UserNotFound(req.user_id.0.clone()))?;
+
+                let tier = KycTier::from_i16(user.kyc_tier);
+                let daily_limit = user
+                    .daily_payin_limit_vnd
+                    .unwrap_or_else(|| tier.daily_payin_limit_vnd());
+                let daily_usage = self
+                    .intent_repo
+                    .get_daily_payin_amount(&req.tenant_id, &req.user_id)
+                    .await?;
+                let daily_remaining = if daily_limit == Decimal::MAX {
+                    Decimal::MAX
+                } else {
+                    let remaining = daily_limit - daily_usage;
+                    if remaining < Decimal::ZERO {
+                        Decimal::ZERO
+                    } else {
+                        remaining
+                    }
+                };
+
+                let reference_code = existing.reference_code.clone().unwrap_or_default();
+                let virtual_account = if reference_code.is_empty() {
+                    None
+                } else {
+                    Some(VirtualAccount {
+                        bank: "VIETCOMBANK".to_string(),
+                        account_number: format!("VA{}", reference_code),
+                        account_name: format!("RAMPOS VA - {}", req.tenant_id.0),
+                    })
+                };
+
                 return Ok(CreatePayinResponse {
                     intent_id: IntentId(existing.id),
-                    reference_code: ReferenceCode(existing.reference_code.unwrap_or_default()),
-                    virtual_account: None, // TODO: fetch from storage
-                    status: PayinState::Created, // TODO: parse from existing.state
+                    reference_code: ReferenceCode(reference_code),
+                    virtual_account,
+                    status: parse_payin_state(&existing.state),
                     expires_at: Timestamp::from_datetime(existing.expires_at.unwrap_or(Utc::now())),
-                    daily_limit: Decimal::MAX, // TODO: fetch actual
-                    daily_remaining: Decimal::MAX, // TODO: fetch actual
+                    daily_limit,
+                    daily_remaining,
                 });
             }
         }
@@ -300,6 +336,23 @@ impl PayinService {
         );
 
         Ok(intent_id)
+    }
+}
+
+fn parse_payin_state(state: &str) -> PayinState {
+    match state {
+        "CREATED" | "PAYIN_CREATED" => PayinState::Created,
+        "INSTRUCTION_ISSUED" => PayinState::InstructionIssued,
+        "FUNDS_PENDING" => PayinState::FundsPending,
+        "FUNDS_CONFIRMED" => PayinState::FundsConfirmed,
+        "VND_CREDITED" => PayinState::VndCredited,
+        "COMPLETED" => PayinState::Completed,
+        "EXPIRED" => PayinState::Expired,
+        "MISMATCHED_AMOUNT" => PayinState::MismatchedAmount,
+        "SUSPECTED_FRAUD" => PayinState::SuspectedFraud,
+        "MANUAL_REVIEW" => PayinState::ManualReview,
+        "CANCELLED" => PayinState::Cancelled,
+        _ => PayinState::Created,
     }
 }
 

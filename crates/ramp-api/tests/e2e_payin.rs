@@ -17,11 +17,13 @@ use ramp_core::{
         onboarding::OnboardingService,
     },
 };
+use ramp_compliance::{case::CaseManager, InMemoryCaseStore};
 use ramp_common::types::*;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use tower::ServiceExt; // for oneshot
-use testcontainers::{clients, images::postgres::Postgres};
+use testcontainers::clients;
+use testcontainers_modules::postgres::Postgres;
 use serde_json::json;
 use chrono::Utc;
 use uuid::Uuid;
@@ -140,7 +142,11 @@ async fn test_e2e_payin_flow_via_api() {
 
     let onboarding_service = Arc::new(OnboardingService::new(
         tenant_repo.clone(),
+        ledger_service.clone(),
+    ));
+    let user_service = Arc::new(ramp_core::service::user::UserService::new(
         user_repo.clone(),
+        event_publisher.clone(),
     ));
 
     // Mock Report Generator (using standard new if possible or mocking if trait needed)
@@ -161,6 +167,7 @@ async fn test_e2e_payin_flow_via_api() {
          pool.clone(),
          storage,
     ));
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
 
     let app_state = AppState {
         payin_service,
@@ -168,9 +175,11 @@ async fn test_e2e_payin_flow_via_api() {
         trade_service,
         ledger_service,
         onboarding_service,
+        user_service,
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
         report_generator,
+        case_manager,
         rate_limiter: None,
         idempotency_handler: None,
     };

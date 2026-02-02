@@ -32,7 +32,9 @@ use ramp_core::{
     },
 };
 
+use ramp_compliance::case::CaseManager;
 use ramp_compliance::reports::ReportGenerator;
+use ramp_compliance::store::postgres::PostgresCaseStore;
 use ramp_compliance::storage::S3DocumentStorage;
 
 #[tokio::main]
@@ -96,12 +98,12 @@ async fn main() -> anyhow::Result<()> {
 
     let onboarding_service = Arc::new(OnboardingService::new(
         tenant_repo.clone(),
-        user_repo.clone(),
+        ledger_service.clone(),
     ));
 
     let user_service = Arc::new(UserService::new(
         user_repo.clone(),
-        tenant_repo.clone(),
+        event_publisher.clone(),
     ));
 
     // Create ReportGenerator
@@ -130,6 +132,9 @@ async fn main() -> anyhow::Result<()> {
     let document_storage = Arc::new(MockDocumentStorage::new());
     let report_generator = Arc::new(ReportGenerator::new(pool.clone(), document_storage));
 
+    let case_store = Arc::new(PostgresCaseStore::new(pool.clone()));
+    let case_manager = Arc::new(CaseManager::new(case_store));
+
     // Create Redis connection and idempotency handler
     let redis_client = redis::Client::open(config.redis.url.as_str())
         .expect("Invalid Redis URL");
@@ -137,7 +142,7 @@ async fn main() -> anyhow::Result<()> {
         .await
         .expect("Failed to connect to Redis");
 
-    let idempotency_handler = Arc::new(IdempotencyHandler::new(
+    let idempotency_handler = Arc::new(IdempotencyHandler::with_redis(
         redis_manager.clone(),
         IdempotencyConfig::default(),
     ));
@@ -158,6 +163,7 @@ async fn main() -> anyhow::Result<()> {
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
         report_generator: report_generator.clone(),
+        case_manager: case_manager.clone(),
         rate_limiter: Some(rate_limiter),
         idempotency_handler: Some(idempotency_handler),
     };
@@ -190,10 +196,11 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // Start intent timeout job
-    let timeout_job = IntentTimeoutJob::new(
+    let timeout_service = Arc::new(ramp_core::service::TimeoutService::new(
         intent_repo.clone(),
         event_publisher.clone(),
-    );
+    ));
+    let timeout_job = IntentTimeoutJob::new(timeout_service);
     tokio::spawn(async move {
         timeout_job.run().await;
     });

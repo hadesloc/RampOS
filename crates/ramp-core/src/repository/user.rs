@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use ramp_common::{types::{TenantId, UserId}, Result};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
+use sqlx::{FromRow, PgPool, QueryBuilder, Row};
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct UserRow {
@@ -28,6 +28,39 @@ pub trait UserRepository: Send + Sync {
     async fn update_kyc_tier(&self, tenant_id: &TenantId, user_id: &UserId, tier: i16) -> Result<()>;
     async fn update_risk_score(&self, tenant_id: &TenantId, user_id: &UserId, score: Decimal) -> Result<()>;
     async fn update_status(&self, tenant_id: &TenantId, user_id: &UserId, status: &str) -> Result<()>;
+    async fn update_limits(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        daily_payin_limit_vnd: Option<Decimal>,
+        daily_payout_limit_vnd: Option<Decimal>,
+    ) -> Result<()>;
+    async fn list_users(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+        kyc_tier: Option<i16>,
+        status: Option<&str>,
+        search: Option<&str>,
+    ) -> Result<Vec<UserRow>>;
+    async fn count_users(
+        &self,
+        tenant_id: &TenantId,
+        kyc_tier: Option<i16>,
+        status: Option<&str>,
+        search: Option<&str>,
+    ) -> Result<i64>;
+    async fn count_users_by_kyc_status(
+        &self,
+        tenant_id: &TenantId,
+        kyc_status: &str,
+    ) -> Result<i64>;
+    async fn count_users_created_since(
+        &self,
+        tenant_id: &TenantId,
+        since: DateTime<Utc>,
+    ) -> Result<i64>;
 }
 
 pub struct PgUserRepository {
@@ -139,5 +172,136 @@ impl UserRepository for PgUserRepository {
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         Ok(())
+    }
+
+    async fn update_limits(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        daily_payin_limit_vnd: Option<Decimal>,
+        daily_payout_limit_vnd: Option<Decimal>,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE users
+            SET daily_payin_limit_vnd = COALESCE($1, daily_payin_limit_vnd),
+                daily_payout_limit_vnd = COALESCE($2, daily_payout_limit_vnd),
+                updated_at = NOW()
+            WHERE tenant_id = $3 AND id = $4
+            "#,
+        )
+        .bind(daily_payin_limit_vnd)
+        .bind(daily_payout_limit_vnd)
+        .bind(&tenant_id.0)
+        .bind(&user_id.0)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn list_users(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+        kyc_tier: Option<i16>,
+        status: Option<&str>,
+        search: Option<&str>,
+    ) -> Result<Vec<UserRow>> {
+        let mut builder = QueryBuilder::new("SELECT * FROM users WHERE tenant_id = ");
+        builder.push_bind(&tenant_id.0);
+
+        if let Some(tier) = kyc_tier {
+            builder.push(" AND kyc_tier = ").push_bind(tier);
+        }
+
+        if let Some(status) = status {
+            builder.push(" AND status = ").push_bind(status);
+        }
+
+        if let Some(search) = search {
+            let pattern = format!("%{}%", search);
+            builder.push(" AND id ILIKE ").push_bind(pattern);
+        }
+
+        builder
+            .push(" ORDER BY created_at DESC LIMIT ")
+            .push_bind(limit)
+            .push(" OFFSET ")
+            .push_bind(offset);
+
+        let query = builder.build_query_as::<UserRow>();
+        query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))
+    }
+
+    async fn count_users(
+        &self,
+        tenant_id: &TenantId,
+        kyc_tier: Option<i16>,
+        status: Option<&str>,
+        search: Option<&str>,
+    ) -> Result<i64> {
+        let mut builder = QueryBuilder::new("SELECT COUNT(*) as count FROM users WHERE tenant_id = ");
+        builder.push_bind(&tenant_id.0);
+
+        if let Some(tier) = kyc_tier {
+            builder.push(" AND kyc_tier = ").push_bind(tier);
+        }
+
+        if let Some(status) = status {
+            builder.push(" AND status = ").push_bind(status);
+        }
+
+        if let Some(search) = search {
+            let pattern = format!("%{}%", search);
+            builder.push(" AND id ILIKE ").push_bind(pattern);
+        }
+
+        let row = builder
+            .build()
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        let count: i64 = row.try_get("count").unwrap_or(0);
+        Ok(count)
+    }
+
+    async fn count_users_by_kyc_status(
+        &self,
+        tenant_id: &TenantId,
+        kyc_status: &str,
+    ) -> Result<i64> {
+        let row = sqlx::query(
+            "SELECT COUNT(*) as count FROM users WHERE tenant_id = $1 AND kyc_status = $2",
+        )
+        .bind(&tenant_id.0)
+        .bind(kyc_status)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        let count: i64 = row.try_get("count").unwrap_or(0);
+        Ok(count)
+    }
+
+    async fn count_users_created_since(
+        &self,
+        tenant_id: &TenantId,
+        since: DateTime<Utc>,
+    ) -> Result<i64> {
+        let row = sqlx::query(
+            "SELECT COUNT(*) as count FROM users WHERE tenant_id = $1 AND created_at >= $2",
+        )
+        .bind(&tenant_id.0)
+        .bind(since)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        let count: i64 = row.try_get("count").unwrap_or(0);
+        Ok(count)
     }
 }

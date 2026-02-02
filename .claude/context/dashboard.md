@@ -66,10 +66,8 @@ RampOS is a complete infrastructure solution for crypto exchanges in Vietnam:
 
 ## What's Pending
 
-### Phase 5: Frontend Expansion
-*   **Status**: Planning Complete. Ready for Implementation.
-*   **Next Action**: Begin Shared Foundation tasks (F-001, F-002).
-*   **Goal**: Deliver high-converting landing page and secure user portal.
+### Remaining Tasks
+*   **Task 3.1.6**: Write state machine tests (in progress)
 
 ---
 

@@ -10,10 +10,7 @@ use opentelemetry_sdk::{
     Resource,
 };
 use std::time::Duration;
-use tracing::Level;
-use tracing_subscriber::{
-    fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer,
-};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 /// Telemetry configuration
 #[derive(Debug, Clone)]
@@ -56,15 +53,13 @@ impl TelemetryConfig {
                 .unwrap_or_else(|_| "rampos-api".to_string()),
             service_version: std::env::var("SERVICE_VERSION")
                 .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string()),
-            environment: std::env::var("ENVIRONMENT")
-                .unwrap_or_else(|_| "dev".to_string()),
+            environment: std::env::var("ENVIRONMENT").unwrap_or_else(|_| "dev".to_string()),
             otlp_endpoint: std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok(),
             sampling_ratio: std::env::var("OTEL_SAMPLING_RATIO")
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(1.0),
-            log_level: std::env::var("RUST_LOG")
-                .unwrap_or_else(|_| "info".to_string()),
+            log_level: std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
             json_logs: std::env::var("JSON_LOGS")
                 .map(|s| s == "true" || s == "1")
                 .unwrap_or(false),
@@ -75,21 +70,20 @@ impl TelemetryConfig {
 /// Initialize telemetry (tracing + metrics)
 pub fn init_telemetry(config: TelemetryConfig) -> anyhow::Result<()> {
     // Build resource
-    let resource = Resource::new(vec![
-        opentelemetry_sdk::resource::ResourceDetector::detect(
+    let resource = Resource::default()
+        .merge(&opentelemetry_sdk::resource::ResourceDetector::detect(
             &opentelemetry_sdk::resource::SdkProvidedResourceDetector,
             Duration::from_secs(0),
-        )
+        ))
         .merge(&Resource::new(vec![
             opentelemetry::KeyValue::new("service.name", config.service_name.clone()),
             opentelemetry::KeyValue::new("service.version", config.service_version.clone()),
             opentelemetry::KeyValue::new("deployment.environment", config.environment.clone()),
-        ])),
-    ]);
+        ]));
 
     // Set up tracing layers
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(&config.log_level));
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.log_level));
 
     // OTLP exporter (if configured)
     if let Some(endpoint) = &config.otlp_endpoint {
@@ -103,32 +97,23 @@ pub fn init_telemetry(config: TelemetryConfig) -> anyhow::Result<()> {
                     .with_sampler(Sampler::TraceIdRatioBased(config.sampling_ratio))
                     .with_resource(resource),
             )
-            .with_batch_exporter(
-                exporter.build_span_exporter()?,
-                runtime::Tokio,
-            )
+            .with_batch_exporter(exporter.build_span_exporter()?, runtime::Tokio)
             .build();
 
         let tracer = tracer_provider.tracer(config.service_name.clone());
         global::set_tracer_provider(tracer_provider);
-        global::set_text_map_propagator(opentelemetry_sdk::propagation::TraceContextPropagator::new());
+        global::set_text_map_propagator(
+            opentelemetry_sdk::propagation::TraceContextPropagator::new(),
+        );
 
         // Set up OpenTelemetry tracing layer
         let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
-        if config.json_logs {
-            tracing_subscriber::registry()
-                .with(env_filter)
-                .with(fmt::layer().json())
-                .with(otel_layer)
-                .init();
-        } else {
-            tracing_subscriber::registry()
-                .with(env_filter)
-                .with(fmt::layer())
-                .with(otel_layer)
-                .init();
-        }
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(fmt::layer().json())
+            .with(otel_layer)
+            .init();
     } else {
         // Local logging only
         if config.json_logs {

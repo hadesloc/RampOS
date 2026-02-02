@@ -12,6 +12,7 @@ pub mod reports;
 pub mod rule_parser;
 pub mod rules;
 pub mod sanctions;
+pub mod transaction_history;
 #[cfg(test)]
 mod sanctions_test;
 pub mod storage;
@@ -33,4 +34,9 @@ pub use sanctions::{
     MockSanctionsProvider, OpenSanctionsProvider, SanctionsProvider, SanctionsResult,
     SanctionsScreeningService,
 };
+pub use transaction_history::{
+    MockTransactionHistoryStore, PostgresTransactionHistoryStore, TransactionHistoryStore,
+    TransactionRecord,
+};
+pub use store::mock::InMemoryCaseStore;
 pub use types::*;

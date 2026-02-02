@@ -1,22 +1,26 @@
 use crate::aml::{AmlEngine, MockDeviceHistoryStore, TransactionData, TransactionType};
-use crate::case::CaseManager;
+use crate::{case::CaseManager, InMemoryCaseStore, MockTransactionHistoryStore};
 use crate::sanctions::MockSanctionsProvider;
 use chrono::Utc;
 use ramp_common::types::{IntentId, TenantId, UserId, VndAmount};
-use rust_decimal::Decimal; // unused but ok
 use std::sync::Arc;
 
 #[tokio::test]
 async fn test_sanctions_integration() {
     // Setup
-    let case_manager = Arc::new(CaseManager::new());
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
     let sanctions_provider = Arc::new(MockSanctionsProvider::new());
     let device_store = Arc::new(MockDeviceHistoryStore::new());
 
     // Add a blocked user to the mock provider
     sanctions_provider.add_blocked_individual("Osama Bin Laden", 100.0);
 
-    let engine = AmlEngine::new(case_manager, Some(sanctions_provider), device_store);
+    let engine = AmlEngine::new(
+        case_manager,
+        Some(sanctions_provider),
+        device_store,
+        Arc::new(MockTransactionHistoryStore::new()),
+    );
 
     // Test Case 1: Clean user
     let clean_tx = TransactionData {

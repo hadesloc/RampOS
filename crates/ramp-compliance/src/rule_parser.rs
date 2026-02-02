@@ -8,6 +8,7 @@ use tracing::{info, warn};
 
 use crate::aml::{LargeTransactionRule, StructuringRule, UnusualPayoutRule, VelocityRule};
 use crate::rules::{AmlRule, CompiledRule, RuleContext, RuleResult};
+use crate::transaction_history::MockTransactionHistoryStore;
 use crate::types::{CaseSeverity, CaseType, RiskScore};
 
 #[derive(Debug, Error)]
@@ -470,6 +471,7 @@ impl RuleParser {
             max_count,
             Duration::hours(window_hours),
             min_total,
+            Arc::new(MockTransactionHistoryStore::new()),
         )))
     }
 
@@ -482,6 +484,7 @@ impl RuleParser {
             max_count,
             Duration::hours(window_hours),
             threshold,
+            Arc::new(MockTransactionHistoryStore::new()),
         )))
     }
 
@@ -492,9 +495,10 @@ impl RuleParser {
 
     fn create_unusual_payout_rule(def: &RuleDefinition) -> Result<CompiledRule, RuleParseError> {
         let min_minutes = Self::get_param_i64(&def.parameters, "min_minutes_between")?;
-        Ok(Box::new(UnusualPayoutRule::new(Duration::minutes(
-            min_minutes,
-        ))))
+        Ok(Box::new(UnusualPayoutRule::new(
+            Duration::minutes(min_minutes),
+            Arc::new(MockTransactionHistoryStore::new()),
+        )))
     }
 
     fn create_custom_rule(_def: &RuleDefinition) -> Result<CompiledRule, RuleParseError> {

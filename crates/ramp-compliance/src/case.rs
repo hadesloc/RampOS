@@ -8,7 +8,7 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::{
-    store::postgres::CaseStore,
+    store::CaseStore,
     types::{CaseSeverity, CaseStatus, CaseType},
 };
 pub mod notes;
@@ -118,6 +118,42 @@ impl CaseManager {
         }
 
         Ok(())
+    }
+
+    pub async fn get_case(&self, case_id: &str) -> Result<Option<AmlCase>> {
+        self.store.get_case(case_id).await
+    }
+
+    pub async fn list_cases(
+        &self,
+        tenant_id: &TenantId,
+        status: Option<CaseStatus>,
+        severity: Option<CaseSeverity>,
+        assigned_to: Option<&str>,
+        user_id: Option<&UserId>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<AmlCase>> {
+        self.store
+            .list_cases(tenant_id, status, severity, assigned_to, user_id, limit, offset)
+            .await
+    }
+
+    pub async fn count_cases(
+        &self,
+        tenant_id: &TenantId,
+        status: Option<CaseStatus>,
+        severity: Option<CaseSeverity>,
+        assigned_to: Option<&str>,
+        user_id: Option<&UserId>,
+    ) -> Result<i64> {
+        self.store
+            .count_cases(tenant_id, status, severity, assigned_to, user_id)
+            .await
+    }
+
+    pub async fn avg_resolution_hours(&self, tenant_id: &TenantId) -> Result<f64> {
+        self.store.avg_resolution_hours(tenant_id).await
     }
 
     /// Assign case to analyst

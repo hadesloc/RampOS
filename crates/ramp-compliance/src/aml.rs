@@ -11,9 +11,11 @@ use crate::case::CaseManager;
 use crate::rules::{AmlRule, RuleContext, RuleResult};
 use crate::rules::sanctions::SanctionsRule;
 use crate::sanctions::{SanctionsProvider, SanctionsResult};
+use crate::transaction_history::{TransactionHistoryStore, TransactionRecord};
 use crate::types::{CaseSeverity, CaseType, ComplianceCheckResult, RiskScore};
 // use serde::{Deserialize, Serialize}; // Unused
 use serde::Serialize;
+use uuid::Uuid;
 
 /// Transaction data for AML checking
 #[derive(Debug, Clone)]
@@ -40,6 +42,18 @@ pub enum TransactionType {
     WithdrawOnchain,
 }
 
+impl TransactionType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TransactionType::Payin => "PAYIN",
+            TransactionType::Payout => "PAYOUT",
+            TransactionType::Trade => "TRADE",
+            TransactionType::DepositOnchain => "DEPOSIT_ONCHAIN",
+            TransactionType::WithdrawOnchain => "WITHDRAW_ONCHAIN",
+        }
+    }
+}
+
 mod device_anomaly;
 pub use device_anomaly::{DeviceAnomalyRule, DeviceHistoryStore, MockDeviceHistoryStore};
 
@@ -48,6 +62,7 @@ pub struct AmlEngine {
     rules: Vec<Box<dyn AmlRule>>,
     case_manager: Arc<CaseManager>,
     sanctions_provider: Option<Arc<dyn SanctionsProvider>>,
+    transaction_store: Arc<dyn TransactionHistoryStore>,
 }
 
 impl AmlEngine {
@@ -55,11 +70,17 @@ impl AmlEngine {
         case_manager: Arc<CaseManager>,
         sanctions_provider: Option<Arc<dyn SanctionsProvider>>,
         device_store: Arc<dyn DeviceHistoryStore>,
+        transaction_store: Arc<dyn TransactionHistoryStore>,
     ) -> Self {
         Self {
-            rules: Self::default_rules(device_store, sanctions_provider.clone()),
+            rules: Self::default_rules(
+                device_store,
+                sanctions_provider.clone(),
+                transaction_store.clone(),
+            ),
             case_manager,
             sanctions_provider,
+            transaction_store,
         }
     }
 
@@ -67,20 +88,26 @@ impl AmlEngine {
     fn default_rules(
         device_store: Arc<dyn DeviceHistoryStore>,
         sanctions_provider: Option<Arc<dyn SanctionsProvider>>,
+        transaction_store: Arc<dyn TransactionHistoryStore>,
     ) -> Vec<Box<dyn AmlRule>> {
         let mut rules: Vec<Box<dyn AmlRule>> = vec![
             Box::new(VelocityRule::new(
                 5,
                 Duration::hours(1),
                 Decimal::from(50_000_000),
+                transaction_store.clone(),
             )),
             Box::new(StructuringRule::new(
                 10,
                 Duration::hours(24),
                 Decimal::from(100_000_000),
+                transaction_store.clone(),
             )),
             Box::new(LargeTransactionRule::new(Decimal::from(500_000_000))),
-            Box::new(UnusualPayoutRule::new(Duration::minutes(30))),
+            Box::new(UnusualPayoutRule::new(
+                Duration::minutes(30),
+                transaction_store.clone(),
+            )),
             Box::new(DeviceAnomalyRule::new(device_store)),
         ];
 
@@ -117,7 +144,7 @@ impl AmlEngine {
                 CaseSeverity::Critical,
                 serde_json::json!({
                     "rule": "sanctions_screening",
-                    "matched_entity": matched_entity,
+                    "matched_entity": "***",
                     "sanctions_list": result.list_name,
                     "score": result.score,
                     "entries": result.matched_entries
@@ -127,17 +154,64 @@ impl AmlEngine {
 
         cases_created.push(case_id);
 
-        warn!(
-            intent_id = %tx.intent_id,
-            entity = %matched_entity,
-            "Sanctions match detected"
-        );
+            warn!(
+                intent_id = %tx.intent_id,
+                entity = "***",
+                "Sanctions match detected"
+            );
 
         Ok(())
     }
 
+    async fn handle_sanctions_failure(
+        &self,
+        tx: &TransactionData,
+        error: &str,
+    ) -> Result<ComplianceCheckResult> {
+        let case_id = self
+            .case_manager
+            .create_case(
+                &tx.tenant_id,
+                Some(&tx.user_id),
+                Some(&tx.intent_id),
+                CaseType::Other("sanctions_screening_failed".to_string()),
+                CaseSeverity::Critical,
+                serde_json::json!({
+                    "rule": "sanctions_screening",
+                    "error": error,
+                }),
+            )
+            .await?;
+
+        warn!(
+            intent_id = %tx.intent_id,
+            error = error,
+            "Sanctions screening failed"
+        );
+
+        Ok(ComplianceCheckResult {
+            passed: false,
+            risk_score: RiskScore::new(100.0),
+            flags: vec![format!("Sanctions screening failed: {}", error)],
+            requires_review: true,
+            cases_created: vec![case_id],
+        })
+    }
+
     /// Run all AML rules against a transaction
     pub async fn check_transaction(&self, tx: &TransactionData) -> Result<ComplianceCheckResult> {
+        let record = TransactionRecord {
+            id: Uuid::now_v7(),
+            tenant_id: tx.tenant_id.clone(),
+            user_id: tx.user_id.clone(),
+            intent_id: tx.intent_id.clone(),
+            transaction_type: tx.transaction_type,
+            amount_vnd: tx.amount_vnd.0,
+            created_at: tx.timestamp,
+        };
+
+        self.transaction_store.record(&record).await?;
+
         let context = RuleContext {
             tenant_id: tx.tenant_id.clone(),
             user_id: tx.user_id.clone(),
@@ -178,7 +252,9 @@ impl AmlEngine {
                         }
                     }
                     Err(e) => {
-                        warn!("Sanctions check failed for name {}: {}", name, e);
+                        return self
+                            .handle_sanctions_failure(tx, &e.to_string())
+                            .await;
                     }
                 }
             }
@@ -201,7 +277,9 @@ impl AmlEngine {
                         }
                     }
                     Err(e) => {
-                        warn!("Sanctions check failed for address {}: {}", address, e);
+                        return self
+                            .handle_sanctions_failure(tx, &e.to_string())
+                            .await;
                     }
                 }
             }
@@ -291,20 +369,24 @@ impl AmlEngine {
 
 /// Velocity rule - too many transactions in short time
 pub struct VelocityRule {
-    #[allow(dead_code)]
     max_count: u32,
-    #[allow(dead_code)]
     window: Duration,
-    #[allow(dead_code)]
     min_total: Decimal,
+    history_store: Arc<dyn TransactionHistoryStore>,
 }
 
 impl VelocityRule {
-    pub fn new(max_count: u32, window: Duration, min_total: Decimal) -> Self {
+    pub fn new(
+        max_count: u32,
+        window: Duration,
+        min_total: Decimal,
+        history_store: Arc<dyn TransactionHistoryStore>,
+    ) -> Self {
         Self {
             max_count,
             window,
             min_total,
+            history_store,
         }
     }
 }
@@ -319,29 +401,52 @@ impl AmlRule for VelocityRule {
         CaseType::Velocity
     }
 
-    async fn evaluate(&self, _ctx: &RuleContext) -> Result<RuleResult> {
-        // In production, would query database for recent transactions
-        // For now, pass all checks
+    async fn evaluate(&self, ctx: &RuleContext) -> Result<RuleResult> {
+        let window_start = ctx.timestamp - self.window;
+        let (count, total) = self
+            .history_store
+            .stats_since(&ctx.tenant_id, &ctx.user_id, window_start)
+            .await?;
+
+        if count >= self.max_count && total >= self.min_total {
+            return Ok(RuleResult {
+                passed: false,
+                reason: format!(
+                    "Velocity exceeded: {} txs totaling {} VND in last {} minutes",
+                    count,
+                    total,
+                    self.window.num_minutes()
+                ),
+                risk_score: Some(RiskScore::new(60.0)),
+                severity: Some(CaseSeverity::High),
+                create_case: true,
+            });
+        }
+
         Ok(RuleResult::pass())
     }
 }
 
 /// Structuring rule - breaking up transactions to avoid limits
 pub struct StructuringRule {
-    #[allow(dead_code)]
     max_count: u32,
-    #[allow(dead_code)]
     window: Duration,
-    #[allow(dead_code)]
     threshold: Decimal,
+    history_store: Arc<dyn TransactionHistoryStore>,
 }
 
 impl StructuringRule {
-    pub fn new(max_count: u32, window: Duration, threshold: Decimal) -> Self {
+    pub fn new(
+        max_count: u32,
+        window: Duration,
+        threshold: Decimal,
+        history_store: Arc<dyn TransactionHistoryStore>,
+    ) -> Self {
         Self {
             max_count,
             window,
             threshold,
+            history_store,
         }
     }
 }
@@ -356,8 +461,36 @@ impl AmlRule for StructuringRule {
         CaseType::Structuring
     }
 
-    async fn evaluate(&self, _ctx: &RuleContext) -> Result<RuleResult> {
-        // In production, would analyze transaction patterns
+    async fn evaluate(&self, ctx: &RuleContext) -> Result<RuleResult> {
+        let window_start = ctx.timestamp - self.window;
+        let min_amount = self.threshold * Decimal::new(8, 1); // 0.8 * threshold
+        let count = self
+            .history_store
+            .count_structuring(
+                &ctx.tenant_id,
+                &ctx.user_id,
+                window_start,
+                min_amount,
+                self.threshold,
+            )
+            .await?;
+
+        if count >= self.max_count {
+            return Ok(RuleResult {
+                passed: false,
+                reason: format!(
+                    "Structuring detected: {} transactions between {} and {} VND in last {} hours",
+                    count,
+                    min_amount,
+                    self.threshold,
+                    self.window.num_hours()
+                ),
+                risk_score: Some(RiskScore::new(75.0)),
+                severity: Some(CaseSeverity::High),
+                create_case: true,
+            });
+        }
+
         Ok(RuleResult::pass())
     }
 }
@@ -403,13 +536,19 @@ impl AmlRule for LargeTransactionRule {
 
 /// Unusual payout rule - withdrawal shortly after deposit
 pub struct UnusualPayoutRule {
-    #[allow(dead_code)]
     min_time_between: Duration,
+    history_store: Arc<dyn TransactionHistoryStore>,
 }
 
 impl UnusualPayoutRule {
-    pub fn new(min_time_between: Duration) -> Self {
-        Self { min_time_between }
+    pub fn new(
+        min_time_between: Duration,
+        history_store: Arc<dyn TransactionHistoryStore>,
+    ) -> Self {
+        Self {
+            min_time_between,
+            history_store,
+        }
     }
 }
 
@@ -423,11 +562,32 @@ impl AmlRule for UnusualPayoutRule {
         CaseType::UnusualPayout
     }
 
-    async fn evaluate(&self, _ctx: &RuleContext) -> Result<RuleResult> {
-        // In production, would check time since last deposit
-        // Only applies to payouts
-        if _ctx.transaction_type != TransactionType::Payout {
+    async fn evaluate(&self, ctx: &RuleContext) -> Result<RuleResult> {
+        if ctx.transaction_type != TransactionType::Payout {
             return Ok(RuleResult::pass());
+        }
+
+        let last_payin = self
+            .history_store
+            .last_transaction_at(&ctx.tenant_id, &ctx.user_id, TransactionType::Payin)
+            .await?;
+
+        let Some(last_payin) = last_payin else {
+            return Ok(RuleResult::pass());
+        };
+
+        let delta = ctx.timestamp - last_payin;
+        if delta < self.min_time_between {
+            return Ok(RuleResult {
+                passed: false,
+                reason: format!(
+                    "Payout {} minutes after last payin",
+                    delta.num_minutes()
+                ),
+                risk_score: Some(RiskScore::new(55.0)),
+                severity: Some(CaseSeverity::Medium),
+                create_case: true,
+            });
         }
 
         Ok(RuleResult::pass())
@@ -438,6 +598,8 @@ impl AmlRule for UnusualPayoutRule {
 mod tests {
     use super::*;
     use rust_decimal::dec;
+    use std::sync::Arc;
+    use crate::transaction_history::MockTransactionHistoryStore;
 
     #[cfg(test)]
     #[allow(dead_code)]
@@ -500,7 +662,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_velocity_rule_passes() {
-        let rule = VelocityRule::new(5, Duration::hours(1), Decimal::from(50_000_000));
+        let history_store = Arc::new(MockTransactionHistoryStore::new());
+        let rule = VelocityRule::new(
+            5,
+            Duration::hours(1),
+            Decimal::from(50_000_000),
+            history_store,
+        );
 
         let ctx = RuleContext {
             tenant_id: TenantId::new("tenant1"),
@@ -520,7 +688,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_structuring_rule_passes() {
-        let rule = StructuringRule::new(10, Duration::hours(24), Decimal::from(100_000_000));
+        let history_store = Arc::new(MockTransactionHistoryStore::new());
+        let rule = StructuringRule::new(
+            10,
+            Duration::hours(24),
+            Decimal::from(100_000_000),
+            history_store,
+        );
 
         let ctx = RuleContext {
             tenant_id: TenantId::new("tenant1"),
@@ -540,7 +714,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_unusual_payout_rule_skips_non_payout() {
-        let rule = UnusualPayoutRule::new(Duration::minutes(30));
+        let history_store = Arc::new(MockTransactionHistoryStore::new());
+        let rule = UnusualPayoutRule::new(Duration::minutes(30), history_store);
 
         let ctx = RuleContext {
             tenant_id: TenantId::new("tenant1"),
@@ -560,7 +735,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_unusual_payout_rule_for_payout() {
-        let rule = UnusualPayoutRule::new(Duration::minutes(30));
+        let history_store = Arc::new(MockTransactionHistoryStore::new());
+        let rule = UnusualPayoutRule::new(Duration::minutes(30), history_store);
 
         let ctx = RuleContext {
             tenant_id: TenantId::new("tenant1"),
@@ -587,31 +763,59 @@ mod tests {
 
     #[test]
     fn test_rule_names() {
-        let velocity = VelocityRule::new(5, Duration::hours(1), Decimal::from(50_000_000));
+        let history_store = Arc::new(MockTransactionHistoryStore::new());
+        let velocity = VelocityRule::new(
+            5,
+            Duration::hours(1),
+            Decimal::from(50_000_000),
+            history_store.clone(),
+        );
         assert_eq!(velocity.name(), "velocity_check");
 
-        let structuring = StructuringRule::new(10, Duration::hours(24), Decimal::from(100_000_000));
+        let structuring = StructuringRule::new(
+            10,
+            Duration::hours(24),
+            Decimal::from(100_000_000),
+            history_store,
+        );
         assert_eq!(structuring.name(), "structuring_check");
 
         let large = LargeTransactionRule::new(Decimal::from(500_000_000));
         assert_eq!(large.name(), "large_transaction");
 
-        let unusual = UnusualPayoutRule::new(Duration::minutes(30));
+        let unusual = UnusualPayoutRule::new(
+            Duration::minutes(30),
+            Arc::new(MockTransactionHistoryStore::new()),
+        );
         assert_eq!(unusual.name(), "unusual_payout");
     }
 
     #[test]
     fn test_rule_case_types() {
-        let velocity = VelocityRule::new(5, Duration::hours(1), Decimal::from(50_000_000));
+        let history_store = Arc::new(MockTransactionHistoryStore::new());
+        let velocity = VelocityRule::new(
+            5,
+            Duration::hours(1),
+            Decimal::from(50_000_000),
+            history_store.clone(),
+        );
         assert_eq!(velocity.case_type(), CaseType::Velocity);
 
-        let structuring = StructuringRule::new(10, Duration::hours(24), Decimal::from(100_000_000));
+        let structuring = StructuringRule::new(
+            10,
+            Duration::hours(24),
+            Decimal::from(100_000_000),
+            history_store,
+        );
         assert_eq!(structuring.case_type(), CaseType::Structuring);
 
         let large = LargeTransactionRule::new(Decimal::from(500_000_000));
         assert_eq!(large.case_type(), CaseType::LargeTransaction);
 
-        let unusual = UnusualPayoutRule::new(Duration::minutes(30));
+        let unusual = UnusualPayoutRule::new(
+            Duration::minutes(30),
+            Arc::new(MockTransactionHistoryStore::new()),
+        );
         assert_eq!(unusual.case_type(), CaseType::UnusualPayout);
     }
 }
