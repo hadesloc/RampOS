@@ -14,9 +14,17 @@ spec:
       labels:
         app: rampos-redis
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
       containers:
       - name: redis
         image: redis:7-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
         command: ["sh", "-c", "redis-server --appendonly yes --requirepass $REDIS_PASSWORD"]
         env:
         - name: REDIS_PASSWORD

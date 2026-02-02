@@ -1,0 +1,47 @@
+{
+  "phases": [
+    {
+      "id": "J-001",
+      "name": "User Registration & KYC",
+      "actor": "End User",
+      "steps": [
+        "User lands on landing page",
+        "User clicks 'Start Building' or 'Sign Up'",
+        "User enters email and creates WebAuthn passkey",
+        "User is redirected to onboarding flow",
+        "User completes Identity Verification (Tier 1)",
+        "User uploads documents (Tier 2)",
+        "User accesses Dashboard"
+      ]
+    },
+    {
+      "id": "J-002",
+      "name": "Deposit VND",
+      "actor": "End User",
+      "steps": [
+        "User logs in to User Portal",
+        "User navigates to 'Deposit' section",
+        "User selects 'VND' and enters amount",
+        "System generates Virtual Account details",
+        "User copies details and transfers via banking app",
+        "System detects transfer and credits account",
+        "User receives notification"
+      ]
+    },
+    {
+      "id": "J-003",
+      "name": "Withdraw Crypto",
+      "actor": "End User",
+      "steps": [
+        "User logs in to User Portal",
+        "User navigates to 'Withdraw' section",
+        "User selects Crypto asset (e.g., USDT)",
+        "User enters destination address and amount",
+        "User confirms transaction with Passkey",
+        "System processes withdrawal (checks limits/AML)",
+        "Transaction broadcasted to blockchain",
+        "User notified of completion"
+      ]
+    }
+  ]
+}

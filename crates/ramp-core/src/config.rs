@@ -29,7 +29,8 @@ pub struct DatabaseConfig {
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
-            url: "postgres://localhost/rampos".to_string(),
+            url: std::env::var("DATABASE_URL")
+                .unwrap_or_else(|_| "postgres://rampos:dev_rampos_2026_secure@localhost:5432/rampos".to_string()),
             max_connections: 100,
             min_connections: 10,
             connect_timeout_secs: 30,

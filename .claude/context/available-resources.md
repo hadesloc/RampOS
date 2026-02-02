@@ -1,6 +1,6 @@
 # Installed Claude Code Resources
 
-Generated: 2026-01-26T09:36:12.973922
+Generated: 2026-02-02T19:25:23.037909
 
 **This list shows ONLY resources that are currently ENABLED in Claude Code settings.**
 
@@ -49,7 +49,7 @@ Generated: 2026-01-26T09:36:12.973922
 - **utility-skills** (baoyu-skills): Utility tools for content processing
 - **variant-analysis** (trailofbits): Find similar vulnerabilities and bugs across codebases using pattern-based analysis
 
-## Skills (132)
+## Skills (149)
 
 ### Internal Skills (use Skill tool)
 - **Agent Development**: This skill should be used when the user asks to "create an agent", "add an agent", "write a subagent", "agent frontmatter", "when to use description", "agent examples", "agent tools", "agent colors", "autonomous agent", or needs guidance on agent structure, system prompts, triggering conditions, or agent development best practices for Claude Code plugins.
@@ -84,16 +84,20 @@ Generated: 2026-01-26T09:36:12.973922
   - Plugin: testing-handbook-skills (trailofbits)
 - **aflpp**: >
   - Plugin: testing-handbook-skills (trailofbits)
+- **algorand-vulnerability-scanner**: Scans Algorand smart contracts for 11 common vulnerabilities including rekeying attacks, unchecked transaction fees, missing field validations, and access control issues. Use when auditing Algorand projects (TEAL/PyTeal).
+  - Plugin: building-secure-contracts (trailofbits)
 - **algorithmic-art**: Creating algorithmic art using p5.js with seeded randomness and interactive parameter exploration. Use this when users request creating art using code, generative art, algorithmic art, flow fields, or particle systems. Create original algorithmic art rather than copying existing artists' work to avoid copyright violations.
   - Plugin: document-skills (anthropic-agent-skills)
 - **algorithmic-art**: Creating algorithmic art using p5.js with seeded randomness and interactive parameter exploration. Use this when users request creating art using code, generative art, algorithmic art, flow fields, or particle systems. Create original algorithmic art rather than copying existing artists' work to avoid copyright violations.
   - Plugin: example-skills (anthropic-agent-skills)
-- **ask-questions-if-underspecified**: Clarify requirements before implementing. Use when serious doubts araise.
+- **ask-questions-if-underspecified**: Clarify requirements before implementing. Use when serious doubts arise.
   - Plugin: ask-questions-if-underspecified (trailofbits)
 - **atheris**: >
   - Plugin: testing-handbook-skills (trailofbits)
 - **audit-context-building**: Enables ultra-granular, line-by-line code analysis to build deep architectural context before vulnerability or bug finding.
   - Plugin: audit-context-building (trailofbits)
+- **audit-prep-assistant**: Prepares codebases for security review using Trail of Bits' checklist. Helps set review goals, runs static analysis tools, increases test coverage, removes dead code, ensures accessibility, and generates documentation (flowcharts, user stories, inline comments).
+  - Plugin: building-secure-contracts (trailofbits)
 - **baoyu-article-illustrator**: Analyzes article structure, identifies positions requiring visual aids, generates illustrations with Type × Style two-dimension approach. Use when user asks to "illustrate article", "add images", "generate images for article", or "为文章配图".
   - Plugin: content-skills (baoyu-skills)
 - **baoyu-article-illustrator**: Analyzes article structure, identifies positions requiring visual aids, generates illustrations with Type × Style two-dimension approach. Use when user asks to "illustrate article", "add images", "generate images for article", or "为文章配图".
@@ -112,11 +116,11 @@ Generated: 2026-01-26T09:36:12.973922
   - Plugin: ai-generation-skills (baoyu-skills)
 - **baoyu-compress-image**: Compresses images to WebP (default) or PNG with automatic tool selection. Use when user asks to "compress image", "optimize image", "convert to webp", or reduce image file size.
   - Plugin: utility-skills (baoyu-skills)
-- **baoyu-cover-image**: Generates article cover images with 4 dimensions (type, style, text, mood) and 20 hand-drawn styles. Supports cinematic (2.35:1), widescreen (16:9), and square (1:1) aspects. Use when user asks to "generate cover image", "create article cover", "make cover", or mentions "封面图".
+- **baoyu-cover-image**: Generates article cover images with 5 dimensions (type, palette, rendering, text, mood) combining 9 color palettes and 6 rendering styles. Supports cinematic (2.35:1), widescreen (16:9), and square (1:1) aspects. Use when user asks to "generate cover image", "create article cover", or "make cover".
   - Plugin: content-skills (baoyu-skills)
-- **baoyu-cover-image**: Generates article cover images with 4 dimensions (type, style, text, mood) and 20 hand-drawn styles. Supports cinematic (2.35:1), widescreen (16:9), and square (1:1) aspects. Use when user asks to "generate cover image", "create article cover", "make cover", or mentions "封面图".
+- **baoyu-cover-image**: Generates article cover images with 5 dimensions (type, palette, rendering, text, mood) combining 9 color palettes and 6 rendering styles. Supports cinematic (2.35:1), widescreen (16:9), and square (1:1) aspects. Use when user asks to "generate cover image", "create article cover", or "make cover".
   - Plugin: ai-generation-skills (baoyu-skills)
-- **baoyu-cover-image**: Generates article cover images with 4 dimensions (type, style, text, mood) and 20 hand-drawn styles. Supports cinematic (2.35:1), widescreen (16:9), and square (1:1) aspects. Use when user asks to "generate cover image", "create article cover", "make cover", or mentions "封面图".
+- **baoyu-cover-image**: Generates article cover images with 5 dimensions (type, palette, rendering, text, mood) combining 9 color palettes and 6 rendering styles. Supports cinematic (2.35:1), widescreen (16:9), and square (1:1) aspects. Use when user asks to "generate cover image", "create article cover", or "make cover".
   - Plugin: utility-skills (baoyu-skills)
 - **baoyu-danger-gemini-web**: Generates images and text via reverse-engineered Gemini Web API. Supports text generation, image generation from prompts, reference images for vision input, and multi-turn conversations. Use when other skills need image generation backend, or when user requests "generate image with Gemini", "Gemini text generation", or needs vision-capable AI generation.
   - Plugin: content-skills (baoyu-skills)
@@ -130,11 +134,17 @@ Generated: 2026-01-26T09:36:12.973922
   - Plugin: ai-generation-skills (baoyu-skills)
 - **baoyu-danger-x-to-markdown**: Converts X (Twitter) tweets and articles to markdown with YAML front matter. Uses reverse-engineered API requiring user consent. Use when user mentions "X to markdown", "tweet to markdown", "save tweet", or provides x.com/twitter.com URLs for conversion.
   - Plugin: utility-skills (baoyu-skills)
-- **baoyu-image-gen**: AI image generation with OpenAI and Google APIs. Supports text-to-image, reference images, aspect ratios, and parallel generation (recommended 4 concurrent subagents). Use when user asks to generate, create, or draw images.
+- **baoyu-format-markdown**: Formats plain text or markdown files with frontmatter, titles, summaries, headings, bold, lists, and code blocks. Use when user asks to "format markdown", "beautify article", "add formatting", or improve article layout. Outputs to {filename}-formatted.md.
   - Plugin: content-skills (baoyu-skills)
-- **baoyu-image-gen**: AI image generation with OpenAI and Google APIs. Supports text-to-image, reference images, aspect ratios, and parallel generation (recommended 4 concurrent subagents). Use when user asks to generate, create, or draw images.
+- **baoyu-format-markdown**: Formats plain text or markdown files with frontmatter, titles, summaries, headings, bold, lists, and code blocks. Use when user asks to "format markdown", "beautify article", "add formatting", or improve article layout. Outputs to {filename}-formatted.md.
   - Plugin: ai-generation-skills (baoyu-skills)
-- **baoyu-image-gen**: AI image generation with OpenAI and Google APIs. Supports text-to-image, reference images, aspect ratios, and parallel generation (recommended 4 concurrent subagents). Use when user asks to generate, create, or draw images.
+- **baoyu-format-markdown**: Formats plain text or markdown files with frontmatter, titles, summaries, headings, bold, lists, and code blocks. Use when user asks to "format markdown", "beautify article", "add formatting", or improve article layout. Outputs to {filename}-formatted.md.
+  - Plugin: utility-skills (baoyu-skills)
+- **baoyu-image-gen**: AI image generation with OpenAI, Google and DashScope APIs. Supports text-to-image, reference images, aspect ratios. Sequential by default; parallel generation available on request. Use when user asks to generate, create, or draw images.
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-image-gen**: AI image generation with OpenAI, Google and DashScope APIs. Supports text-to-image, reference images, aspect ratios. Sequential by default; parallel generation available on request. Use when user asks to generate, create, or draw images.
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-image-gen**: AI image generation with OpenAI, Google and DashScope APIs. Supports text-to-image, reference images, aspect ratios. Sequential by default; parallel generation available on request. Use when user asks to generate, create, or draw images.
   - Plugin: utility-skills (baoyu-skills)
 - **baoyu-infographic**: Generates professional infographics with 20 layout types and 17 visual styles. Analyzes content, recommends layout×style combinations, and generates publication-ready infographics. Use when user asks to create "infographic", "信息图", "visual summary", or "可视化".
   - Plugin: content-skills (baoyu-skills)
@@ -142,11 +152,17 @@ Generated: 2026-01-26T09:36:12.973922
   - Plugin: ai-generation-skills (baoyu-skills)
 - **baoyu-infographic**: Generates professional infographics with 20 layout types and 17 visual styles. Analyzes content, recommends layout×style combinations, and generates publication-ready infographics. Use when user asks to create "infographic", "信息图", "visual summary", or "可视化".
   - Plugin: utility-skills (baoyu-skills)
-- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via Chrome CDP automation. Supports article posting (文章) with full markdown formatting and image-text posting (图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "图文/文章".
+- **baoyu-markdown-to-html**: Converts Markdown to styled HTML with WeChat-compatible themes. Supports code highlighting, math, PlantUML, footnotes, alerts, and infographics. Use when user asks for "markdown to html", "convert md to html", "md转html", or needs styled HTML output from markdown.
   - Plugin: content-skills (baoyu-skills)
-- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via Chrome CDP automation. Supports article posting (文章) with full markdown formatting and image-text posting (图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "图文/文章".
+- **baoyu-markdown-to-html**: Converts Markdown to styled HTML with WeChat-compatible themes. Supports code highlighting, math, PlantUML, footnotes, alerts, and infographics. Use when user asks for "markdown to html", "convert md to html", "md转html", or needs styled HTML output from markdown.
   - Plugin: ai-generation-skills (baoyu-skills)
-- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via Chrome CDP automation. Supports article posting (文章) with full markdown formatting and image-text posting (图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "图文/文章".
+- **baoyu-markdown-to-html**: Converts Markdown to styled HTML with WeChat-compatible themes. Supports code highlighting, math, PlantUML, footnotes, alerts, and infographics. Use when user asks for "markdown to html", "convert md to html", "md转html", or needs styled HTML output from markdown.
+  - Plugin: utility-skills (baoyu-skills)
+- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "图文/文章".
+  - Plugin: content-skills (baoyu-skills)
+- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "图文/文章".
+  - Plugin: ai-generation-skills (baoyu-skills)
+- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "图文/文章".
   - Plugin: utility-skills (baoyu-skills)
 - **baoyu-post-to-x**: Posts content and articles to X (Twitter). Supports regular posts with images/videos and X Articles (long-form Markdown). Uses real Chrome with CDP to bypass anti-automation. Use when user asks to "post to X", "tweet", "publish to Twitter", or "share on X".
   - Plugin: content-skills (baoyu-skills)
@@ -166,11 +182,11 @@ Generated: 2026-01-26T09:36:12.973922
   - Plugin: ai-generation-skills (baoyu-skills)
 - **baoyu-url-to-markdown**: Fetch any URL and convert to markdown using Chrome CDP. Supports two modes - auto-capture on page load, or wait for user signal (for pages requiring login). Use when user wants to save a webpage as markdown.
   - Plugin: utility-skills (baoyu-skills)
-- **baoyu-xhs-images**: Generates Xiaohongshu (Little Red Book) infographic series with 9 visual styles and 6 layouts. Breaks content into 1-10 cartoon-style images optimized for XHS engagement. Use when user mentions "小红书图片", "XHS images", "RedNote infographics", "小红书种草", or wants social media infographics for Chinese platforms.
+- **baoyu-xhs-images**: Generates Xiaohongshu (Little Red Book) infographic series with 10 visual styles and 8 layouts. Breaks content into 1-10 cartoon-style images optimized for XHS engagement. Use when user mentions "小红书图片", "XHS images", "RedNote infographics", "小红书种草", or wants social media infographics for Chinese platforms.
   - Plugin: content-skills (baoyu-skills)
-- **baoyu-xhs-images**: Generates Xiaohongshu (Little Red Book) infographic series with 9 visual styles and 6 layouts. Breaks content into 1-10 cartoon-style images optimized for XHS engagement. Use when user mentions "小红书图片", "XHS images", "RedNote infographics", "小红书种草", or wants social media infographics for Chinese platforms.
+- **baoyu-xhs-images**: Generates Xiaohongshu (Little Red Book) infographic series with 10 visual styles and 8 layouts. Breaks content into 1-10 cartoon-style images optimized for XHS engagement. Use when user mentions "小红书图片", "XHS images", "RedNote infographics", "小红书种草", or wants social media infographics for Chinese platforms.
   - Plugin: ai-generation-skills (baoyu-skills)
-- **baoyu-xhs-images**: Generates Xiaohongshu (Little Red Book) infographic series with 9 visual styles and 6 layouts. Breaks content into 1-10 cartoon-style images optimized for XHS engagement. Use when user mentions "小红书图片", "XHS images", "RedNote infographics", "小红书种草", or wants social media infographics for Chinese platforms.
+- **baoyu-xhs-images**: Generates Xiaohongshu (Little Red Book) infographic series with 10 visual styles and 8 layouts. Breaks content into 1-10 cartoon-style images optimized for XHS engagement. Use when user mentions "小红书图片", "XHS images", "RedNote infographics", "小红书种草", or wants social media infographics for Chinese platforms.
   - Plugin: utility-skills (baoyu-skills)
 - **brand-guidelines**: Applies Anthropic's official brand colors and typography to any sort of artifact that may benefit from having Anthropic's look-and-feel. Use it when brand colors or style guidelines, visual formatting, or company design standards apply.
   - Plugin: document-skills (anthropic-agent-skills)
@@ -196,12 +212,16 @@ Generated: 2026-01-26T09:36:12.973922
   - Plugin: ultimate-workflow (ultimate-workflow-local)
 - **build-status**: 
   - Plugin: ultimate-workflow (ultimate-workflow-local)
+- **cairo-vulnerability-scanner**: Scans Cairo/StarkNet smart contracts for 6 critical vulnerabilities including felt252 arithmetic overflow, L1-L2 messaging issues, address conversion problems, and signature replay. Use when auditing StarkNet projects.
+  - Plugin: building-secure-contracts (trailofbits)
 - **canvas-design**: Create beautiful visual art in .png and .pdf documents using design philosophy. You should use this skill when the user asks to create a poster, piece of art, design, or other static piece. Create original visual designs, never copying existing artists' work to avoid copyright violations.
   - Plugin: document-skills (anthropic-agent-skills)
 - **canvas-design**: Create beautiful visual art in .png and .pdf documents using design philosophy. You should use this skill when the user asks to create a poster, piece of art, design, or other static piece. Create original visual designs, never copying existing artists' work to avoid copyright violations.
   - Plugin: example-skills (anthropic-agent-skills)
 - **cargo-fuzz**: >
   - Plugin: testing-handbook-skills (trailofbits)
+- **code-maturity-assessor**: Systematic code maturity assessment using Trail of Bits' 9-category framework. Analyzes codebase for arithmetic safety, auditing practices, access controls, complexity, decentralization, documentation, MEV risks, low-level code, and testing. Produces professional scorecard with evidence-based ratings and actionable recommendations.
+  - Plugin: building-secure-contracts (trailofbits)
 - **codeql**: Run CodeQL static analysis for security vulnerability detection, taint tracking, and data flow analysis. Use when asked to analyze code with CodeQL, create CodeQL databases, write custom QL queries, perform security audits, or set up CodeQL in CI/CD pipelines.
   - Plugin: static-analysis (trailofbits)
 - **codeql**: >
@@ -210,6 +230,8 @@ Generated: 2026-01-26T09:36:12.973922
   - Plugin: constant-time-analysis (trailofbits)
 - **constant-time-testing**: >
   - Plugin: testing-handbook-skills (trailofbits)
+- **cosmos-vulnerability-scanner**: Scans Cosmos SDK blockchains for 9 consensus-critical vulnerabilities including non-determinism, incorrect signers, ABCI panics, and rounding errors. Use when auditing Cosmos chains or CosmWasm contracts.
+  - Plugin: building-secure-contracts (trailofbits)
 - **coverage-analysis**: >
   - Plugin: testing-handbook-skills (trailofbits)
 - **differential-review**: >
@@ -238,6 +260,8 @@ Generated: 2026-01-26T09:36:12.973922
   - Plugin: testing-handbook-skills (trailofbits)
 - **fuzzing-obstacles**: >
   - Plugin: testing-handbook-skills (trailofbits)
+- **guidelines-advisor**: Smart contract development advisor based on Trail of Bits' best practices. Analyzes codebase to generate documentation/specifications, review architecture, check upgradeability patterns, assess implementation quality, identify pitfalls, review dependencies, and evaluate testing. Provides actionable recommendations.
+  - Plugin: building-secure-contracts (trailofbits)
 - **harness-writing**: >
   - Plugin: testing-handbook-skills (trailofbits)
 - **installing-local-plugins**: Installs and troubleshoots local Claude Code plugin marketplaces and plugins. Use when local plugin installation fails, Claude Code cannot find a marketplace path, or schema validation errors occur.
@@ -274,11 +298,13 @@ Generated: 2026-01-26T09:36:12.973922
   - Plugin: testing-handbook-skills (trailofbits)
 - **sarif-parsing**: Parse, analyze, and process SARIF (Static Analysis Results Interchange Format) files. Use when reading security scan results, aggregating findings from multiple tools, deduplicating alerts, extracting specific vulnerabilities, or integrating SARIF data into CI/CD pipelines.
   - Plugin: static-analysis (trailofbits)
+- **secure-workflow-guide**: Guides through Trail of Bits' 5-step secure development workflow. Runs Slither scans, checks special features (upgradeability/ERC conformance/token integration), generates visual security diagrams, helps document security properties for fuzzing/verification, and reviews manual security areas.
+  - Plugin: building-secure-contracts (trailofbits)
 - **semgrep**: Run Semgrep static analysis for fast security scanning and pattern matching. Use when asked to scan code with Semgrep, write custom YAML rules, find vulnerabilities quickly, use taint mode, or set up Semgrep in CI/CD pipelines.
   - Plugin: static-analysis (trailofbits)
 - **semgrep**: >
   - Plugin: testing-handbook-skills (trailofbits)
-- **semgrep-rule-creator**: Create custom Semgrep rules for detecting bug patterns and security vulnerabilities. This skill should be used when the user explicitly asks to "create a Semgrep rule", "write a Semgrep rule", "make a Semgrep rule", "build a Semgrep rule", or requests detection of a specific bug pattern, vulnerability, or insecure code pattern using Semgrep.
+- **semgrep-rule-creator**: Creates custom Semgrep rules for detecting security vulnerabilities, bug patterns, and code patterns. Use when writing Semgrep rules or building custom static analysis detections.
   - Plugin: semgrep-rule-creator (trailofbits)
 - **semgrep-rule-variant-creator**: Creates language variants of existing Semgrep rules. Use when porting a Semgrep rule to specified target languages. Takes an existing rule and target languages as input, produces independent rule+test directories for each language.
   - Plugin: semgrep-rule-variant-creator (trailofbits)
@@ -292,14 +318,22 @@ Generated: 2026-01-26T09:36:12.973922
   - Plugin: document-skills (anthropic-agent-skills)
 - **slack-gif-creator**: Knowledge and utilities for creating animated GIFs optimized for Slack. Provides constraints, validation tools, and animation concepts. Use when users request animated GIFs for Slack like "make me a GIF of X doing Y for Slack.
   - Plugin: example-skills (anthropic-agent-skills)
+- **solana-vulnerability-scanner**: Scans Solana programs for 6 critical vulnerabilities including arbitrary CPI, improper PDA validation, missing signer/ownership checks, and sysvar spoofing. Use when auditing Solana/Anchor programs.
+  - Plugin: building-secure-contracts (trailofbits)
 - **spec-to-code-compliance**: Verifies code implements exactly what documentation specifies for blockchain audits. Use when comparing code against whitepapers, finding gaps between specs and implementation, or performing compliance checks for protocol implementations.
   - Plugin: spec-to-code-compliance (trailofbits)
+- **substrate-vulnerability-scanner**: Scans Substrate/Polkadot pallets for 7 critical vulnerabilities including arithmetic overflow, panic DoS, incorrect weights, and bad origin checks. Use when auditing Substrate runtimes or FRAME pallets.
+  - Plugin: building-secure-contracts (trailofbits)
 - **testing-handbook-generator**: >
   - Plugin: testing-handbook-skills (trailofbits)
 - **theme-factory**: Toolkit for styling artifacts with a theme. These artifacts can be slides, docs, reportings, HTML landing pages, etc. There are 10 pre-set themes with colors/fonts that you can apply to any artifact that has been creating, or can generate a new theme on-the-fly.
   - Plugin: document-skills (anthropic-agent-skills)
 - **theme-factory**: Toolkit for styling artifacts with a theme. These artifacts can be slides, docs, reportings, HTML landing pages, etc. There are 10 pre-set themes with colors/fonts that you can apply to any artifact that has been creating, or can generate a new theme on-the-fly.
   - Plugin: example-skills (anthropic-agent-skills)
+- **token-integration-analyzer**: Token integration and implementation analyzer based on Trail of Bits' token integration checklist. Analyzes token implementations for ERC20/ERC721 conformity, checks for 20+ weird token patterns, assesses contract composition and owner privileges, performs on-chain scarcity analysis, and evaluates how protocols handle non-standard tokens. Context-aware for both token implementations and token integrations.
+  - Plugin: building-secure-contracts (trailofbits)
+- **ton-vulnerability-scanner**: Scans TON (The Open Network) smart contracts for 3 critical vulnerabilities including integer-as-boolean misuse, fake Jetton contracts, and forward TON without gas checks. Use when auditing FunC contracts.
+  - Plugin: building-secure-contracts (trailofbits)
 - **variant-analysis**: Find similar vulnerabilities and bugs across codebases using pattern-based analysis. Use when hunting bug variants, building CodeQL/Semgrep queries, analyzing security vulnerabilities, or performing systematic code audits after finding an initial issue.
   - Plugin: variant-analysis (trailofbits)
 - **web-artifacts-builder**: Suite of tools for creating elaborate, multi-component claude.ai HTML artifacts using modern frontend web technologies (React, Tailwind CSS, shadcn/ui). Use for complex artifacts requiring state management, routing, or shadcn/ui components - not for simple single-file HTML/JSX artifacts.

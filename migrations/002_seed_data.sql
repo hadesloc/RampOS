@@ -63,7 +63,7 @@ VALUES
     ),
     -- Tenant B: PSP Adapter
     ('rails_b_psp', 'tenant_b_456', 'VN_PAY', 'VNPay', 'PSP',
-     '\xBADF00D',
+     '\xBADF00DD',
      true, false, true, 'ACTIVE'
     )
 ON CONFLICT (id) DO UPDATE SET

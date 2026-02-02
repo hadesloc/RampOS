@@ -23,6 +23,10 @@ spec:
       - name: rampos-server
         image: ghcr.io/rampos/rampos:latest
         imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
         ports:
         - containerPort: 8080
         envFrom:

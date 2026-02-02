@@ -1092,6 +1092,35 @@ security:
 
 ---
 
+## 12. Frontend Expansion
+
+### 12.1 User Portal
+A customer-facing application for managing assets, identity, and transactions.
+
+**Key Features:**
+- **WebAuthn-First Auth**: Passwordless login via Passkeys.
+- **KYC Onboarding**: Guided flow for identity verification.
+- **Asset Dashboard**: Real-time view of VND and Crypto balances.
+- **Transaction Management**: Deposit, Withdraw, and History views.
+
+### 12.2 Landing Page
+High-performance marketing site to convert developers and businesses.
+
+**Key Features:**
+- **Performance**: LCP < 1.5s, SEO optimized.
+- **Developer Focus**: Code snippets and API documentation integration.
+- **Trust & Security**: Visualizing compliance and security features.
+
+### 12.3 Admin Dashboard Enhancements
+Improvements to the existing operator interface.
+
+**Key Features:**
+- **Dark Mode Support**: Complete theme support.
+- **Advanced Visualization**: Interactive charts for volume and user growth.
+- **Activity Logs**: Detailed audit trail visibility.
+
+---
+
 ## Appendix A: Error Codes
 
 | Code | Description |

@@ -177,6 +177,7 @@ CREATE INDEX idx_ledger_sequence ON ledger_entries(sequence);
 -- ============================================================================
 
 CREATE TABLE account_balances (
+    id SERIAL PRIMARY KEY,
     tenant_id VARCHAR(64) NOT NULL REFERENCES tenants(id),
     user_id VARCHAR(64), -- NULL for system accounts
     account_type VARCHAR(64) NOT NULL,
@@ -188,7 +189,8 @@ CREATE TABLE account_balances (
 
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    PRIMARY KEY (tenant_id, COALESCE(user_id, ''), account_type, currency)
+    -- Unique constraint for composite key
+    CONSTRAINT account_balances_unique UNIQUE (tenant_id, user_id, account_type, currency)
 );
 
 CREATE INDEX idx_balances_user ON account_balances(tenant_id, user_id)

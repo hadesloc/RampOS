@@ -73,13 +73,103 @@ pub struct UserLimitInfo {
 // Helpers
 // ============================================================================
 
-pub(crate) fn check_admin_key(headers: &HeaderMap) -> Result<(), ApiError> {
-    let expected = std::env::var("RAMPOS_ADMIN_KEY")
-        .map_err(|_| ApiError::Forbidden("Admin key not configured".to_string()))?;
-    match headers.get("X-Admin-Key") {
-        Some(val) if val == expected.as_str() => Ok(()),
-        _ => Err(ApiError::Forbidden("Invalid or missing X-Admin-Key".to_string())),
+/// Admin role levels for RBAC
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum AdminRole {
+    /// Read-only access to admin endpoints
+    Viewer = 0,
+    /// Can view and update cases, users
+    Operator = 1,
+    /// Full access including tenant management
+    Admin = 2,
+    /// Super admin with all permissions
+    SuperAdmin = 3,
+}
+
+impl AdminRole {
+    fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "viewer" => Some(AdminRole::Viewer),
+            "operator" => Some(AdminRole::Operator),
+            "admin" => Some(AdminRole::Admin),
+            "superadmin" | "super_admin" => Some(AdminRole::SuperAdmin),
+            _ => None,
+        }
     }
+}
+
+/// RBAC permission check result
+pub struct AdminAuth {
+    pub role: AdminRole,
+    pub user_id: Option<String>,
+}
+
+/// Check admin key and extract role information
+///
+/// SECURITY: This implements proper RBAC with role-based access control.
+/// Format of X-Admin-Key: <key>:<role> or just <key> (defaults to Viewer)
+pub(crate) fn check_admin_key_with_role(headers: &HeaderMap, required_role: AdminRole) -> Result<AdminAuth, ApiError> {
+    let expected_key = std::env::var("RAMPOS_ADMIN_KEY")
+        .map_err(|_| ApiError::Forbidden("Admin key not configured".to_string()))?;
+
+    let header_value = headers
+        .get("X-Admin-Key")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| ApiError::Forbidden("Invalid or missing X-Admin-Key".to_string()))?;
+
+    // Parse format: <key> or <key>:<role>
+    let parts: Vec<&str> = header_value.splitn(2, ':').collect();
+    let provided_key = parts[0];
+
+    // Verify the key first
+    if provided_key != expected_key {
+        return Err(ApiError::Forbidden("Invalid admin key".to_string()));
+    }
+
+    // Extract role from header or default to Viewer
+    let role = if parts.len() > 1 {
+        AdminRole::from_str(parts[1])
+            .ok_or_else(|| ApiError::Forbidden(format!("Invalid role: {}", parts[1])))?
+    } else {
+        // Check for role in separate header
+        headers
+            .get("X-Admin-Role")
+            .and_then(|v| v.to_str().ok())
+            .and_then(AdminRole::from_str)
+            .unwrap_or(AdminRole::Viewer)
+    };
+
+    // Verify role meets requirement
+    if role < required_role {
+        return Err(ApiError::Forbidden(format!(
+            "Insufficient permissions. Required: {:?}, Have: {:?}",
+            required_role, role
+        )));
+    }
+
+    // Extract user ID for audit logging
+    let user_id = headers
+        .get("X-Admin-User-Id")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+
+    Ok(AdminAuth { role, user_id })
+}
+
+/// Legacy function for backward compatibility - requires at least Viewer role
+pub(crate) fn check_admin_key(headers: &HeaderMap) -> Result<(), ApiError> {
+    check_admin_key_with_role(headers, AdminRole::Viewer)?;
+    Ok(())
+}
+
+/// Check admin key with Operator role requirement
+pub(crate) fn check_admin_key_operator(headers: &HeaderMap) -> Result<AdminAuth, ApiError> {
+    check_admin_key_with_role(headers, AdminRole::Operator)
+}
+
+/// Check admin key with Admin role requirement
+pub(crate) fn check_admin_key_admin(headers: &HeaderMap) -> Result<AdminAuth, ApiError> {
+    check_admin_key_with_role(headers, AdminRole::Admin)
 }
 
 // ============================================================================

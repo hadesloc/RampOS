@@ -1,0 +1,1147 @@
+{
+  "info": {
+    "_postman_id": "rampos-api-collection",
+    "name": "RampOS API Collection",
+    "description": "Complete API collection for RampOS - Fiat-Crypto On/Off Ramp Platform.\n\n## Authentication\nAll API requests require:\n- `Authorization: Bearer <API_KEY>` - Your tenant API key\n- `X-Timestamp` - Current timestamp (ISO8601 or Unix timestamp)\n\n## HMAC Signing (for webhooks)\nSome endpoints (like confirm_payin) require HMAC signature verification.\n\n## Rate Limiting\nAPI is rate-limited. Check `X-RateLimit-*` headers in responses.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{API_KEY}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Set current timestamp in ISO8601 format",
+          "const now = new Date().toISOString();",
+          "pm.request.headers.add({",
+          "    key: 'X-Timestamp',",
+          "    value: now",
+          "});",
+          "",
+          "// Generate idempotency key for POST requests",
+          "if (pm.request.method === 'POST') {",
+          "    const idempotencyKey = pm.variables.get('IDEMPOTENCY_KEY') || `idem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;",
+          "    pm.request.headers.add({",
+          "        key: 'Idempotency-Key',",
+          "        value: idempotencyKey",
+          "    });",
+          "}",
+          "",
+          "// HMAC Signing for internal endpoints",
+          "const requiresHmac = pm.variables.get('REQUIRES_HMAC');",
+          "if (requiresHmac === 'true') {",
+          "    const crypto = require('crypto-js');",
+          "    const secret = pm.environment.get('HMAC_SECRET');",
+          "    const body = pm.request.body ? pm.request.body.raw : '';",
+          "    const timestamp = now;",
+          "    const method = pm.request.method;",
+          "    const path = pm.request.url.getPath();",
+          "    ",
+          "    const signatureBase = `${method}\\n${path}\\n${timestamp}\\n${body}`;",
+          "    const signature = crypto.HmacSHA256(signatureBase, secret).toString(crypto.enc.Hex);",
+          "    ",
+          "    pm.request.headers.add({",
+          "        key: 'X-Signature',",
+          "        value: signature",
+          "    });",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Extract common response data",
+          "if (pm.response.code === 200) {",
+          "    const jsonData = pm.response.json();",
+          "    ",
+          "    // Store intent_id for subsequent requests",
+          "    if (jsonData.intentId) {",
+          "        pm.environment.set('LAST_INTENT_ID', jsonData.intentId);",
+          "    }",
+          "    ",
+          "    // Store reference_code for pay-in confirmation",
+          "    if (jsonData.referenceCode) {",
+          "        pm.environment.set('LAST_REFERENCE_CODE', jsonData.referenceCode);",
+          "    }",
+          "}",
+          "",
+          "// Check rate limit headers",
+          "const remaining = pm.response.headers.get('X-RateLimit-Remaining');",
+          "if (remaining && parseInt(remaining) < 10) {",
+          "    console.warn('Rate limit nearly exhausted:', remaining, 'requests remaining');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://api.rampos.io"
+    },
+    {
+      "key": "API_VERSION",
+      "value": "v1"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Health check endpoints (no authentication required)",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/health",
+              "host": ["{{BASE_URL}}"],
+              "path": ["health"]
+            },
+            "description": "Check if the service is healthy. Returns service status and version."
+          },
+          "response": [
+            {
+              "name": "Healthy",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"healthy\",\n  \"version\": \"0.1.0\",\n  \"timestamp\": \"2026-01-23T10:30:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Readiness Check",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/ready",
+              "host": ["{{BASE_URL}}"],
+              "path": ["ready"]
+            },
+            "description": "Check if the service is ready to accept traffic."
+          },
+          "response": [
+            {
+              "name": "Ready",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"ready\",\n  \"version\": \"0.1.0\",\n  \"timestamp\": \"2026-01-23T10:30:00Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Intents",
+      "description": "Intent management - Pay-in, Pay-out, and Trade intents",
+      "item": [
+        {
+          "name": "Pay-In",
+          "item": [
+            {
+              "name": "Create Pay-In Intent",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenantId\": \"{{TENANT_ID}}\",\n  \"userId\": \"{{USER_ID}}\",\n  \"amountVnd\": 1000000,\n  \"railsProvider\": \"mock\",\n  \"metadata\": {\n    \"orderId\": \"order_123\",\n    \"source\": \"mobile_app\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/intents/payin",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "intents", "payin"]
+                },
+                "description": "Create a new pay-in intent for user to deposit fiat currency.\n\n**Minimum amount:** 1,000 VND\n\n**Response includes:**\n- `intentId` - Unique intent identifier\n- `referenceCode` - Bank transfer reference code\n- `virtualAccount` - Virtual bank account details (if applicable)\n- `expiresAt` - When the intent expires"
+              },
+              "response": [
+                {
+                  "name": "Created",
+                  "status": "OK",
+                  "code": 200,
+                  "header": [
+                    {
+                      "key": "X-User-Daily-Limit",
+                      "value": "50000000"
+                    },
+                    {
+                      "key": "X-User-Daily-Remaining",
+                      "value": "49000000"
+                    }
+                  ],
+                  "body": "{\n  \"intentId\": \"intent_payin_abc123\",\n  \"referenceCode\": \"RAMP1234567890\",\n  \"virtualAccount\": {\n    \"bank\": \"Vietcombank\",\n    \"accountNumber\": \"1234567890123\",\n    \"accountName\": \"RAMPOS PAYMENT\"\n  },\n  \"expiresAt\": \"2026-01-23T11:30:00Z\",\n  \"status\": \"PENDING_BANK\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "Confirm Pay-In (Internal/Webhook)",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Internal-Secret",
+                    "value": "{{INTERNAL_SERVICE_SECRET}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenantId\": \"{{TENANT_ID}}\",\n  \"referenceCode\": \"{{LAST_REFERENCE_CODE}}\",\n  \"status\": \"FUNDS_CONFIRMED\",\n  \"bankTxId\": \"VCB20260123123456\",\n  \"amountVnd\": 1000000,\n  \"settledAt\": \"2026-01-23T10:35:00Z\",\n  \"rawPayloadHash\": \"sha256:abc123def456...\"\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/intents/payin/confirm",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "intents", "payin", "confirm"]
+                },
+                "description": "**Internal endpoint** - Called by rails provider webhook handler.\n\nConfirms that funds have been received for a pay-in intent.\n\nRequires `X-Internal-Secret` header for authentication."
+              },
+              "response": [
+                {
+                  "name": "Confirmed",
+                  "status": "OK",
+                  "code": 200,
+                  "body": "{\n  \"intentId\": \"intent_payin_abc123\",\n  \"status\": \"COMPLETED\"\n}"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Pay-Out",
+          "item": [
+            {
+              "name": "Create Pay-Out Intent",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenantId\": \"{{TENANT_ID}}\",\n  \"userId\": \"{{USER_ID}}\",\n  \"amountVnd\": 500000,\n  \"railsProvider\": \"mock\",\n  \"bankAccount\": {\n    \"bankCode\": \"VCB\",\n    \"accountNumber\": \"0123456789\",\n    \"accountName\": \"NGUYEN VAN A\"\n  },\n  \"metadata\": {\n    \"withdrawalReason\": \"personal\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/intents/payout",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "intents", "payout"]
+                },
+                "description": "Create a new pay-out intent for user to withdraw fiat to bank account.\n\n**Minimum amount:** 10,000 VND\n\n**Bank account fields:**\n- `bankCode` - Vietnamese bank code (e.g., VCB, TCB, ACB)\n- `accountNumber` - Bank account number\n- `accountName` - Account holder name (must match KYC)"
+              },
+              "response": [
+                {
+                  "name": "Created",
+                  "status": "OK",
+                  "code": 200,
+                  "header": [
+                    {
+                      "key": "X-User-Daily-Limit",
+                      "value": "50000000"
+                    },
+                    {
+                      "key": "X-User-Daily-Remaining",
+                      "value": "49500000"
+                    }
+                  ],
+                  "body": "{\n  \"intentId\": \"intent_payout_xyz789\",\n  \"status\": \"PENDING_REVIEW\"\n}"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Query",
+          "item": [
+            {
+              "name": "Get Intent by ID",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/intents/{{LAST_INTENT_ID}}",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "intents", "{{LAST_INTENT_ID}}"]
+                },
+                "description": "Retrieve details of a specific intent by ID."
+              },
+              "response": [
+                {
+                  "name": "Found",
+                  "status": "OK",
+                  "code": 200,
+                  "body": "{\n  \"id\": \"intent_payin_abc123\",\n  \"userId\": \"user_123\",\n  \"intentType\": \"PAYIN\",\n  \"state\": \"COMPLETED\",\n  \"amount\": \"1000000\",\n  \"currency\": \"VND\",\n  \"actualAmount\": \"1000000\",\n  \"referenceCode\": \"RAMP1234567890\",\n  \"bankTxId\": \"VCB20260123123456\",\n  \"metadata\": {},\n  \"stateHistory\": [\n    {\"state\": \"CREATED\", \"timestamp\": \"2026-01-23T10:00:00Z\"},\n    {\"state\": \"PENDING_BANK\", \"timestamp\": \"2026-01-23T10:00:01Z\"},\n    {\"state\": \"COMPLETED\", \"timestamp\": \"2026-01-23T10:35:00Z\"}\n  ],\n  \"createdAt\": \"2026-01-23T10:00:00Z\",\n  \"updatedAt\": \"2026-01-23T10:35:00Z\",\n  \"completedAt\": \"2026-01-23T10:35:00Z\"\n}"
+                }
+              ]
+            },
+            {
+              "name": "List Intents",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/intents?user_id={{USER_ID}}&limit=20&offset=0",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "intents"],
+                  "query": [
+                    {
+                      "key": "user_id",
+                      "value": "{{USER_ID}}",
+                      "description": "Required: Filter by user ID"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20",
+                      "description": "Max results per page (default: 20)"
+                    },
+                    {
+                      "key": "offset",
+                      "value": "0",
+                      "description": "Pagination offset"
+                    },
+                    {
+                      "key": "intent_type",
+                      "value": "PAYIN",
+                      "description": "Filter by type: PAYIN, PAYOUT, TRADE",
+                      "disabled": true
+                    },
+                    {
+                      "key": "state",
+                      "value": "COMPLETED",
+                      "description": "Filter by state",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "List intents with filtering and pagination.\n\n**Required:** `user_id` query parameter"
+              },
+              "response": [
+                {
+                  "name": "List",
+                  "status": "OK",
+                  "code": 200,
+                  "body": "{\n  \"data\": [\n    {\n      \"id\": \"intent_payin_abc123\",\n      \"userId\": \"user_123\",\n      \"intentType\": \"PAYIN\",\n      \"state\": \"COMPLETED\",\n      \"amount\": \"1000000\",\n      \"currency\": \"VND\",\n      \"createdAt\": \"2026-01-23T10:00:00Z\",\n      \"updatedAt\": \"2026-01-23T10:35:00Z\"\n    }\n  ],\n  \"pagination\": {\n    \"limit\": 20,\n    \"offset\": 0,\n    \"hasMore\": false\n  }\n}"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Events",
+      "description": "Event recording endpoints",
+      "item": [
+        {
+          "name": "Record Trade Executed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{TENANT_ID}}\",\n  \"userId\": \"{{USER_ID}}\",\n  \"tradeId\": \"trade_ext_12345\",\n  \"symbol\": \"BTC/VND\",\n  \"price\": \"1500000000\",\n  \"vndDelta\": -1000000,\n  \"cryptoDelta\": \"0.00066667\",\n  \"ts\": \"2026-01-23T10:40:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/{{API_VERSION}}/events/trade-executed",
+              "host": ["{{BASE_URL}}"],
+              "path": ["{{API_VERSION}}", "events", "trade-executed"]
+            },
+            "description": "Record a trade executed on an external exchange.\n\n**Fields:**\n- `vndDelta` - Negative = user spent VND, Positive = user received VND\n- `cryptoDelta` - Amount of crypto bought/sold\n- `ts` - Trade execution timestamp"
+          },
+          "response": [
+            {
+              "name": "Recorded",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"intentId\": \"intent_trade_def456\",\n  \"status\": \"Completed\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Balance",
+      "description": "User balance queries",
+      "item": [
+        {
+          "name": "Get User Balances",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/{{API_VERSION}}/balance/{{USER_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["{{API_VERSION}}", "balance", "{{USER_ID}}"]
+            },
+            "description": "Get current balances for a user across all currencies and account types."
+          },
+          "response": [
+            {
+              "name": "Balances",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"balances\": [\n    {\n      \"accountType\": \"FIAT\",\n      \"currency\": \"VND\",\n      \"balance\": \"5000000\"\n    },\n    {\n      \"accountType\": \"CRYPTO\",\n      \"currency\": \"BTC\",\n      \"balance\": \"0.00066667\"\n    }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Admin dashboard endpoints (requires X-Admin-Key header)",
+      "auth": {
+        "type": "apikey",
+        "apikey": [
+          {
+            "key": "key",
+            "value": "X-Admin-Key"
+          },
+          {
+            "key": "value",
+            "value": "{{ADMIN_KEY}}"
+          },
+          {
+            "key": "in",
+            "value": "header"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Dashboard",
+          "item": [
+            {
+              "name": "Get Dashboard Stats",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/dashboard",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "dashboard"]
+                },
+                "description": "Get aggregated dashboard statistics for the tenant."
+              },
+              "response": [
+                {
+                  "name": "Stats",
+                  "status": "OK",
+                  "code": 200,
+                  "body": "{\n  \"intents\": {\n    \"totalToday\": 150,\n    \"payinCount\": 100,\n    \"payoutCount\": 50,\n    \"pendingCount\": 10,\n    \"completedCount\": 135,\n    \"failedCount\": 5\n  },\n  \"cases\": {\n    \"total\": 25,\n    \"open\": 5,\n    \"inReview\": 3,\n    \"onHold\": 2,\n    \"resolved\": 15,\n    \"bySeverity\": {\n      \"low\": 10,\n      \"medium\": 8,\n      \"high\": 5,\n      \"critical\": 2\n    },\n    \"avgResolutionHours\": 24.5\n  },\n  \"users\": {\n    \"total\": 5000,\n    \"active\": 4500,\n    \"kycPending\": 150,\n    \"newToday\": 25\n  },\n  \"volume\": {\n    \"totalPayinVnd\": \"1500000000\",\n    \"totalPayoutVnd\": \"750000000\",\n    \"totalTradeVnd\": \"2000000000\",\n    \"period\": \"24h\"\n  }\n}"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Users",
+          "item": [
+            {
+              "name": "List Users",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/users?limit=20&offset=0",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "users"],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    },
+                    {
+                      "key": "offset",
+                      "value": "0"
+                    },
+                    {
+                      "key": "kyc_tier",
+                      "value": "1",
+                      "disabled": true
+                    },
+                    {
+                      "key": "status",
+                      "value": "ACTIVE",
+                      "disabled": true
+                    },
+                    {
+                      "key": "search",
+                      "value": "nguyen",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "List users with filtering and search."
+              },
+              "response": []
+            },
+            {
+              "name": "Get User",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/users/{{USER_ID}}",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "users", "{{USER_ID}}"]
+                },
+                "description": "Get user details by ID."
+              },
+              "response": []
+            },
+            {
+              "name": "Update User",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}:operator"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"ACTIVE\",\n  \"kycTier\": 2,\n  \"dailyPayinLimitVnd\": 100000000,\n  \"dailyPayoutLimitVnd\": 50000000\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/users/{{USER_ID}}",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "users", "{{USER_ID}}"]
+                },
+                "description": "Update user settings. Requires Operator role."
+              },
+              "response": []
+            },
+            {
+              "name": "Get User Tier",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/users/{{USER_ID}}/tier",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "users", "{{USER_ID}}", "tier"]
+                },
+                "description": "Get user's current KYC tier information."
+              },
+              "response": []
+            },
+            {
+              "name": "Upgrade User Tier",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"targetTier\": \"TIER2\",\n  \"reason\": \"KYC verification completed\"\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/users/{{USER_ID}}/tier/upgrade",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "users", "{{USER_ID}}", "tier", "upgrade"]
+                },
+                "description": "Manually upgrade user's KYC tier."
+              },
+              "response": []
+            },
+            {
+              "name": "Downgrade User Tier",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"targetTier\": \"TIER1\",\n  \"reason\": \"Suspicious activity detected\"\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/users/{{USER_ID}}/tier/downgrade",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "users", "{{USER_ID}}", "tier", "downgrade"]
+                },
+                "description": "Manually downgrade user's KYC tier."
+              },
+              "response": []
+            },
+            {
+              "name": "Get User Limits",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/users/{{USER_ID}}/limits",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "users", "{{USER_ID}}", "limits"]
+                },
+                "description": "Get user's current daily limits and usage."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Cases",
+          "item": [
+            {
+              "name": "List Cases",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/cases?limit=20&offset=0",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "cases"],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    },
+                    {
+                      "key": "offset",
+                      "value": "0"
+                    },
+                    {
+                      "key": "status",
+                      "value": "OPEN",
+                      "disabled": true
+                    },
+                    {
+                      "key": "severity",
+                      "value": "HIGH",
+                      "disabled": true
+                    },
+                    {
+                      "key": "assigned_to",
+                      "value": "analyst1",
+                      "disabled": true
+                    },
+                    {
+                      "key": "user_id",
+                      "value": "user_123",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "List AML cases with filtering."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Case",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/cases/{{CASE_ID}}",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "cases", "{{CASE_ID}}"]
+                },
+                "description": "Get AML case details by ID."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Case",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}:operator"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"REVIEW\",\n  \"assignedTo\": \"analyst1\",\n  \"note\": \"Initial review started\"\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/cases/{{CASE_ID}}",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "cases", "{{CASE_ID}}"]
+                },
+                "description": "Update AML case. Requires Operator role."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Case Stats",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/cases/stats",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "cases", "stats"]
+                },
+                "description": "Get aggregated case statistics."
+              },
+              "response": []
+            },
+            {
+              "name": "Generate SAR",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/cases/{{CASE_ID}}/sar",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "cases", "{{CASE_ID}}", "sar"]
+                },
+                "description": "Generate Suspicious Activity Report for a case."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Tiers",
+          "item": [
+            {
+              "name": "List Tier Configurations",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/tiers",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "tiers"]
+                },
+                "description": "List all KYC tier configurations with limits and requirements."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Tenants",
+          "item": [
+            {
+              "name": "Create Tenant",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"New Exchange\",\n  \"config\": {\n    \"webhookUrl\": \"https://example.com/webhooks/rampos\",\n    \"allowedRails\": [\"mock\", \"vcb\"]\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/tenants",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "tenants"]
+                },
+                "description": "Create a new tenant (exchange/platform)."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Tenant",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"dailyPayinLimitVnd\": \"10000000000\",\n  \"dailyPayoutLimitVnd\": \"5000000000\",\n  \"webhookUrl\": \"https://example.com/webhooks/rampos-v2\"\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/tenants/{{TENANT_ID}}",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "tenants", "{{TENANT_ID}}"]
+                },
+                "description": "Update tenant configuration."
+              },
+              "response": []
+            },
+            {
+              "name": "Generate API Keys",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/tenants/{{TENANT_ID}}/api-keys",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "tenants", "{{TENANT_ID}}", "api-keys"]
+                },
+                "description": "Generate new API keys for a tenant. **Warning:** Existing keys will be invalidated."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate Tenant",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/tenants/{{TENANT_ID}}/activate",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "tenants", "{{TENANT_ID}}", "activate"]
+                },
+                "description": "Activate a tenant to allow API access."
+              },
+              "response": []
+            },
+            {
+              "name": "Suspend Tenant",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"Compliance review required\"\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/tenants/{{TENANT_ID}}/suspend",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "tenants", "{{TENANT_ID}}", "suspend"]
+                },
+                "description": "Suspend a tenant, blocking all API access."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Reports",
+          "item": [
+            {
+              "name": "Generate AML Report",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/reports/aml?start_date=2026-01-01T00:00:00Z&end_date=2026-01-31T23:59:59Z",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "reports", "aml"],
+                  "query": [
+                    {
+                      "key": "start_date",
+                      "value": "2026-01-01T00:00:00Z"
+                    },
+                    {
+                      "key": "end_date",
+                      "value": "2026-01-31T23:59:59Z"
+                    }
+                  ]
+                },
+                "description": "Generate AML report for date range."
+              },
+              "response": []
+            },
+            {
+              "name": "Export AML Report (CSV/PDF)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/reports/aml/export?start_date=2026-01-01T00:00:00Z&end_date=2026-01-31T23:59:59Z&format=csv",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "reports", "aml", "export"],
+                  "query": [
+                    {
+                      "key": "start_date",
+                      "value": "2026-01-01T00:00:00Z"
+                    },
+                    {
+                      "key": "end_date",
+                      "value": "2026-01-31T23:59:59Z"
+                    },
+                    {
+                      "key": "format",
+                      "value": "csv",
+                      "description": "csv or pdf"
+                    }
+                  ]
+                },
+                "description": "Export AML report as CSV or PDF file."
+              },
+              "response": []
+            },
+            {
+              "name": "Generate KYC Report",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/reports/kyc?start_date=2026-01-01T00:00:00Z&end_date=2026-01-31T23:59:59Z",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "reports", "kyc"],
+                  "query": [
+                    {
+                      "key": "start_date",
+                      "value": "2026-01-01T00:00:00Z"
+                    },
+                    {
+                      "key": "end_date",
+                      "value": "2026-01-31T23:59:59Z"
+                    }
+                  ]
+                },
+                "description": "Generate KYC report for date range."
+              },
+              "response": []
+            },
+            {
+              "name": "Export KYC Report (CSV/PDF)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/reports/kyc/export?start_date=2026-01-01T00:00:00Z&end_date=2026-01-31T23:59:59Z&format=pdf",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "reports", "kyc", "export"],
+                  "query": [
+                    {
+                      "key": "start_date",
+                      "value": "2026-01-01T00:00:00Z"
+                    },
+                    {
+                      "key": "end_date",
+                      "value": "2026-01-31T23:59:59Z"
+                    },
+                    {
+                      "key": "format",
+                      "value": "pdf",
+                      "description": "csv or pdf"
+                    }
+                  ]
+                },
+                "description": "Export KYC report as CSV or PDF file."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Reconciliation",
+          "item": [
+            {
+              "name": "List Recon Batches",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/recon/batches?limit=20&offset=0",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "recon", "batches"],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    },
+                    {
+                      "key": "offset",
+                      "value": "0"
+                    }
+                  ]
+                },
+                "description": "List reconciliation batches."
+              },
+              "response": []
+            },
+            {
+              "name": "Create Recon Batch",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Admin-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"railsProvider\": \"vcb\",\n  \"periodStart\": \"2026-01-01T00:00:00Z\",\n  \"periodEnd\": \"2026-01-31T23:59:59Z\"\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/{{API_VERSION}}/admin/recon/batches",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["{{API_VERSION}}", "admin", "recon", "batches"]
+                },
+                "description": "Create a new reconciliation batch."
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

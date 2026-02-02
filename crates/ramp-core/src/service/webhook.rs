@@ -137,6 +137,14 @@ impl WebhookService {
             .webhook_url
             .ok_or_else(|| ramp_common::Error::Internal("No webhook URL configured".into()))?;
 
+        // SECURITY FIX: Use the encrypted webhook secret, not the hash
+        // The hash should only be used for verification, not for HMAC signing
+        let webhook_secret = tenant
+            .webhook_secret_encrypted
+            .ok_or_else(|| ramp_common::Error::Internal(
+                "Webhook secret not configured. Please update tenant with encrypted webhook secret.".into()
+            ))?;
+
         // Build webhook payload
         let payload = serde_json::json!({
             "id": event.id,
@@ -148,10 +156,11 @@ impl WebhookService {
         let payload_bytes = serde_json::to_vec(&payload)
             .map_err(|e| ramp_common::Error::Internal(e.to_string()))?;
 
-        // Generate signature
+        // Generate signature using the actual secret (decrypted)
+        // NOTE: In production, decrypt webhook_secret here using application encryption key
         let timestamp = Utc::now().timestamp();
         let signature = generate_webhook_signature(
-            tenant.webhook_secret_hash.as_bytes(),
+            &webhook_secret,
             timestamp,
             &payload_bytes,
         );

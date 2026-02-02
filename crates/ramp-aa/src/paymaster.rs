@@ -158,17 +158,93 @@ impl Paymaster for PaymasterService {
     }
 
     async fn validate(&self, paymaster_data: &PaymasterData) -> Result<bool> {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+
+        type HmacSha256 = Hmac<Sha256>;
+
         let now = Utc::now().timestamp() as u64;
 
+        // Check time validity
         if now < paymaster_data.valid_after {
+            info!(
+                now = now,
+                valid_after = paymaster_data.valid_after,
+                "Paymaster data not yet valid"
+            );
             return Ok(false);
         }
 
         if now > paymaster_data.valid_until {
+            info!(
+                now = now,
+                valid_until = paymaster_data.valid_until,
+                "Paymaster data expired"
+            );
             return Ok(false);
         }
 
-        // In production, would verify signature
+        // Verify paymaster address matches
+        if paymaster_data.paymaster_address != self.paymaster_address {
+            info!(
+                expected = %self.paymaster_address,
+                actual = %paymaster_data.paymaster_address,
+                "Paymaster address mismatch"
+            );
+            return Ok(false);
+        }
+
+        // Extract and verify signature from paymaster_and_data
+        // Format: paymaster address (20 bytes) + validUntil (6 bytes) + validAfter (6 bytes) + signature (32 bytes)
+        let data = paymaster_data.paymaster_and_data.as_ref();
+
+        // Minimum length: 20 (address) + 6 (validUntil) + 6 (validAfter) + 32 (signature) = 64 bytes
+        if data.len() < 64 {
+            info!(
+                data_len = data.len(),
+                "Paymaster data too short for signature verification"
+            );
+            return Ok(false);
+        }
+
+        // Extract the signature (last 32 bytes for HMAC-SHA256)
+        let signature_start = data.len() - 32;
+        let provided_signature = &data[signature_start..];
+
+        // Reconstruct the signed message (we sign the payload hash + timestamps)
+        // The signature was created over: user_op_hash (call_data in sponsor) + valid_until + valid_after
+        // Since we don't have the original user_op here, we verify using the embedded timestamps
+        let mut signed_data = Vec::new();
+        // Use the data portion (excluding signature) as the message
+        signed_data.extend_from_slice(&data[20..signature_start]); // validUntil + validAfter portion
+
+        // Compute expected signature
+        let mut mac = match HmacSha256::new_from_slice(&self.signer_key) {
+            Ok(m) => m,
+            Err(_) => {
+                info!("Invalid signer key for HMAC");
+                return Ok(false);
+            }
+        };
+
+        // Recreate the signed message format used in sign_paymaster_data
+        let mut verify_data = Vec::new();
+        verify_data.extend_from_slice(&paymaster_data.valid_until.to_be_bytes());
+        verify_data.extend_from_slice(&paymaster_data.valid_after.to_be_bytes());
+        mac.update(&verify_data);
+
+        // Verify the signature using constant-time comparison
+        if mac.verify_slice(provided_signature).is_err() {
+            info!("Paymaster signature verification failed");
+            return Ok(false);
+        }
+
+        info!(
+            valid_until = paymaster_data.valid_until,
+            valid_after = paymaster_data.valid_after,
+            "Paymaster data validated successfully"
+        );
+
         Ok(true)
     }
 }

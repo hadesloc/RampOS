@@ -1,0 +1,91 @@
+{
+  "id": "rampos-environment",
+  "name": "RampOS Environment",
+  "values": [
+    {
+      "key": "BASE_URL",
+      "value": "https://api.rampos.io",
+      "type": "default",
+      "enabled": true,
+      "description": "RampOS API base URL"
+    },
+    {
+      "key": "API_VERSION",
+      "value": "v1",
+      "type": "default",
+      "enabled": true,
+      "description": "API version"
+    },
+    {
+      "key": "API_KEY",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Your tenant API key (Bearer token)"
+    },
+    {
+      "key": "ADMIN_KEY",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Admin API key for admin endpoints"
+    },
+    {
+      "key": "TENANT_ID",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "Your tenant ID"
+    },
+    {
+      "key": "USER_ID",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "Test user ID"
+    },
+    {
+      "key": "INTERNAL_SERVICE_SECRET",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Internal service secret for webhook handlers"
+    },
+    {
+      "key": "HMAC_SECRET",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "HMAC secret for signature verification"
+    },
+    {
+      "key": "LAST_INTENT_ID",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "Last created intent ID (auto-populated)"
+    },
+    {
+      "key": "LAST_REFERENCE_CODE",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "Last pay-in reference code (auto-populated)"
+    },
+    {
+      "key": "CASE_ID",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "AML case ID for testing"
+    },
+    {
+      "key": "IDEMPOTENCY_KEY",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "Custom idempotency key (optional, auto-generated if empty)"
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}

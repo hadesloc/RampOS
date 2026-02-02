@@ -478,7 +478,68 @@ This document outlines the implementation plan for RampOS, a full-stack crypto/V
 
 ---
 
-## Dependencies
+## Phase 5: Frontend Expansion (Days 91-110)
+
+### Week 13: Shared Foundation & Landing Page (Days 91-97)
+
+#### 13.1 Foundation (Days 91-93)
+- [ ] Setup monorepo/workspace structure for multiple apps
+- [ ] Extract shared UI components (Shadcn) to packages/ui
+- [ ] Configure shared tooling (ESLint, Prettier, Tailwind)
+
+**Deliverables:**
+- Monorepo structure
+- Shared UI library
+
+#### 13.2 Landing Page (Days 93-97)
+- [ ] Implement Hero section with animations
+- [ ] Build Features and How-It-Works sections
+- [ ] Create Developer API showcase
+- [ ] Optimize for SEO and performance (LCP < 1.5s)
+
+**Deliverables:**
+- High-performance landing page
+- Marketing assets
+
+### Week 14: User Portal Core (Days 98-104)
+
+#### 14.1 Auth & Onboarding (Days 98-100)
+- [ ] Implement WebAuthn/Passkey auth
+- [ ] Build multi-step KYC flow
+- [ ] Create user dashboard shell
+
+**Deliverables:**
+- Secure authentication system
+- KYC onboarding flow
+
+#### 14.2 Wallet & Transactions (Days 100-104)
+- [ ] Build Asset Dashboard
+- [ ] Implement Deposit/Withdraw forms
+- [ ] Create Transaction History table
+- [ ] Integrate with Backend APIs
+
+**Deliverables:**
+- Full wallet functionality
+- Transaction management UI
+
+### Week 15: Polish & Launch (Days 105-110)
+
+#### 15.1 Admin & Polish (Days 105-107)
+- [ ] Fix Dark Mode inconsistencies
+- [ ] Improve Admin charts and tables
+- [ ] Add activity logs view
+
+#### 15.2 Final QA & Delivery (Days 107-110)
+- [ ] E2E testing of frontend flows
+- [ ] Performance tuning
+- [ ] Deployment to Vercel/Edge
+
+**Deliverables:**
+- Polished Admin Dashboard
+- Production-ready User Portal
+
+---
+
 
 ```mermaid
 graph TD

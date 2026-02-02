@@ -6,14 +6,23 @@ services:
     image: postgres:16-alpine
     container_name: rampos-postgres
     environment:
-      POSTGRES_USER: rampos
-      POSTGRES_PASSWORD: rampos_secret
-      POSTGRES_DB: rampos
+      POSTGRES_USER: ${POSTGRES_USER:-rampos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-rampos}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
+      # Migrations are run by the app, not docker init
+      # - ./migrations:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rampos"]
       interval: 10s
@@ -25,7 +34,15 @@ services:
     image: redis:7-alpine
     container_name: rampos-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -40,8 +57,16 @@ services:
     image: nats:2.10-alpine
     container_name: rampos-nats
     ports:
-      - "4222:4222"
-      - "8222:8222"
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
     command: --jetstream --store_dir /data
     volumes:
       - nats_data:/data
@@ -51,8 +76,16 @@ services:
     image: clickhouse/clickhouse-server:24-alpine
     container_name: rampos-clickhouse
     ports:
-      - "8123:8123"
-      - "9000:9000"
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
     volumes:
       - clickhouse_data:/var/lib/clickhouse
     ulimits:
@@ -68,12 +101,21 @@ services:
     container_name: rampos-api
     ports:
       - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
     environment:
-      RAMPOS__DATABASE__URL: postgres://rampos:rampos_secret@postgres:5432/rampos
+      RAMPOS__DATABASE__URL: postgres://${POSTGRES_USER:-rampos}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-rampos}
       RAMPOS__REDIS__URL: redis://redis:6379
       RAMPOS__NATS__URL: nats://nats:4222
       RAMPOS__SERVER__HOST: 0.0.0.0
       RAMPOS__SERVER__PORT: 8080
+      RAMPOS_ADMIN_KEY: ${RAMPOS_ADMIN_KEY:?RAMPOS_ADMIN_KEY must be set}
       RUST_LOG: info,ramp_api=debug,ramp_core=debug
     depends_on:
       postgres:

@@ -330,6 +330,7 @@ pub async fn get_case(
 }
 
 /// PATCH /v1/admin/cases/:id - Update case
+/// Requires Operator role or higher
 pub async fn update_case(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -337,10 +338,12 @@ pub async fn update_case(
     State(app_state): State<crate::router::AppState>,
     Json(request): Json<UpdateCaseRequest>,
 ) -> Result<Json<CaseResponse>, ApiError> {
-    super::tier::check_admin_key(&headers)?;
+    // SECURITY: Require Operator role for case updates
+    let auth = super::tier::check_admin_key_operator(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         case_id = %case_id,
+        admin_user = ?auth.user_id,
         "Updating case"
     );
 
@@ -566,6 +569,7 @@ pub async fn get_user(
 }
 
 /// PATCH /v1/admin/users/:id - Update user
+/// Requires Operator role or higher
 pub async fn update_user(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -573,10 +577,12 @@ pub async fn update_user(
     State(app_state): State<crate::router::AppState>,
     Json(request): Json<UpdateUserRequest>,
 ) -> Result<Json<UserResponse>, ApiError> {
-    super::tier::check_admin_key(&headers)?;
+    // SECURITY: Require Operator role for user updates
+    let auth = super::tier::check_admin_key_operator(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         user_id = %user_id,
+        admin_user = ?auth.user_id,
         "Updating user"
     );
 

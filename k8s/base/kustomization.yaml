@@ -4,7 +4,7 @@ kind: Kustomization
 resources:
 - namespace.yaml
 - configmap.yaml
-- secret.yaml
+- secret.example.yaml
 - postgres-statefulset.yaml
 - redis-statefulset.yaml
 - nats-statefulset.yaml
@@ -12,4 +12,5 @@ resources:
 - service.yaml
 - ingress.yaml
 - hpa.yaml
+- network-policy.yaml
 - ../jobs/migration-job.yaml

@@ -12,6 +12,11 @@ pub struct TenantRow {
     pub status: String,
     pub api_key_hash: String,
     pub webhook_secret_hash: String,
+    /// Encrypted webhook secret for HMAC signing.
+    /// This should be decrypted at runtime using application-level encryption.
+    /// SECURITY: Do not use webhook_secret_hash for signing - it's only for verification.
+    #[serde(skip_serializing)]
+    pub webhook_secret_encrypted: Option<Vec<u8>>,
     pub webhook_url: Option<String>,
     pub config: serde_json::Value,
     pub daily_payin_limit_vnd: Option<Decimal>,
@@ -28,6 +33,7 @@ pub trait TenantRepository: Send + Sync {
     async fn update_status(&self, id: &TenantId, status: &str) -> Result<()>;
     async fn update_webhook_url(&self, id: &TenantId, url: &str) -> Result<()>;
     async fn update_api_key_hash(&self, id: &TenantId, hash: &str) -> Result<()>;
+    async fn update_webhook_secret(&self, id: &TenantId, hash: &str, encrypted: &[u8]) -> Result<()>;
     async fn update_limits(&self, id: &TenantId, daily_payin: Option<Decimal>, daily_payout: Option<Decimal>) -> Result<()>;
     async fn update_config(&self, id: &TenantId, config: &serde_json::Value) -> Result<()>;
     async fn list_ids(&self) -> Result<Vec<TenantId>>;
@@ -124,6 +130,20 @@ impl TenantRepository for PgTenantRepository {
             .execute(&self.pool)
             .await
             .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn update_webhook_secret(&self, id: &TenantId, hash: &str, encrypted: &[u8]) -> Result<()> {
+        sqlx::query(
+            "UPDATE tenants SET webhook_secret_hash = $1, webhook_secret_encrypted = $2, updated_at = NOW() WHERE id = $3"
+        )
+        .bind(hash)
+        .bind(encrypted)
+        .bind(&id.0)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         Ok(())
     }
