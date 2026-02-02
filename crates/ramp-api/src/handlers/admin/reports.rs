@@ -4,17 +4,19 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use serde::Deserialize;
 use std::sync::Arc;
 use tracing::info;
-use serde::Deserialize;
 // use uuid::Uuid; // Unused
 
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
 use ramp_compliance::reports::{
-    ReportGenerator,
     // AmlReportParams, KycReportParams, ReportType, // Unused
-    AmlReport, KycReport, SarReport
+    AmlReport,
+    KycReport,
+    ReportGenerator,
+    SarReport,
 };
 // use ramp_common::types::TenantId; // Unused
 
@@ -197,21 +199,26 @@ pub async fn export_aml_report(
 
     let (content, content_type, filename) = match download.format.as_str() {
         "csv" => {
-            let data = report_generator.export_to_csv(&report)
+            let data = report_generator
+                .export_to_csv(&report)
                 .map_err(|e| ApiError::Internal(format!("Failed to export CSV: {}", e)))?;
             (data.into_bytes(), "text/csv", "aml_report.csv")
-        },
+        }
         "pdf" => {
-            let data = report_generator.export_to_pdf(&report)
+            let data = report_generator
+                .export_to_pdf(&report)
                 .map_err(|e| ApiError::Internal(format!("Failed to export PDF: {}", e)))?;
             (data, "application/pdf", "aml_report.pdf")
-        },
+        }
         _ => return Err(ApiError::BadRequest("Unsupported format".to_string())),
     };
 
     let headers = [
         (header::CONTENT_TYPE, content_type),
-        (header::CONTENT_DISPOSITION, &format!("attachment; filename=\"{}\"", filename)),
+        (
+            header::CONTENT_DISPOSITION,
+            &format!("attachment; filename=\"{}\"", filename),
+        ),
     ];
 
     Ok((headers, content).into_response())
@@ -241,21 +248,26 @@ pub async fn export_kyc_report(
 
     let (content, content_type, filename) = match download.format.as_str() {
         "csv" => {
-            let data = report_generator.export_to_csv(&report)
+            let data = report_generator
+                .export_to_csv(&report)
                 .map_err(|e| ApiError::Internal(format!("Failed to export CSV: {}", e)))?;
             (data.into_bytes(), "text/csv", "kyc_report.csv")
-        },
+        }
         "pdf" => {
-            let data = report_generator.export_to_pdf(&report)
+            let data = report_generator
+                .export_to_pdf(&report)
                 .map_err(|e| ApiError::Internal(format!("Failed to export PDF: {}", e)))?;
             (data, "application/pdf", "kyc_report.pdf")
-        },
+        }
         _ => return Err(ApiError::BadRequest("Unsupported format".to_string())),
     };
 
     let headers = [
         (header::CONTENT_TYPE, content_type),
-        (header::CONTENT_DISPOSITION, &format!("attachment; filename=\"{}\"", filename)),
+        (
+            header::CONTENT_DISPOSITION,
+            &format!("attachment; filename=\"{}\"", filename),
+        ),
     ];
 
     Ok((headers, content).into_response())
@@ -281,7 +293,8 @@ pub async fn generate_sar(
     // but doesn't take `tenant_id` to filter. It fetches the case.
     // We should probably check the tenant_id in the returned report matches the context.
 
-    let report = app_state.report_generator
+    let report = app_state
+        .report_generator
         .generate_suspicious_activity_report(&case_id)
         .await
         .map_err(|e| ApiError::Internal(format!("Failed to generate SAR: {}", e)))?;

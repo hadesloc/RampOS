@@ -2,29 +2,28 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use tower::ServiceExt;
-use std::sync::Arc;
-use ramp_core::test_utils::*;
-use ramp_core::event::InMemoryEventPublisher;
-use ramp_core::service::{
-    payin::PayinService,
-    payout::PayoutService,
-    trade::TradeService,
-    ledger::LedgerService,
-    onboarding::OnboardingService,
-};
-use ramp_core::repository::tenant::TenantRow;
-use ramp_core::repository::user::UserRow;
+use chrono::{Duration, Utc};
+use ramp_api::middleware::{IdempotencyConfig, IdempotencyHandler, RateLimitConfig, RateLimiter};
 use ramp_api::{create_router, AppState};
 use ramp_common::ledger::{AccountType, LedgerCurrency};
-use ramp_core::repository::{IntentRepository, LedgerRepository};
-use ramp_compliance::{case::CaseManager, InMemoryCaseStore, reports::ReportGenerator, storage::MockDocumentStorage};
-use sqlx::PgPool;
-use ramp_api::middleware::{RateLimiter, RateLimitConfig, IdempotencyHandler, IdempotencyConfig};
 use ramp_common::types::*;
-use sha2::{Digest, Sha256};
-use chrono::{Utc, Duration};
+use ramp_compliance::{
+    case::CaseManager, reports::ReportGenerator, storage::MockDocumentStorage, InMemoryCaseStore,
+};
+use ramp_core::event::InMemoryEventPublisher;
+use ramp_core::repository::tenant::TenantRow;
+use ramp_core::repository::user::UserRow;
+use ramp_core::repository::{IntentRepository, LedgerRepository};
+use ramp_core::service::{
+    ledger::LedgerService, onboarding::OnboardingService, payin::PayinService,
+    payout::PayoutService, trade::TradeService,
+};
+use ramp_core::test_utils::*;
 use rust_decimal::Decimal;
+use sha2::{Digest, Sha256};
+use sqlx::PgPool;
+use std::sync::Arc;
+use tower::ServiceExt;
 
 // --- Helper Functions ---
 
@@ -61,6 +60,7 @@ async fn setup_app() -> TestApp {
         status: "ACTIVE".to_string(),
         api_key_hash: api_key_hash.clone(),
         webhook_secret_hash: "secret".to_string(),
+            webhook_secret_encrypted: None,
         webhook_url: None,
         config: serde_json::json!({}),
         daily_payin_limit_vnd: None,
@@ -129,10 +129,12 @@ async fn setup_app() -> TestApp {
         endpoint_limits: std::collections::HashMap::new(),
     })));
 
-    let idempotency_handler = Some(Arc::new(IdempotencyHandler::with_memory(IdempotencyConfig {
-        ttl_seconds: 60,
-        key_prefix: "test:idempotency".to_string(),
-    })));
+    let idempotency_handler = Some(Arc::new(IdempotencyHandler::with_memory(
+        IdempotencyConfig {
+            ttl_seconds: 60,
+            key_prefix: "test:idempotency".to_string(),
+        },
+    )));
 
     let app_state = AppState {
         payin_service,
@@ -147,6 +149,7 @@ async fn setup_app() -> TestApp {
         case_manager,
         rate_limiter,
         idempotency_handler,
+        aa_service: None,
     };
 
     let router = create_router(app_state);
@@ -202,7 +205,9 @@ async fn test_payin_flow() {
     let response = app.router.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     let intent_id = body.get("intent_id").and_then(|v| v.as_str()).unwrap();
     let reference_code = body.get("reference_code").and_then(|v| v.as_str()).unwrap();
@@ -244,7 +249,7 @@ async fn test_payout_creation() {
         Some(&UserId::new("user1")),
         &AccountType::LiabilityUserVnd,
         &LedgerCurrency::VND,
-        Decimal::from(500000)
+        Decimal::from(500000),
     );
 
     let payload = serde_json::json!({
@@ -351,7 +356,7 @@ async fn test_get_balances() {
         Some(&UserId::new("user1")),
         &AccountType::LiabilityUserVnd,
         &LedgerCurrency::VND,
-        Decimal::from(500_000)
+        Decimal::from(500_000),
     );
 
     let request = Request::builder()
@@ -364,7 +369,9 @@ async fn test_get_balances() {
     let response = app.router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     let balances = body.get("balances").unwrap().as_array().unwrap();

@@ -1,4 +1,8 @@
-use axum::{extract::{Extension, State}, http::HeaderMap, Json};
+use axum::{
+    extract::{Extension, State},
+    http::HeaderMap,
+    Json,
+};
 use ramp_common::types::*;
 use ramp_core::service::payout::{CreatePayoutRequest as ServiceRequest, PayoutService};
 use std::sync::Arc;
@@ -78,15 +82,26 @@ pub async fn create_payout(
     let mut headers = HeaderMap::new();
     headers.insert(
         "X-User-Daily-Limit",
-        result.daily_limit.to_string().parse().unwrap_or(axum::http::HeaderValue::from_static("0")),
+        result
+            .daily_limit
+            .to_string()
+            .parse()
+            .unwrap_or(axum::http::HeaderValue::from_static("0")),
     );
     headers.insert(
         "X-User-Daily-Remaining",
-        result.daily_remaining.to_string().parse().unwrap_or(axum::http::HeaderValue::from_static("0")),
+        result
+            .daily_remaining
+            .to_string()
+            .parse()
+            .unwrap_or(axum::http::HeaderValue::from_static("0")),
     );
 
-    Ok((headers, Json(CreatePayoutResponse {
-        intent_id: result.intent_id.0,
-        status: result.status.to_string(),
-    })))
+    Ok((
+        headers,
+        Json(CreatePayoutResponse {
+            intent_id: result.intent_id.0,
+            status: result.status.to_string(),
+        }),
+    ))
 }

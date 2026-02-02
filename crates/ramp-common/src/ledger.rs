@@ -334,6 +334,20 @@ pub enum LedgerError {
     AccountNotFound(String),
 }
 
+/// Convert string to LedgerCurrency
+impl LedgerCurrency {
+    pub fn from_symbol(symbol: &str) -> Self {
+        match symbol.to_uppercase().as_str() {
+            "VND" => LedgerCurrency::VND,
+            "BTC" => LedgerCurrency::BTC,
+            "ETH" => LedgerCurrency::ETH,
+            "USDT" => LedgerCurrency::USDT,
+            "USDC" => LedgerCurrency::USDC,
+            _ => LedgerCurrency::Other,
+        }
+    }
+}
+
 /// Common ledger transaction patterns for RampOS
 pub mod patterns {
     use super::*;
@@ -394,6 +408,87 @@ pub mod patterns {
             .build()
     }
 
+    /// Create ledger entries for VND pay-out reversal (funds returned to user)
+    ///
+    /// This reverses the payout_vnd_initiated transaction:
+    /// - Debits the ClearingBankPending account (clearing the held funds)
+    /// - Credits back the user's VND balance (restoring their funds)
+    ///
+    /// Used when:
+    /// - Bank rejects the payout
+    /// - Payout times out
+    /// - Payout is cancelled after funds were held
+    pub fn payout_vnd_reversed(
+        tenant_id: TenantId,
+        user_id: UserId,
+        intent_id: IntentId,
+        amount: Decimal,
+        reason: &str,
+    ) -> Result<LedgerTransaction, LedgerError> {
+        LedgerTransactionBuilder::new(
+            tenant_id,
+            intent_id,
+            format!("VND Pay-out reversed: {}", reason),
+        )
+        .debit(
+            AccountType::ClearingBankPending,
+            amount,
+            LedgerCurrency::VND,
+        )
+        .credit_user(
+            user_id,
+            AccountType::LiabilityUserVnd,
+            amount,
+            LedgerCurrency::VND,
+        )
+        .build()
+    }
+
+    /// Create ledger entries for partial VND pay-out reversal
+    ///
+    /// Used when a payout partially succeeds and we need to return the remainder
+    /// - original_amount: The total amount initially held
+    /// - settled_amount: The amount that was actually settled by the bank
+    /// - Returns the difference (original - settled) to the user
+    pub fn payout_vnd_partial_reversed(
+        tenant_id: TenantId,
+        user_id: UserId,
+        intent_id: IntentId,
+        original_amount: Decimal,
+        settled_amount: Decimal,
+        reason: &str,
+    ) -> Result<LedgerTransaction, LedgerError> {
+        let reversal_amount = original_amount - settled_amount;
+
+        if reversal_amount <= Decimal::ZERO {
+            return Err(LedgerError::Imbalanced {
+                debit: Decimal::ZERO,
+                credit: Decimal::ZERO,
+            });
+        }
+
+        LedgerTransactionBuilder::new(
+            tenant_id,
+            intent_id,
+            format!(
+                "VND Pay-out partial reversal: {} (settled: {}, returned: {})",
+                reason, settled_amount, reversal_amount
+            ),
+        )
+        .debit(
+            AccountType::ClearingBankPending,
+            reversal_amount,
+            LedgerCurrency::VND,
+        )
+        .credit_user(
+            user_id,
+            AccountType::LiabilityUserVnd,
+            reversal_amount,
+            LedgerCurrency::VND,
+        )
+        .build()
+    }
+
     /// Create ledger entries for crypto/VND trade
     pub fn trade_crypto_vnd(
         tenant_id: TenantId,
@@ -452,6 +547,92 @@ pub mod patterns {
 
         builder.build()
     }
+
+    /// Create ledger entries for crypto deposit confirmed (on-chain)
+    /// Credits crypto to user's account from on-chain deposit
+    pub fn deposit_crypto_confirmed(
+        tenant_id: TenantId,
+        user_id: UserId,
+        intent_id: IntentId,
+        amount: Decimal,
+        crypto_currency: LedgerCurrency,
+    ) -> Result<LedgerTransaction, LedgerError> {
+        LedgerTransactionBuilder::new(tenant_id, intent_id, "Crypto deposit confirmed")
+            .debit(AccountType::AssetCrypto, amount, crypto_currency)
+            .credit_user(
+                user_id,
+                AccountType::LiabilityUserCrypto,
+                amount,
+                crypto_currency,
+            )
+            .build()
+    }
+
+    /// Create ledger entries for crypto withdraw initiated
+    /// Holds crypto from user's account pending on-chain transfer
+    pub fn withdraw_crypto_initiated(
+        tenant_id: TenantId,
+        user_id: UserId,
+        intent_id: IntentId,
+        amount: Decimal,
+        crypto_currency: LedgerCurrency,
+    ) -> Result<LedgerTransaction, LedgerError> {
+        LedgerTransactionBuilder::new(tenant_id, intent_id, "Crypto withdraw initiated")
+            .debit_user(
+                user_id,
+                AccountType::LiabilityUserCrypto,
+                amount,
+                crypto_currency,
+            )
+            .credit(
+                AccountType::ClearingCryptoPending,
+                amount,
+                crypto_currency,
+            )
+            .build()
+    }
+
+    /// Create ledger entries for crypto withdraw confirmed (on-chain tx mined)
+    /// Finalizes the withdraw by clearing the pending crypto
+    pub fn withdraw_crypto_confirmed(
+        tenant_id: TenantId,
+        intent_id: IntentId,
+        amount: Decimal,
+        crypto_currency: LedgerCurrency,
+    ) -> Result<LedgerTransaction, LedgerError> {
+        LedgerTransactionBuilder::new(tenant_id, intent_id, "Crypto withdraw confirmed")
+            .debit(
+                AccountType::ClearingCryptoPending,
+                amount,
+                crypto_currency,
+            )
+            .credit(AccountType::AssetCrypto, amount, crypto_currency)
+            .build()
+    }
+
+    /// Create ledger entries for crypto withdraw failed/reversed
+    /// Returns crypto to user's account when withdraw fails
+    pub fn withdraw_crypto_reversed(
+        tenant_id: TenantId,
+        user_id: UserId,
+        intent_id: IntentId,
+        amount: Decimal,
+        crypto_currency: LedgerCurrency,
+    ) -> Result<LedgerTransaction, LedgerError> {
+        LedgerTransactionBuilder::new(tenant_id, intent_id, "Crypto withdraw reversed")
+            .debit(
+                AccountType::ClearingCryptoPending,
+                amount,
+                crypto_currency,
+            )
+            .credit_user(
+                user_id,
+                AccountType::LiabilityUserCrypto,
+                amount,
+                crypto_currency,
+            )
+            .build()
+    }
 }
 
 #[cfg(test)]
@@ -501,5 +682,114 @@ mod tests {
         .build();
 
         assert!(tx.is_err());
+    }
+
+    #[test]
+    fn test_payout_vnd_reversed_pattern() {
+        let tx = patterns::payout_vnd_reversed(
+            TenantId::new("test"),
+            UserId::new("user1"),
+            IntentId::new_payout(),
+            Decimal::from(1000000),
+            "Bank rejected",
+        );
+
+        assert!(tx.is_ok());
+        let tx = tx.unwrap();
+        assert!(tx.is_balanced());
+        assert_eq!(tx.entries.len(), 2);
+        assert!(tx.description.contains("reversed"));
+    }
+
+    #[test]
+    fn test_payout_vnd_partial_reversed_pattern() {
+        let tx = patterns::payout_vnd_partial_reversed(
+            TenantId::new("test"),
+            UserId::new("user1"),
+            IntentId::new_payout(),
+            Decimal::from(1000000),  // original
+            Decimal::from(700000),   // settled
+            "Partial settlement",
+        );
+
+        assert!(tx.is_ok());
+        let tx = tx.unwrap();
+        assert!(tx.is_balanced());
+        // Should reverse 300000 (1000000 - 700000)
+        assert_eq!(tx.total_amount(), Decimal::from(300000));
+    }
+
+    #[test]
+    fn test_payout_vnd_partial_reversed_fails_when_invalid() {
+        // Settled amount > original should fail
+        let tx = patterns::payout_vnd_partial_reversed(
+            TenantId::new("test"),
+            UserId::new("user1"),
+            IntentId::new_payout(),
+            Decimal::from(500000),   // original
+            Decimal::from(600000),   // settled (more than original)
+            "Invalid",
+        );
+
+        assert!(tx.is_err());
+    }
+
+    #[test]
+    fn test_payout_lifecycle_ledger_entries() {
+        // Test the complete payout lifecycle:
+        // 1. Initiated (hold funds)
+        // 2. Either confirmed (complete) or reversed (refund)
+
+        let tenant_id = TenantId::new("test");
+        let user_id = UserId::new("user1");
+        let intent_id = IntentId::new_payout();
+        let amount = Decimal::from(500000);
+
+        // Step 1: Initiate payout (hold funds)
+        let initiated = patterns::payout_vnd_initiated(
+            tenant_id.clone(),
+            user_id.clone(),
+            intent_id.clone(),
+            amount,
+        ).unwrap();
+
+        assert!(initiated.is_balanced());
+        // User balance debited, ClearingBankPending credited
+        let user_entry = initiated.entries.iter()
+            .find(|e| e.user_id.is_some())
+            .unwrap();
+        assert_eq!(user_entry.direction, EntryDirection::Debit);
+        assert_eq!(user_entry.account_type, AccountType::LiabilityUserVnd);
+
+        // Step 2a: Confirm payout (success path)
+        let confirmed = patterns::payout_vnd_confirmed(
+            tenant_id.clone(),
+            intent_id.clone(),
+            amount,
+        ).unwrap();
+
+        assert!(confirmed.is_balanced());
+        // ClearingBankPending debited, AssetBank credited
+        let clearing_entry = confirmed.entries.iter()
+            .find(|e| e.account_type == AccountType::ClearingBankPending)
+            .unwrap();
+        assert_eq!(clearing_entry.direction, EntryDirection::Debit);
+
+        // Step 2b: Reverse payout (failure path)
+        let reversed = patterns::payout_vnd_reversed(
+            tenant_id.clone(),
+            user_id.clone(),
+            intent_id.clone(),
+            amount,
+            "Bank rejected",
+        ).unwrap();
+
+        assert!(reversed.is_balanced());
+        // ClearingBankPending debited, User balance credited (refund)
+        let refund_entry = reversed.entries.iter()
+            .find(|e| e.user_id.is_some())
+            .unwrap();
+        assert_eq!(refund_entry.direction, EntryDirection::Credit);
+        assert_eq!(refund_entry.account_type, AccountType::LiabilityUserVnd);
     }
 }

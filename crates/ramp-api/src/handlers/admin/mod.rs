@@ -23,14 +23,13 @@ use ramp_common::types::UserId;
 use ramp_compliance::types::{CaseSeverity, CaseStatus};
 use ramp_core::repository::user::UserRow;
 
-pub mod tier;
 pub mod onboarding;
 pub mod reports;
+pub mod tier;
 
-pub use tier::*;
 pub use onboarding::*;
 pub use reports::*;
-
+pub use tier::*;
 
 // ============================================================================
 // Case Management DTOs
@@ -432,53 +431,113 @@ pub async fn get_case_stats(
         .map_err(ApiError::from)?;
     let open = app_state
         .case_manager
-        .count_cases(&tenant_ctx.tenant_id, Some(CaseStatus::Open), None, None, None)
+        .count_cases(
+            &tenant_ctx.tenant_id,
+            Some(CaseStatus::Open),
+            None,
+            None,
+            None,
+        )
         .await
         .map_err(ApiError::from)?;
     let in_review = app_state
         .case_manager
-        .count_cases(&tenant_ctx.tenant_id, Some(CaseStatus::Review), None, None, None)
+        .count_cases(
+            &tenant_ctx.tenant_id,
+            Some(CaseStatus::Review),
+            None,
+            None,
+            None,
+        )
         .await
         .map_err(ApiError::from)?;
     let on_hold = app_state
         .case_manager
-        .count_cases(&tenant_ctx.tenant_id, Some(CaseStatus::Hold), None, None, None)
+        .count_cases(
+            &tenant_ctx.tenant_id,
+            Some(CaseStatus::Hold),
+            None,
+            None,
+            None,
+        )
         .await
         .map_err(ApiError::from)?;
     let resolved = app_state
         .case_manager
-        .count_cases(&tenant_ctx.tenant_id, Some(CaseStatus::Closed), None, None, None)
+        .count_cases(
+            &tenant_ctx.tenant_id,
+            Some(CaseStatus::Closed),
+            None,
+            None,
+            None,
+        )
         .await
         .map_err(ApiError::from)?
         + app_state
             .case_manager
-            .count_cases(&tenant_ctx.tenant_id, Some(CaseStatus::Reported), None, None, None)
+            .count_cases(
+                &tenant_ctx.tenant_id,
+                Some(CaseStatus::Reported),
+                None,
+                None,
+                None,
+            )
             .await
             .map_err(ApiError::from)?
         + app_state
             .case_manager
-            .count_cases(&tenant_ctx.tenant_id, Some(CaseStatus::Released), None, None, None)
+            .count_cases(
+                &tenant_ctx.tenant_id,
+                Some(CaseStatus::Released),
+                None,
+                None,
+                None,
+            )
             .await
             .map_err(ApiError::from)?;
 
     let low = app_state
         .case_manager
-        .count_cases(&tenant_ctx.tenant_id, None, Some(CaseSeverity::Low), None, None)
+        .count_cases(
+            &tenant_ctx.tenant_id,
+            None,
+            Some(CaseSeverity::Low),
+            None,
+            None,
+        )
         .await
         .map_err(ApiError::from)?;
     let medium = app_state
         .case_manager
-        .count_cases(&tenant_ctx.tenant_id, None, Some(CaseSeverity::Medium), None, None)
+        .count_cases(
+            &tenant_ctx.tenant_id,
+            None,
+            Some(CaseSeverity::Medium),
+            None,
+            None,
+        )
         .await
         .map_err(ApiError::from)?;
     let high = app_state
         .case_manager
-        .count_cases(&tenant_ctx.tenant_id, None, Some(CaseSeverity::High), None, None)
+        .count_cases(
+            &tenant_ctx.tenant_id,
+            None,
+            Some(CaseSeverity::High),
+            None,
+            None,
+        )
         .await
         .map_err(ApiError::from)?;
     let critical = app_state
         .case_manager
-        .count_cases(&tenant_ctx.tenant_id, None, Some(CaseSeverity::Critical), None, None)
+        .count_cases(
+            &tenant_ctx.tenant_id,
+            None,
+            Some(CaseSeverity::Critical),
+            None,
+            None,
+        )
         .await
         .map_err(ApiError::from)?;
 
@@ -762,14 +821,8 @@ fn map_user_response(user: &UserRow) -> UserResponse {
         kyc_tier: user.kyc_tier,
         kyc_status: user.kyc_status.clone(),
         status: user.status.clone(),
-        daily_payin_limit_vnd: user
-            .daily_payin_limit_vnd
-            .unwrap_or_default()
-            .to_string(),
-        daily_payout_limit_vnd: user
-            .daily_payout_limit_vnd
-            .unwrap_or_default()
-            .to_string(),
+        daily_payin_limit_vnd: user.daily_payin_limit_vnd.unwrap_or_default().to_string(),
+        daily_payout_limit_vnd: user.daily_payout_limit_vnd.unwrap_or_default().to_string(),
         created_at: user.created_at.to_rfc3339(),
         updated_at: user.updated_at.to_rfc3339(),
     }

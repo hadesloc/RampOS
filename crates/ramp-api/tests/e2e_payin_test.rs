@@ -2,37 +2,37 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use chrono::Utc;
 use ramp_api::{create_router, AppState};
+use ramp_common::types::*;
+use ramp_compliance::reports::ReportGenerator;
+use ramp_compliance::storage::mock::MockDocumentStorage;
+use ramp_compliance::{case::CaseManager, InMemoryCaseStore};
+use ramp_core::repository::tenant::TenantRow;
+use ramp_core::repository::user::UserRow;
 use ramp_core::{
     event::InMemoryEventPublisher,
     repository::{
-        intent::{PgIntentRepository, IntentRepository},
-        ledger::{PgLedgerRepository, LedgerRepository},
+        intent::{IntentRepository, PgIntentRepository},
+        ledger::{LedgerRepository, PgLedgerRepository},
         tenant::{PgTenantRepository, TenantRepository},
         user::{PgUserRepository, UserRepository},
         webhook::PgWebhookRepository,
     },
     service::{
-        ledger::LedgerService, payin::PayinService, payout::PayoutService, trade::TradeService,
-        onboarding::OnboardingService, user::UserService,
+        ledger::LedgerService, onboarding::OnboardingService, payin::PayinService,
+        payout::PayoutService, trade::TradeService, user::UserService,
     },
 };
-use ramp_common::types::*;
+use rust_decimal::Decimal;
+use serde_json::json;
+use sha2::{Digest, Sha256};
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
-use tower::ServiceExt; // for oneshot
 use testcontainers::clients;
 use testcontainers_modules::postgres::Postgres;
-use serde_json::json;
-use chrono::Utc;
+use tower::ServiceExt; // for oneshot
 use uuid::Uuid;
-use sha2::{Sha256, Digest};
-use ramp_core::repository::tenant::TenantRow;
-use ramp_core::repository::user::UserRow;
-use rust_decimal::Decimal;
-use ramp_compliance::reports::ReportGenerator;
-use ramp_compliance::storage::mock::MockDocumentStorage;
-use ramp_compliance::{case::CaseManager, InMemoryCaseStore};
 
 #[tokio::test]
 async fn test_e2e_payin_flow() {
@@ -40,7 +40,10 @@ async fn test_e2e_payin_flow() {
     let docker = clients::Cli::default();
     let pg_container = docker.run(Postgres::default());
     let pg_port = pg_container.get_host_port_ipv4(5432);
-    let db_url = format!("postgres://postgres:postgres@127.0.0.1:{}/postgres", pg_port);
+    let db_url = format!(
+        "postgres://postgres:postgres@127.0.0.1:{}/postgres",
+        pg_port
+    );
 
     // 2. Setup Pool & Migrate
     let pool = PgPoolOptions::new()
@@ -72,36 +75,43 @@ async fn test_e2e_payin_flow() {
     let api_key_hash = hex::encode(hasher.finalize());
 
     // Create Tenant
-    tenant_repo.create(&TenantRow {
-        id: tenant_id.to_string(),
-        name: "E2E Test Tenant".to_string(),
-        status: "ACTIVE".to_string(),
-        api_key_hash: api_key_hash,
-        webhook_secret_hash: "secret".to_string(),
-        webhook_url: Some("http://localhost/webhook".to_string()),
-        config: json!({}),
-        daily_payin_limit_vnd: None,
-        daily_payout_limit_vnd: None,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-    }).await.expect("Failed to create tenant");
+    tenant_repo
+        .create(&TenantRow {
+            id: tenant_id.to_string(),
+            name: "E2E Test Tenant".to_string(),
+            status: "ACTIVE".to_string(),
+            api_key_hash: api_key_hash,
+            webhook_secret_hash: "secret".to_string(),
+            webhook_secret_encrypted: None,
+            webhook_url: Some("http://localhost/webhook".to_string()),
+            config: json!({}),
+            daily_payin_limit_vnd: None,
+            daily_payout_limit_vnd: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
+        .await
+        .expect("Failed to create tenant");
 
     // Create User
     let user_id = "user_e2e_1";
-    user_repo.create(&UserRow {
-        id: user_id.to_string(),
-        tenant_id: tenant_id.to_string(),
-        status: "ACTIVE".to_string(),
-        kyc_tier: 1,
-        kyc_status: "VERIFIED".to_string(),
-        kyc_verified_at: Some(Utc::now()),
-        risk_score: Some(Decimal::ZERO),
-        risk_flags: json!([]),
-        daily_payin_limit_vnd: None,
-        daily_payout_limit_vnd: None,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-    }).await.expect("Failed to create user");
+    user_repo
+        .create(&UserRow {
+            id: user_id.to_string(),
+            tenant_id: tenant_id.to_string(),
+            status: "ACTIVE".to_string(),
+            kyc_tier: 1,
+            kyc_status: "VERIFIED".to_string(),
+            kyc_verified_at: Some(Utc::now()),
+            risk_score: Some(Decimal::ZERO),
+            risk_flags: json!([]),
+            daily_payin_limit_vnd: None,
+            daily_payout_limit_vnd: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
+        .await
+        .expect("Failed to create user");
 
     // Create Rails Adapter (manually via SQL as it's config)
     sqlx::query(r#"
@@ -145,10 +155,7 @@ async fn test_e2e_payin_flow() {
         ledger_service.clone(),
     ));
 
-    let user_service = Arc::new(UserService::new(
-        user_repo.clone(),
-        event_publisher.clone(),
-    ));
+    let user_service = Arc::new(UserService::new(user_repo.clone(), event_publisher.clone()));
 
     let document_storage = Arc::new(MockDocumentStorage::new());
     let report_generator = Arc::new(ReportGenerator::new(pool.clone(), document_storage));
@@ -167,6 +174,7 @@ async fn test_e2e_payin_flow() {
         case_manager,
         rate_limiter: None,
         idempotency_handler: None,
+        aa_service: None,
     };
 
     let app = create_router(app_state);
@@ -194,7 +202,9 @@ async fn test_e2e_payin_flow() {
     let response = app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let resp_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     let intent_id = resp_json["intentId"].as_str().unwrap().to_string();
@@ -204,8 +214,11 @@ async fn test_e2e_payin_flow() {
     println!("Created Intent: {}, Status: {}", intent_id, status);
 
     // Verify State in DB
-    let intent_row = intent_repo.get_by_id(&TenantId::new(tenant_id), &IntentId(intent_id.clone()))
-        .await.unwrap().expect("Intent not found in DB");
+    let intent_row = intent_repo
+        .get_by_id(&TenantId::new(tenant_id), &IntentId(intent_id.clone()))
+        .await
+        .unwrap()
+        .expect("Intent not found in DB");
     // Initial state might be INSTRUCTION_ISSUED
     // We check it's not empty
     assert!(!intent_row.state.is_empty());
@@ -233,16 +246,15 @@ async fn test_e2e_payin_flow() {
     let response = app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let resp_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     assert_eq!(resp_json["status"], "COMPLETED");
 
     // Step 3: Verify Ledger
     let entries = ledger_repo
-        .get_entries_by_intent(
-            &TenantId::new(tenant_id),
-            &IntentId(intent_id.clone()),
-        )
+        .get_entries_by_intent(&TenantId::new(tenant_id), &IntentId(intent_id.clone()))
         .await
         .unwrap();
     assert!(entries.len() >= 2); // Debit Provider, Credit User
@@ -250,21 +262,23 @@ async fn test_e2e_payin_flow() {
     // Check for Credit to LIABILITY_USER_MAIN or LIABILITY_USER_VND depending on logic
     // Usually it is LIABILITY_USER_MAIN if we look at seed data, or LIABILITY_USER_VND
     // Let's check for any CREDIT entry with correct amount
-    let user_credit = entries.iter().find(|e|
-        e.direction == "CREDIT" &&
-        e.amount == Decimal::from(amount) &&
-        (e.account_type.contains("USER") || e.account_type.contains("LIABILITY"))
-    );
+    let user_credit = entries.iter().find(|e| {
+        e.direction == "CREDIT"
+            && e.amount == Decimal::from(amount)
+            && (e.account_type.contains("USER") || e.account_type.contains("LIABILITY"))
+    });
     assert!(user_credit.is_some(), "User liability should be credited");
 
     // Step 4: Verify Balance
     // We need to know the exact account type used by PayinService
     // Assuming defaults, it likely uses LIABILITY_USER_MAIN or similar
-    let balances = ledger_repo.get_user_balances(&TenantId::new(tenant_id), &UserId::new(user_id)).await.unwrap();
-    let user_balance = balances.iter().find(|b|
-        b.currency == "VND" &&
-        b.balance > Decimal::ZERO
-    );
+    let balances = ledger_repo
+        .get_user_balances(&TenantId::new(tenant_id), &UserId::new(user_id))
+        .await
+        .unwrap();
+    let user_balance = balances
+        .iter()
+        .find(|b| b.currency == "VND" && b.balance > Decimal::ZERO);
     assert!(user_balance.is_some());
     assert_eq!(user_balance.unwrap().balance, Decimal::from(amount));
 

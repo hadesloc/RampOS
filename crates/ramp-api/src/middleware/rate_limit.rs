@@ -6,7 +6,10 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 use tracing::warn;
 
 use crate::middleware::tenant::TenantContext;
@@ -55,7 +58,13 @@ pub enum RateLimitError {
 /// Abstract store for rate limiting
 #[async_trait::async_trait]
 pub trait RateLimitStore: Send + Sync {
-    async fn check(&self, key: &str, limit: u64, window_seconds: u64, key_prefix: &str) -> Result<RateLimitResult, RateLimitError>;
+    async fn check(
+        &self,
+        key: &str,
+        limit: u64,
+        window_seconds: u64,
+        key_prefix: &str,
+    ) -> Result<RateLimitResult, RateLimitError>;
 }
 
 /// Redis implementation of RateLimitStore
@@ -73,7 +82,13 @@ impl RedisRateLimitStore {
 
 #[async_trait::async_trait]
 impl RateLimitStore for RedisRateLimitStore {
-    async fn check(&self, key: &str, limit: u64, window_seconds: u64, key_prefix: &str) -> Result<RateLimitResult, RateLimitError> {
+    async fn check(
+        &self,
+        key: &str,
+        limit: u64,
+        window_seconds: u64,
+        key_prefix: &str,
+    ) -> Result<RateLimitResult, RateLimitError> {
         let full_key = format!("{}:{}", key_prefix, key);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -122,10 +137,10 @@ impl RateLimitStore for RedisRateLimitStore {
             .await;
 
         let result = result.map_err(|e| {
-                tracing::error!("Redis error during rate limit check: {}", e);
-                // Fail open on Redis error
-                RateLimitError::Store(e.to_string())
-            })?;
+            tracing::error!("Redis error during rate limit check: {}", e);
+            // Fail open on Redis error
+            RateLimitError::Store(e.to_string())
+        })?;
 
         if result[0] == 1 {
             Ok(RateLimitResult {
@@ -159,7 +174,13 @@ impl MemoryRateLimitStore {
 
 #[async_trait::async_trait]
 impl RateLimitStore for MemoryRateLimitStore {
-    async fn check(&self, key: &str, limit: u64, window_seconds: u64, key_prefix: &str) -> Result<RateLimitResult, RateLimitError> {
+    async fn check(
+        &self,
+        key: &str,
+        limit: u64,
+        window_seconds: u64,
+        key_prefix: &str,
+    ) -> Result<RateLimitResult, RateLimitError> {
         let full_key = format!("{}:{}", key_prefix, key);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -203,10 +224,7 @@ pub struct RateLimiter {
 
 impl RateLimiter {
     pub fn new(store: Arc<dyn RateLimitStore>, config: RateLimitConfig) -> Self {
-        Self {
-            store,
-            config,
-        }
+        Self { store, config }
     }
 
     /// Helper to create with Redis store
@@ -221,7 +239,14 @@ impl RateLimiter {
 
     /// Check if request is allowed against a specific limit
     pub async fn check(&self, key: &str, limit: u64) -> Result<RateLimitResult, RateLimitError> {
-        self.store.check(key, limit, self.config.window_seconds, &self.config.key_prefix).await
+        self.store
+            .check(
+                key,
+                limit,
+                self.config.window_seconds,
+                &self.config.key_prefix,
+            )
+            .await
     }
 }
 
@@ -238,7 +263,10 @@ pub async fn rate_limit_middleware(
 
     match global_result {
         Ok(result) if !result.allowed => {
-            warn!(reset_after = result.reset_after_seconds, "Global rate limit exceeded");
+            warn!(
+                reset_after = result.reset_after_seconds,
+                "Global rate limit exceeded"
+            );
             let mut response = Response::builder()
                 .status(StatusCode::TOO_MANY_REQUESTS)
                 .body(axum::body::Body::empty())
@@ -302,14 +330,12 @@ pub async fn rate_limit_middleware(
             "Retry-After",
             result.reset_after_seconds.to_string().parse().unwrap(),
         );
-        response.headers_mut().insert(
-            "X-RateLimit-Limit",
-            limit.to_string().parse().unwrap(),
-        );
-        response.headers_mut().insert(
-            "X-RateLimit-Remaining",
-            "0".parse().unwrap(),
-        );
+        response
+            .headers_mut()
+            .insert("X-RateLimit-Limit", limit.to_string().parse().unwrap());
+        response
+            .headers_mut()
+            .insert("X-RateLimit-Remaining", "0".parse().unwrap());
         response.headers_mut().insert(
             "X-RateLimit-Reset",
             result.reset_after_seconds.to_string().parse().unwrap(),
@@ -325,7 +351,11 @@ pub async fn rate_limit_middleware(
             Err(e) => {
                 warn!(error = ?e, "Rate limiter error (endpoint), allowing request");
                 // Fail open, but we passed tenant check
-                 RateLimitResult { allowed: true, remaining: 1, reset_after_seconds: 0 }
+                RateLimitResult {
+                    allowed: true,
+                    remaining: 1,
+                    reset_after_seconds: 0,
+                }
             }
         };
 
@@ -343,7 +373,11 @@ pub async fn rate_limit_middleware(
 
             response.headers_mut().insert(
                 "Retry-After",
-                endpoint_result.reset_after_seconds.to_string().parse().unwrap(),
+                endpoint_result
+                    .reset_after_seconds
+                    .to_string()
+                    .parse()
+                    .unwrap(),
             );
             return Ok(response);
         }
@@ -356,10 +390,9 @@ pub async fn rate_limit_middleware(
     let mut response = next.run(req).await;
 
     // Add rate limit headers (using tenant result)
-    response.headers_mut().insert(
-        "X-RateLimit-Limit",
-        limit.to_string().parse().unwrap(),
-    );
+    response
+        .headers_mut()
+        .insert("X-RateLimit-Limit", limit.to_string().parse().unwrap());
     response.headers_mut().insert(
         "X-RateLimit-Remaining",
         result.remaining.to_string().parse().unwrap(),

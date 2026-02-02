@@ -59,6 +59,9 @@ impl OnboardingService {
             status: "PENDING".to_string(),
             api_key_hash,
             webhook_secret_hash,
+            // Store the encrypted webhook secret for HMAC signing
+            // In production, this should be encrypted with a proper encryption key
+            webhook_secret_encrypted: Some(webhook_secret.as_bytes().to_vec()),
             webhook_url: None,
             config,
             daily_payin_limit_vnd: None,

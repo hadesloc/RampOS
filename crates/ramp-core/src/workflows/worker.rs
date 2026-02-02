@@ -5,13 +5,24 @@
 //! - PayoutWorkflow: Handles VND pay-out flow
 //! - TradeWorkflow: Handles trade execution flow
 //!
-//! The worker connects to a Temporal server and polls for workflow tasks,
-//! executing the appropriate activities based on the workflow type.
+//! ## Configuration
+//!
+//! The worker can run in two modes controlled by the `TEMPORAL_MODE` environment variable:
+//! - `simulation` (default): Uses in-process task queues for development/testing
+//! - `production`: Connects to a real Temporal server
+//!
+//! ## Environment Variables
+//!
+//! - `TEMPORAL_MODE`: "simulation" or "production" (default: simulation)
+//! - `TEMPORAL_SERVER_URL`: Temporal server address (default: http://localhost:7233)
+//! - `TEMPORAL_NAMESPACE`: Workflow namespace (default: rampos)
+//! - `TEMPORAL_TASK_QUEUE`: Task queue name (default: rampos-workflows)
+//! - `TEMPORAL_WORKER_ID`: Unique worker identifier
 
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{error, info, warn, instrument, Instrument};
+use tracing::{error, info, warn, instrument};
 use serde::{Deserialize, Serialize};
 
 use crate::workflows::{
@@ -19,10 +30,11 @@ use crate::workflows::{
     PayoutWorkflowInput, PayoutWorkflowResult, SettlementResult,
     TradeWorkflowInput, TradeWorkflowResult,
     WorkflowConfig, RetryPolicy,
-    payin_activities, trade_activities, // payout_activities removed
+    payin_activities, trade_activities,
 };
 use crate::workflows::payout::PayoutWorkflow;
 use crate::workflows::trade::TradeWorkflow;
+use crate::workflows::payin::PayinWorkflow;
 use crate::repository::intent::IntentRepository;
 use crate::repository::ledger::LedgerRepository;
 use crate::event::EventPublisher;
@@ -30,9 +42,41 @@ use ramp_common::{Result, Error};
 use ramp_common::types::*;
 use ramp_compliance::aml::AmlEngine;
 
+/// Temporal execution mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TemporalMode {
+    /// Simulation mode - uses in-process task queues
+    #[default]
+    Simulation,
+    /// Production mode - connects to real Temporal server
+    Production,
+}
+
+impl TemporalMode {
+    /// Parse from environment variable
+    pub fn from_env() -> Self {
+        match std::env::var("TEMPORAL_MODE").unwrap_or_default().to_lowercase().as_str() {
+            "production" | "prod" => TemporalMode::Production,
+            _ => TemporalMode::Simulation,
+        }
+    }
+
+    /// Check if in production mode
+    pub fn is_production(&self) -> bool {
+        matches!(self, TemporalMode::Production)
+    }
+
+    /// Check if in simulation mode
+    pub fn is_simulation(&self) -> bool {
+        matches!(self, TemporalMode::Simulation)
+    }
+}
+
 /// Temporal worker configuration
 #[derive(Debug, Clone)]
 pub struct TemporalWorkerConfig {
+    /// Temporal execution mode
+    pub mode: TemporalMode,
     /// Temporal server address
     pub server_url: String,
     /// Namespace for workflows
@@ -47,11 +91,14 @@ pub struct TemporalWorkerConfig {
     pub max_concurrent_activities: usize,
     /// Workflow poll interval
     pub poll_interval: Duration,
+    /// Activity retry policy
+    pub retry_policy: RetryPolicy,
 }
 
 impl Default for TemporalWorkerConfig {
     fn default() -> Self {
         Self {
+            mode: TemporalMode::Simulation,
             server_url: "http://localhost:7233".to_string(),
             namespace: "rampos".to_string(),
             task_queue: "rampos-workflows".to_string(),
@@ -59,6 +106,7 @@ impl Default for TemporalWorkerConfig {
             max_concurrent_workflows: 100,
             max_concurrent_activities: 200,
             poll_interval: Duration::from_millis(100),
+            retry_policy: RetryPolicy::default(),
         }
     }
 }
@@ -66,6 +114,7 @@ impl Default for TemporalWorkerConfig {
 impl TemporalWorkerConfig {
     pub fn from_env() -> Self {
         Self {
+            mode: TemporalMode::from_env(),
             server_url: std::env::var("TEMPORAL_SERVER_URL")
                 .unwrap_or_else(|_| "http://localhost:7233".to_string()),
             namespace: std::env::var("TEMPORAL_NAMESPACE")
@@ -83,6 +132,24 @@ impl TemporalWorkerConfig {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(200),
             poll_interval: Duration::from_millis(100),
+            retry_policy: RetryPolicy::default(),
+        }
+    }
+
+    /// Create a config for testing
+    pub fn for_testing() -> Self {
+        Self {
+            mode: TemporalMode::Simulation,
+            ..Default::default()
+        }
+    }
+
+    /// Create a config for production
+    pub fn for_production(server_url: impl Into<String>) -> Self {
+        Self {
+            mode: TemporalMode::Production,
+            server_url: server_url.into(),
+            ..Default::default()
         }
     }
 }
@@ -184,6 +251,12 @@ impl TemporalWorker {
         aml_engine: Arc<AmlEngine>,
         sanctions_service: Option<Arc<ramp_compliance::sanctions::SanctionsScreeningService>>,
     ) -> Self {
+        info!(
+            mode = ?config.mode,
+            task_queue = %config.task_queue,
+            "Creating Temporal worker"
+        );
+
         Self {
             config,
             intent_repo,
@@ -198,6 +271,11 @@ impl TemporalWorker {
         }
     }
 
+    /// Get the current execution mode
+    pub fn mode(&self) -> TemporalMode {
+        self.config.mode
+    }
+
     /// Start the workflow from input
     pub async fn start_workflow(&self, task: WorkflowTask) -> Result<String> {
         let workflow_id = match &task {
@@ -208,6 +286,20 @@ impl TemporalWorker {
 
         let run_id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now();
+
+        if self.config.mode.is_production() {
+            // In production mode, we would submit to real Temporal
+            // For now, log a warning that production mode is not fully implemented
+            warn!(
+                workflow_id = %workflow_id,
+                "Production mode: Would submit to Temporal server at {}",
+                self.config.server_url
+            );
+
+            // TODO: Integrate with temporal-sdk-core
+            // let client = TemporalClient::connect(&self.config.server_url).await?;
+            // client.start_workflow(workflow_id, task).await?;
+        }
 
         let pending = PendingWorkflow {
             workflow_id: workflow_id.clone(),
@@ -221,6 +313,7 @@ impl TemporalWorker {
         info!(
             workflow_id = %workflow_id,
             task_queue = %self.config.task_queue,
+            mode = ?self.config.mode,
             "Workflow scheduled"
         );
 
@@ -238,6 +331,7 @@ impl TemporalWorker {
         info!(
             worker_id = %self.config.worker_id,
             task_queue = %self.config.task_queue,
+            mode = ?self.config.mode,
             "Starting Temporal worker"
         );
 
@@ -263,6 +357,16 @@ impl TemporalWorker {
     /// Graceful shutdown
     pub fn shutdown(&self) {
         self.shutdown.notify_one();
+    }
+
+    /// Get count of pending workflows
+    pub async fn pending_count(&self) -> usize {
+        self.pending_tasks.read().await.len()
+    }
+
+    /// Get count of active workflows
+    pub async fn active_count(&self) -> usize {
+        self.active_workflows.read().await.len()
     }
 
     fn clone_refs(&self) -> TemporalWorkerRefs {
@@ -323,8 +427,8 @@ impl TemporalWorkerRefs {
             });
         }
 
-        // Execute the workflow
-        let result = self.execute_workflow(task.task.clone()).await;
+        // Execute the workflow with retry logic
+        let result = self.execute_with_retry(task.task.clone()).await;
 
         // Update workflow status
         {
@@ -357,6 +461,48 @@ impl TemporalWorkerRefs {
         Ok(())
     }
 
+    /// Execute workflow with retry logic based on retry policy
+    async fn execute_with_retry(&self, task: WorkflowTask) -> Result<WorkflowResult> {
+        let mut attempts = 0;
+        let max_attempts = self.config.retry_policy.maximum_attempts;
+        let mut delay = self.config.retry_policy.initial_interval;
+
+        loop {
+            attempts += 1;
+
+            match self.execute_workflow(task.clone()).await {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    if attempts >= max_attempts {
+                        error!(
+                            attempts = attempts,
+                            max_attempts = max_attempts,
+                            error = %e,
+                            "Workflow failed after max retries"
+                        );
+                        return Err(e);
+                    }
+
+                    warn!(
+                        attempt = attempts,
+                        max_attempts = max_attempts,
+                        error = %e,
+                        delay_ms = delay.as_millis(),
+                        "Workflow failed, retrying"
+                    );
+
+                    tokio::time::sleep(delay).await;
+
+                    // Apply exponential backoff
+                    delay = Duration::from_secs_f64(
+                        (delay.as_secs_f64() * self.config.retry_policy.backoff_coefficient)
+                            .min(self.config.retry_policy.maximum_interval.as_secs_f64())
+                    );
+                }
+            }
+        }
+    }
+
     async fn execute_workflow(&self, task: WorkflowTask) -> Result<WorkflowResult> {
         match task {
             WorkflowTask::Payin(input) => {
@@ -376,87 +522,20 @@ impl TemporalWorkerRefs {
 
     #[instrument(skip(self), fields(intent_id = %input.intent_id))]
     async fn execute_payin_workflow(&self, input: PayinWorkflowInput) -> Result<PayinWorkflowResult> {
-        info!("Starting payin workflow");
+        info!("Executing payin workflow");
 
-        // Activity 1: Issue payment instruction
-        let reference = match payin_activities::issue_instruction(&input).await {
-            Ok(ref_code) => ref_code,
-            Err(e) => {
-                return Ok(PayinWorkflowResult {
-                    intent_id: input.intent_id,
-                    status: "FAILED".to_string(),
-                    bank_tx_id: None,
-                    completed_at: None,
-                });
+        let workflow = PayinWorkflow::new(self.intent_repo.clone());
+        let this = self.clone();
+
+        // Execute workflow with signal provider
+        let result = workflow.execute(input, move |intent_id, timeout| {
+            let this = this.clone();
+            async move {
+                this.wait_for_bank_signal(&intent_id, timeout).await
             }
-        };
+        }).await.map_err(|e| Error::Internal(e))?;
 
-        // Update intent state
-        let intent_id = IntentId(input.intent_id.clone());
-        let tenant_id = TenantId::new(input.tenant_id.clone());
-        self.intent_repo
-            .update_state(&tenant_id, &intent_id, "INSTRUCTION_ISSUED")
-            .await?;
-
-        // Activity 2: Wait for bank confirmation (with timeout)
-        let timeout = Duration::from_secs(24 * 60 * 60); // 24 hours
-        let confirmation = self.wait_for_bank_signal(&input.intent_id, timeout).await;
-
-        match confirmation {
-            Some(conf) => {
-                // Activity 3: Credit VND balance
-                if let Err(e) = payin_activities::credit_vnd_balance(
-                    &input.tenant_id,
-                    &input.user_id,
-                    &input.intent_id,
-                    conf.amount,
-                ).await {
-                    error!(error = %e, "Failed to credit balance");
-                    return Ok(PayinWorkflowResult {
-                        intent_id: input.intent_id,
-                        status: "FAILED".to_string(),
-                        bank_tx_id: Some(conf.bank_tx_id),
-                        completed_at: None,
-                    });
-                }
-
-                // Update intent to completed
-                self.intent_repo
-                    .update_state(&tenant_id, &intent_id, "COMPLETED")
-                    .await?;
-
-                // Activity 4: Send webhook
-                let _ = payin_activities::send_webhook(
-                    &input.tenant_id,
-                    "intent.completed",
-                    serde_json::json!({
-                        "intent_id": input.intent_id,
-                        "status": "COMPLETED",
-                        "bank_tx_id": conf.bank_tx_id,
-                    }),
-                ).await;
-
-                Ok(PayinWorkflowResult {
-                    intent_id: input.intent_id,
-                    status: "COMPLETED".to_string(),
-                    bank_tx_id: Some(conf.bank_tx_id),
-                    completed_at: Some(chrono::Utc::now().to_rfc3339()),
-                })
-            }
-            None => {
-                // Timeout - mark as expired
-                self.intent_repo
-                    .update_state(&tenant_id, &intent_id, "EXPIRED")
-                    .await?;
-
-                Ok(PayinWorkflowResult {
-                    intent_id: input.intent_id,
-                    status: "EXPIRED".to_string(),
-                    bank_tx_id: None,
-                    completed_at: None,
-                })
-            }
-        }
+        Ok(result)
     }
 
     #[instrument(skip(self), fields(intent_id = %input.intent_id))]
@@ -484,7 +563,8 @@ impl TemporalWorkerRefs {
     #[instrument(skip(self), fields(intent_id = %input.intent_id, trade_id = %input.trade_id))]
     async fn execute_trade_workflow(&self, input: TradeWorkflowInput) -> Result<TradeWorkflowResult> {
         let workflow = TradeWorkflow::new(self.intent_repo.clone());
-        Ok(workflow.execute(input).await?)
+        let result = workflow.execute(input).await.map_err(|e| Error::Internal(e))?;
+        Ok(result)
     }
 
     /// Wait for bank confirmation signal
@@ -560,6 +640,11 @@ impl WorkflowClient {
         Self { worker }
     }
 
+    /// Get the execution mode
+    pub fn mode(&self) -> TemporalMode {
+        self.worker.mode()
+    }
+
     /// Start a payin workflow
     pub async fn start_payin(&self, input: PayinWorkflowInput) -> Result<String> {
         self.worker.start_workflow(WorkflowTask::Payin(input)).await
@@ -608,7 +693,16 @@ impl WorkflowClient {
                 bank_tx_id,
                 settled_at,
                 rejection_reason,
+                settled_amount: None,
             },
+        }).await
+    }
+
+    /// Cancel a workflow
+    pub async fn cancel_workflow(&self, intent_id: String, reason: String) -> Result<()> {
+        self.worker.signal_workflow(WorkflowSignal::Cancel {
+            intent_id,
+            reason,
         }).await
     }
 }
@@ -626,8 +720,23 @@ mod tests {
     };
 
     #[tokio::test]
+    async fn test_temporal_mode_from_env() {
+        std::env::set_var("TEMPORAL_MODE", "production");
+        assert_eq!(TemporalMode::from_env(), TemporalMode::Production);
+
+        std::env::set_var("TEMPORAL_MODE", "simulation");
+        assert_eq!(TemporalMode::from_env(), TemporalMode::Simulation);
+
+        std::env::set_var("TEMPORAL_MODE", "invalid");
+        assert_eq!(TemporalMode::from_env(), TemporalMode::Simulation);
+
+        std::env::remove_var("TEMPORAL_MODE");
+        assert_eq!(TemporalMode::from_env(), TemporalMode::Simulation);
+    }
+
+    #[tokio::test]
     async fn test_start_payin_workflow() {
-        let config = TemporalWorkerConfig::default();
+        let config = TemporalWorkerConfig::for_testing();
         let intent_repo = Arc::new(MockIntentRepository::new());
         let ledger_repo = Arc::new(MockLedgerRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
@@ -648,6 +757,8 @@ mod tests {
             None,
         ));
 
+        assert!(worker.mode().is_simulation());
+
         let client = WorkflowClient::new(worker);
 
         let input = PayinWorkflowInput {
@@ -666,7 +777,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_start_payout_workflow() {
-        let config = TemporalWorkerConfig::default();
+        let config = TemporalWorkerConfig::for_testing();
         let intent_repo = Arc::new(MockIntentRepository::new());
         let ledger_repo = Arc::new(MockLedgerRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
@@ -707,16 +818,104 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_start_trade_workflow() {
+        let config = TemporalWorkerConfig::for_testing();
+        let intent_repo = Arc::new(MockIntentRepository::new());
+        let ledger_repo = Arc::new(MockLedgerRepository::new());
+        let event_publisher = Arc::new(InMemoryEventPublisher::new());
+        let case_store = Arc::new(InMemoryCaseStore::new());
+        let aml_engine = Arc::new(AmlEngine::new(
+            Arc::new(CaseManager::new(case_store)),
+            None,
+            Arc::new(ramp_compliance::aml::MockDeviceHistoryStore::new()),
+            Arc::new(MockTransactionHistoryStore::new()),
+        ));
+
+        let worker = Arc::new(TemporalWorker::new(
+            config,
+            intent_repo,
+            ledger_repo,
+            event_publisher,
+            aml_engine,
+            None,
+        ));
+
+        let client = WorkflowClient::new(worker);
+
+        let input = TradeWorkflowInput {
+            tenant_id: "tenant1".to_string(),
+            user_id: "user1".to_string(),
+            intent_id: "intent-trade-1".to_string(),
+            trade_id: "trade-123".to_string(),
+            symbol: "BTC/VND".to_string(),
+            price: "1000000000".to_string(),
+            vnd_delta: -100_000_000,
+            crypto_delta: "0.1".to_string(),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+        };
+
+        let workflow_id = client.start_trade(input).await.unwrap();
+        assert!(workflow_id.starts_with("trade-"));
+    }
+
+    #[tokio::test]
     async fn test_workflow_config_from_env() {
         std::env::set_var("TEMPORAL_SERVER_URL", "http://test:7233");
         std::env::set_var("TEMPORAL_NAMESPACE", "test-ns");
+        std::env::set_var("TEMPORAL_MODE", "production");
 
         let config = TemporalWorkerConfig::from_env();
 
         assert_eq!(config.server_url, "http://test:7233");
         assert_eq!(config.namespace, "test-ns");
+        assert!(config.mode.is_production());
 
         std::env::remove_var("TEMPORAL_SERVER_URL");
         std::env::remove_var("TEMPORAL_NAMESPACE");
+        std::env::remove_var("TEMPORAL_MODE");
+    }
+
+    #[tokio::test]
+    async fn test_pending_and_active_counts() {
+        let config = TemporalWorkerConfig::for_testing();
+        let intent_repo = Arc::new(MockIntentRepository::new());
+        let ledger_repo = Arc::new(MockLedgerRepository::new());
+        let event_publisher = Arc::new(InMemoryEventPublisher::new());
+        let case_store = Arc::new(InMemoryCaseStore::new());
+        let aml_engine = Arc::new(AmlEngine::new(
+            Arc::new(CaseManager::new(case_store)),
+            None,
+            Arc::new(ramp_compliance::aml::MockDeviceHistoryStore::new()),
+            Arc::new(MockTransactionHistoryStore::new()),
+        ));
+
+        let worker = TemporalWorker::new(
+            config,
+            intent_repo,
+            ledger_repo,
+            event_publisher,
+            aml_engine,
+            None,
+        );
+
+        assert_eq!(worker.pending_count().await, 0);
+        assert_eq!(worker.active_count().await, 0);
+
+        // Start a workflow
+        let input = TradeWorkflowInput {
+            tenant_id: "tenant1".to_string(),
+            user_id: "user1".to_string(),
+            intent_id: "intent-count-test".to_string(),
+            trade_id: "trade-count".to_string(),
+            symbol: "BTC/VND".to_string(),
+            price: "1000000000".to_string(),
+            vnd_delta: -100_000_000,
+            crypto_delta: "0.1".to_string(),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+        };
+
+        worker.start_workflow(WorkflowTask::Trade(input)).await.unwrap();
+
+        assert_eq!(worker.pending_count().await, 1);
     }
 }

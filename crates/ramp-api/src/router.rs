@@ -24,6 +24,7 @@ use ramp_core::service::{
 };
 
 use crate::handlers;
+use crate::handlers::aa::AAServiceState;
 use crate::middleware::{
     auth_middleware, idempotency_middleware, rate_limit_middleware, request_id_middleware,
     IdempotencyHandler, RateLimiter,
@@ -48,6 +49,7 @@ pub struct AppState {
     pub case_manager: Arc<CaseManager>,
     pub rate_limiter: Option<Arc<RateLimiter>>,
     pub idempotency_handler: Option<Arc<IdempotencyHandler>>,
+    pub aa_service: Option<AAServiceState>,
 }
 
 /// Create the API router with full middleware stack
@@ -192,12 +194,40 @@ pub fn create_router(state: AppState) -> Router {
         .merge(tier_routes)
         .nest("/reports", report_routes);
 
+    // Account Abstraction (AA) routes
+    // SECURITY: AA routes have stricter rate limiting due to expensive on-chain operations
+    let aa_routes = if let Some(ref aa_service) = state.aa_service {
+        let mut aa_router = Router::new()
+            .route("/accounts", post(handlers::aa::create_account))
+            .route("/accounts/:address", get(handlers::aa::get_account))
+            .route("/user-operations", post(handlers::aa::send_user_operation))
+            .route("/user-operations/estimate", post(handlers::aa::estimate_gas))
+            .route("/user-operations/:hash", get(handlers::aa::get_user_operation))
+            .route("/user-operations/:hash/receipt", get(handlers::aa::get_user_operation_receipt))
+            .with_state(aa_service.clone());
+
+        // SECURITY FIX: Apply stricter rate limiting to AA routes
+        // AA operations are expensive (on-chain transactions), so we need tighter limits
+        if let Some(ref limiter) = state.rate_limiter {
+            aa_router = aa_router.layer(middleware::from_fn_with_state(
+                limiter.clone(),
+                rate_limit_middleware,
+            ));
+        }
+
+        aa_router
+    } else {
+        // AA service not configured
+        Router::new()
+    };
+
     // API v1 routes with authentication
     let mut api_v1 = Router::new()
         .nest("/intents", intent_routes)
         .nest("/events", event_routes)
         .nest("/balance", balance_routes)
         .nest("/admin", admin_routes)
+        .nest("/aa", aa_routes)
         .layer(middleware::from_fn_with_state(
             state.tenant_repo.clone(),
             auth_middleware,

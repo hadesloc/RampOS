@@ -15,27 +15,19 @@ use ramp_core::{
     event::InMemoryEventPublisher,
     jobs::intent_timeout::IntentTimeoutJob,
     repository::{
-        intent::PgIntentRepository,
-        ledger::PgLedgerRepository,
-        tenant::PgTenantRepository,
-        user::PgUserRepository,
-        webhook::PgWebhookRepository,
+        intent::PgIntentRepository, ledger::PgLedgerRepository, tenant::PgTenantRepository,
+        user::PgUserRepository, webhook::PgWebhookRepository,
     },
     service::{
-        ledger::LedgerService,
-        payin::PayinService,
-        payout::PayoutService,
-        trade::TradeService,
-        webhook::WebhookService,
-        onboarding::OnboardingService,
-        user::UserService,
+        ledger::LedgerService, onboarding::OnboardingService, payin::PayinService,
+        payout::PayoutService, trade::TradeService, user::UserService, webhook::WebhookService,
     },
 };
 
 use ramp_compliance::case::CaseManager;
 use ramp_compliance::reports::ReportGenerator;
-use ramp_compliance::store::postgres::PostgresCaseStore;
 use ramp_compliance::storage::S3DocumentStorage;
+use ramp_compliance::store::postgres::PostgresCaseStore;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -101,10 +93,7 @@ async fn main() -> anyhow::Result<()> {
         ledger_service.clone(),
     ));
 
-    let user_service = Arc::new(UserService::new(
-        user_repo.clone(),
-        event_publisher.clone(),
-    ));
+    let user_service = Arc::new(UserService::new(user_repo.clone(), event_publisher.clone()));
 
     // Create ReportGenerator
     // For now we use S3DocumentStorage, config should have s3 info but it is mocked/assumed for now
@@ -136,8 +125,7 @@ async fn main() -> anyhow::Result<()> {
     let case_manager = Arc::new(CaseManager::new(case_store));
 
     // Create Redis connection and idempotency handler
-    let redis_client = redis::Client::open(config.redis.url.as_str())
-        .expect("Invalid Redis URL");
+    let redis_client = redis::Client::open(config.redis.url.as_str()).expect("Invalid Redis URL");
     let redis_manager = redis::aio::ConnectionManager::new(redis_client)
         .await
         .expect("Failed to connect to Redis");
@@ -166,6 +154,7 @@ async fn main() -> anyhow::Result<()> {
         case_manager: case_manager.clone(),
         rate_limiter: Some(rate_limiter),
         idempotency_handler: Some(idempotency_handler),
+        aa_service: None, // AA service temporarily disabled
     };
 
     // Create router

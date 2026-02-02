@@ -11,7 +11,7 @@ http-client = ["reqwest"]
 
 [dependencies]
 ramp-common = { path = "../ramp-common" }
-ramp-compliance = { path = "../ramp-compliance" }
+ramp-compliance = { path = "../ramp-compliance", features = ["testing"] }
 ramp-adapter = { path = "../ramp-adapter" }
 ramp-ledger = { path = "../ramp-ledger" }
 

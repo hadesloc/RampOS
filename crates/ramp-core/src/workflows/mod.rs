@@ -9,14 +9,19 @@
 //! The actual Temporal SDK integration requires the temporal-sdk crate.
 
 use std::time::Duration;
-use ramp_common::types::*;
 use serde::{Deserialize, Serialize};
 
 pub mod worker;
 pub mod payout;
 pub mod trade;
+pub mod payin;
+pub mod activities;
+pub mod compensation;
 
 pub use payout::{PayoutWorkflowInput, PayoutWorkflowResult, BankAccountInfo, SettlementResult};
+pub use payin::PayinWorkflow;
+pub use activities::{payin_activities, trade_activities};
+pub use compensation::{CompensationAction, CompensationChain};
 
 /// Payin workflow input
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,65 +42,6 @@ pub struct PayinWorkflowResult {
     pub status: String,
     pub bank_tx_id: Option<String>,
     pub completed_at: Option<String>,
-}
-
-/// Payin workflow activities
-pub mod payin_activities {
-    use super::*;
-
-    /// Activity: Issue payment instruction to user
-    pub async fn issue_instruction(input: &PayinWorkflowInput) -> Result<String, String> {
-        // In production: Generate virtual account, QR code, or bank transfer instructions
-        tracing::info!(
-            intent_id = %input.intent_id,
-            "Issuing payment instruction"
-        );
-        Ok(input.reference_code.clone())
-    }
-
-    /// Activity: Wait for bank confirmation (webhook)
-    pub async fn wait_for_bank_confirmation(
-        intent_id: &str,
-        timeout: Duration,
-    ) -> Result<BankConfirmation, String> {
-        // In production: This would be a signal handler waiting for webhook
-        tracing::info!(
-            intent_id = %intent_id,
-            "Waiting for bank confirmation"
-        );
-
-        // Placeholder - would be signaled by webhook handler
-        Err("Timeout waiting for confirmation".to_string())
-    }
-
-    /// Activity: Credit user's VND balance
-    pub async fn credit_vnd_balance(
-        tenant_id: &str,
-        user_id: &str,
-        intent_id: &str,
-        amount: i64,
-    ) -> Result<(), String> {
-        tracing::info!(
-            intent_id = %intent_id,
-            amount = %amount,
-            "Crediting VND balance"
-        );
-        Ok(())
-    }
-
-    /// Activity: Send webhook notification
-    pub async fn send_webhook(
-        tenant_id: &str,
-        event_type: &str,
-        payload: serde_json::Value,
-    ) -> Result<(), String> {
-        tracing::info!(
-            tenant_id = %tenant_id,
-            event_type = %event_type,
-            "Sending webhook notification"
-        );
-        Ok(())
-    }
 }
 
 /// Bank confirmation signal data
@@ -127,47 +73,6 @@ pub struct TradeWorkflowResult {
     pub status: String,
     pub completed_at: Option<String>,
     pub compliance_hold: bool,
-}
-
-/// Trade workflow activities
-pub mod trade_activities {
-    use super::*;
-
-    /// Activity: Run post-trade compliance check
-    pub async fn run_post_trade_check(input: &TradeWorkflowInput) -> Result<bool, String> {
-        tracing::info!(
-            trade_id = %input.trade_id,
-            symbol = %input.symbol,
-            "Running post-trade compliance check"
-        );
-
-        // Check for wash trading, unusual patterns, etc.
-        // Flag large trades for review
-        let vnd_abs = input.vnd_delta.abs();
-        Ok(vnd_abs <= 1_000_000_000) // 1B VND threshold
-    }
-
-    /// Activity: Settle trade in ledger
-    pub async fn settle_in_ledger(input: &TradeWorkflowInput) -> Result<(), String> {
-        tracing::info!(
-            trade_id = %input.trade_id,
-            "Settling trade in ledger"
-        );
-        Ok(())
-    }
-
-    /// Activity: Flag for manual review
-    pub async fn flag_for_review(
-        intent_id: &str,
-        reason: &str,
-    ) -> Result<String, String> {
-        tracing::info!(
-            intent_id = %intent_id,
-            reason = %reason,
-            "Flagging trade for manual review"
-        );
-        Ok(format!("CASE_{}", intent_id))
-    }
 }
 
 /// Workflow configuration

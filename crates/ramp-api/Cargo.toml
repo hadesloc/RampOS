@@ -11,7 +11,9 @@ path = "src/main.rs"
 ramp-common = { path = "../ramp-common" }
 ramp-core = { path = "../ramp-core" }
 ramp-compliance = { path = "../ramp-compliance" }
+ramp-aa = { path = "../ramp-aa" }
 
+ethers = { workspace = true }
 tokio = { workspace = true }
 axum = { workspace = true }
 axum-extra = { workspace = true }
@@ -44,3 +46,4 @@ testcontainers = "0.15"
 testcontainers-modules = { version = "0.3", features = ["postgres", "redis"] }
 reqwest = { version = "0.11", features = ["json"] }
 rust_decimal_macros = "1.33"
+tower = { version = "0.4", features = ["util"] }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Table,
   TableBody,
@@ -9,14 +9,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,123 +19,30 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { MoreHorizontal, Download, Filter, Eye } from "lucide-react";
-
-// Types
-interface Transaction {
-  id: string;
-  date: string;
-  type: "DEPOSIT" | "WITHDRAW" | "TRADE";
-  amount: string;
-  currency: string;
-  status: "COMPLETED" | "PENDING" | "FAILED";
-  reference: string;
-  details?: string;
-}
-
-// Mock Data
-const mockTransactions: Transaction[] = [
-  {
-    id: "tx_01HYJ2K3N4P5Q6R7S8T9U0A",
-    date: "2026-01-28T10:30:00Z",
-    type: "DEPOSIT",
-    amount: "50000000",
-    currency: "VND",
-    status: "COMPLETED",
-    reference: "DEP-20260128-001",
-    details: "Bank Transfer - Vietcombank",
-  },
-  {
-    id: "tx_01HYJ2K3N4P5Q6R7S8T9U0B",
-    date: "2026-01-28T11:15:00Z",
-    type: "TRADE",
-    amount: "0.5",
-    currency: "ETH",
-    status: "COMPLETED",
-    reference: "TRD-20260128-002",
-    details: "Buy ETH/VND @ 65,000,000",
-  },
-  {
-    id: "tx_01HYJ2K3N4P5Q6R7S8T9U0C",
-    date: "2026-01-27T09:45:00Z",
-    type: "WITHDRAW",
-    amount: "20000000",
-    currency: "VND",
-    status: "PENDING",
-    reference: "WDR-20260127-003",
-    details: "Withdraw to Techcombank",
-  },
-  {
-    id: "tx_01HYJ2K3N4P5Q6R7S8T9U0D",
-    date: "2026-01-26T15:20:00Z",
-    type: "TRADE",
-    amount: "1000",
-    currency: "USDT",
-    status: "FAILED",
-    reference: "TRD-20260126-004",
-    details: "Sell USDT/VND @ 25,400",
-  },
-  {
-    id: "tx_01HYJ2K3N4P5Q6R7S8T9U0E",
-    date: "2026-01-25T14:10:00Z",
-    type: "DEPOSIT",
-    amount: "100000000",
-    currency: "VND",
-    status: "COMPLETED",
-    reference: "DEP-20260125-005",
-    details: "Bank Transfer - MBBank",
-  },
-  {
-    id: "tx_01HYJ2K3N4P5Q6R7S8T9U0F",
-    date: "2026-01-24T08:00:00Z",
-    type: "WITHDRAW",
-    amount: "0.1",
-    currency: "BTC",
-    status: "COMPLETED",
-    reference: "WDR-20260124-006",
-    details: "Withdraw to External Wallet",
-  },
-  {
-    id: "tx_01HYJ2K3N4P5Q6R7S8T9U0G",
-    date: "2026-01-23T16:45:00Z",
-    type: "TRADE",
-    amount: "500",
-    currency: "USDC",
-    status: "COMPLETED",
-    reference: "TRD-20260123-007",
-    details: "Buy USDC/VND @ 25,350",
-  },
-  {
-    id: "tx_01HYJ2K3N4P5Q6R7S8T9U0H",
-    date: "2026-01-22T11:30:00Z",
-    type: "DEPOSIT",
-    amount: "25000000",
-    currency: "VND",
-    status: "COMPLETED",
-    reference: "DEP-20260122-008",
-    details: "Bank Transfer - VPBank",
-  },
-  {
-    id: "tx_01HYJ2K3N4P5Q6R7S8T9U0I",
-    date: "2026-01-21T09:15:00Z",
-    type: "WITHDRAW",
-    amount: "15000000",
-    currency: "VND",
-    status: "COMPLETED",
-    reference: "WDR-20260121-009",
-    details: "Withdraw to ACB",
-  },
-  {
-    id: "tx_01HYJ2K3N4P5Q6R7S8T9U0J",
-    date: "2026-01-20T13:20:00Z",
-    type: "TRADE",
-    amount: "2.5",
-    currency: "ETH",
-    status: "COMPLETED",
-    reference: "TRD-20260120-010",
-    details: "Sell ETH/VND @ 64,500,000",
-  },
-];
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Download,
+  Eye,
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  ExternalLink,
+} from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
+import {
+  transactionApi,
+  Transaction,
+  TransactionFilters,
+  PaginatedResponse,
+} from "@/lib/portal-api";
+import { useRouter } from "next/navigation";
 
 // Helper Functions
 function formatCurrency(amount: string, currency: string): string {
@@ -156,11 +55,12 @@ function formatCurrency(amount: string, currency: string): string {
       maximumFractionDigits: 0,
     }).format(num);
   }
-  // For crypto currencies, just format the number
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 8,
-  }).format(num) + ` ${currency}`;
+  return (
+    new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 8,
+    }).format(num) + ` ${currency}`
+  );
 }
 
 function formatDate(dateStr: string): string {
@@ -178,8 +78,10 @@ function getStatusColor(status: string): string {
     case "COMPLETED":
       return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
     case "PENDING":
+    case "PROCESSING":
       return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
     case "FAILED":
+    case "CANCELLED":
       return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
@@ -200,53 +102,110 @@ function getTypeLabel(type: string): string {
 }
 
 export default function TransactionsPage() {
-  const [transactions] = useState<Transaction[]>(mockTransactions);
-  const [filters, setFilters] = useState({
-    type: "ALL",
-    status: "ALL",
-    dateFrom: "",
-    dateTo: "",
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    perPage: 10,
+    total: 0,
+    totalPages: 0,
+  });
+  const [filters, setFilters] = useState<TransactionFilters>({
+    type: undefined,
+    status: undefined,
+    startDate: undefined,
+    endDate: undefined,
   });
   const [search, setSearch] = useState("");
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Filter Logic
-  const filteredTransactions = transactions.filter((tx) => {
-    // Search
-    if (
-      search &&
-      !tx.id.toLowerCase().includes(search.toLowerCase()) &&
-      !tx.reference.toLowerCase().includes(search.toLowerCase())
-    ) {
-      return false;
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push("/portal/login");
     }
+  }, [authLoading, isAuthenticated, router]);
 
-    // Type Filter
-    if (filters.type !== "ALL" && tx.type !== filters.type) return false;
+  // Fetch transactions
+  const fetchTransactions = useCallback(
+    async (showRefreshing = false) => {
+      if (showRefreshing) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
 
-    // Status Filter
-    if (filters.status !== "ALL" && tx.status !== filters.status) return false;
+      try {
+        const response: PaginatedResponse<Transaction> =
+          await transactionApi.listTransactions({
+            ...filters,
+            page: pagination.page,
+            perPage: pagination.perPage,
+          });
 
-    // Date Filter
-    if (filters.dateFrom && new Date(tx.date) < new Date(filters.dateFrom))
-      return false;
-    if (
-      filters.dateTo &&
-      new Date(tx.date) > new Date(new Date(filters.dateTo).setHours(23, 59, 59))
-    )
-      return false;
+        setTransactions(response.data);
+        setPagination((prev) => ({
+          ...prev,
+          total: response.total,
+          totalPages: response.totalPages,
+        }));
+      } catch (err) {
+        console.error("Failed to fetch transactions:", err);
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [filters, pagination.page, pagination.perPage]
+  );
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchTransactions();
+    }
+  }, [isAuthenticated, fetchTransactions]);
+
+  // Filter transactions by search (client-side for reference field)
+  const filteredTransactions = transactions.filter((tx) => {
+    if (search) {
+      return (
+        tx.id.toLowerCase().includes(search.toLowerCase()) ||
+        tx.reference.toLowerCase().includes(search.toLowerCase())
+      );
+    }
     return true;
   });
 
+  const handlePageChange = (newPage: number) => {
+    setPagination((prev) => ({ ...prev, page: newPage }));
+  };
+
+  const handleFilterChange = (key: keyof TransactionFilters, value: string) => {
+    setFilters((prev) => ({
+      ...prev,
+      [key]: value === "ALL" ? undefined : value,
+    }));
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
+
   const handleExport = () => {
-    // Mock export functionality
-    const headers = ["Date", "Type", "Amount", "Currency", "Status", "Reference"];
+    const headers = [
+      "Date",
+      "Type",
+      "Amount",
+      "Currency",
+      "Status",
+      "Reference",
+    ];
     const csvContent = [
       headers.join(","),
       ...filteredTransactions.map((tx) =>
         [
-          tx.date,
+          tx.createdAt,
           tx.type,
           tx.amount,
           tx.currency,
@@ -260,11 +219,25 @@ export default function TransactionsPage() {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `transactions_${new Date().toISOString()}.csv`);
+    link.setAttribute(
+      "download",
+      `transactions_${new Date().toISOString()}.csv`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
+
+  // Show loading state
+  if (authLoading || isLoading) {
+    return (
+      <div className="space-y-6 p-6">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-6">
@@ -285,40 +258,63 @@ export default function TransactionsPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
 
-          <select
-            className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            value={filters.type}
-            onChange={(e) => setFilters({ ...filters, type: e.target.value })}
+          <Select
+            value={filters.type || "ALL"}
+            onValueChange={(value) => handleFilterChange("type", value)}
           >
-            <option value="ALL">All Types</option>
-            <option value="DEPOSIT">Deposit</option>
-            <option value="WITHDRAW">Withdraw</option>
-            <option value="TRADE">Trade</option>
-          </select>
+            <SelectTrigger className="w-full md:w-[150px]">
+              <SelectValue placeholder="All Types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Types</SelectItem>
+              <SelectItem value="DEPOSIT">Deposit</SelectItem>
+              <SelectItem value="WITHDRAW">Withdraw</SelectItem>
+              <SelectItem value="TRADE">Trade</SelectItem>
+            </SelectContent>
+          </Select>
 
-          <select
-            className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            value={filters.status}
-            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+          <Select
+            value={filters.status || "ALL"}
+            onValueChange={(value) => handleFilterChange("status", value)}
           >
-            <option value="ALL">All Statuses</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="PENDING">Pending</option>
-            <option value="FAILED">Failed</option>
-          </select>
+            <SelectTrigger className="w-full md:w-[150px]">
+              <SelectValue placeholder="All Statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Statuses</SelectItem>
+              <SelectItem value="COMPLETED">Completed</SelectItem>
+              <SelectItem value="PENDING">Pending</SelectItem>
+              <SelectItem value="PROCESSING">Processing</SelectItem>
+              <SelectItem value="FAILED">Failed</SelectItem>
+              <SelectItem value="CANCELLED">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
 
           <Input
             type="date"
             className="w-full md:w-[150px]"
-            value={filters.dateFrom}
-            onChange={(e) => setFilters({...filters, dateFrom: e.target.value})}
+            value={filters.startDate || ""}
+            onChange={(e) => handleFilterChange("startDate", e.target.value)}
+            placeholder="From date"
           />
         </div>
 
-        <Button variant="outline" onClick={handleExport}>
-          <Download className="mr-2 h-4 w-4" />
-          Export CSV
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => fetchTransactions(true)}
+            disabled={isRefreshing}
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+            />
+          </Button>
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
+        </div>
       </div>
 
       {/* Transaction Table */}
@@ -339,7 +335,7 @@ export default function TransactionsPage() {
               filteredTransactions.map((tx) => (
                 <TableRow key={tx.id}>
                   <TableCell className="font-medium">
-                    {formatDate(tx.date)}
+                    {formatDate(tx.createdAt)}
                   </TableCell>
                   <TableCell className="font-mono text-sm">
                     {tx.reference}
@@ -364,7 +360,11 @@ export default function TransactionsPage() {
                   <TableCell>
                     <Dialog>
                       <DialogTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => setSelectedTx(tx)}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setSelectedTx(tx)}
+                        >
                           <Eye className="h-4 w-4" />
                         </Button>
                       </DialogTrigger>
@@ -390,7 +390,7 @@ export default function TransactionsPage() {
                                 Date
                               </span>
                               <span className="col-span-3 text-sm">
-                                {formatDate(selectedTx.date)}
+                                {formatDate(selectedTx.createdAt)}
                               </span>
                             </div>
                             <div className="grid grid-cols-4 items-center gap-4">
@@ -406,9 +406,25 @@ export default function TransactionsPage() {
                                 Amount
                               </span>
                               <span className="col-span-3 font-mono text-sm font-bold">
-                                {formatCurrency(selectedTx.amount, selectedTx.currency)}
+                                {formatCurrency(
+                                  selectedTx.amount,
+                                  selectedTx.currency
+                                )}
                               </span>
                             </div>
+                            {selectedTx.fee && (
+                              <div className="grid grid-cols-4 items-center gap-4">
+                                <span className="text-sm font-medium text-muted-foreground text-right">
+                                  Fee
+                                </span>
+                                <span className="col-span-3 font-mono text-sm">
+                                  {formatCurrency(
+                                    selectedTx.fee,
+                                    selectedTx.currency
+                                  )}
+                                </span>
+                              </div>
+                            )}
                             <div className="grid grid-cols-4 items-center gap-4">
                               <span className="text-sm font-medium text-muted-foreground text-right">
                                 Status
@@ -423,14 +439,36 @@ export default function TransactionsPage() {
                                 </span>
                               </span>
                             </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                              <span className="text-sm font-medium text-muted-foreground text-right">
-                                Details
-                              </span>
-                              <span className="col-span-3 text-sm">
-                                {selectedTx.details}
-                              </span>
-                            </div>
+                            {selectedTx.details && (
+                              <div className="grid grid-cols-4 items-center gap-4">
+                                <span className="text-sm font-medium text-muted-foreground text-right">
+                                  Details
+                                </span>
+                                <span className="col-span-3 text-sm">
+                                  {selectedTx.details}
+                                </span>
+                              </div>
+                            )}
+                            {selectedTx.txHash && (
+                              <div className="grid grid-cols-4 items-center gap-4">
+                                <span className="text-sm font-medium text-muted-foreground text-right">
+                                  Tx Hash
+                                </span>
+                                <span className="col-span-3 flex items-center gap-2">
+                                  <span className="font-mono text-xs text-muted-foreground truncate max-w-[200px]">
+                                    {selectedTx.txHash}
+                                  </span>
+                                  <a
+                                    href={`https://tronscan.org/#/transaction/${selectedTx.txHash}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-primary hover:underline"
+                                  >
+                                    <ExternalLink className="h-4 w-4" />
+                                  </a>
+                                </span>
+                              </div>
+                            )}
                             <div className="grid grid-cols-4 items-center gap-4">
                               <span className="text-sm font-medium text-muted-foreground text-right">
                                 ID
@@ -457,14 +495,37 @@ export default function TransactionsPage() {
         </Table>
       </div>
 
-      {/* Pagination (Mock) */}
-      <div className="flex items-center justify-end space-x-2 py-4">
-        <Button variant="outline" size="sm" disabled>
-          Previous
-        </Button>
-        <Button variant="outline" size="sm" disabled>
-          Next
-        </Button>
+      {/* Pagination */}
+      <div className="flex items-center justify-between py-4">
+        <p className="text-sm text-muted-foreground">
+          Showing{" "}
+          {Math.min(
+            (pagination.page - 1) * pagination.perPage + 1,
+            pagination.total
+          )}{" "}
+          to {Math.min(pagination.page * pagination.perPage, pagination.total)}{" "}
+          of {pagination.total} transactions
+        </p>
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handlePageChange(pagination.page - 1)}
+            disabled={pagination.page <= 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handlePageChange(pagination.page + 1)}
+            disabled={pagination.page >= pagination.totalPages}
+          >
+            Next
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   );

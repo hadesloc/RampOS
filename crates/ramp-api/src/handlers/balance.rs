@@ -1,4 +1,7 @@
-use axum::{extract::{State, Extension}, Json};
+use axum::{
+    extract::{Extension, State},
+    Json,
+};
 use ramp_common::types::*;
 use ramp_core::service::ledger::LedgerService;
 use std::sync::Arc;

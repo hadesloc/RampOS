@@ -1,46 +1,157 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
-import { startRegistration } from "@/lib/webauthn"
-import Link from "next/link"
-import { Fingerprint, Loader2 } from "lucide-react"
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useAuth } from "@/contexts/auth-context";
+import { isWebAuthnSupported, isPlatformAuthenticatorAvailable } from "@/lib/webauthn";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  Fingerprint,
+  Loader2,
+  AlertCircle,
+  Shield,
+  Smartphone,
+  CheckCircle,
+} from "lucide-react";
 
 export default function RegisterPage() {
-  const [email, setEmail] = useState("")
-  const [termsAccepted, setTermsAccepted] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [email, setEmail] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [webAuthnAvailable, setWebAuthnAvailable] = useState(true);
+  const [platformAuthAvailable, setPlatformAuthAvailable] = useState(false);
+
+  const {
+    registerWithPasskey,
+    isLoading,
+    error,
+    clearError,
+    isAuthenticated,
+  } = useAuth();
+
+  const router = useRouter();
+
+  // Check WebAuthn availability
+  useEffect(() => {
+    const checkWebAuthn = async () => {
+      const supported = isWebAuthnSupported();
+      setWebAuthnAvailable(supported);
+
+      if (supported) {
+        const platformAvailable = await isPlatformAuthenticatorAvailable();
+        setPlatformAuthAvailable(platformAvailable);
+      }
+    };
+
+    checkWebAuthn();
+  }, []);
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push("/portal");
+    }
+  }, [isAuthenticated, router]);
 
   const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!termsAccepted) return
+    e.preventDefault();
+    if (!termsAccepted || !email) return;
 
-    setLoading(true)
+    clearError();
     try {
-      await startRegistration(email)
-      // success logic
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setLoading(false)
+      await registerWithPasskey(email);
+    } catch {
+      // Error is handled by context
     }
+  };
+
+  if (!webAuthnAvailable) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-2xl font-bold tracking-tight">
+              Browser Not Supported
+            </CardTitle>
+            <CardDescription>
+              Your browser does not support passkey authentication.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Please use a modern browser like Chrome, Safari, Firefox, or
+                Edge to register with passkeys. Alternatively, you can sign in
+                with a magic link if you already have an account.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+          <CardFooter>
+            <Link href="/portal/login" className="w-full">
+              <Button variant="outline" className="w-full">
+                Go to Login
+              </Button>
+            </Link>
+          </CardFooter>
+        </Card>
+      </div>
+    );
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold tracking-tight">Create an account</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight">
+            Create an account
+          </CardTitle>
           <CardDescription>
-            Enter your email below to create your account
+            Set up your account with a secure passkey
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleRegister} className="space-y-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* Passkey benefits */}
+            <div className="rounded-lg bg-muted p-4 space-y-3">
+              <p className="text-sm font-medium">Why passkeys?</p>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <div className="flex items-start gap-2">
+                  <Shield className="h-4 w-4 mt-0.5 text-green-500" />
+                  <span>More secure than passwords - cannot be phished</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Smartphone className="h-4 w-4 mt-0.5 text-blue-500" />
+                  <span>
+                    Use Touch ID, Face ID, or Windows Hello
+                  </span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="h-4 w-4 mt-0.5 text-purple-500" />
+                  <span>Quick and easy - no password to remember</span>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -50,16 +161,23 @@ export default function RegisterPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
               />
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex items-start space-x-2">
               <Checkbox
                 id="terms"
                 checked={termsAccepted}
-                onCheckedChange={(checked) => setTermsAccepted(checked as boolean)}
+                onCheckedChange={(checked) =>
+                  setTermsAccepted(checked as boolean)
+                }
+                disabled={isLoading}
               />
-              <Label htmlFor="terms" className="text-sm font-normal leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+              <Label
+                htmlFor="terms"
+                className="text-sm font-normal leading-snug peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
                 I agree to the{" "}
                 <Link href="/terms" className="text-primary hover:underline">
                   Terms of Service
@@ -74,26 +192,36 @@ export default function RegisterPage() {
             <Button
               className="w-full"
               type="submit"
-              disabled={loading || !termsAccepted || !email}
+              disabled={isLoading || !termsAccepted || !email}
             >
-              {loading ? (
+              {isLoading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Fingerprint className="mr-2 h-4 w-4" />
               )}
-              Create Passkey & Register
+              {isLoading ? "Setting up passkey..." : "Create Passkey & Register"}
             </Button>
+
+            {platformAuthAvailable && (
+              <p className="text-xs text-center text-muted-foreground">
+                You will be prompted to use your device biometrics or security
+                key
+              </p>
+            )}
           </form>
         </CardContent>
         <CardFooter className="flex flex-col space-y-2">
           <div className="text-sm text-muted-foreground text-center">
             Already have an account?{" "}
-            <Link href="/portal/login" className="text-primary hover:underline">
+            <Link
+              href="/portal/login"
+              className="text-primary hover:underline"
+            >
               Sign in
             </Link>
           </div>
         </CardFooter>
       </Card>
     </div>
-  )
+  );
 }

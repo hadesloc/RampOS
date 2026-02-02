@@ -34,6 +34,14 @@ pub trait EventPublisher: Send + Sync {
         new_tier: KycTier,
         reason: Option<String>,
     ) -> Result<()>;
+
+    /// Publish payout reversed event (funds returned to user)
+    async fn publish_payout_reversed(
+        &self,
+        intent_id: &IntentId,
+        tenant_id: &TenantId,
+        reason: &str,
+    ) -> Result<()>;
 }
 
 /// NATS JetStream event publisher
@@ -138,6 +146,23 @@ impl EventPublisher for NatsEventPublisher {
 
         self.publish(&subject, payload.to_string().as_bytes()).await
     }
+
+    async fn publish_payout_reversed(
+        &self,
+        intent_id: &IntentId,
+        tenant_id: &TenantId,
+        reason: &str,
+    ) -> Result<()> {
+        let subject = format!("{}.payout.reversed", self.stream_prefix);
+        let payload = serde_json::json!({
+            "intent_id": intent_id.0,
+            "tenant_id": tenant_id.0,
+            "reason": reason,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        });
+
+        self.publish(&subject, payload.to_string().as_bytes()).await
+    }
 }
 
 /// In-memory event publisher for testing
@@ -212,6 +237,22 @@ impl EventPublisher for InMemoryEventPublisher {
             "user_id": user_id.0,
             "old_tier": old_tier as i16,
             "new_tier": new_tier as i16,
+            "reason": reason,
+        });
+        self.events.write().await.push(event);
+        Ok(())
+    }
+
+    async fn publish_payout_reversed(
+        &self,
+        intent_id: &IntentId,
+        tenant_id: &TenantId,
+        reason: &str,
+    ) -> Result<()> {
+        let event = serde_json::json!({
+            "type": "payout.reversed",
+            "intent_id": intent_id.0,
+            "tenant_id": tenant_id.0,
             "reason": reason,
         });
         self.events.write().await.push(event);

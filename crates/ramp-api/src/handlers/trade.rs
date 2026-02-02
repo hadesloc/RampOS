@@ -1,5 +1,5 @@
-use axum::{extract::State, http::HeaderMap, Json};
 use axum::extract::Extension;
+use axum::{extract::State, http::HeaderMap, Json};
 use ramp_common::types::*;
 use ramp_core::service::trade::{TradeExecutedRequest as ServiceRequest, TradeService};
 use std::sync::Arc;

@@ -6,24 +6,29 @@ use axum::{
 use chrono::Utc;
 use ramp_api::{create_router, AppState};
 use ramp_common::{
-    ledger::{AccountType, LedgerCurrency, EntryDirection},
+    ledger::{AccountType, EntryDirection, LedgerCurrency},
     types::*,
+};
+use ramp_compliance::{
+    case::CaseManager, reports::ReportGenerator, storage::MockDocumentStorage, InMemoryCaseStore,
 };
 use ramp_core::{
     event::InMemoryEventPublisher,
     repository::{tenant::TenantRow, user::UserRow, LedgerRepository},
     service::{
-        ledger::LedgerService, payin::PayinService, payout::{PayoutService, ConfirmPayoutRequest, PayoutBankStatus}, trade::TradeService,
+        ledger::LedgerService,
         onboarding::OnboardingService,
+        payin::PayinService,
+        payout::{ConfirmPayoutRequest, PayoutBankStatus, PayoutService},
+        trade::TradeService,
     },
     test_utils::*,
 };
-use ramp_compliance::{case::CaseManager, InMemoryCaseStore, reports::ReportGenerator, storage::MockDocumentStorage};
-use sqlx::PgPool;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use sqlx::PgPool;
 use std::sync::Arc;
 use tower::ServiceExt; // for oneshot
 use uuid::Uuid;
@@ -138,6 +143,7 @@ async fn setup_test_app() -> TestContext {
         status: "ACTIVE".to_string(),
         api_key_hash,
         webhook_secret_hash: "secret".to_string(),
+            webhook_secret_encrypted: None,
         webhook_url: None,
         config: serde_json::json!({}),
         daily_payin_limit_vnd: None,
@@ -210,6 +216,7 @@ async fn setup_test_app() -> TestContext {
         case_manager,
         rate_limiter: None,
         idempotency_handler: None,
+        aa_service: None,
     };
 
     let app = create_router(app_state);
@@ -231,8 +238,8 @@ async fn setup_test_app() -> TestContext {
 /// Pay-in flow E2E tests
 #[cfg(test)]
 mod payin_e2e_tests {
-    use super::*;
     use super::fixtures::*;
+    use super::*;
 
     /// Test: Complete pay-in flow from creation to completion
     #[tokio::test]
@@ -254,7 +261,9 @@ mod payin_e2e_tests {
         let response = ctx.app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
         let intent_id = intent_resp["intentId"].as_str().unwrap().to_string();
@@ -297,19 +306,18 @@ mod payin_e2e_tests {
         assert_eq!(txs[0].intent_id.0, intent_id);
 
         // Check for credit to user liability
-        let has_credit = txs[0].entries.iter().any(|e|
-            e.account_type == AccountType::LiabilityUserVnd &&
-            e.direction == EntryDirection::Credit &&
-            e.amount == Decimal::from(amount)
-        );
+        let has_credit = txs[0].entries.iter().any(|e| {
+            e.account_type == AccountType::LiabilityUserVnd
+                && e.direction == EntryDirection::Credit
+                && e.amount == Decimal::from(amount)
+        });
         assert!(has_credit, "Should have credited user liability");
 
         // Verify webhook
         let events = ctx.event_publisher.get_events().await;
-        let completed_event = events.iter().find(|e|
-            e["type"] == "intent.status_changed" &&
-            e["new_status"] == "COMPLETED"
-        );
+        let completed_event = events
+            .iter()
+            .find(|e| e["type"] == "intent.status_changed" && e["new_status"] == "COMPLETED");
         assert!(completed_event.is_some());
     }
 
@@ -337,8 +345,8 @@ mod payin_e2e_tests {
 /// Pay-out flow E2E tests
 #[cfg(test)]
 mod payout_e2e_tests {
-    use super::*;
     use super::fixtures::*;
+    use super::*;
 
     /// Test: Complete pay-out flow
     #[tokio::test]
@@ -369,7 +377,9 @@ mod payout_e2e_tests {
         let response = ctx.app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         let intent_id_str = intent_resp["intentId"].as_str().unwrap().to_string();
         let status = intent_resp["status"].as_str().unwrap();
@@ -390,7 +400,10 @@ mod payout_e2e_tests {
             status: PayoutBankStatus::Success,
         };
 
-        ctx.payout_service.confirm_payout(confirm_req).await.expect("Failed to confirm payout");
+        ctx.payout_service
+            .confirm_payout(confirm_req)
+            .await
+            .expect("Failed to confirm payout");
 
         // Step 3: Verify intent final state
         let intents = ctx.intent_repo.intents.lock().unwrap();
@@ -404,28 +417,32 @@ mod payout_e2e_tests {
         assert_eq!(txs.len(), 2);
 
         // Verify final balance
-        let final_balance = ctx.ledger_repo.get_balance(
-            &TenantId::new(&ctx.tenant_id),
-            Some(&UserId::new(&ctx.user_id)),
-            &AccountType::LiabilityUserVnd,
-            &LedgerCurrency::VND
-        ).await.unwrap();
+        let final_balance = ctx
+            .ledger_repo
+            .get_balance(
+                &TenantId::new(&ctx.tenant_id),
+                Some(&UserId::new(&ctx.user_id)),
+                &AccountType::LiabilityUserVnd,
+                &LedgerCurrency::VND,
+            )
+            .await
+            .unwrap();
 
         assert_eq!(final_balance, dec!(500_000)); // 1M - 500k = 500k
 
         // Step 5: Verify webhooks
         let events = ctx.event_publisher.get_events().await;
 
-        let created_event = events.iter().find(|e|
-            e["type"] == "intent.created" && e["intent_id"] == intent_id_str
-        );
+        let created_event = events
+            .iter()
+            .find(|e| e["type"] == "intent.created" && e["intent_id"] == intent_id_str);
         assert!(created_event.is_some());
 
-        let completed_event = events.iter().find(|e|
-            e["type"] == "intent.status_changed" &&
-            e["new_status"] == "COMPLETED" &&
-            e["intent_id"] == intent_id_str
-        );
+        let completed_event = events.iter().find(|e| {
+            e["type"] == "intent.status_changed"
+                && e["new_status"] == "COMPLETED"
+                && e["intent_id"] == intent_id_str
+        });
         assert!(completed_event.is_some());
     }
 
@@ -480,7 +497,9 @@ mod payout_e2e_tests {
         let response = ctx.app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         let status = intent_resp["status"].as_str().unwrap();
 
@@ -512,7 +531,9 @@ mod payout_e2e_tests {
             .unwrap();
 
         let response = ctx.app.clone().oneshot(request).await.unwrap();
-        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         let intent_id_str = intent_resp["intentId"].as_str().unwrap();
 
@@ -525,7 +546,10 @@ mod payout_e2e_tests {
             status: PayoutBankStatus::Rejected("Account Closed".to_string()),
         };
 
-        ctx.payout_service.confirm_payout(confirm_req).await.expect("Failed to process rejection");
+        ctx.payout_service
+            .confirm_payout(confirm_req)
+            .await
+            .expect("Failed to process rejection");
 
         // 3. Verify State
         let intents = ctx.intent_repo.intents.lock().unwrap();
@@ -534,10 +558,9 @@ mod payout_e2e_tests {
 
         // 4. Verify Event
         let events = ctx.event_publisher.get_events().await;
-        let reject_event = events.iter().find(|e|
-            e["type"] == "intent.status_changed" &&
-            e["new_status"] == "BANK_REJECTED"
-        );
+        let reject_event = events
+            .iter()
+            .find(|e| e["type"] == "intent.status_changed" && e["new_status"] == "BANK_REJECTED");
         assert!(reject_event.is_some());
     }
 }
@@ -545,8 +568,8 @@ mod payout_e2e_tests {
 /// Trade flow E2E tests
 #[cfg(test)]
 mod trade_e2e_tests {
-    use super::*;
     use super::fixtures::*;
+    use super::*;
 
     /// Test: Execute Trade and verify Ledger
     #[tokio::test]
@@ -560,7 +583,7 @@ mod trade_e2e_tests {
             "trade_001",
             "BTC/VND",
             -100_000_000, // User pays VND
-            dec!(0.1)     // User gets BTC
+            dec!(0.1),    // User gets BTC
         );
 
         let request = Request::builder()
@@ -590,43 +613,47 @@ mod trade_e2e_tests {
         // patterns::trade_crypto_vnd should be balanced.
 
         // Check user VND debit
-        let user_vnd_debit = entries.iter().find(|e|
-            e.account_type == AccountType::LiabilityUserVnd &&
-            e.direction == EntryDirection::Debit &&
-            e.amount == dec!(100_000_000)
-        );
+        let user_vnd_debit = entries.iter().find(|e| {
+            e.account_type == AccountType::LiabilityUserVnd
+                && e.direction == EntryDirection::Debit
+                && e.amount == dec!(100_000_000)
+        });
         assert!(user_vnd_debit.is_some(), "Should debit user VND");
 
         // Check user Crypto credit
         // Note: AccountType might be LiabilityUserCrypto or specific like LiabilityUserBtc depending on implementation
         // The mock service uses parsed currency. patterns::trade_crypto_vnd typically uses AccountType::LiabilityUserCrypto
         // with currency = BTC.
-        let user_btc_credit = entries.iter().find(|e|
+        let user_btc_credit = entries.iter().find(|e| {
             e.account_type.to_string().contains("User") && // Broad check for now
             e.currency == LedgerCurrency::BTC &&
             e.direction == EntryDirection::Credit &&
             e.amount == dec!(0.1)
-        );
+        });
         assert!(user_btc_credit.is_some(), "Should credit user BTC");
 
         // Verify total balance of transaction is 0 per currency?
         // LedgerTransaction validation usually ensures sum(debits) = sum(credits) per currency.
         // We can manually verify here.
-        let vnd_debits: Decimal = entries.iter()
+        let vnd_debits: Decimal = entries
+            .iter()
             .filter(|e| e.currency == LedgerCurrency::VND && e.direction == EntryDirection::Debit)
             .map(|e| e.amount)
             .sum();
-        let vnd_credits: Decimal = entries.iter()
+        let vnd_credits: Decimal = entries
+            .iter()
             .filter(|e| e.currency == LedgerCurrency::VND && e.direction == EntryDirection::Credit)
             .map(|e| e.amount)
             .sum();
         assert_eq!(vnd_debits, vnd_credits, "VND entries must balance");
 
-        let btc_debits: Decimal = entries.iter()
+        let btc_debits: Decimal = entries
+            .iter()
             .filter(|e| e.currency == LedgerCurrency::BTC && e.direction == EntryDirection::Debit)
             .map(|e| e.amount)
             .sum();
-        let btc_credits: Decimal = entries.iter()
+        let btc_credits: Decimal = entries
+            .iter()
             .filter(|e| e.currency == LedgerCurrency::BTC && e.direction == EntryDirection::Credit)
             .map(|e| e.amount)
             .sum();

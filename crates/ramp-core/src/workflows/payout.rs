@@ -8,7 +8,7 @@ use rust_decimal::Decimal;
 use ramp_common::{
     types::*,
     Result,
-    ledger::{LedgerTransaction, LedgerEntry, EntryDirection, AccountType, LedgerCurrency, LedgerError, patterns, LedgerEntryId},
+    ledger::{AccountType, LedgerCurrency, LedgerError, patterns},
     Error,
 };
 use ramp_compliance::aml::{AmlEngine, TransactionData, TransactionType};
@@ -51,6 +51,32 @@ pub struct SettlementResult {
     pub bank_tx_id: String,
     pub settled_at: Option<String>,
     pub rejection_reason: Option<String>,
+    /// For partial success scenarios
+    pub settled_amount: Option<i64>,
+}
+
+/// Reason for payout reversal
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ReversalReason {
+    BankRejected(String),
+    Timeout,
+    PartialSuccess { settled_amount: Decimal },
+    SubmissionFailed(String),
+    Cancelled,
+}
+
+impl std::fmt::Display for ReversalReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReversalReason::BankRejected(reason) => write!(f, "Bank rejected: {}", reason),
+            ReversalReason::Timeout => write!(f, "Settlement timeout"),
+            ReversalReason::PartialSuccess { settled_amount } => {
+                write!(f, "Partial success (settled: {})", settled_amount)
+            }
+            ReversalReason::SubmissionFailed(reason) => write!(f, "Submission failed: {}", reason),
+            ReversalReason::Cancelled => write!(f, "Cancelled by user/system"),
+        }
+    }
 }
 
 use ramp_compliance::sanctions::SanctionsScreeningService;
@@ -155,8 +181,14 @@ impl PayoutWorkflow {
             Err(e) => {
                 error!(error = %e, "Failed to submit to bank");
                 // Rollback hold
-                let _ = self.reverse_funds(&tenant_id, &user_id, &intent_id, amount, "Submission failed").await;
-                self.update_state(&tenant_id, &intent_id, "FAILED_SUBMISSION").await?;
+                let _ = self.reverse_funds(
+                    &tenant_id,
+                    &user_id,
+                    &intent_id,
+                    ReversalReason::SubmissionFailed(e.to_string()),
+                    amount,
+                ).await;
+                self.update_state(&tenant_id, &intent_id, "REVERSED").await?;
                 return Ok(self.failure_result(input.intent_id, format!("Bank submission failed: {}", e)));
             }
         };
@@ -169,7 +201,54 @@ impl PayoutWorkflow {
 
         match settlement {
             Some(result) if result.success => {
-                // 6. Complete
+                // Check if this is a partial success
+                if let Some(settled_amount_i64) = result.settled_amount {
+                    let settled_amount = Decimal::from(settled_amount_i64);
+                    if settled_amount < amount {
+                        // Partial success - settle what was paid, reverse the rest
+                        info!(
+                            settled_amount = %settled_amount,
+                            original_amount = %amount,
+                            "Partial payout settlement"
+                        );
+
+                        // Finalize the settled portion
+                        if let Err(e) = self.finalize_settlement(
+                            &tenant_id,
+                            &intent_id,
+                            settled_amount
+                        ).await {
+                            error!(error = %e, "Failed to finalize partial settlement in ledger");
+                        }
+
+                        // Reverse the unsettled portion
+                        let _ = self.reverse_funds(
+                            &tenant_id,
+                            &user_id,
+                            &intent_id,
+                            ReversalReason::PartialSuccess { settled_amount },
+                            amount,
+                        ).await;
+
+                        self.update_state(&tenant_id, &intent_id, "COMPLETED").await?;
+
+                        let _ = self.event_publisher.publish_intent_status_changed(
+                            &intent_id,
+                            &tenant_id,
+                            "COMPLETED"
+                        ).await;
+
+                        return Ok(PayoutWorkflowResult {
+                            intent_id: input.intent_id,
+                            status: "COMPLETED".to_string(),
+                            bank_tx_id: Some(bank_tx_id),
+                            completed_at: result.settled_at,
+                            rejection_reason: Some(format!("Partial settlement: {} of {} VND", settled_amount, amount)),
+                        });
+                    }
+                }
+
+                // 6. Complete (full success)
                 if let Err(e) = self.finalize_settlement(
                     &tenant_id,
                     &intent_id,
@@ -204,30 +283,57 @@ impl PayoutWorkflow {
                     &tenant_id,
                     &user_id,
                     &intent_id,
+                    ReversalReason::BankRejected(reason.clone()),
                     amount,
-                    &reason
                 ).await;
 
-                self.update_state(&tenant_id, &intent_id, "REJECTED_BY_BANK").await?;
+                self.update_state(&tenant_id, &intent_id, "REVERSED").await?;
 
                 let _ = self.event_publisher.publish_intent_status_changed(
                     &intent_id,
                     &tenant_id,
-                    "REJECTED_BY_BANK"
+                    "REVERSED"
+                ).await;
+
+                // Also publish payout reversed event for webhook consumers
+                let _ = self.event_publisher.publish_payout_reversed(
+                    &intent_id,
+                    &tenant_id,
+                    &reason,
                 ).await;
 
                 Ok(self.failure_result(input.intent_id, reason))
             }
             None => {
-                // Timeout
-                self.update_state(&tenant_id, &intent_id, "SETTLEMENT_TIMEOUT").await?;
+                // Timeout - reverse funds and mark as reversed
+                let _ = self.reverse_funds(
+                    &tenant_id,
+                    &user_id,
+                    &intent_id,
+                    ReversalReason::Timeout,
+                    amount,
+                ).await;
+
+                self.update_state(&tenant_id, &intent_id, "REVERSED").await?;
+
+                let _ = self.event_publisher.publish_intent_status_changed(
+                    &intent_id,
+                    &tenant_id,
+                    "REVERSED"
+                ).await;
+
+                let _ = self.event_publisher.publish_payout_reversed(
+                    &intent_id,
+                    &tenant_id,
+                    "Settlement timeout - funds returned to user",
+                ).await;
 
                 Ok(PayoutWorkflowResult {
                     intent_id: input.intent_id,
-                    status: "PENDING_INVESTIGATION".to_string(),
+                    status: "REVERSED".to_string(),
                     bank_tx_id: Some(bank_tx_id),
                     completed_at: None,
-                    rejection_reason: Some("Settlement timeout".to_string()),
+                    rejection_reason: Some("Settlement timeout - funds returned to user".to_string()),
                 })
             }
         }
@@ -331,53 +437,265 @@ impl PayoutWorkflow {
         tenant_id: &TenantId,
         user_id: &UserId,
         intent_id: &IntentId,
-        amount: Decimal,
-        reason: &str,
+        reason: ReversalReason,
+        original_amount: Decimal,
     ) -> Result<()> {
-        // Reverse Hold (refund)
-        let tx_id = format!("ltx_{}", uuid::Uuid::new_v4());
-        let now = Utc::now();
+        info!(
+            intent_id = %intent_id,
+            reason = %reason,
+            amount = %original_amount,
+            "Reversing payout funds"
+        );
 
-        let tx = LedgerTransaction {
-            id: tx_id,
-            tenant_id: tenant_id.clone(),
-            intent_id: intent_id.clone(),
-            entries: vec![
-                LedgerEntry {
-                    id: LedgerEntryId::new(),
-                    tenant_id: tenant_id.clone(),
-                    user_id: Some(user_id.clone()),
-                    intent_id: intent_id.clone(),
-                    account_type: AccountType::LiabilityUserVnd,
-                    direction: EntryDirection::Debit, // + (Refund)
-                    amount,
-                    currency: LedgerCurrency::VND,
-                    balance_after: Decimal::ZERO,
-                    description: format!("Refund payout: {}", reason),
-                    metadata: serde_json::json!({}),
-                    created_at: now,
-                    sequence: 0,
-                },
-                 LedgerEntry {
-                    id: LedgerEntryId::new(),
-                    tenant_id: tenant_id.clone(),
-                    user_id: None,
-                    intent_id: intent_id.clone(),
-                    account_type: AccountType::ClearingBankPending,
-                    direction: EntryDirection::Credit, // - (Reduce PayoutPayable)
-                    amount,
-                    currency: LedgerCurrency::VND,
-                    balance_after: Decimal::ZERO,
-                    description: "Refund payout contra".to_string(),
-                    metadata: serde_json::json!({}),
-                    created_at: now,
-                    sequence: 0,
-                }
-            ],
-            description: format!("Refund payout: {}", reason),
-            created_at: now,
+        let tx = match &reason {
+            ReversalReason::PartialSuccess { settled_amount } => {
+                // For partial success, we need to:
+                // 1. First complete the settled portion (done separately in finalize_settlement)
+                // 2. Then reverse only the unsettled portion
+                patterns::payout_vnd_partial_reversed(
+                    tenant_id.clone(),
+                    user_id.clone(),
+                    intent_id.clone(),
+                    original_amount,
+                    *settled_amount,
+                    &reason.to_string(),
+                ).map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?
+            }
+            _ => {
+                // Full reversal for bank rejection, timeout, submission failure, or cancellation
+                patterns::payout_vnd_reversed(
+                    tenant_id.clone(),
+                    user_id.clone(),
+                    intent_id.clone(),
+                    original_amount,
+                    &reason.to_string(),
+                ).map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?
+            }
         };
 
-        self.ledger_repo.record_transaction(tx).await
+        self.ledger_repo.record_transaction(tx).await?;
+
+        info!(
+            intent_id = %intent_id,
+            "Payout funds reversed successfully"
+        );
+
+        Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::{MockIntentRepository, MockLedgerRepository};
+    use crate::event::InMemoryEventPublisher;
+    use ramp_common::ledger::EntryDirection;
+    use ramp_compliance::aml::AmlEngine;
+    use rust_decimal_macros::dec;
+    use std::sync::Arc;
+
+    fn create_test_workflow() -> (
+        PayoutWorkflow,
+        Arc<MockIntentRepository>,
+        Arc<MockLedgerRepository>,
+        Arc<InMemoryEventPublisher>,
+    ) {
+        let intent_repo = Arc::new(MockIntentRepository::new());
+        let ledger_repo = Arc::new(MockLedgerRepository::new());
+        let event_publisher = Arc::new(InMemoryEventPublisher::new());
+        let aml_engine = Arc::new(AmlEngine::new_permissive());
+
+        let workflow = PayoutWorkflow::new(
+            intent_repo.clone(),
+            ledger_repo.clone(),
+            event_publisher.clone(),
+            aml_engine,
+            None,
+        );
+
+        (workflow, intent_repo, ledger_repo, event_publisher)
+    }
+
+    #[test]
+    fn test_reversal_reason_display() {
+        assert_eq!(
+            ReversalReason::BankRejected("Invalid account".to_string()).to_string(),
+            "Bank rejected: Invalid account"
+        );
+        assert_eq!(
+            ReversalReason::Timeout.to_string(),
+            "Settlement timeout"
+        );
+        assert_eq!(
+            ReversalReason::PartialSuccess { settled_amount: dec!(500000) }.to_string(),
+            "Partial success (settled: 500000)"
+        );
+        assert_eq!(
+            ReversalReason::SubmissionFailed("Network error".to_string()).to_string(),
+            "Submission failed: Network error"
+        );
+        assert_eq!(
+            ReversalReason::Cancelled.to_string(),
+            "Cancelled by user/system"
+        );
+    }
+
+    #[test]
+    fn test_payout_vnd_reversed_ledger_pattern() {
+        let tx = patterns::payout_vnd_reversed(
+            TenantId::new("tenant1"),
+            UserId::new("user1"),
+            IntentId::new_payout(),
+            dec!(1000000),
+            "Bank rejected: Invalid account",
+        ).unwrap();
+
+        assert!(tx.is_balanced());
+        assert_eq!(tx.entries.len(), 2);
+
+        // First entry: Debit ClearingBankPending (release held funds)
+        let debit_entry = tx.entries.iter()
+            .find(|e| e.direction == EntryDirection::Debit)
+            .unwrap();
+        assert_eq!(debit_entry.account_type, AccountType::ClearingBankPending);
+        assert_eq!(debit_entry.amount, dec!(1000000));
+
+        // Second entry: Credit user's VND balance (refund)
+        let credit_entry = tx.entries.iter()
+            .find(|e| e.direction == EntryDirection::Credit)
+            .unwrap();
+        assert_eq!(credit_entry.account_type, AccountType::LiabilityUserVnd);
+        assert_eq!(credit_entry.amount, dec!(1000000));
+        assert!(credit_entry.user_id.is_some());
+    }
+
+    #[test]
+    fn test_payout_vnd_partial_reversed_ledger_pattern() {
+        let tx = patterns::payout_vnd_partial_reversed(
+            TenantId::new("tenant1"),
+            UserId::new("user1"),
+            IntentId::new_payout(),
+            dec!(1000000),  // Original amount
+            dec!(700000),   // Settled amount
+            "Partial settlement",
+        ).unwrap();
+
+        assert!(tx.is_balanced());
+        assert_eq!(tx.entries.len(), 2);
+
+        // Reversal amount should be 300000 (1000000 - 700000)
+        let debit_entry = tx.entries.iter()
+            .find(|e| e.direction == EntryDirection::Debit)
+            .unwrap();
+        assert_eq!(debit_entry.amount, dec!(300000));
+
+        let credit_entry = tx.entries.iter()
+            .find(|e| e.direction == EntryDirection::Credit)
+            .unwrap();
+        assert_eq!(credit_entry.amount, dec!(300000));
+    }
+
+    #[test]
+    fn test_payout_vnd_partial_reversed_fails_when_settled_exceeds_original() {
+        let result = patterns::payout_vnd_partial_reversed(
+            TenantId::new("tenant1"),
+            UserId::new("user1"),
+            IntentId::new_payout(),
+            dec!(500000),   // Original amount
+            dec!(700000),   // Settled amount (more than original - invalid)
+            "Invalid partial",
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_workflow_reverse_funds_full_reversal() {
+        let (workflow, _intent_repo, ledger_repo, _event_publisher) = create_test_workflow();
+
+        let tenant_id = TenantId::new("tenant1");
+        let user_id = UserId::new("user1");
+        let intent_id = IntentId::new_payout();
+
+        let result = workflow.reverse_funds(
+            &tenant_id,
+            &user_id,
+            &intent_id,
+            ReversalReason::BankRejected("Account closed".to_string()),
+            dec!(500000),
+        ).await;
+
+        assert!(result.is_ok());
+
+        let txs = ledger_repo.transactions.lock().unwrap();
+        assert_eq!(txs.len(), 1);
+        assert!(txs[0].is_balanced());
+        assert!(txs[0].description.contains("Bank rejected"));
+    }
+
+    #[tokio::test]
+    async fn test_workflow_reverse_funds_timeout() {
+        let (workflow, _intent_repo, ledger_repo, _event_publisher) = create_test_workflow();
+
+        let tenant_id = TenantId::new("tenant1");
+        let user_id = UserId::new("user1");
+        let intent_id = IntentId::new_payout();
+
+        let result = workflow.reverse_funds(
+            &tenant_id,
+            &user_id,
+            &intent_id,
+            ReversalReason::Timeout,
+            dec!(1000000),
+        ).await;
+
+        assert!(result.is_ok());
+
+        let txs = ledger_repo.transactions.lock().unwrap();
+        assert_eq!(txs.len(), 1);
+        assert!(txs[0].description.contains("timeout"));
+    }
+
+    #[tokio::test]
+    async fn test_workflow_reverse_funds_partial_success() {
+        let (workflow, _intent_repo, ledger_repo, _event_publisher) = create_test_workflow();
+
+        let tenant_id = TenantId::new("tenant1");
+        let user_id = UserId::new("user1");
+        let intent_id = IntentId::new_payout();
+
+        let result = workflow.reverse_funds(
+            &tenant_id,
+            &user_id,
+            &intent_id,
+            ReversalReason::PartialSuccess { settled_amount: dec!(600000) },
+            dec!(1000000),
+        ).await;
+
+        assert!(result.is_ok());
+
+        let txs = ledger_repo.transactions.lock().unwrap();
+        assert_eq!(txs.len(), 1);
+
+        // Verify only 400000 was reversed (1000000 - 600000)
+        let tx = &txs[0];
+        assert!(tx.is_balanced());
+        assert_eq!(tx.total_amount(), dec!(400000));
+    }
+
+    #[tokio::test]
+    async fn test_settlement_result_with_partial_amount() {
+        // Test that SettlementResult can carry partial settlement info
+        let result = SettlementResult {
+            success: true,
+            bank_tx_id: "BANK_123".to_string(),
+            settled_at: Some("2024-01-15T10:30:00Z".to_string()),
+            rejection_reason: None,
+            settled_amount: Some(700000),
+        };
+
+        assert!(result.success);
+        assert_eq!(result.settled_amount, Some(700000));
+    }
+}
+

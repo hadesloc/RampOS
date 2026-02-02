@@ -1,7 +1,7 @@
 //! Intent handlers - GET intent by ID
 
 use axum::{
-    extract::{Path, State, Extension},
+    extract::{Extension, Path, State},
     http::StatusCode,
     Json,
 };
@@ -12,8 +12,8 @@ use tracing::info;
 use ramp_common::types::{IntentId, TenantId};
 use ramp_core::repository::intent::{IntentRepository, IntentRow};
 
-use crate::middleware::tenant::TenantContext;
 use crate::error::ApiError;
+use crate::middleware::tenant::TenantContext;
 
 /// Intent response DTO
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
@@ -162,7 +162,10 @@ pub async fn get_intent(
         .get_by_id(&tenant_ctx.tenant_id, &IntentId::new(&intent_id))
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or(ApiError::NotFound(format!("Intent {} not found", intent_id)))?;
+        .ok_or(ApiError::NotFound(format!(
+            "Intent {} not found",
+            intent_id
+        )))?;
 
     Ok(Json(IntentResponse::from(intent)))
 }
@@ -199,9 +202,9 @@ pub async fn list_intents(
     );
 
     // For now, list by user if provided, otherwise return error
-    let user_id = query
-        .user_id
-        .ok_or(ApiError::BadRequest("user_id query parameter required".to_string()))?;
+    let user_id = query.user_id.ok_or(ApiError::BadRequest(
+        "user_id query parameter required".to_string(),
+    ))?;
 
     let intents = intent_repo
         .list_by_user(

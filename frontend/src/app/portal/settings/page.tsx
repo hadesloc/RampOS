@@ -1,17 +1,39 @@
 "use client";
 
-import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Shield, User, Bell, Key } from "lucide-react";
+import { Shield, User, Bell, Key, Loader2, LogOut } from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
+import { useRouter } from "next/navigation";
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
+  const {
+    user,
+    isAuthenticated,
+    isLoading: authLoading,
+    logout,
+  } = useAuth();
+  const router = useRouter();
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push("/portal/login");
+    }
+  }, [authLoading, isAuthenticated, router]);
 
   const handleSave = (section: string) => {
     setLoading(true);
@@ -21,13 +43,39 @@ export default function SettingsPage() {
     }, 1000);
   };
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+      router.push("/portal/login");
+    } catch {
+      toast.error("Failed to logout");
+    }
+  };
+
+  // Show loading state
+  if (authLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
-        <p className="text-muted-foreground">
-          Manage your account settings and preferences.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
+          <p className="text-muted-foreground">
+            Manage your account settings and preferences.
+          </p>
+        </div>
+        <Button variant="destructive" onClick={handleLogout}>
+          <LogOut className="h-4 w-4 mr-2" />
+          Logout
+        </Button>
       </div>
 
       <Tabs defaultValue="profile" className="space-y-4">
@@ -57,18 +105,33 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
-                <Input id="name" defaultValue="John Doe" placeholder="Your name" />
+                <Input
+                  id="name"
+                  defaultValue={user?.email?.split("@")[0] || ""}
+                  placeholder="Your name"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email Address</Label>
-                <Input id="email" type="email" defaultValue="john.doe@example.com" readOnly className="bg-muted" />
+                <Input
+                  id="email"
+                  type="email"
+                  defaultValue={user?.email || ""}
+                  readOnly
+                  className="bg-muted"
+                />
                 <p className="text-xs text-muted-foreground">
-                  Email cannot be changed. Contact support if you need to update it.
+                  Email cannot be changed. Contact support if you need to update
+                  it.
                 </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone Number</Label>
-                <Input id="phone" type="tel" defaultValue="+84 901 234 567" placeholder="+84 ..." />
+                <Input
+                  id="phone"
+                  type="tel"
+                  placeholder="+84 ..."
+                />
               </div>
               <Button onClick={() => handleSave("Profile")} disabled={loading}>
                 {loading ? "Saving..." : "Save Changes"}
@@ -95,7 +158,7 @@ export default function SettingsPage() {
                 </div>
                 <Switch defaultChecked />
               </div>
-              
+
               <div className="border-t pt-6">
                 <h4 className="font-medium mb-4">Passkeys</h4>
                 <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
@@ -103,10 +166,23 @@ export default function SettingsPage() {
                     <Key className="h-5 w-5 text-primary" />
                     <div>
                       <p className="font-medium">Chrome on Windows</p>
-                      <p className="text-sm text-muted-foreground">Added Feb 2, 2026</p>
+                      <p className="text-sm text-muted-foreground">
+                        Added{" "}
+                        {new Date().toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </p>
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" className="text-destructive">Remove</Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive"
+                  >
+                    Remove
+                  </Button>
                 </div>
                 <Button variant="outline" className="mt-4 gap-2">
                   Add a passkey
@@ -114,7 +190,10 @@ export default function SettingsPage() {
               </div>
 
               <div className="border-t pt-6">
-                <Button onClick={() => handleSave("Security")} disabled={loading}>
+                <Button
+                  onClick={() => handleSave("Security")}
+                  disabled={loading}
+                >
                   {loading ? "Saving..." : "Update Security"}
                 </Button>
               </div>
@@ -158,7 +237,10 @@ export default function SettingsPage() {
                 </div>
                 <Switch />
               </div>
-              <Button onClick={() => handleSave("Notifications")} disabled={loading}>
+              <Button
+                onClick={() => handleSave("Notifications")}
+                disabled={loading}
+              >
                 {loading ? "Saving..." : "Save Preferences"}
               </Button>
             </CardContent>

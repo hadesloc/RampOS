@@ -4,24 +4,19 @@ use axum::{
     Json,
 };
 use ramp_common::types::TenantId;
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
+use validator::Validate;
 
+use crate::dto::{CreateTenantRequest, SuspendTenantRequest, UpdateTenantRequest};
 use crate::error::ApiError;
+use crate::extract::ValidatedJson;
 use ramp_core::service::onboarding::{ApiKeyPair, OnboardingService};
 
 // ============================================================================
-// DTOs
+// Response DTOs
 // ============================================================================
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateTenantRequest {
-    pub name: String,
-    pub config: serde_json::Value,
-}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,20 +28,6 @@ pub struct TenantResponse {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateTenantRequest {
-    pub daily_payin_limit_vnd: Option<Decimal>,
-    pub daily_payout_limit_vnd: Option<Decimal>,
-    pub webhook_url: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SuspendTenantRequest {
-    pub reason: String,
-}
-
 // ============================================================================
 // Handlers
 // ============================================================================
@@ -55,7 +36,7 @@ pub struct SuspendTenantRequest {
 pub async fn create_tenant(
     headers: HeaderMap,
     State(onboarding_service): State<Arc<OnboardingService>>,
-    Json(request): Json<CreateTenantRequest>,
+    ValidatedJson(request): ValidatedJson<CreateTenantRequest>,
 ) -> Result<Json<TenantResponse>, ApiError> {
     super::tier::check_admin_key(&headers)?;
     info!(name = %request.name, "Creating new tenant");
@@ -113,7 +94,7 @@ pub async fn suspend_tenant(
     headers: HeaderMap,
     State(onboarding_service): State<Arc<OnboardingService>>,
     Path(tenant_id): Path<String>,
-    Json(request): Json<SuspendTenantRequest>,
+    ValidatedJson(request): ValidatedJson<SuspendTenantRequest>,
 ) -> Result<StatusCode, ApiError> {
     super::tier::check_admin_key(&headers)?;
     info!(tenant_id = %tenant_id, reason = %request.reason, "Suspending tenant");
@@ -131,7 +112,7 @@ pub async fn update_tenant(
     headers: HeaderMap,
     State(onboarding_service): State<Arc<OnboardingService>>,
     Path(tenant_id): Path<String>,
-    Json(request): Json<UpdateTenantRequest>,
+    ValidatedJson(request): ValidatedJson<UpdateTenantRequest>,
 ) -> Result<StatusCode, ApiError> {
     super::tier::check_admin_key(&headers)?;
     info!(tenant_id = %tenant_id, "Updating tenant");

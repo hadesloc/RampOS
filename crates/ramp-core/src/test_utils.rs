@@ -89,7 +89,7 @@ impl IntentRepository for MockIntentRepository {
             .iter()
             .filter(|i| {
                 if let Some(expires_at) = i.expires_at {
-                    expires_at < now && !["COMPLETED", "EXPIRED", "CANCELLED", "TIMEOUT", "REJECTED_BY_POLICY", "BANK_REJECTED", "SUSPECTED_FRAUD"].contains(&i.state.as_str())
+                    expires_at < now && !["COMPLETED", "EXPIRED", "CANCELLED", "TIMEOUT", "REJECTED_BY_POLICY", "BANK_REJECTED", "SUSPECTED_FRAUD", "REVERSED"].contains(&i.state.as_str())
                 } else {
                     false
                 }
@@ -218,6 +218,36 @@ impl LedgerRepository for MockLedgerRepository {
 
     async fn get_user_balances(&self, _tenant_id: &TenantId, _user_id: &UserId) -> Result<Vec<BalanceRow>> {
         Ok(self.balances.lock().unwrap().clone())
+    }
+
+    async fn check_balance_and_record_transaction(
+        &self,
+        required_balance: Decimal,
+        _user_id: &UserId,
+        account_type: &AccountType,
+        currency: &LedgerCurrency,
+        tx: LedgerTransaction,
+    ) -> Result<Decimal> {
+        // Check balance first
+        let balances = self.balances.lock().unwrap();
+        let current_balance = balances
+            .iter()
+            .find(|b| b.account_type == account_type.to_string() && b.currency == currency.to_string())
+            .map(|b| b.balance)
+            .unwrap_or(Decimal::ZERO);
+        drop(balances);
+
+        if current_balance < required_balance {
+            return Err(ramp_common::Error::InsufficientBalance {
+                required: required_balance.to_string(),
+                available: current_balance.to_string(),
+            });
+        }
+
+        // Record the transaction
+        self.transactions.lock().unwrap().push(tx);
+
+        Ok(current_balance)
     }
 }
 
@@ -436,6 +466,15 @@ impl TenantRepository for MockTenantRepository {
         Ok(())
     }
 
+    async fn update_webhook_secret(&self, id: &TenantId, hash: &str, encrypted: &[u8]) -> Result<()> {
+        let mut tenants = self.tenants.lock().unwrap();
+        if let Some(tenant) = tenants.iter_mut().find(|t| t.id == id.0) {
+            tenant.webhook_secret_hash = hash.to_string();
+            tenant.webhook_secret_encrypted = Some(encrypted.to_vec());
+        }
+        Ok(())
+    }
+
     async fn update_limits(&self, id: &TenantId, daily_payin: Option<Decimal>, daily_payout: Option<Decimal>) -> Result<()> {
         let mut tenants = self.tenants.lock().unwrap();
         if let Some(tenant) = tenants.iter_mut().find(|t| t.id == id.0) {
@@ -542,6 +581,7 @@ mod tests {
             status: "ACTIVE".to_string(),
             api_key_hash: "hash123".to_string(),
             webhook_secret_hash: "secret".to_string(),
+            webhook_secret_encrypted: None,
             webhook_url: None,
             config: serde_json::json!({}),
             daily_payin_limit_vnd: None,

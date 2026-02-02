@@ -4,7 +4,10 @@ use axum::{
     Json,
 };
 use ramp_common::types::*;
-use ramp_core::service::payin::{ConfirmPayinRequest as ServiceConfirmRequest, CreatePayinRequest as ServiceRequest, PayinService};
+use ramp_core::service::payin::{
+    ConfirmPayinRequest as ServiceConfirmRequest, CreatePayinRequest as ServiceRequest,
+    PayinService,
+};
 use std::sync::Arc;
 use tracing::{info, instrument};
 use validator::Validate;
@@ -93,11 +96,19 @@ pub async fn create_payin(
     let mut headers = HeaderMap::new();
     headers.insert(
         "X-User-Daily-Limit",
-        result.daily_limit.to_string().parse().unwrap_or(axum::http::HeaderValue::from_static("0")),
+        result
+            .daily_limit
+            .to_string()
+            .parse()
+            .unwrap_or(axum::http::HeaderValue::from_static("0")),
     );
     headers.insert(
         "X-User-Daily-Remaining",
-        result.daily_remaining.to_string().parse().unwrap_or(axum::http::HeaderValue::from_static("0")),
+        result
+            .daily_remaining
+            .to_string()
+            .parse()
+            .unwrap_or(axum::http::HeaderValue::from_static("0")),
     );
 
     Ok((headers, Json(response)))
@@ -136,7 +147,9 @@ pub async fn confirm_payin(
         .and_then(|v| v.to_str().ok());
 
     if provided_secret != Some(&internal_secret) {
-        return Err(ApiError::Forbidden("Missing or invalid internal secret".to_string()));
+        return Err(ApiError::Forbidden(
+            "Missing or invalid internal secret".to_string(),
+        ));
     }
 
     tracing::Span::current()

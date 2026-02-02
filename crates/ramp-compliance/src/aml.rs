@@ -84,6 +84,24 @@ impl AmlEngine {
         }
     }
 
+    /// Create a permissive AML engine for testing that has no rules and allows all transactions
+    #[cfg(any(test, feature = "testing"))]
+    pub fn new_permissive() -> Self {
+        use crate::store::mock::InMemoryCaseStore;
+        use crate::transaction_history::MockTransactionHistoryStore;
+
+        let case_store = Arc::new(InMemoryCaseStore::new());
+        let case_manager = Arc::new(CaseManager::new(case_store));
+        let transaction_store: Arc<dyn TransactionHistoryStore> = Arc::new(MockTransactionHistoryStore::new());
+
+        Self {
+            rules: vec![], // No rules = all transactions pass
+            case_manager,
+            sanctions_provider: None,
+            transaction_store,
+        }
+    }
+
     /// Get default AML rules
     fn default_rules(
         device_store: Arc<dyn DeviceHistoryStore>,

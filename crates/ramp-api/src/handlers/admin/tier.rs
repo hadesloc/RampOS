@@ -3,11 +3,13 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use serde::{Deserialize, Serialize};
 use rust_decimal::prelude::ToPrimitive;
+use serde::{Deserialize, Serialize};
 use tracing::info;
 
+use crate::dto::TierChangeRequest;
 use crate::error::ApiError;
+use crate::extract::ValidatedJson;
 use crate::middleware::tenant::TenantContext;
 use ramp_common::types::UserId;
 use ramp_compliance::kyc::UserKycInfo;
@@ -46,14 +48,6 @@ pub struct TierHistoryEntry {
     pub reason: String,
     pub changed_by: String,
     pub timestamp: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TierChangeRequest {
-    #[serde(alias = "target_tier")]
-    pub target_tier: String,
-    pub reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,7 +102,10 @@ pub struct AdminAuth {
 ///
 /// SECURITY: This implements proper RBAC with role-based access control.
 /// Format of X-Admin-Key: <key>:<role> or just <key> (defaults to Viewer)
-pub(crate) fn check_admin_key_with_role(headers: &HeaderMap, required_role: AdminRole) -> Result<AdminAuth, ApiError> {
+pub(crate) fn check_admin_key_with_role(
+    headers: &HeaderMap,
+    required_role: AdminRole,
+) -> Result<AdminAuth, ApiError> {
     let expected_key = std::env::var("RAMPOS_ADMIN_KEY")
         .map_err(|_| ApiError::Forbidden("Admin key not configured".to_string()))?;
 
@@ -276,7 +273,7 @@ pub async fn upgrade_user_tier(
     Extension(tenant_ctx): Extension<TenantContext>,
     Path(user_id): Path<String>,
     State(app_state): State<crate::router::AppState>,
-    Json(request): Json<TierChangeRequest>,
+    ValidatedJson(request): ValidatedJson<TierChangeRequest>,
 ) -> Result<Json<UserTierInfo>, ApiError> {
     check_admin_key(&headers)?;
 
@@ -289,8 +286,7 @@ pub async fn upgrade_user_tier(
     );
 
     // Parse target tier
-    let target_tier = parse_tier(&request.target_tier)
-        .map_err(ApiError::Validation)?;
+    let target_tier = parse_tier(&request.target_tier).map_err(ApiError::Validation)?;
 
     let user_id_obj: UserId = UserId::new(user_id.clone());
     let upgrade_result: Result<(), ramp_common::Error> = app_state
@@ -317,15 +313,13 @@ pub async fn upgrade_user_tier(
         current_tier: format!("{:?}", kyc_info.current_tier),
         tier_status: format!("{:?}", kyc_info.kyc_status),
         last_updated: user.updated_at.to_rfc3339(),
-        history: vec![
-            TierHistoryEntry {
-                from_tier: "UNKNOWN".to_string(),
-                to_tier: request.target_tier,
-                reason: request.reason,
-                changed_by: "admin".to_string(),
-                timestamp: chrono::Utc::now().to_rfc3339(),
-            }
-        ],
+        history: vec![TierHistoryEntry {
+            from_tier: "UNKNOWN".to_string(),
+            to_tier: request.target_tier,
+            reason: request.reason,
+            changed_by: "admin".to_string(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }],
     }))
 }
 
@@ -335,7 +329,7 @@ pub async fn downgrade_user_tier(
     Extension(tenant_ctx): Extension<TenantContext>,
     Path(user_id): Path<String>,
     State(app_state): State<crate::router::AppState>,
-    Json(request): Json<TierChangeRequest>,
+    ValidatedJson(request): ValidatedJson<TierChangeRequest>,
 ) -> Result<Json<UserTierInfo>, ApiError> {
     check_admin_key(&headers)?;
 
@@ -348,13 +342,17 @@ pub async fn downgrade_user_tier(
     );
 
     // Parse target tier
-    let target_tier = parse_tier(&request.target_tier)
-        .map_err(ApiError::Validation)?;
+    let target_tier = parse_tier(&request.target_tier).map_err(ApiError::Validation)?;
 
     let user_id_obj: UserId = UserId::new(user_id.clone());
     let downgrade_result: Result<(), ramp_common::Error> = app_state
         .user_service
-        .downgrade_user_tier(&tenant_ctx.tenant_id, &user_id_obj, target_tier, &request.reason)
+        .downgrade_user_tier(
+            &tenant_ctx.tenant_id,
+            &user_id_obj,
+            target_tier,
+            &request.reason,
+        )
         .await;
     downgrade_result.map_err(ApiError::from)?;
 
@@ -376,15 +374,13 @@ pub async fn downgrade_user_tier(
         current_tier: format!("{:?}", kyc_info.current_tier),
         tier_status: format!("{:?}", kyc_info.kyc_status),
         last_updated: user.updated_at.to_rfc3339(),
-        history: vec![
-            TierHistoryEntry {
-                from_tier: "UNKNOWN".to_string(),
-                to_tier: request.target_tier,
-                reason: request.reason,
-                changed_by: "admin".to_string(),
-                timestamp: chrono::Utc::now().to_rfc3339(),
-            }
-        ],
+        history: vec![TierHistoryEntry {
+            from_tier: "UNKNOWN".to_string(),
+            to_tier: request.target_tier,
+            reason: request.reason,
+            changed_by: "admin".to_string(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }],
     }))
 }
 

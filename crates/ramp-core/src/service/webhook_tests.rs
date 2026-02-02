@@ -34,6 +34,7 @@ mock! {
         async fn create(&self, tenant: &TenantRow) -> Result<()>;
         async fn update_status(&self, id: &TenantId, status: &str) -> Result<()>;
         async fn update_webhook_url(&self, id: &TenantId, url: &str) -> Result<()>;
+        async fn update_webhook_secret(&self, id: &TenantId, hash: &str, encrypted: &[u8]) -> Result<()>;
         async fn update_api_key_hash(&self, id: &TenantId, hash: &str) -> Result<()>;
         async fn update_limits(&self, id: &TenantId, daily_payin: Option<rust_decimal::Decimal>, daily_payout: Option<rust_decimal::Decimal>) -> Result<()>;
         async fn update_config(&self, id: &TenantId, config: &serde_json::Value) -> Result<()>;
@@ -76,6 +77,7 @@ mod tests {
             status: "ACTIVE".to_string(),
             api_key_hash: "hash".to_string(),
             webhook_secret_hash: "secret".to_string(),
+            webhook_secret_encrypted: None,
             webhook_url,
             config: json!({}),
             daily_payin_limit_vnd: None,

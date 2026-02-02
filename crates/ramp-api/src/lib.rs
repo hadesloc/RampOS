@@ -1,12 +1,12 @@
 //! RampOS API Server
 
-pub mod handlers;
-pub mod middleware;
 pub mod dto;
 pub mod error;
-pub mod router;
 pub mod extract;
+pub mod handlers;
+pub mod middleware;
 pub mod openapi;
+pub mod router;
 
-pub use router::{create_router, AppState};
 pub use error::ApiError;
+pub use router::{create_router, AppState};

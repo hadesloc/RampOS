@@ -2,24 +2,31 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use tower::ServiceExt; // for oneshot
-use std::sync::Arc;
-use ramp_core::test_utils::*;
+use chrono::Utc;
+use ramp_api::middleware::{IdempotencyConfig, IdempotencyHandler, RateLimitConfig, RateLimiter};
+use ramp_api::{create_router, AppState};
+use ramp_common::ledger::{AccountType, EntryDirection, LedgerCurrency};
+use ramp_common::types::*;
+use ramp_compliance::{
+    case::CaseManager, reports::ReportGenerator, storage::MockDocumentStorage, InMemoryCaseStore,
+};
 use ramp_core::event::InMemoryEventPublisher;
-use ramp_core::service::{payin::PayinService, payout::{PayoutService, ConfirmPayoutRequest, PayoutBankStatus}, trade::TradeService, ledger::LedgerService};
 use ramp_core::repository::tenant::TenantRow;
 use ramp_core::repository::user::UserRow;
-use ramp_api::{create_router, AppState};
-use ramp_common::ledger::{AccountType, LedgerCurrency, EntryDirection};
 use ramp_core::repository::LedgerRepository;
-use ramp_api::middleware::{RateLimiter, RateLimitConfig, IdempotencyHandler, IdempotencyConfig};
-use ramp_common::types::*;
-use sha2::{Digest, Sha256};
-use chrono::Utc;
+use ramp_core::service::{
+    ledger::LedgerService,
+    payin::PayinService,
+    payout::{ConfirmPayoutRequest, PayoutBankStatus, PayoutService},
+    trade::TradeService,
+};
+use ramp_core::test_utils::*;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use ramp_compliance::{case::CaseManager, InMemoryCaseStore, reports::ReportGenerator, storage::MockDocumentStorage};
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
+use std::sync::Arc;
+use tower::ServiceExt; // for oneshot
 
 // --- Helper Functions ---
 
@@ -59,6 +66,7 @@ async fn setup_app() -> TestApp {
         status: "ACTIVE".to_string(),
         api_key_hash: api_key_hash.clone(),
         webhook_secret_hash: "secret".to_string(),
+            webhook_secret_encrypted: None,
         webhook_url: Some("http://localhost:3000/webhook".to_string()),
         config: serde_json::json!({}),
         daily_payin_limit_vnd: None,
@@ -127,10 +135,12 @@ async fn setup_app() -> TestApp {
         endpoint_limits: std::collections::HashMap::new(),
     })));
 
-    let idempotency_handler = Some(Arc::new(IdempotencyHandler::with_memory(IdempotencyConfig {
-        ttl_seconds: 60,
-        key_prefix: "test:idempotency".to_string(),
-    })));
+    let idempotency_handler = Some(Arc::new(IdempotencyHandler::with_memory(
+        IdempotencyConfig {
+            ttl_seconds: 60,
+            key_prefix: "test:idempotency".to_string(),
+        },
+    )));
 
     let app_state = AppState {
         payin_service,
@@ -145,6 +155,7 @@ async fn setup_app() -> TestApp {
         case_manager,
         rate_limiter,
         idempotency_handler,
+        aa_service: None,
     };
 
     let router = create_router(app_state);
@@ -206,7 +217,9 @@ async fn test_payout_success_flow() {
     let response = app.router.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     let intent_id_str = intent_resp["intentId"].as_str().unwrap();
     let status = intent_resp["status"].as_str().unwrap();
@@ -222,11 +235,11 @@ async fn test_payout_success_flow() {
     assert_eq!(txs.len(), 1); // Initiation tx
     assert_eq!(txs[0].intent_id, intent_id);
     // Check debit user liability
-    let has_debit = txs[0].entries.iter().any(|e|
-        e.account_type == AccountType::LiabilityUserVnd &&
-        e.direction == EntryDirection::Debit &&
-        e.amount == Decimal::from(amount)
-    );
+    let has_debit = txs[0].entries.iter().any(|e| {
+        e.account_type == AccountType::LiabilityUserVnd
+            && e.direction == EntryDirection::Debit
+            && e.amount == Decimal::from(amount)
+    });
     assert!(has_debit, "Funds should be held (debited) from user");
 
     // Drop lock
@@ -242,7 +255,10 @@ async fn test_payout_success_flow() {
         status: PayoutBankStatus::Success,
     };
 
-    app.payout_service.confirm_payout(confirm_req).await.unwrap();
+    app.payout_service
+        .confirm_payout(confirm_req)
+        .await
+        .unwrap();
 
     // 6. Verify state = "completed"
     let intents = app.intent_repo.intents.lock().unwrap();
@@ -270,12 +286,16 @@ async fn test_payout_success_flow() {
 
     // 8. Verify user balance decreased
     // We can check the balance via the repo
-    let final_balance = app.ledger_repo.get_balance(
-        &TenantId::new(&app.tenant_id),
-        Some(&UserId::new(&app.user_id)),
-        &AccountType::LiabilityUserVnd,
-        &LedgerCurrency::VND
-    ).await.unwrap();
+    let final_balance = app
+        .ledger_repo
+        .get_balance(
+            &TenantId::new(&app.tenant_id),
+            Some(&UserId::new(&app.user_id)),
+            &AccountType::LiabilityUserVnd,
+            &LedgerCurrency::VND,
+        )
+        .await
+        .unwrap();
 
     assert_eq!(final_balance, dec!(500_000)); // 1M - 500k = 500k
 
@@ -380,7 +400,9 @@ async fn test_payout_aml_block() {
     let response = app.router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     let status = intent_resp["status"].as_str().unwrap();
 
@@ -425,7 +447,9 @@ async fn test_payout_bank_rejection() {
     let response = app.router.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     let intent_id_str = intent_resp["intentId"].as_str().unwrap();
     let intent_id = IntentId::new(intent_id_str);
@@ -438,7 +462,10 @@ async fn test_payout_bank_rejection() {
         status: PayoutBankStatus::Rejected("Account invalid".to_string()),
     };
 
-    app.payout_service.confirm_payout(confirm_req).await.unwrap();
+    app.payout_service
+        .confirm_payout(confirm_req)
+        .await
+        .unwrap();
 
     // Verify state
     let intents = app.intent_repo.intents.lock().unwrap();

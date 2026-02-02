@@ -660,6 +660,7 @@ impl WorkflowClient {
                 bank_tx_id,
                 settled_at,
                 rejection_reason,
+                settled_amount: None,
             },
         }).await
     }

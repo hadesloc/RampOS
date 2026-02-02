@@ -8,6 +8,8 @@ pub mod webhook;
 pub mod timeout;
 pub mod user;
 pub mod onboarding;
+pub mod deposit;
+pub mod withdraw;
 #[cfg(test)]
 mod webhook_tests;
 
@@ -19,3 +21,5 @@ pub use webhook::WebhookService;
 pub use timeout::TimeoutService;
 pub use user::UserService;
 pub use onboarding::OnboardingService;
+pub use deposit::DepositService;
+pub use withdraw::WithdrawService;

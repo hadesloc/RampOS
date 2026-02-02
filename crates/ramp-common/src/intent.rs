@@ -143,6 +143,8 @@ pub enum PayoutState {
     Timeout,
     ManualReview,
     Cancelled,
+    // Reversal state - funds returned to user
+    Reversed,
 }
 
 impl PayoutState {
@@ -153,6 +155,7 @@ impl PayoutState {
                 | PayoutState::RejectedByPolicy
                 | PayoutState::BankRejected
                 | PayoutState::Cancelled
+                | PayoutState::Reversed
         )
     }
 
@@ -160,6 +163,14 @@ impl PayoutState {
         matches!(
             self,
             PayoutState::RejectedByPolicy | PayoutState::BankRejected | PayoutState::Timeout
+        )
+    }
+
+    /// Check if this state requires reversal of held funds
+    pub fn requires_reversal(&self) -> bool {
+        matches!(
+            self,
+            PayoutState::BankRejected | PayoutState::Timeout | PayoutState::Cancelled
         )
     }
 
@@ -177,17 +188,19 @@ impl PayoutState {
                 PayoutState::Timeout,
             ],
             PayoutState::Confirmed => vec![PayoutState::Completed],
-            PayoutState::Timeout => vec![PayoutState::Submitted, PayoutState::ManualReview],
+            PayoutState::Timeout => vec![PayoutState::Submitted, PayoutState::ManualReview, PayoutState::Reversed],
+            PayoutState::BankRejected => vec![PayoutState::Reversed],
             PayoutState::ManualReview => vec![
                 PayoutState::PolicyApproved,
                 PayoutState::RejectedByPolicy,
                 PayoutState::Cancelled,
+                PayoutState::Reversed,
             ],
+            PayoutState::Cancelled => vec![PayoutState::Reversed],
             // Terminal states
             PayoutState::Completed
             | PayoutState::RejectedByPolicy
-            | PayoutState::BankRejected
-            | PayoutState::Cancelled => vec![],
+            | PayoutState::Reversed => vec![],
         }
     }
 
@@ -209,6 +222,7 @@ impl std::fmt::Display for PayoutState {
             PayoutState::Timeout => write!(f, "TIMEOUT"),
             PayoutState::ManualReview => write!(f, "MANUAL_REVIEW"),
             PayoutState::Cancelled => write!(f, "CANCELLED"),
+            PayoutState::Reversed => write!(f, "REVERSED"),
         }
     }
 }

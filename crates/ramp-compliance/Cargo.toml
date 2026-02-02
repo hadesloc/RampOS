@@ -3,6 +3,10 @@ name = "ramp-compliance"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = []
+testing = []
+
 [dependencies]
 ramp-common = { path = "../ramp-common" }
 

@@ -1,20 +1,20 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import * as z from "zod"
-import { toast } from "sonner"
-import { ArrowRight, ShieldCheck } from "lucide-react"
+import { useState, useEffect } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import { toast } from "sonner";
+import { ArrowRight, ShieldCheck, Loader2, AlertCircle, Wallet } from "lucide-react";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
+} from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -23,25 +23,31 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useAuth } from "@/contexts/auth-context";
+import { transactionApi, walletApi, Balance } from "@/lib/portal-api";
+import { useRouter } from "next/navigation";
 
 const vndWithdrawSchema = z.object({
   bankName: z.string().min(1, "Please select a bank"),
   accountNumber: z.string().min(5, "Account number must be at least 5 digits"),
   accountName: z.string().min(2, "Account name is required"),
-  amount: z.string().refine((val) => !isNaN(Number(val)) && Number(val) >= 50000, {
-    message: "Minimum withdrawal is 50,000 VND",
-  }),
-})
+  amount: z
+    .string()
+    .refine((val) => !isNaN(Number(val)) && Number(val) >= 50000, {
+      message: "Minimum withdrawal is 50,000 VND",
+    }),
+});
 
 const cryptoWithdrawSchema = z.object({
   network: z.string().min(1, "Please select a network"),
@@ -50,10 +56,22 @@ const cryptoWithdrawSchema = z.object({
     message: "Minimum withdrawal is 10 USDT",
   }),
   otp: z.string().length(6, "OTP must be 6 digits"),
-})
+});
 
 export default function WithdrawPage() {
-  const [isConfirming, setIsConfirming] = useState(false)
+  const [activeTab, setActiveTab] = useState<"vnd" | "crypto">("vnd");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [balances, setBalances] = useState<Balance[]>([]);
+  const [isLoadingBalances, setIsLoadingBalances] = useState(true);
+
+  const {
+    user,
+    wallet,
+    isAuthenticated,
+    isLoading: authLoading,
+    createWallet,
+  } = useAuth();
+  const router = useRouter();
 
   const vndForm = useForm<z.infer<typeof vndWithdrawSchema>>({
     resolver: zodResolver(vndWithdrawSchema),
@@ -63,7 +81,7 @@ export default function WithdrawPage() {
       accountName: "",
       amount: "",
     },
-  })
+  });
 
   const cryptoForm = useForm<z.infer<typeof cryptoWithdrawSchema>>({
     resolver: zodResolver(cryptoWithdrawSchema),
@@ -73,26 +91,144 @@ export default function WithdrawPage() {
       amount: "",
       otp: "",
     },
-  })
+  });
 
-  function onVndSubmit(values: z.infer<typeof vndWithdrawSchema>) {
-    setIsConfirming(true)
-    // Simulate API call
-    setTimeout(() => {
-      setIsConfirming(false)
-      toast.success(`Withdrawal request for ${values.amount} VND submitted`)
-      vndForm.reset()
-    }, 1500)
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push("/portal/login");
+    }
+  }, [authLoading, isAuthenticated, router]);
+
+  // Fetch balances
+  useEffect(() => {
+    const fetchBalances = async () => {
+      if (!wallet) {
+        setIsLoadingBalances(false);
+        return;
+      }
+
+      try {
+        const data = await walletApi.getBalances();
+        setBalances(data);
+      } catch (err) {
+        console.error("Failed to fetch balances:", err);
+      } finally {
+        setIsLoadingBalances(false);
+      }
+    };
+
+    if (isAuthenticated && wallet) {
+      fetchBalances();
+    } else {
+      setIsLoadingBalances(false);
+    }
+  }, [isAuthenticated, wallet]);
+
+  const getBalance = (currency: string): string => {
+    const balance = balances.find((b) => b.currency === currency);
+    return balance?.available || "0";
+  };
+
+  async function onVndSubmit(values: z.infer<typeof vndWithdrawSchema>) {
+    setIsSubmitting(true);
+
+    try {
+      await transactionApi.createWithdraw({
+        method: "VND_BANK",
+        amount: values.amount,
+        currency: "VND",
+        bankName: values.bankName,
+        accountNumber: values.accountNumber,
+        accountName: values.accountName,
+      });
+
+      toast.success(
+        `Withdrawal request for ${Number(values.amount).toLocaleString()} VND submitted`
+      );
+      vndForm.reset();
+      router.push("/portal/transactions");
+    } catch (err) {
+      toast.error("Failed to submit withdrawal request");
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
-  function onCryptoSubmit(values: z.infer<typeof cryptoWithdrawSchema>) {
-    setIsConfirming(true)
-    // Simulate API call
-    setTimeout(() => {
-      setIsConfirming(false)
-      toast.success(`Withdrawal request for ${values.amount} USDT submitted`)
-      cryptoForm.reset()
-    }, 1500)
+  async function onCryptoSubmit(values: z.infer<typeof cryptoWithdrawSchema>) {
+    setIsSubmitting(true);
+
+    try {
+      await transactionApi.createWithdraw({
+        method: "CRYPTO",
+        amount: values.amount,
+        currency: "USDT",
+        network: values.network,
+        walletAddress: values.address,
+        otp: values.otp,
+      });
+
+      toast.success(`Withdrawal request for ${values.amount} USDT submitted`);
+      cryptoForm.reset();
+      router.push("/portal/transactions");
+    } catch (err) {
+      toast.error("Failed to submit withdrawal request");
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const handleCreateWallet = async () => {
+    try {
+      await createWallet();
+      toast.success("Wallet created successfully!");
+    } catch {
+      toast.error("Failed to create wallet");
+    }
+  };
+
+  // Show loading state
+  if (authLoading || isLoadingBalances) {
+    return (
+      <div className="container max-w-2xl py-8">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  // Show wallet creation prompt if no wallet
+  if (!wallet) {
+    return (
+      <div className="container max-w-2xl py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold">Withdraw</h1>
+          <p className="text-muted-foreground">
+            Create a wallet to withdraw funds.
+          </p>
+        </div>
+
+        <Card>
+          <CardContent className="flex flex-col items-center py-10 space-y-4">
+            <div className="rounded-full bg-muted p-4">
+              <Wallet className="h-12 w-12 text-muted-foreground" />
+            </div>
+            <div className="text-center space-y-2">
+              <h2 className="text-xl font-semibold">No Wallet Found</h2>
+              <p className="text-muted-foreground max-w-md">
+                You need to create a smart wallet before you can withdraw funds.
+              </p>
+            </div>
+            <Button onClick={handleCreateWallet} size="lg">
+              Create Wallet
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -104,7 +240,31 @@ export default function WithdrawPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="vnd" className="w-full">
+      {/* Balance Display */}
+      <Card className="mb-6">
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">VND Balance</p>
+              <p className="text-xl font-semibold">
+                {Number(getBalance("VND")).toLocaleString("vi-VN")} VND
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">USDT Balance</p>
+              <p className="text-xl font-semibold">
+                {Number(getBalance("USDT")).toLocaleString()} USDT
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Tabs
+        defaultValue="vnd"
+        className="w-full"
+        onValueChange={(v) => setActiveTab(v as "vnd" | "crypto")}
+      >
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="vnd">VND Withdrawal</TabsTrigger>
           <TabsTrigger value="crypto">Crypto Withdrawal</TabsTrigger>
@@ -120,14 +280,20 @@ export default function WithdrawPage() {
             </CardHeader>
             <CardContent>
               <Form {...vndForm}>
-                <form onSubmit={vndForm.handleSubmit(onVndSubmit)} className="space-y-4">
+                <form
+                  onSubmit={vndForm.handleSubmit(onVndSubmit)}
+                  className="space-y-4"
+                >
                   <FormField
                     control={vndForm.control}
                     name="bankName"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Bank</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select bank" />
@@ -138,6 +304,9 @@ export default function WithdrawPage() {
                             <SelectItem value="tcb">Techcombank</SelectItem>
                             <SelectItem value="mb">MB Bank</SelectItem>
                             <SelectItem value="acb">ACB</SelectItem>
+                            <SelectItem value="vpb">VPBank</SelectItem>
+                            <SelectItem value="bidv">BIDV</SelectItem>
+                            <SelectItem value="agr">Agribank</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -166,9 +335,14 @@ export default function WithdrawPage() {
                       <FormItem>
                         <FormLabel>Account Name</FormLabel>
                         <FormControl>
-                          <Input placeholder="Enter account holder name" {...field} />
+                          <Input
+                            placeholder="Enter account holder name"
+                            {...field}
+                          />
                         </FormControl>
-                        <FormDescription>Must match your verified KYC name</FormDescription>
+                        <FormDescription>
+                          Must match your verified KYC name
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -183,13 +357,23 @@ export default function WithdrawPage() {
                         <FormControl>
                           <Input placeholder="Min 50,000" {...field} />
                         </FormControl>
+                        <FormDescription>
+                          Available: {Number(getBalance("VND")).toLocaleString("vi-VN")} VND
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
 
-                  <Button type="submit" className="w-full" disabled={isConfirming}>
-                    {isConfirming ? "Processing..." : "Withdraw VND"}
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    {isSubmitting ? "Processing..." : "Withdraw VND"}
                   </Button>
                 </form>
               </Form>
@@ -207,14 +391,20 @@ export default function WithdrawPage() {
             </CardHeader>
             <CardContent>
               <Form {...cryptoForm}>
-                <form onSubmit={cryptoForm.handleSubmit(onCryptoSubmit)} className="space-y-4">
+                <form
+                  onSubmit={cryptoForm.handleSubmit(onCryptoSubmit)}
+                  className="space-y-4"
+                >
                   <FormField
                     control={cryptoForm.control}
                     name="network"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Network</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select network" />
@@ -238,7 +428,10 @@ export default function WithdrawPage() {
                       <FormItem>
                         <FormLabel>Wallet Address</FormLabel>
                         <FormControl>
-                          <Input placeholder="Enter wallet address" {...field} />
+                          <Input
+                            placeholder="Enter wallet address"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -255,6 +448,8 @@ export default function WithdrawPage() {
                           <Input placeholder="Min 10 USDT" {...field} />
                         </FormControl>
                         <FormDescription>
+                          Available: {Number(getBalance("USDT")).toLocaleString()} USDT
+                          <br />
                           Estimated Gas Fee: ~1.00 USDT
                         </FormDescription>
                         <FormMessage />
@@ -272,7 +467,7 @@ export default function WithdrawPage() {
                           <Input placeholder="000000" maxLength={6} {...field} />
                         </FormControl>
                         <FormDescription>
-                           Enter code from your authenticator app
+                          Enter code from your authenticator app
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -282,12 +477,20 @@ export default function WithdrawPage() {
                   <div className="rounded-md bg-muted p-4">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <ShieldCheck className="h-4 w-4" />
-                      <span>Security Check: Withdrawal requires 2FA confirmation.</span>
+                      <span>
+                        Security Check: Withdrawal requires 2FA confirmation.
+                      </span>
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full" disabled={isConfirming}>
-                    {isConfirming ? "Processing..." : (
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
                       <span className="flex items-center gap-2">
                         Confirm Withdrawal <ArrowRight className="h-4 w-4" />
                       </span>
@@ -300,5 +503,5 @@ export default function WithdrawPage() {
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

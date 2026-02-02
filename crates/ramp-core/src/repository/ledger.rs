@@ -52,6 +52,24 @@ pub trait LedgerRepository: Send + Sync {
         tenant_id: &TenantId,
         user_id: &UserId,
     ) -> Result<Vec<BalanceRow>>;
+
+    /// SECURITY: Atomically check balance and record transaction.
+    /// Uses SELECT FOR UPDATE to prevent race conditions in concurrent withdrawals.
+    /// Returns the balance before the transaction was applied.
+    ///
+    /// This method:
+    /// 1. Acquires a row lock on the account balance
+    /// 2. Verifies sufficient balance
+    /// 3. Records the transaction
+    /// 4. All within a single database transaction
+    async fn check_balance_and_record_transaction(
+        &self,
+        required_balance: Decimal,
+        user_id: &UserId,
+        account_type: &AccountType,
+        currency: &LedgerCurrency,
+        tx: LedgerTransaction,
+    ) -> Result<Decimal>;
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
@@ -251,5 +269,155 @@ impl LedgerRepository for PgLedgerRepository {
 
         tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
         Ok(rows)
+    }
+
+    /// SECURITY: Atomically check balance and record transaction with row locking.
+    /// Prevents race conditions in concurrent withdrawals.
+    async fn check_balance_and_record_transaction(
+        &self,
+        required_balance: Decimal,
+        user_id: &UserId,
+        account_type: &AccountType,
+        currency: &LedgerCurrency,
+        ledger_tx: LedgerTransaction,
+    ) -> Result<Decimal> {
+        // Start database transaction
+        let mut db_tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        // Set RLS context
+        set_rls_context(&mut db_tx, &ledger_tx.tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        // CRITICAL: Get balance WITH LOCK to prevent concurrent modifications
+        // FOR UPDATE acquires a row-level exclusive lock
+        let current_balance: Decimal = sqlx::query_scalar(
+            r#"
+            SELECT COALESCE(balance, 0)
+            FROM account_balances
+            WHERE tenant_id = $1
+              AND user_id = $2
+              AND account_type = $3
+              AND currency = $4
+            FOR UPDATE
+            "#,
+        )
+        .bind(&ledger_tx.tenant_id.0)
+        .bind(&user_id.0)
+        .bind(account_type.to_string())
+        .bind(currency.to_string())
+        .fetch_optional(&mut *db_tx)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?
+        .unwrap_or(Decimal::ZERO);
+
+        // Check if sufficient balance
+        if current_balance < required_balance {
+            // Rollback and return error
+            db_tx
+                .rollback()
+                .await
+                .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+            return Err(ramp_common::Error::InsufficientBalance {
+                required: required_balance.to_string(),
+                available: current_balance.to_string(),
+            });
+        }
+
+        // Balance is sufficient, now record all entries atomically
+        for entry in &ledger_tx.entries {
+            // Get current balance for this specific entry's account
+            let entry_current_balance: Decimal = sqlx::query_scalar(
+                r#"
+                SELECT COALESCE(balance, 0)
+                FROM account_balances
+                WHERE tenant_id = $1
+                  AND COALESCE(user_id, '') = COALESCE($2, '')
+                  AND account_type = $3
+                  AND currency = $4
+                FOR UPDATE
+                "#,
+            )
+            .bind(&ledger_tx.tenant_id.0)
+            .bind(entry.user_id.as_ref().map(|u| &u.0))
+            .bind(entry.account_type.to_string())
+            .bind(entry.currency.to_string())
+            .fetch_optional(&mut *db_tx)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?
+            .unwrap_or(Decimal::ZERO);
+
+            // Calculate new balance
+            let balance_change = match entry.direction {
+                EntryDirection::Debit => entry.amount,
+                EntryDirection::Credit => -entry.amount,
+            };
+            let new_balance = entry_current_balance + balance_change;
+
+            // Insert ledger entry
+            sqlx::query(
+                r#"
+                INSERT INTO ledger_entries (
+                    id, tenant_id, user_id, intent_id, transaction_id,
+                    account_type, direction, amount, currency, balance_after,
+                    description, metadata, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                "#,
+            )
+            .bind(&entry.id.0)
+            .bind(&ledger_tx.tenant_id.0)
+            .bind(entry.user_id.as_ref().map(|u| &u.0))
+            .bind(&ledger_tx.intent_id.0)
+            .bind(&ledger_tx.id)
+            .bind(entry.account_type.to_string())
+            .bind(match entry.direction {
+                EntryDirection::Debit => "DEBIT",
+                EntryDirection::Credit => "CREDIT",
+            })
+            .bind(entry.amount)
+            .bind(entry.currency.to_string())
+            .bind(new_balance)
+            .bind(&entry.description)
+            .bind(&entry.metadata)
+            .bind(entry.created_at)
+            .execute(&mut *db_tx)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+            // Upsert balance
+            sqlx::query(
+                r#"
+                INSERT INTO account_balances (tenant_id, user_id, account_type, currency, balance, last_entry_id, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                ON CONFLICT (tenant_id, COALESCE(user_id, ''), account_type, currency)
+                DO UPDATE SET
+                    balance = $5,
+                    last_entry_id = $6,
+                    updated_at = NOW()
+                "#,
+            )
+            .bind(&ledger_tx.tenant_id.0)
+            .bind(entry.user_id.as_ref().map(|u| &u.0))
+            .bind(entry.account_type.to_string())
+            .bind(entry.currency.to_string())
+            .bind(new_balance)
+            .bind(&entry.id.0)
+            .execute(&mut *db_tx)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        }
+
+        // Commit the transaction
+        db_tx
+            .commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(current_balance)
     }
 }

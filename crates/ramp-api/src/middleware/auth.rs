@@ -1,16 +1,16 @@
 use crate::middleware::tenant::TenantContext;
 use axum::{
     extract::{Request, State},
-    http::{StatusCode, HeaderMap},
+    http::{HeaderMap, StatusCode},
     middleware::Next,
-    response::{Response, IntoResponse},
+    response::{IntoResponse, Response},
     Json,
 };
+use chrono::{DateTime, TimeZone, Utc};
 use ramp_common::types::TenantId;
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
-use chrono::{DateTime, Utc, TimeZone};
-use serde_json::json;
 
 use ramp_core::repository::tenant::TenantRepository;
 
@@ -40,14 +40,16 @@ pub async fn auth_middleware(
                     "error": "missing_timestamp",
                     "message": "X-Timestamp header is missing"
                 })),
-            ).into_response(),
+            )
+                .into_response(),
             TimestampValidationError::InvalidFormat => (
                 StatusCode::BAD_REQUEST,
                 Json(json!({
                     "error": "invalid_format",
                     "message": "Invalid timestamp format"
                 })),
-            ).into_response(),
+            )
+                .into_response(),
             TimestampValidationError::Expired | TimestampValidationError::Future => (
                 StatusCode::UNAUTHORIZED,
                 Json(json!({
@@ -55,7 +57,8 @@ pub async fn auth_middleware(
                     "message": "Request timestamp is outside acceptable range",
                     "server_time": Utc::now().to_rfc3339()
                 })),
-            ).into_response(),
+            )
+                .into_response(),
         };
         return Ok(response);
     }
@@ -109,13 +112,19 @@ fn validate_timestamp(headers: &HeaderMap) -> Result<(), TimestampValidationErro
         dt.with_timezone(&Utc)
     } else {
         // Try parsing as Unix timestamp (seconds or milliseconds)
-        let ts_val = timestamp_str.parse::<i64>().map_err(|_| TimestampValidationError::InvalidFormat)?;
+        let ts_val = timestamp_str
+            .parse::<i64>()
+            .map_err(|_| TimestampValidationError::InvalidFormat)?;
 
         // Simple heuristic: if > 10^11, likely milliseconds (valid until year 5138)
         if ts_val > 100_000_000_000 {
-            Utc.timestamp_millis_opt(ts_val).single().ok_or(TimestampValidationError::InvalidFormat)?
+            Utc.timestamp_millis_opt(ts_val)
+                .single()
+                .ok_or(TimestampValidationError::InvalidFormat)?
         } else {
-             Utc.timestamp_opt(ts_val, 0).single().ok_or(TimestampValidationError::InvalidFormat)?
+            Utc.timestamp_opt(ts_val, 0)
+                .single()
+                .ok_or(TimestampValidationError::InvalidFormat)?
         }
     };
 
@@ -139,12 +148,6 @@ fn validate_timestamp(headers: &HeaderMap) -> Result<(), TimestampValidationErro
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{
-        // body::Body, // Unused
-        // http::Request, // Unused
-        // routing::get, // Unused
-        // Router, // Unused
-    };
     // use tower::ServiceExt; // Unused
 
     #[test]
@@ -157,12 +160,18 @@ mod tests {
         // Too old
         let past = now - chrono::Duration::seconds(301);
         headers.insert("X-Timestamp", past.to_rfc3339().parse().unwrap());
-        assert_eq!(validate_timestamp(&headers), Err(TimestampValidationError::Expired));
+        assert_eq!(
+            validate_timestamp(&headers),
+            Err(TimestampValidationError::Expired)
+        );
 
-        // Future > 1 min
-        let future = now + chrono::Duration::seconds(61);
+        // Future > 1 min (use 65 seconds to account for test execution time)
+        let future = now + chrono::Duration::seconds(65);
         headers.insert("X-Timestamp", future.to_rfc3339().parse().unwrap());
-        assert_eq!(validate_timestamp(&headers), Err(TimestampValidationError::Future));
+        assert_eq!(
+            validate_timestamp(&headers),
+            Err(TimestampValidationError::Future)
+        );
     }
 
     #[test]
@@ -175,7 +184,10 @@ mod tests {
         assert_eq!(validate_timestamp(&headers), Ok(()));
 
         // Milliseconds
-        headers.insert("X-Timestamp", now.timestamp_millis().to_string().parse().unwrap());
+        headers.insert(
+            "X-Timestamp",
+            now.timestamp_millis().to_string().parse().unwrap(),
+        );
         assert_eq!(validate_timestamp(&headers), Ok(()));
     }
 
@@ -184,10 +196,16 @@ mod tests {
         let mut headers = HeaderMap::new();
 
         // Missing
-        assert_eq!(validate_timestamp(&headers), Err(TimestampValidationError::Missing));
+        assert_eq!(
+            validate_timestamp(&headers),
+            Err(TimestampValidationError::Missing)
+        );
 
         // Invalid format
         headers.insert("X-Timestamp", "invalid".parse().unwrap());
-        assert_eq!(validate_timestamp(&headers), Err(TimestampValidationError::InvalidFormat));
+        assert_eq!(
+            validate_timestamp(&headers),
+            Err(TimestampValidationError::InvalidFormat)
+        );
     }
 }

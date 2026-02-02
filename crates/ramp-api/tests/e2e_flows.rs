@@ -6,24 +6,29 @@ use axum::{
 use chrono::Utc;
 use ramp_api::{create_router, AppState};
 use ramp_common::{
-    ledger::{AccountType, LedgerCurrency, EntryDirection},
+    ledger::{AccountType, EntryDirection, LedgerCurrency},
     types::{IntentId, TenantId, UserId},
+};
+use ramp_compliance::{
+    case::CaseManager, reports::ReportGenerator, storage::MockDocumentStorage, InMemoryCaseStore,
 };
 use ramp_core::{
     event::InMemoryEventPublisher,
     repository::{tenant::TenantRow, user::UserRow, LedgerRepository},
     service::{
-        ledger::LedgerService, payin::PayinService, payout::{PayoutService, ConfirmPayoutRequest, PayoutBankStatus}, trade::TradeService,
+        ledger::LedgerService,
         onboarding::OnboardingService,
+        payin::PayinService,
+        payout::{ConfirmPayoutRequest, PayoutBankStatus, PayoutService},
+        trade::TradeService,
     },
     test_utils::*,
 };
-use ramp_compliance::{case::CaseManager, InMemoryCaseStore, reports::ReportGenerator, storage::MockDocumentStorage};
-use sqlx::PgPool;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use sqlx::PgPool;
 use std::sync::Arc;
 use tower::ServiceExt; // for oneshot
 use uuid::Uuid;
@@ -136,6 +141,7 @@ async fn setup_test_app() -> TestContext {
         status: "ACTIVE".to_string(),
         api_key_hash,
         webhook_secret_hash: "secret".to_string(),
+            webhook_secret_encrypted: None,
         webhook_url: Some("http://localhost:3000/webhook".to_string()),
         config: serde_json::json!({}),
         daily_payin_limit_vnd: None,
@@ -208,6 +214,7 @@ async fn setup_test_app() -> TestContext {
         case_manager,
         rate_limiter: None,
         idempotency_handler: None,
+        aa_service: None,
     };
 
     let app = create_router(app_state);
@@ -245,7 +252,9 @@ async fn test_payin_e2e_flow() {
     // Assert: Response 201 (or 200 OK)
     assert!(response.status() == StatusCode::CREATED || response.status() == StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     let intent_id = intent_resp["intentId"].as_str().unwrap().to_string();
@@ -288,14 +297,18 @@ async fn test_payin_e2e_flow() {
     assert!(!txs.is_empty(), "Ledger should have transactions");
 
     // Find transaction for this intent
-    let tx = txs.iter().find(|t| t.intent_id.0 == intent_id).expect("Transaction not found");
+    let tx = txs
+        .iter()
+        .find(|t| t.intent_id.0 == intent_id)
+        .expect("Transaction not found");
 
     // Verify Credit to User Liability
-    let user_credit = tx.entries.iter().find(|e|
-        (e.account_type == AccountType::LiabilityUserVnd || e.account_type.to_string().contains("User")) &&
-        e.direction == EntryDirection::Credit &&
-        e.amount == Decimal::from(amount)
-    );
+    let user_credit = tx.entries.iter().find(|e| {
+        (e.account_type == AccountType::LiabilityUserVnd
+            || e.account_type.to_string().contains("User"))
+            && e.direction == EntryDirection::Credit
+            && e.amount == Decimal::from(amount)
+    });
     assert!(user_credit.is_some(), "Should have credited user liability");
 
     // Assert: Webhook event queued
@@ -304,11 +317,11 @@ async fn test_payin_e2e_flow() {
     drop(txs);
 
     let events = ctx.event_publisher.get_events().await;
-    let completed_event = events.iter().find(|e|
-        e["type"] == "intent.status_changed" &&
-        e["new_status"] == "COMPLETED" &&
-        e["intent_id"] == intent_id
-    );
+    let completed_event = events.iter().find(|e| {
+        e["type"] == "intent.status_changed"
+            && e["new_status"] == "COMPLETED"
+            && e["intent_id"] == intent_id
+    });
     assert!(completed_event.is_some(), "Webhook event should be queued");
 }
 
@@ -340,7 +353,9 @@ async fn test_payout_e2e_flow() {
     let response = ctx.app.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     let intent_id_str = intent_resp["intentId"].as_str().unwrap().to_string();
 
@@ -363,7 +378,10 @@ async fn test_payout_e2e_flow() {
         status: PayoutBankStatus::Success,
     };
 
-    ctx.payout_service.confirm_payout(confirm_req).await.expect("Failed to confirm payout");
+    ctx.payout_service
+        .confirm_payout(confirm_req)
+        .await
+        .expect("Failed to confirm payout");
 
     // Verify final state
     let intents = ctx.intent_repo.intents.lock().unwrap();
@@ -372,16 +390,19 @@ async fn test_payout_e2e_flow() {
 
     // Assert: Balance deducted
     drop(txs);
-    let balance = ctx.ledger_repo.get_balance(
-        &TenantId::new(&ctx.tenant_id),
-        Some(&UserId::new(&ctx.user_id)),
-        &AccountType::LiabilityUserVnd,
-        &LedgerCurrency::VND
-    ).await.unwrap();
+    let balance = ctx
+        .ledger_repo
+        .get_balance(
+            &TenantId::new(&ctx.tenant_id),
+            Some(&UserId::new(&ctx.user_id)),
+            &AccountType::LiabilityUserVnd,
+            &LedgerCurrency::VND,
+        )
+        .await
+        .unwrap();
 
     // 1M - 500k = 500k
     assert_eq!(balance, dec!(500_000));
-
 
     // Sub-test: AML Compliance Check
     // Action: Trigger AML check (Large amount)
@@ -408,7 +429,9 @@ async fn test_payout_e2e_flow() {
     let response_aml = ctx.app.clone().oneshot(request_aml).await.unwrap();
     assert_eq!(response_aml.status(), StatusCode::OK);
 
-    let body_bytes_aml = axum::body::to_bytes(response_aml.into_body(), usize::MAX).await.unwrap();
+    let body_bytes_aml = axum::body::to_bytes(response_aml.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let intent_resp_aml: serde_json::Value = serde_json::from_slice(&body_bytes_aml).unwrap();
 
     // Assert: AML compliance check triggered -> REJECTED_BY_POLICY
@@ -427,7 +450,7 @@ async fn test_trade_e2e_flow() {
         "trade_e2e_001",
         "BTC/VND",
         -50_000_000, // User sells 50M VND
-        dec!(0.05)   // User buys 0.05 BTC
+        dec!(0.05),  // User buys 0.05 BTC
     );
 
     let request = Request::builder()
@@ -446,23 +469,44 @@ async fn test_trade_e2e_flow() {
     assert!(!txs.is_empty());
 
     // Get the transaction
-    let tx = txs
-        .iter()
-        .find(|t| !t.intent_id.0.is_empty())
-        .unwrap();
+    let tx = txs.iter().find(|t| !t.intent_id.0.is_empty()).unwrap();
 
     // Verify VND Balance
-    let vnd_entries: Vec<_> = tx.entries.iter().filter(|e| e.currency == LedgerCurrency::VND).collect();
-    let vnd_debits: Decimal = vnd_entries.iter().filter(|e| e.direction == EntryDirection::Debit).map(|e| e.amount).sum();
-    let vnd_credits: Decimal = vnd_entries.iter().filter(|e| e.direction == EntryDirection::Credit).map(|e| e.amount).sum();
+    let vnd_entries: Vec<_> = tx
+        .entries
+        .iter()
+        .filter(|e| e.currency == LedgerCurrency::VND)
+        .collect();
+    let vnd_debits: Decimal = vnd_entries
+        .iter()
+        .filter(|e| e.direction == EntryDirection::Debit)
+        .map(|e| e.amount)
+        .sum();
+    let vnd_credits: Decimal = vnd_entries
+        .iter()
+        .filter(|e| e.direction == EntryDirection::Credit)
+        .map(|e| e.amount)
+        .sum();
 
     assert_eq!(vnd_debits, vnd_credits, "VND entries should be balanced");
     assert!(vnd_debits > Decimal::ZERO, "Should have VND movement");
 
     // Verify BTC Balance
-    let btc_entries: Vec<_> = tx.entries.iter().filter(|e| e.currency == LedgerCurrency::BTC).collect();
-    let btc_debits: Decimal = btc_entries.iter().filter(|e| e.direction == EntryDirection::Debit).map(|e| e.amount).sum();
-    let btc_credits: Decimal = btc_entries.iter().filter(|e| e.direction == EntryDirection::Credit).map(|e| e.amount).sum();
+    let btc_entries: Vec<_> = tx
+        .entries
+        .iter()
+        .filter(|e| e.currency == LedgerCurrency::BTC)
+        .collect();
+    let btc_debits: Decimal = btc_entries
+        .iter()
+        .filter(|e| e.direction == EntryDirection::Debit)
+        .map(|e| e.amount)
+        .sum();
+    let btc_credits: Decimal = btc_entries
+        .iter()
+        .filter(|e| e.direction == EntryDirection::Credit)
+        .map(|e| e.amount)
+        .sum();
 
     assert_eq!(btc_debits, btc_credits, "BTC entries should be balanced");
     assert!(btc_debits > Decimal::ZERO, "Should have BTC movement");

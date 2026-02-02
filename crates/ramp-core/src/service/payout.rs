@@ -316,20 +316,34 @@ impl PayoutService {
             }
             PayoutBankStatus::Rejected(reason) => {
                 // Reverse ledger entries (return funds to user)
-                // In production, create reversal transaction
+                let user_id = UserId(intent.user_id.clone());
+                let tx = patterns::payout_vnd_reversed(
+                    req.tenant_id.clone(),
+                    user_id,
+                    req.intent_id.clone(),
+                    intent.amount,
+                    &reason,
+                )?;
 
+                self.ledger_repo.record_transaction(tx).await?;
+
+                // Update state to REVERSED (funds returned)
                 self.intent_repo
-                    .update_state(&req.tenant_id, &req.intent_id, "BANK_REJECTED")
+                    .update_state(&req.tenant_id, &req.intent_id, "REVERSED")
                     .await?;
 
                 self.event_publisher
-                    .publish_intent_status_changed(&req.intent_id, &req.tenant_id, "BANK_REJECTED")
+                    .publish_intent_status_changed(&req.intent_id, &req.tenant_id, "REVERSED")
+                    .await?;
+
+                self.event_publisher
+                    .publish_payout_reversed(&req.intent_id, &req.tenant_id, &reason)
                     .await?;
 
                 info!(
                     intent_id = %req.intent_id,
                     reason = %reason,
-                    "Pay-out rejected by bank"
+                    "Pay-out rejected by bank - funds reversed to user"
                 );
             }
         }
@@ -362,6 +376,7 @@ fn parse_payout_state(state: &str) -> PayoutState {
         "TIMEOUT" => PayoutState::Timeout,
         "MANUAL_REVIEW" => PayoutState::ManualReview,
         "CANCELLED" => PayoutState::Cancelled,
+        "REVERSED" => PayoutState::Reversed,
         _ => PayoutState::Created,
     }
 }
@@ -439,5 +454,184 @@ mod tests {
 
         let txs = ledger_repo.transactions.lock().unwrap();
         assert_eq!(txs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_confirm_payout_bank_rejected_triggers_reversal() {
+        let intent_repo = Arc::new(MockIntentRepository::new());
+        let ledger_repo = Arc::new(MockLedgerRepository::new());
+        let user_repo = Arc::new(MockUserRepository::new());
+        let event_publisher = Arc::new(InMemoryEventPublisher::new());
+
+        // Setup user
+        user_repo.add_user(UserRow {
+            id: "user1".to_string(),
+            tenant_id: "tenant1".to_string(),
+            status: "ACTIVE".to_string(),
+            kyc_tier: 1,
+            kyc_status: "VERIFIED".to_string(),
+            kyc_verified_at: Some(Utc::now()),
+            risk_score: None,
+            risk_flags: serde_json::json!({}),
+            daily_payin_limit_vnd: None,
+            daily_payout_limit_vnd: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        });
+
+        // Setup balance
+        ledger_repo.set_balance(
+            &TenantId::new("tenant1"),
+            Some(&UserId::new("user1")),
+            &AccountType::LiabilityUserVnd,
+            &LedgerCurrency::VND,
+            dec!(500000),
+        );
+
+        let service = PayoutService::new(
+            intent_repo.clone(),
+            ledger_repo.clone(),
+            user_repo.clone(),
+            event_publisher.clone(),
+        );
+
+        // First create a payout
+        let create_req = CreatePayoutRequest {
+            tenant_id: TenantId::new("tenant1"),
+            user_id: UserId::new("user1"),
+            amount_vnd: VndAmount::from_i64(100_000),
+            rails_provider: RailsProvider::new("VIETCOMBANK"),
+            bank_account: BankAccount {
+                bank_code: "VCB".to_string(),
+                account_number: "123456789".to_string(),
+                account_name: "NGUYEN VAN A".to_string(),
+            },
+            idempotency_key: None,
+            metadata: serde_json::json!({}),
+        };
+
+        let create_res = service.create_payout(create_req).await.unwrap();
+        let intent_id = create_res.intent_id;
+
+        // Now simulate bank rejection
+        let confirm_req = ConfirmPayoutRequest {
+            tenant_id: TenantId::new("tenant1"),
+            intent_id: intent_id.clone(),
+            bank_tx_id: "BANK_TX_123".to_string(),
+            status: PayoutBankStatus::Rejected("Account closed".to_string()),
+        };
+
+        let result = service.confirm_payout(confirm_req).await;
+        assert!(result.is_ok());
+
+        // Verify state is REVERSED
+        let intents = intent_repo.intents.lock().unwrap();
+        let intent = intents.iter().find(|i| i.id == intent_id.0).unwrap();
+        assert_eq!(intent.state, "REVERSED");
+
+        // Verify reversal ledger entry was created (should have 2 transactions: initial hold + reversal)
+        let txs = ledger_repo.transactions.lock().unwrap();
+        assert_eq!(txs.len(), 2);
+
+        // The second transaction should be the reversal
+        let reversal_tx = &txs[1];
+        assert!(reversal_tx.description.contains("reversed") || reversal_tx.description.contains("Account closed"));
+        assert!(reversal_tx.is_balanced());
+
+        // Verify events were published
+        let events = event_publisher.get_events().await;
+        let reversed_events: Vec<_> = events.iter()
+            .filter(|e| e.get("type").and_then(|t| t.as_str()) == Some("payout.reversed"))
+            .collect();
+        assert!(!reversed_events.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_confirm_payout_success() {
+        let intent_repo = Arc::new(MockIntentRepository::new());
+        let ledger_repo = Arc::new(MockLedgerRepository::new());
+        let user_repo = Arc::new(MockUserRepository::new());
+        let event_publisher = Arc::new(InMemoryEventPublisher::new());
+
+        // Setup user
+        user_repo.add_user(UserRow {
+            id: "user1".to_string(),
+            tenant_id: "tenant1".to_string(),
+            status: "ACTIVE".to_string(),
+            kyc_tier: 1,
+            kyc_status: "VERIFIED".to_string(),
+            kyc_verified_at: Some(Utc::now()),
+            risk_score: None,
+            risk_flags: serde_json::json!({}),
+            daily_payin_limit_vnd: None,
+            daily_payout_limit_vnd: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        });
+
+        // Setup balance
+        ledger_repo.set_balance(
+            &TenantId::new("tenant1"),
+            Some(&UserId::new("user1")),
+            &AccountType::LiabilityUserVnd,
+            &LedgerCurrency::VND,
+            dec!(500000),
+        );
+
+        let service = PayoutService::new(
+            intent_repo.clone(),
+            ledger_repo.clone(),
+            user_repo.clone(),
+            event_publisher.clone(),
+        );
+
+        // First create a payout
+        let create_req = CreatePayoutRequest {
+            tenant_id: TenantId::new("tenant1"),
+            user_id: UserId::new("user1"),
+            amount_vnd: VndAmount::from_i64(100_000),
+            rails_provider: RailsProvider::new("VIETCOMBANK"),
+            bank_account: BankAccount {
+                bank_code: "VCB".to_string(),
+                account_number: "123456789".to_string(),
+                account_name: "NGUYEN VAN A".to_string(),
+            },
+            idempotency_key: None,
+            metadata: serde_json::json!({}),
+        };
+
+        let create_res = service.create_payout(create_req).await.unwrap();
+        let intent_id = create_res.intent_id;
+
+        // Now simulate bank confirmation (success)
+        let confirm_req = ConfirmPayoutRequest {
+            tenant_id: TenantId::new("tenant1"),
+            intent_id: intent_id.clone(),
+            bank_tx_id: "BANK_TX_123".to_string(),
+            status: PayoutBankStatus::Success,
+        };
+
+        let result = service.confirm_payout(confirm_req).await;
+        assert!(result.is_ok());
+
+        // Verify state is COMPLETED
+        let intents = intent_repo.intents.lock().unwrap();
+        let intent = intents.iter().find(|i| i.id == intent_id.0).unwrap();
+        assert_eq!(intent.state, "COMPLETED");
+
+        // Verify completion ledger entry was created (should have 2 transactions: initial hold + confirmation)
+        let txs = ledger_repo.transactions.lock().unwrap();
+        assert_eq!(txs.len(), 2);
+
+        // The second transaction should be the confirmation
+        let confirmation_tx = &txs[1];
+        assert!(confirmation_tx.description.contains("confirmed"));
+    }
+
+    #[test]
+    fn test_parse_payout_state_reversed() {
+        assert_eq!(parse_payout_state("REVERSED"), PayoutState::Reversed);
+        assert_eq!(parse_payout_state("BANK_REJECTED"), PayoutState::BankRejected);
+        assert_eq!(parse_payout_state("TIMEOUT"), PayoutState::Timeout);
     }
 }

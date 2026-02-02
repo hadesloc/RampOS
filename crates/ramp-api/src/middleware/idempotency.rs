@@ -8,8 +8,8 @@ use axum::{
     response::Response,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 
 use crate::middleware::tenant::TenantContext;
@@ -44,7 +44,14 @@ pub struct StoredResponse {
 #[async_trait::async_trait]
 pub trait IdempotencyStore: Send + Sync {
     async fn get(&self, tenant_id: &str, key: &str, key_prefix: &str) -> Option<StoredResponse>;
-    async fn store(&self, tenant_id: &str, key: &str, response: &StoredResponse, ttl_seconds: u64, key_prefix: &str) -> Result<(), String>;
+    async fn store(
+        &self,
+        tenant_id: &str,
+        key: &str,
+        response: &StoredResponse,
+        ttl_seconds: u64,
+        key_prefix: &str,
+    ) -> Result<(), String>;
     async fn try_lock(&self, tenant_id: &str, key: &str, key_prefix: &str) -> Result<bool, String>;
     async fn unlock(&self, tenant_id: &str, key: &str, key_prefix: &str) -> Result<(), String>;
 }
@@ -75,7 +82,14 @@ impl IdempotencyStore for RedisIdempotencyStore {
         }
     }
 
-    async fn store(&self, tenant_id: &str, key: &str, response: &StoredResponse, ttl_seconds: u64, key_prefix: &str) -> Result<(), String> {
+    async fn store(
+        &self,
+        tenant_id: &str,
+        key: &str,
+        response: &StoredResponse,
+        ttl_seconds: u64,
+        key_prefix: &str,
+    ) -> Result<(), String> {
         let full_key = format!("{}:{}:{}", key_prefix, tenant_id, key);
         let mut conn = (*self.redis).clone();
 
@@ -157,7 +171,14 @@ impl IdempotencyStore for MemoryIdempotencyStore {
         None
     }
 
-    async fn store(&self, tenant_id: &str, key: &str, response: &StoredResponse, ttl_seconds: u64, key_prefix: &str) -> Result<(), String> {
+    async fn store(
+        &self,
+        tenant_id: &str,
+        key: &str,
+        response: &StoredResponse,
+        ttl_seconds: u64,
+        key_prefix: &str,
+    ) -> Result<(), String> {
         let full_key = format!("{}:{}:{}", key_prefix, tenant_id, key);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -206,10 +227,7 @@ pub struct IdempotencyHandler {
 
 impl IdempotencyHandler {
     pub fn new(store: Arc<dyn IdempotencyStore>, config: IdempotencyConfig) -> Self {
-        Self {
-            store,
-            config,
-        }
+        Self { store, config }
     }
 
     pub fn with_redis(redis: redis::aio::ConnectionManager, config: IdempotencyConfig) -> Self {
@@ -222,7 +240,9 @@ impl IdempotencyHandler {
 
     /// Get stored response for idempotency key
     pub async fn get(&self, tenant_id: &str, key: &str) -> Option<StoredResponse> {
-        self.store.get(tenant_id, key, &self.config.key_prefix).await
+        self.store
+            .get(tenant_id, key, &self.config.key_prefix)
+            .await
     }
 
     /// Store response for idempotency key
@@ -232,17 +252,29 @@ impl IdempotencyHandler {
         key: &str,
         response: &StoredResponse,
     ) -> Result<(), String> {
-        self.store.store(tenant_id, key, response, self.config.ttl_seconds, &self.config.key_prefix).await
+        self.store
+            .store(
+                tenant_id,
+                key,
+                response,
+                self.config.ttl_seconds,
+                &self.config.key_prefix,
+            )
+            .await
     }
 
     /// Mark request as in-progress (to prevent concurrent requests with same key)
     pub async fn try_lock(&self, tenant_id: &str, key: &str) -> Result<bool, String> {
-        self.store.try_lock(tenant_id, key, &self.config.key_prefix).await
+        self.store
+            .try_lock(tenant_id, key, &self.config.key_prefix)
+            .await
     }
 
     /// Release lock
     pub async fn unlock(&self, tenant_id: &str, key: &str) -> Result<(), String> {
-        self.store.unlock(tenant_id, key, &self.config.key_prefix).await
+        self.store
+            .unlock(tenant_id, key, &self.config.key_prefix)
+            .await
     }
 }
 

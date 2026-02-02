@@ -5,9 +5,7 @@ use axum::{
     routing::post,
     Router,
 };
-use ramp_api::middleware::{
-    IdempotencyConfig, IdempotencyHandler, idempotency_middleware,
-};
+use ramp_api::middleware::{idempotency_middleware, IdempotencyConfig, IdempotencyHandler};
 use std::sync::Arc;
 use tower::ServiceExt; // for oneshot
 
@@ -32,7 +30,9 @@ async fn test_idempotency_different_request_hash_conflict() {
     let response1 = app.clone().oneshot(req1).await.unwrap();
     assert_eq!(response1.status(), StatusCode::OK);
 
-    let body1 = axum::body::to_bytes(response1.into_body(), usize::MAX).await.unwrap();
+    let body1 = axum::body::to_bytes(response1.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body1, "Success");
 
     // Request 2 - Same key, different body

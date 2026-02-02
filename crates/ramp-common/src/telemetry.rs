@@ -88,7 +88,7 @@ pub fn init_telemetry(config: TelemetryConfig) -> anyhow::Result<()> {
     // OTLP exporter (if configured)
     if let Some(endpoint) = &config.otlp_endpoint {
         let exporter = opentelemetry_otlp::new_exporter()
-            .tonic()
+            .http()
             .with_endpoint(endpoint);
 
         let tracer_provider = TracerProvider::builder()
