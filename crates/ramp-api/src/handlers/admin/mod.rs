@@ -23,17 +23,33 @@ use ramp_common::types::UserId;
 use ramp_compliance::types::{CaseSeverity, CaseStatus};
 use ramp_core::repository::user::UserRow;
 
+pub mod intent;
+pub mod ledger;
 pub mod onboarding;
 pub mod reports;
+pub mod rules;
 pub mod tier;
+pub mod webhooks;
 
+pub use intent::*;
+pub use ledger::*;
 pub use onboarding::*;
 pub use reports::*;
+pub use rules::*;
 pub use tier::*;
+pub use webhooks::*;
 
 // ============================================================================
 // Case Management DTOs
 // ============================================================================
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PaginationParams {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

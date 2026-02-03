@@ -511,6 +511,59 @@ impl LedgerRepository for MockLedgerRepository {
 
         Ok(current_balance)
     }
+
+    async fn list_entries(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<LedgerEntryRow>> {
+        let txs = self.transactions.lock().unwrap();
+        let entries: Vec<LedgerEntryRow> = txs
+            .iter()
+            .filter(|tx| tx.tenant_id == *tenant_id)
+            .flat_map(|tx| {
+                tx.entries.iter().map(|e| LedgerEntryRow {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    tenant_id: tx.tenant_id.0.clone(),
+                    user_id: e.user_id.as_ref().map(|u| u.0.clone()),
+                    intent_id: tx.intent_id.0.clone(),
+                    transaction_id: tx.id.clone(),
+                    account_type: e.account_type.to_string(),
+                    direction: e.direction.to_string(),
+                    amount: e.amount,
+                    currency: e.currency.to_string(),
+                    balance_after: Decimal::ZERO,
+                    sequence: 0,
+                    description: Some(e.description.clone()),
+                    metadata: serde_json::json!({}),
+                    created_at: Utc::now(),
+                })
+            })
+            .collect();
+
+        let start = offset.max(0) as usize;
+        let end = (start + limit.max(0) as usize).min(entries.len());
+        if start >= entries.len() {
+            return Ok(vec![]);
+        }
+        Ok(entries[start..end].to_vec())
+    }
+
+    async fn list_all_balances(
+        &self,
+        _tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<BalanceRow>> {
+        let balances = self.balances.lock().unwrap();
+        let start = offset.max(0) as usize;
+        let end = (start + limit.max(0) as usize).min(balances.len());
+        if start >= balances.len() {
+            return Ok(vec![]);
+        }
+        Ok(balances[start..end].to_vec())
+    }
 }
 
 #[derive(Clone)]

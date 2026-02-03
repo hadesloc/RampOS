@@ -44,6 +44,25 @@ type Client struct {
 	apiSecret  string
 	httpClient *http.Client
 	tenantID   string
+
+	Payins  *PayinService
+	Payouts *PayoutService
+}
+
+type PayinService struct {
+	client *Client
+}
+
+func (s *PayinService) Create(ctx context.Context, req *CreatePayinRequest) (*CreatePayinResponse, error) {
+	return s.client.CreatePayin(ctx, *req)
+}
+
+type PayoutService struct {
+	client *Client
+}
+
+func (s *PayoutService) Create(ctx context.Context, req *CreatePayoutRequest) (*CreatePayoutResponse, error) {
+	return s.client.CreatePayout(ctx, *req)
 }
 
 // ClientOption configures the Client.
@@ -85,7 +104,24 @@ func NewClient(apiKey, apiSecret string, opts ...ClientOption) *Client {
 		opt(c)
 	}
 
+	c.Payins = &PayinService{client: c}
+	c.Payouts = &PayoutService{client: c}
+
 	return c
+}
+
+// WithAPIKey sets the API key.
+func WithAPIKey(apiKey string) ClientOption {
+	return func(c *Client) {
+		c.apiKey = apiKey
+	}
+}
+
+// WithAPISecret sets the API secret.
+func WithAPISecret(apiSecret string) ClientOption {
+	return func(c *Client) {
+		c.apiSecret = apiSecret
+	}
 }
 
 // doRequest performs an HTTP request with authentication.
@@ -132,7 +168,9 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 	defer resp.Body.Close()
 
 	// Read response body
-	respBody, err := io.ReadAll(resp.Body)
+	// Limit response size to 10MB to prevent DoS
+	limitedReader := io.LimitReader(resp.Body, 10*1024*1024)
+	respBody, err := io.ReadAll(limitedReader)
 	if err != nil {
 		return fmt.Errorf("failed to read response: %w", err)
 	}

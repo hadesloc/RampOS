@@ -7,6 +7,7 @@ pub mod health;
 pub mod intent;
 pub mod payin;
 pub mod payout;
+pub mod portal;
 pub mod trade;
 
 pub use aa::*;

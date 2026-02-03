@@ -1,63 +1,10 @@
 "use client";
 
-import { useState } from "react";
-
-interface Case {
-  id: string;
-  caseType: string;
-  severity: string;
-  status: string;
-  assignedTo?: string;
-  userId?: string;
-  intentId?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// Mock data
-const mockCases: Case[] = [
-  {
-    id: "case_01HYJ2KM3N4P5Q6R7S8T9U0A",
-    caseType: "VELOCITY",
-    severity: "HIGH",
-    status: "OPEN",
-    assignedTo: "analyst@rampos.io",
-    userId: "user_123",
-    intentId: "intent_456",
-    createdAt: "2026-01-23T09:00:00Z",
-    updatedAt: "2026-01-23T09:30:00Z",
-  },
-  {
-    id: "case_01HYJ2KM3N4P5Q6R7S8T9U0B",
-    caseType: "LARGE_TRANSACTION",
-    severity: "CRITICAL",
-    status: "REVIEW",
-    assignedTo: "senior@rampos.io",
-    userId: "user_456",
-    intentId: "intent_789",
-    createdAt: "2026-01-23T08:00:00Z",
-    updatedAt: "2026-01-23T10:00:00Z",
-  },
-  {
-    id: "case_01HYJ2KM3N4P5Q6R7S8T9U0C",
-    caseType: "STRUCTURING",
-    severity: "MEDIUM",
-    status: "HOLD",
-    userId: "user_789",
-    createdAt: "2026-01-22T15:00:00Z",
-    updatedAt: "2026-01-23T08:00:00Z",
-  },
-  {
-    id: "case_01HYJ2KM3N4P5Q6R7S8T9U0D",
-    caseType: "UNUSUAL_PAYOUT",
-    severity: "LOW",
-    status: "RELEASED",
-    assignedTo: "analyst@rampos.io",
-    userId: "user_101",
-    createdAt: "2026-01-22T10:00:00Z",
-    updatedAt: "2026-01-22T16:00:00Z",
-  },
-];
+import { useState, useEffect } from "react";
+import { casesApi, type AmlCase } from "@/lib/api";
+import { Loader2, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleString("vi-VN", {
@@ -102,17 +49,58 @@ function getStatusColor(status: string): string {
 }
 
 export default function CompliancePage() {
-  const [cases] = useState<Case[]>(mockCases);
+  const [cases, setCases] = useState<AmlCase[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
   const [filter, setFilter] = useState({
     severity: "",
     status: "",
   });
 
-  const filteredCases = cases.filter((c) => {
-    if (filter.severity && c.severity !== filter.severity) return false;
-    if (filter.status && c.status !== filter.status) return false;
-    return true;
-  });
+  const fetchCases = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await casesApi.list({
+        status: filter.status || undefined,
+        severity: filter.severity || undefined,
+      });
+      setCases(response.data);
+    } catch (err: any) {
+      console.error("Failed to fetch cases:", err);
+      setError(err.message || "Failed to load cases");
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err.message || "Failed to load cases",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCases();
+  }, [filter.status, filter.severity]);
+
+  const handleStatusUpdate = async (id: string, newStatus: string) => {
+    try {
+        await casesApi.updateStatus(id, newStatus);
+        toast({
+            title: "Success",
+            description: `Case status updated to ${newStatus}`,
+        });
+        fetchCases(); // Reload data
+    } catch (err: any) {
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: err.message || "Failed to update case status",
+        });
+    }
+  };
 
   const stats = {
     total: cases.length,
@@ -120,13 +108,22 @@ export default function CompliancePage() {
     critical: cases.filter((c) => c.severity === "CRITICAL").length,
   };
 
+  const handleRefresh = () => {
+    fetchCases();
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Compliance</h1>
-        <p className="text-muted-foreground">
-          AML case management and monitoring
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+            <h1 className="text-3xl font-bold tracking-tight">Compliance</h1>
+            <p className="text-muted-foreground">
+            AML case management and monitoring
+            </p>
+        </div>
+        <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
 
       {/* Stats */}
@@ -188,14 +185,30 @@ export default function CompliancePage() {
             </tr>
           </thead>
           <tbody>
-            {filteredCases.map((c) => (
+            {loading ? (
+                <tr>
+                    <td colSpan={7} className="h-24 text-center">
+                        <div className="flex justify-center items-center gap-2">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            <span className="text-muted-foreground">Loading cases...</span>
+                        </div>
+                    </td>
+                </tr>
+            ) : cases.length === 0 ? (
+                <tr>
+                    <td colSpan={7} className="h-24 text-center text-muted-foreground">
+                        No cases found matching the filters.
+                    </td>
+                </tr>
+            ) : (
+                cases.map((c) => (
               <tr key={c.id} className="border-t hover:bg-muted/30">
                 <td className="px-4 py-3">
                   <span className="font-mono text-xs">
                     {c.id.substring(0, 20)}...
                   </span>
                 </td>
-                <td className="px-4 py-3">{c.caseType}</td>
+                <td className="px-4 py-3">{c.case_type}</td>
                 <td className="px-4 py-3">
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getSeverityColor(
@@ -215,27 +228,42 @@ export default function CompliancePage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
-                  {c.assignedTo || "Unassigned"}
+                  {c.assigned_to || "Unassigned"}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
-                  {formatDate(c.createdAt)}
+                  {formatDate(c.created_at)}
                 </td>
                 <td className="px-4 py-3">
-                  <button className="text-blue-600 dark:text-blue-400 hover:underline text-xs">
-                    View
-                  </button>
+                  <div className="flex gap-2">
+                      <button
+                        className="text-blue-600 dark:text-blue-400 hover:underline text-xs"
+                        onClick={() => alert(`View details for ${c.id}`)}
+                      >
+                        View
+                      </button>
+                      {c.status === 'OPEN' && (
+                          <button
+                            className="text-purple-600 dark:text-purple-400 hover:underline text-xs"
+                            onClick={() => handleStatusUpdate(c.id, 'REVIEW')}
+                          >
+                            Review
+                          </button>
+                      )}
+                      {(c.status === 'OPEN' || c.status === 'REVIEW') && (
+                          <button
+                            className="text-green-600 dark:text-green-400 hover:underline text-xs"
+                            onClick={() => handleStatusUpdate(c.id, 'RELEASED')}
+                          >
+                            Release
+                          </button>
+                      )}
+                  </div>
                 </td>
               </tr>
-            ))}
+            )))}
           </tbody>
         </table>
       </div>
-
-      {filteredCases.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground">
-          No cases found matching the filters.
-        </div>
-      )}
     </div>
   );
 }

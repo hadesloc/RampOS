@@ -45,6 +45,7 @@ hex = "0.4"
 jsonwebtoken = "9.2"
 argon2 = "0.5"
 rand = "0.8"
+base64 = "0.22"
 
 # Ethereum/AA
 ethers = { version = "2.0", default-features = false, features = ["abigen", "ws"] }

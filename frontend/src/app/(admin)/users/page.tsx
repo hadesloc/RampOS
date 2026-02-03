@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -30,64 +30,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { MoreHorizontal, Plus, Settings2 } from "lucide-react";
+import { MoreHorizontal, Plus, Settings2, Loader2, RefreshCw } from "lucide-react";
+import { usersApi, type User } from "@/lib/api";
+import { useToast } from "@/components/ui/use-toast";
 
-interface User {
-  id: string;
-  externalId: string;
-  kycTier: number;
-  kycStatus: string;
-  status: string;
-  dailyPayinLimitVnd: string;
-  dailyPayoutLimitVnd: string;
-  createdAt: string;
-}
-
-// Mock data
-const mockUsers: User[] = [
-  {
-    id: "user_01HYJ2KM3N4P5Q6R7S8T9U0A",
-    externalId: "EXT_USER_001",
-    kycTier: 2,
-    kycStatus: "APPROVED",
-    status: "ACTIVE",
-    dailyPayinLimitVnd: "500000000",
-    dailyPayoutLimitVnd: "200000000",
-    createdAt: "2026-01-15T10:00:00Z",
-  },
-  {
-    id: "user_01HYJ2KM3N4P5Q6R7S8T9U0B",
-    externalId: "EXT_USER_002",
-    kycTier: 1,
-    kycStatus: "PENDING",
-    status: "ACTIVE",
-    dailyPayinLimitVnd: "100000000",
-    dailyPayoutLimitVnd: "50000000",
-    createdAt: "2026-01-20T14:30:00Z",
-  },
-  {
-    id: "user_01HYJ2KM3N4P5Q6R7S8T9U0C",
-    externalId: "EXT_USER_003",
-    kycTier: 0,
-    kycStatus: "NOT_STARTED",
-    status: "ACTIVE",
-    dailyPayinLimitVnd: "10000000",
-    dailyPayoutLimitVnd: "5000000",
-    createdAt: "2026-01-22T09:15:00Z",
-  },
-  {
-    id: "user_01HYJ2KM3N4P5Q6R7S8T9U0D",
-    externalId: "EXT_USER_004",
-    kycTier: 3,
-    kycStatus: "APPROVED",
-    status: "SUSPENDED",
-    dailyPayinLimitVnd: "1000000000",
-    dailyPayoutLimitVnd: "500000000",
-    createdAt: "2026-01-10T08:00:00Z",
-  },
-];
-
-function formatVnd(value: string): string {
+function formatVnd(value?: string): string {
+  if (!value) return "0 ₫";
   const num = parseInt(value, 10);
   return new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -147,12 +95,16 @@ function getTierLabel(tier: number): string {
   }
 }
 
-function getInitials(externalId: string): string {
-    return externalId.split('_').pop()?.substring(0, 2).toUpperCase() || "US";
+function getInitials(id: string): string {
+    return id.substring(0, 2).toUpperCase() || "US";
 }
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
   const [filter, setFilter] = useState({
     kycTier: "",
     status: "",
@@ -161,7 +113,7 @@ export default function UsersPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
     avatar: true,
-    externalId: true,
+    id: true,
     kycTier: true,
     kycStatus: true,
     status: true,
@@ -175,34 +127,50 @@ export default function UsersPage() {
       kycTier: "0",
   });
 
+  const fetchUsers = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await usersApi.list({
+        status: filter.status || undefined,
+        // kyc_status: filter.kycStatus || undefined, // Not in filter state yet but supported by API
+      });
+      setUsers(response.data);
+    } catch (err: any) {
+      console.error("Failed to fetch users:", err);
+      setError(err.message || "Failed to load users");
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err.message || "Failed to load users",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
+    fetchUsers();
+  }, [filter.status]); // Refetch when filter changes
+
+  // Client-side filtering for other fields
   const filteredUsers = users.filter((user) => {
-    if (filter.kycTier && user.kycTier !== parseInt(filter.kycTier)) return false;
-    if (filter.status && user.status !== filter.status) return false;
-    if (
-      search &&
-      !user.externalId.toLowerCase().includes(search.toLowerCase()) &&
-      !user.id.toLowerCase().includes(search.toLowerCase())
-    )
-      return false;
+    if (filter.kycTier && user.kyc_tier !== parseInt(filter.kycTier)) return false;
+    if (search && !user.id.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
   const handleCreateUser = () => {
-    // In a real app, this would call an API
-    const user: User = {
-        id: `user_${Math.random().toString(36).substr(2, 9)}`,
-        externalId: newUser.externalId || `EXT_USER_${Math.floor(Math.random() * 1000)}`,
-        kycTier: parseInt(newUser.kycTier),
-        kycStatus: "NOT_STARTED",
-        status: "ACTIVE",
-        dailyPayinLimitVnd: "10000000",
-        dailyPayoutLimitVnd: "5000000",
-        createdAt: new Date().toISOString(),
-    };
-    setUsers([...users, user]);
+    // API doesn't have create user yet, keeping as placeholder
+    toast({
+      title: "Coming Soon",
+      description: "User creation API is not yet available.",
+    });
     setIsCreateOpen(false);
-    setNewUser({ externalId: "", kycTier: "0" });
+  };
+
+  const handleRefresh = () => {
+    fetchUsers();
   };
 
   return (
@@ -214,57 +182,62 @@ export default function UsersPage() {
             Manage users and their KYC status
             </p>
         </div>
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-                <Button>
-                    <Plus className="mr-2 h-4 w-4" /> Create User
-                </Button>
-            </DialogTrigger>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Create New User</DialogTitle>
-                    <DialogDescription>
-                        Add a new user to the system. They will start with Tier 0.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="externalId" className="text-right">
-                            External ID
-                        </Label>
-                        <Input
-                            id="externalId"
-                            value={newUser.externalId}
-                            onChange={(e) => setNewUser({...newUser, externalId: e.target.value})}
-                            className="col-span-3"
-                        />
+        <div className="flex gap-2">
+            <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading}>
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                <DialogTrigger asChild>
+                    <Button>
+                        <Plus className="mr-2 h-4 w-4" /> Create User
+                    </Button>
+                </DialogTrigger>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Create New User</DialogTitle>
+                        <DialogDescription>
+                            Add a new user to the system. They will start with Tier 0.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="externalId" className="text-right">
+                                External ID
+                            </Label>
+                            <Input
+                                id="externalId"
+                                value={newUser.externalId}
+                                onChange={(e) => setNewUser({...newUser, externalId: e.target.value})}
+                                className="col-span-3"
+                            />
+                        </div>
+                         <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="kycTier" className="text-right">
+                                Initial Tier
+                            </Label>
+                            <select
+                                id="kycTier"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 col-span-3"
+                                value={newUser.kycTier}
+                                onChange={(e) => setNewUser({ ...newUser, kycTier: e.target.value })}
+                            >
+                                <option value="0">Tier 0</option>
+                                <option value="1">Tier 1</option>
+                                <option value="2">Tier 2</option>
+                                <option value="3">Tier 3</option>
+                            </select>
+                        </div>
                     </div>
-                     <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="kycTier" className="text-right">
-                            Initial Tier
-                        </Label>
-                        <select
-                            id="kycTier"
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 col-span-3"
-                            value={newUser.kycTier}
-                            onChange={(e) => setNewUser({ ...newUser, kycTier: e.target.value })}
-                        >
-                            <option value="0">Tier 0</option>
-                            <option value="1">Tier 1</option>
-                            <option value="2">Tier 2</option>
-                            <option value="3">Tier 3</option>
-                        </select>
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button onClick={handleCreateUser}>Create User</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                    <DialogFooter>
+                        <Button onClick={handleCreateUser}>Create User</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4 items-center">
+      <div className="flex gap-4 items-center flex-wrap">
         <Input
           placeholder="Search by ID..."
           className="max-w-xs"
@@ -333,7 +306,7 @@ export default function UsersPage() {
           <TableHeader>
             <TableRow>
               {visibleColumns.avatar && <TableHead className="w-[80px]">Avatar</TableHead>}
-              {visibleColumns.externalId && <TableHead>External ID</TableHead>}
+              {visibleColumns.id && <TableHead>ID</TableHead>}
               {visibleColumns.kycTier && <TableHead>KYC Tier</TableHead>}
               {visibleColumns.kycStatus && <TableHead>KYC Status</TableHead>}
               {visibleColumns.status && <TableHead>Status</TableHead>}
@@ -344,30 +317,46 @@ export default function UsersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredUsers.map((user) => (
+            {loading ? (
+                <TableRow>
+                    <TableCell colSpan={9} className="h-24 text-center">
+                        <div className="flex justify-center items-center gap-2">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            <span className="text-muted-foreground">Loading users...</span>
+                        </div>
+                    </TableCell>
+                </TableRow>
+            ) : filteredUsers.length === 0 ? (
+                <TableRow>
+                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                        No users found matching the filters.
+                    </TableCell>
+                </TableRow>
+            ) : (
+                filteredUsers.map((user) => (
               <TableRow key={user.id}>
                 {visibleColumns.avatar && (
                   <TableCell>
                     <Avatar>
-                      <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.externalId}`} alt={user.externalId} />
-                      <AvatarFallback>{getInitials(user.externalId)}</AvatarFallback>
+                      <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`} alt={user.id} />
+                      <AvatarFallback>{getInitials(user.id)}</AvatarFallback>
                     </Avatar>
                   </TableCell>
                 )}
-                {visibleColumns.externalId && (
-                  <TableCell className="font-mono text-sm">{user.externalId}</TableCell>
+                {visibleColumns.id && (
+                  <TableCell className="font-mono text-xs">{user.id}</TableCell>
                 )}
                 {visibleColumns.kycTier && (
-                  <TableCell>{getTierLabel(user.kycTier)}</TableCell>
+                  <TableCell>{getTierLabel(user.kyc_tier)}</TableCell>
                 )}
                 {visibleColumns.kycStatus && (
                   <TableCell>
                     <span
                       className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getKycStatusColor(
-                        user.kycStatus
+                        user.kyc_status
                       )}`}
                     >
-                      {user.kycStatus}
+                      {user.kyc_status}
                     </span>
                   </TableCell>
                 )}
@@ -384,17 +373,17 @@ export default function UsersPage() {
                 )}
                 {visibleColumns.payinLimit && (
                   <TableCell className="text-right font-mono text-sm">
-                    {formatVnd(user.dailyPayinLimitVnd)}
+                    {formatVnd(user.daily_payin_limit_vnd)}
                   </TableCell>
                 )}
                 {visibleColumns.payoutLimit && (
                   <TableCell className="text-right font-mono text-sm">
-                    {formatVnd(user.dailyPayoutLimitVnd)}
+                    {formatVnd(user.daily_payout_limit_vnd)}
                   </TableCell>
                 )}
                 {visibleColumns.created && (
                   <TableCell className="text-muted-foreground">
-                    {formatDate(user.createdAt)}
+                    {formatDate(user.created_at)}
                   </TableCell>
                 )}
                 {visibleColumns.actions && (
@@ -408,16 +397,16 @@ export default function UsersPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => alert(`View details for ${user.externalId}`)}>
+                        <DropdownMenuItem onClick={() => alert(`View details for ${user.id}`)}>
                           View Details
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => alert(`Edit ${user.externalId}`)}>
+                        <DropdownMenuItem onClick={() => alert(`Edit ${user.id}`)}>
                           Edit User
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-red-600 focus:text-red-600"
-                          onClick={() => alert(`Suspend ${user.externalId}`)}
+                          onClick={() => alert(`Suspend ${user.id}`)}
                         >
                           Suspend User
                         </DropdownMenuItem>
@@ -426,16 +415,10 @@ export default function UsersPage() {
                   </TableCell>
                 )}
               </TableRow>
-            ))}
+            )))}
           </TableBody>
         </Table>
       </div>
-
-      {filteredUsers.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground">
-          No users found matching the filters.
-        </div>
-      )}
     </div>
   );
 }

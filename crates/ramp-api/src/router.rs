@@ -1,7 +1,7 @@
 use axum::http::{header, HeaderValue};
 use axum::{
     middleware,
-    routing::{get, patch, post},
+    routing::{get, patch, post, put},
     Router,
 };
 use std::sync::Arc;
@@ -20,7 +20,7 @@ use ramp_core::repository::intent::IntentRepository;
 use ramp_core::repository::tenant::TenantRepository;
 use ramp_core::service::{
     ledger::LedgerService, onboarding::OnboardingService, payin::PayinService,
-    payout::PayoutService, trade::TradeService, user::UserService,
+    payout::PayoutService, trade::TradeService, user::UserService, webhook::WebhookService,
 };
 
 use crate::handlers;
@@ -33,6 +33,7 @@ use crate::openapi::ApiDoc;
 
 use ramp_compliance::case::CaseManager;
 use ramp_compliance::reports::ReportGenerator;
+use ramp_compliance::rules::RuleCacheManager;
 
 /// Application state shared across handlers
 #[derive(Clone)]
@@ -43,10 +44,12 @@ pub struct AppState {
     pub ledger_service: Arc<LedgerService>,
     pub onboarding_service: Arc<OnboardingService>,
     pub user_service: Arc<UserService>,
+    pub webhook_service: Arc<WebhookService>,
     pub tenant_repo: Arc<dyn TenantRepository>,
     pub intent_repo: Arc<dyn IntentRepository>,
     pub report_generator: Arc<ReportGenerator>,
     pub case_manager: Arc<CaseManager>,
+    pub rule_manager: Option<Arc<RuleCacheManager>>,
     pub rate_limiter: Option<Arc<RateLimiter>>,
     pub idempotency_handler: Option<Arc<IdempotencyHandler>>,
     pub aa_service: Option<AAServiceState>,
@@ -123,6 +126,21 @@ pub fn create_router(state: AppState) -> Router {
     let admin_general_routes = Router::new()
         // Dashboard
         .route("/dashboard", get(handlers::get_dashboard))
+        // Intents
+        .route("/intents/:id/cancel", post(handlers::admin::cancel_intent))
+        .route("/intents/:id/retry", post(handlers::admin::retry_intent))
+        // Rules
+        .route("/rules", get(handlers::admin::list_rules))
+        .route("/rules", post(handlers::admin::create_rule))
+        .route("/rules/:id", put(handlers::admin::update_rule))
+        .route("/rules/:id/toggle", put(handlers::admin::toggle_rule))
+        // Ledger
+        .route("/ledger/entries", get(handlers::admin::list_entries))
+        .route("/ledger/balances", get(handlers::admin::list_balances))
+        // Webhooks
+        .route("/webhooks", get(handlers::admin::list_webhooks))
+        .route("/webhooks/:id", get(handlers::admin::get_webhook))
+        .route("/webhooks/:id/retry", post(handlers::admin::retry_webhook))
         // Cases
         .route("/cases", get(handlers::list_cases))
         .route("/cases/stats", get(handlers::get_case_stats))
@@ -230,6 +248,10 @@ pub fn create_router(state: AppState) -> Router {
         Router::new()
     };
 
+    // Portal routes (user authentication via JWT, not tenant API key)
+    // These routes are for the end-user portal application
+    let portal_routes = handlers::portal::router().with_state(state.clone());
+
     // API v1 routes with authentication
     let mut api_v1 = Router::new()
         .nest("/intents", intent_routes)
@@ -261,11 +283,16 @@ pub fn create_router(state: AppState) -> Router {
     // OpenAPI documentation
     let openapi = ApiDoc::openapi();
 
+    // Auth routes for portal (no tenant auth required)
+    let auth_routes = handlers::portal::auth::router().with_state(state.clone());
+
     // Combine all routes
     Router::new()
         .merge(health_routes)
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
         .nest("/v1", api_v1)
+        .nest("/v1/portal", portal_routes)
+        .nest("/v1/auth", auth_routes)
         .layer(middleware::from_fn(request_id_middleware))
         .layer({
             let request_headers = Arc::new([

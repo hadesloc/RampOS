@@ -22,6 +22,9 @@ mock! {
         async fn mark_failed(&self, id: &EventId, error: &str, next_attempt_at: DateTime<Utc>) -> Result<()>;
         async fn mark_permanently_failed(&self, id: &EventId, error: &str) -> Result<()>;
         async fn get_events_by_intent(&self, tenant_id: &TenantId, intent_id: &IntentId) -> Result<Vec<WebhookEventRow>>;
+        async fn list_events(&self, tenant_id: &TenantId, limit: i64, offset: i64) -> Result<Vec<WebhookEventRow>>;
+        async fn get_event(&self, tenant_id: &TenantId, event_id: &str) -> Result<Option<WebhookEventRow>>;
+        async fn retry_event(&self, tenant_id: &TenantId, event_id: &str) -> Result<()>;
     }
 }
 

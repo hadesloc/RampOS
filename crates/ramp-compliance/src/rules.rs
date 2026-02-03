@@ -105,26 +105,9 @@ impl RuleCacheManager {
     }
 
     pub async fn get_rules(&self, tenant_id: &TenantId) -> Option<Vec<CompiledRule>> {
-        let key = Self::get_key(tenant_id);
-        let mut conn = match self.client.get_multiplexed_async_connection().await {
-            Ok(conn) => conn,
-            Err(e) => {
-                error!("Failed to get redis connection: {}", e);
-                return None;
-            }
-        };
-
-        let data: String = match conn.get(&key).await {
-            Ok(data) => data,
-            Err(_) => return None, // Cache miss or error
-        };
-
-        let definitions: Vec<RuleDefinition> = match serde_json::from_str(&data) {
+        let definitions = match self.get_rule_definitions(tenant_id).await {
             Ok(defs) => defs,
-            Err(e) => {
-                error!("Failed to deserialize rules from cache: {}", e);
-                return None;
-            }
+            Err(_) => return None,
         };
 
         // Compile rules using RuleParser
@@ -140,6 +123,29 @@ impl RuleCacheManager {
                 error!("Failed to compile rules from cache: {}", e);
                 None
             }
+        }
+    }
+
+    pub async fn get_rule_definitions(&self, tenant_id: &TenantId) -> Result<Vec<RuleDefinition>> {
+        let key = Self::get_key(tenant_id);
+        let mut conn = self
+            .client
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        let data: Option<String> = conn
+            .get(&key)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        match data {
+            Some(json) => {
+                let definitions: Vec<RuleDefinition> = serde_json::from_str(&json)
+                    .map_err(|e| ramp_common::Error::Serialization(e.to_string()))?;
+                Ok(definitions)
+            }
+            None => Ok(Vec::new()),
         }
     }
 

@@ -3,7 +3,7 @@ use ramp_common::{
     types::{TenantId, UserId},
     Result,
 };
-use rust_decimal::Decimal;
+use rust_decimal::{prelude::ToPrimitive, Decimal};
 use serde::Serialize;
 use sqlx::{PgPool, Row};
 use std::sync::Arc;
@@ -11,6 +11,9 @@ use tracing::info;
 // use uuid::Uuid; // Unused in imports, used in code fully qualified as uuid::Uuid if needed
 
 use super::types::{AmlReport, DailyReport, KycReport, Report, SarReport};
+use crate::reports::ctr::{
+    CtrReport, CtrTransaction, CustomerInfo, FilingInstitution, TransactionType,
+};
 use crate::storage::{DocumentStorage, DocumentType};
 
 #[derive(Debug, Clone, Copy)]
@@ -19,6 +22,7 @@ pub enum ReportType {
     Aml,
     Kyc,
     Sar,
+    Ctr,
 }
 
 pub struct ReportGenerator {
@@ -299,6 +303,121 @@ impl ReportGenerator {
             narrative,
             transaction_details: tx_details,
             evidence_links: vec![],
+        };
+
+        Ok(report)
+    }
+
+    /// Generate CTR report
+    pub async fn generate_ctr_report(
+        &self,
+        tenant_id: TenantId,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+        threshold_amount: i64,
+    ) -> Result<CtrReport> {
+        let tenant_id_str = tenant_id.to_string();
+        let threshold_decimal = Decimal::from(threshold_amount);
+
+        // Fetch transactions exceeding threshold
+        // We join with users and kyc_records to try to get customer info
+        // Note: compliance_transactions is better for this than intents as it's specifically for compliance
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                ct.id, ct.created_at, ct.amount_vnd, ct.transaction_type,
+                u.id as user_id,
+                kyc.verification_data
+            FROM compliance_transactions ct
+            JOIN users u ON ct.user_id = u.id AND ct.tenant_id = u.tenant_id
+            LEFT JOIN kyc_records kyc ON u.id = kyc.user_id AND u.tenant_id = kyc.tenant_id AND kyc.status = 'APPROVED'
+            WHERE ct.tenant_id = $1
+            AND ct.created_at BETWEEN $2 AND $3
+            AND ct.amount_vnd >= $4
+            ORDER BY ct.created_at DESC
+            "#
+        )
+        .bind(&tenant_id_str)
+        .bind(start)
+        .bind(end)
+        .bind(threshold_decimal)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ramp_common::Error::Database(format!("Database error: {}", e)))?;
+
+        let mut transactions = Vec::new();
+        let mut total_amount: i64 = 0;
+
+        for row in rows {
+            let id: uuid::Uuid = row.try_get("id")?;
+            let created_at: DateTime<Utc> = row.try_get("created_at")?;
+            let amount_decimal: Decimal = row.try_get("amount_vnd")?;
+            let type_str: String = row.try_get("transaction_type")?;
+            let user_id: String = row.try_get("user_id")?;
+            let verification_data: Option<serde_json::Value> =
+                row.try_get("verification_data").ok();
+
+            let amount_i64 = amount_decimal.to_i64().unwrap_or(0);
+            total_amount += amount_i64;
+
+            // Map transaction type
+            let transaction_type = match type_str.as_str() {
+                "DEPOSIT_ONCHAIN" | "PAYIN_VND" => TransactionType::Deposit,
+                "WITHDRAW_ONCHAIN" | "PAYOUT_VND" => TransactionType::Withdrawal,
+                "TRADE_EXECUTED" => TransactionType::Exchange,
+                _ => TransactionType::Other(type_str),
+            };
+
+            // Extract customer info from KYC data if available
+            let (name, id_number, id_type, nationality, address) =
+                if let Some(data) = verification_data {
+                    (
+                        data["full_name"].as_str().unwrap_or("Unknown").to_string(),
+                        data["id_number"].as_str().unwrap_or("Unknown").to_string(),
+                        data["id_type"].as_str().unwrap_or("Unknown").to_string(),
+                        data["nationality"].as_str().unwrap_or("VN").to_string(),
+                        data["address"].as_str().unwrap_or("Unknown").to_string(),
+                    )
+                } else {
+                    (
+                        format!("User {}", user_id),
+                        "Unknown".to_string(),
+                        "Unknown".to_string(),
+                        "Unknown".to_string(),
+                        "Unknown".to_string(),
+                    )
+                };
+
+            transactions.push(CtrTransaction {
+                transaction_id: id.to_string(),
+                transaction_date: created_at,
+                amount: amount_i64,
+                transaction_type,
+                customer: CustomerInfo {
+                    name,
+                    id_number,
+                    id_type,
+                    nationality,
+                    address,
+                },
+            });
+        }
+
+        // Placeholder institution info - in real app would come from tenant config
+        let filing_institution = FilingInstitution {
+            name: "RampOS Tenant".to_string(),
+            tax_id: "0000000000".to_string(),
+            address: "Hanoi, Vietnam".to_string(),
+        };
+
+        let report = CtrReport {
+            report_id: format!("CTR-{}-{}", tenant_id, Utc::now().timestamp()),
+            report_date: Utc::now(),
+            filing_institution,
+            transactions,
+            total_amount,
+            currency: "VND".to_string(),
+            tenant_id,
         };
 
         Ok(report)

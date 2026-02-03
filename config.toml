@@ -23,3 +23,16 @@ retry_max_attempts = 10
 retry_initial_delay_ms = 1000
 retry_max_delay_ms = 3600000
 signature_tolerance_secs = 300
+
+[providers]
+[providers.kyc]
+provider = "mock"
+
+[providers.kyt]
+provider = "mock"
+
+[providers.sanctions]
+provider = "mock"
+
+[providers.document_storage]
+provider = "mock"

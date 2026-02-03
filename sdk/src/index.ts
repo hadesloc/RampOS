@@ -1,4 +1,5 @@
 export * from './client';
+export * from './types';
 export * from './types/intent';
 export * from './types/user';
 export * from './types/ledger';

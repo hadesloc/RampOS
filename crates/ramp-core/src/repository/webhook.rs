@@ -54,6 +54,28 @@ pub trait WebhookRepository: Send + Sync {
         tenant_id: &TenantId,
         intent_id: &IntentId,
     ) -> Result<Vec<WebhookEventRow>>;
+
+    /// List all webhook events for a tenant (paginated)
+    async fn list_events(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<WebhookEventRow>>;
+
+    /// Get a specific webhook event
+    async fn get_event(
+        &self,
+        tenant_id: &TenantId,
+        event_id: &str,
+    ) -> Result<Option<WebhookEventRow>>;
+
+    /// Reset an event to pending status
+    async fn retry_event(
+        &self,
+        tenant_id: &TenantId,
+        event_id: &str,
+    ) -> Result<()>;
 }
 
 pub struct PgWebhookRepository {
@@ -221,5 +243,104 @@ impl WebhookRepository for PgWebhookRepository {
             .await
             .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
         Ok(rows)
+    }
+
+    async fn list_events(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<WebhookEventRow>> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        let rows = sqlx::query_as::<_, WebhookEventRow>(
+            "SELECT * FROM webhook_events WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        )
+        .bind(&tenant_id.0)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        Ok(rows)
+    }
+
+    async fn get_event(
+        &self,
+        tenant_id: &TenantId,
+        event_id: &str,
+    ) -> Result<Option<WebhookEventRow>> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        let row = sqlx::query_as::<_, WebhookEventRow>(
+            "SELECT * FROM webhook_events WHERE tenant_id = $1 AND id = $2",
+        )
+        .bind(&tenant_id.0)
+        .bind(event_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        Ok(row)
+    }
+
+    async fn retry_event(
+        &self,
+        tenant_id: &TenantId,
+        event_id: &str,
+    ) -> Result<()> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        let result = sqlx::query(
+            r#"
+            UPDATE webhook_events
+            SET status = 'PENDING',
+                next_attempt_at = NOW(),
+                last_error = NULL
+            WHERE tenant_id = $1 AND id = $2
+            "#,
+        )
+        .bind(&tenant_id.0)
+        .bind(event_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+             return Err(ramp_common::Error::NotFound(format!("Webhook event {} not found", event_id)));
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        Ok(())
     }
 }

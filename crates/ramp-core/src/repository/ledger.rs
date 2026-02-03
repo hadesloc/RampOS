@@ -57,6 +57,22 @@ pub trait LedgerRepository: Send + Sync {
         user_id: &UserId,
     ) -> Result<Vec<BalanceRow>>;
 
+    /// List all ledger entries for a tenant (paginated)
+    async fn list_entries(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<LedgerEntryRow>>;
+
+    /// List all account balances for a tenant (paginated)
+    async fn list_all_balances(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<BalanceRow>>;
+
     /// SECURITY: Atomically check balance and record transaction.
     /// Uses SELECT FOR UPDATE to prevent race conditions in concurrent withdrawals.
     /// Returns the balance before the transaction was applied.
@@ -295,6 +311,75 @@ impl LedgerRepository for PgLedgerRepository {
         )
         .bind(&tenant_id.0)
         .bind(&user_id.0)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        Ok(rows)
+    }
+
+    async fn list_entries(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<LedgerEntryRow>> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        let rows = sqlx::query_as::<_, LedgerEntryRow>(
+            "SELECT * FROM ledger_entries WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        )
+        .bind(&tenant_id.0)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(rows)
+    }
+
+    async fn list_all_balances(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<BalanceRow>> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        let rows = sqlx::query_as::<_, BalanceRow>(
+            r#"
+            SELECT account_type, currency, balance
+            FROM account_balances
+            WHERE tenant_id = $1
+            ORDER BY balance DESC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(&tenant_id.0)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&mut *tx)
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;

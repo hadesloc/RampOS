@@ -88,6 +88,26 @@ impl LedgerService {
             )
             .await
     }
+
+    /// List ledger entries
+    pub async fn list_entries(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<crate::repository::ledger::LedgerEntryRow>> {
+        self.repo.list_entries(tenant_id, limit, offset).await
+    }
+
+    /// List balances
+    pub async fn list_balances(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<BalanceRow>> {
+        self.repo.list_all_balances(tenant_id, limit, offset).await
+    }
 }
 
 #[cfg(test)]

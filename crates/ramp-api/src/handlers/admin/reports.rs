@@ -12,56 +12,25 @@ use tracing::info;
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
 use ramp_compliance::reports::{
+    ctr::CtrReport,
     // AmlReportParams, KycReportParams, ReportType, // Unused
     AmlReport,
     KycReport,
     ReportGenerator,
     SarReport,
 };
-// use ramp_common::types::TenantId; // Unused
-
-// We need to inject the report generator into the handler state somehow.
-// For now, we'll assume it's available via extension or we'll create a new one
-// (though creating a new one per request isn't ideal for connection pooling,
-// normally this would be in AppState).
-
-// Since we can't easily modify AppState in this task scope without touching many files,
-// we will assume for this task that we can construct it or access it.
-// However, looking at main.rs, AppState is defined in router.rs.
-// We should probably add report_generator to AppState if we were doing a full refactor.
-
-// For this task, we'll assume the `State` extractor provides access to the necessary dependencies
-// to build a ReportGenerator, or that ReportGenerator is injectable.
-// Actually, ReportGenerator needs PgPool and DocumentStorage.
-// AppState has intent_repo, etc. but maybe not raw pool access easily visible.
-// But we can get pool from one of the services or repositories if they expose it.
-
-// Let's check how other handlers access DB. They use services/repos.
-// We might need to add a `ReportService` or similar to `ramp-core` or just put `ReportGenerator` in `ramp-compliance`.
-// `ReportGenerator` is already in `ramp-compliance`.
-
-// Ideally, we'd add `report_generator: Arc<ReportGenerator>` to `AppState`.
-// But to avoid breaking changes to `AppState` struct definition in `router.rs`
-// (which might be used in many places), we might need to rely on what's available.
-
-// WAIT, `AppState` in `router.rs` is:
-// pub struct AppState {
-//    pub payin_service: Arc<PayinService>,
-//    ...
-//    pub tenant_repo: Arc<dyn TenantRepository>,
-// }
-
-// We can't add fields to it easily without modifying main.rs initialization.
-// The instructions say: "3. API endpoints - Update handler in ramp-api".
-// It doesn't explicitly say "Modify AppState", but we probably need to to make it work properly.
-// OR we can misuse an existing service if we have to, but that's bad.
-
-// Let's try to add `report_generator` to `AppState`.
 
 #[derive(Debug, Deserialize)]
 pub struct ReportQueryParams {
     pub start_date: chrono::DateTime<chrono::Utc>,
     pub end_date: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CtrQueryParams {
+    pub start_date: chrono::DateTime<chrono::Utc>,
+    pub end_date: chrono::DateTime<chrono::Utc>,
+    pub threshold: Option<i64>, // Default 200,000,000
 }
 
 #[derive(Debug, Deserialize)]
@@ -304,4 +273,70 @@ pub async fn generate_sar(
     }
 
     Ok(Json(report))
+}
+
+/// GET /v1/admin/reports/ctr
+pub async fn generate_ctr_report(
+    headers: HeaderMap,
+    Extension(tenant_ctx): Extension<TenantContext>,
+    State(report_generator): State<Arc<ReportGenerator>>,
+    Query(params): Query<CtrQueryParams>,
+) -> Result<Json<CtrReport>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
+    info!(
+        tenant = %tenant_ctx.tenant_id.0,
+        "Generating CTR report"
+    );
+
+    let threshold = params.threshold.unwrap_or(200_000_000);
+
+    let report = report_generator
+        .generate_ctr_report(
+            tenant_ctx.tenant_id.clone(),
+            params.start_date,
+            params.end_date,
+            threshold,
+        )
+        .await
+        .map_err(|e| ApiError::Internal(format!("Failed to generate report: {}", e)))?;
+
+    Ok(Json(report))
+}
+
+/// POST /v1/admin/reports/ctr/generate
+pub async fn trigger_ctr_generation(
+    headers: HeaderMap,
+    Extension(tenant_ctx): Extension<TenantContext>,
+    State(report_generator): State<Arc<ReportGenerator>>,
+    Json(params): Json<CtrQueryParams>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
+    info!(
+        tenant = %tenant_ctx.tenant_id.0,
+        "Triggering CTR report generation"
+    );
+
+    let threshold = params.threshold.unwrap_or(200_000_000);
+
+    let report = report_generator
+        .generate_ctr_report(
+            tenant_ctx.tenant_id.clone(),
+            params.start_date,
+            params.end_date,
+            threshold,
+        )
+        .await
+        .map_err(|e| ApiError::Internal(format!("Failed to generate report: {}", e)))?;
+
+    // Save report to storage
+    let url = report_generator
+        .save_report(&report, tenant_ctx.tenant_id.clone(), "json")
+        .await
+        .map_err(|e| ApiError::Internal(format!("Failed to save report: {}", e)))?;
+
+    Ok(Json(serde_json::json!({
+        "status": "generated",
+        "report_id": report.report_id,
+        "url": url
+    })))
 }

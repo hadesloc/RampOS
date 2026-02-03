@@ -1,9 +1,17 @@
 {
-  "generated_at": "2026-02-03T10:07:56.681923",
+  "generated_at": "2026-02-03T12:00:55.485416",
   "enabled_plugins": [
     [
-      "content-skills",
-      "baoyu-skills"
+      "context7",
+      "claude-plugins-official"
+    ],
+    [
+      "semgrep-rule-variant-creator",
+      "trailofbits"
+    ],
+    [
+      "constant-time-analysis",
+      "trailofbits"
     ],
     [
       "entry-point-analyzer",
@@ -14,99 +22,15 @@
       "ultimate-workflow-local"
     ],
     [
-      "property-based-testing",
-      "trailofbits"
-    ],
-    [
-      "pyright-lsp",
-      "claude-plugins-official"
-    ],
-    [
-      "variant-analysis",
-      "trailofbits"
-    ],
-    [
-      "ai-generation-skills",
-      "baoyu-skills"
-    ],
-    [
-      "plugin-super-factory",
-      "hades-local"
-    ],
-    [
-      "superpowers",
-      "claude-plugins-official"
-    ],
-    [
-      "spec-to-code-compliance",
-      "trailofbits"
-    ],
-    [
       "super-meta-factory",
       "trailofbits"
-    ],
-    [
-      "constant-time-analysis",
-      "trailofbits"
-    ],
-    [
-      "plugin-factory",
-      "trailofbits"
-    ],
-    [
-      "semgrep-rule-creator",
-      "trailofbits"
-    ],
-    [
-      "ask-questions-if-underspecified",
-      "trailofbits"
-    ],
-    [
-      "frontend-design",
-      "claude-plugins-official"
-    ],
-    [
-      "feature-dev",
-      "claude-plugins-official"
-    ],
-    [
-      "code-review",
-      "claude-plugins-official"
-    ],
-    [
-      "fix-review",
-      "trailofbits"
-    ],
-    [
-      "building-secure-contracts",
-      "trailofbits"
-    ],
-    [
-      "example-skills",
-      "anthropic-agent-skills"
-    ],
-    [
-      "dwarf-expert",
-      "trailofbits"
-    ],
-    [
-      "code-simplifier",
-      "claude-plugins-official"
-    ],
-    [
-      "plugin-dev",
-      "claude-plugins-official"
     ],
     [
       "typescript-lsp",
       "claude-plugins-official"
     ],
     [
-      "utility-skills",
-      "baoyu-skills"
-    ],
-    [
-      "testing-handbook-skills",
+      "ask-questions-if-underspecified",
       "trailofbits"
     ],
     [
@@ -114,39 +38,71 @@
       "trailofbits"
     ],
     [
-      "static-analysis",
-      "trailofbits"
+      "plugin-super-factory",
+      "hades-local"
     ],
     [
-      "rlm-agent",
-      "rlm-local"
+      "utility-skills",
+      "baoyu-skills"
+    ],
+    [
+      "example-skills",
+      "anthropic-agent-skills"
     ],
     [
       "local-plugin-installer",
       "trailofbits"
     ],
     [
-      "rust-analyzer-lsp",
+      "code-simplifier",
       "claude-plugins-official"
-    ],
-    [
-      "document-skills",
-      "anthropic-agent-skills"
-    ],
-    [
-      "greptile",
-      "claude-plugins-official"
-    ],
-    [
-      "audit-context-building",
-      "trailofbits"
     ],
     [
       "burpsuite-project-parser",
       "trailofbits"
     ],
     [
-      "semgrep-rule-variant-creator",
+      "frontend-design",
+      "claude-plugins-official"
+    ],
+    [
+      "ultimate-workflow",
+      "ultimate-workflow-local"
+    ],
+    [
+      "audit-context-building",
+      "trailofbits"
+    ],
+    [
+      "playwright",
+      "claude-plugins-official"
+    ],
+    [
+      "variant-analysis",
+      "trailofbits"
+    ],
+    [
+      "testing-handbook-skills",
+      "trailofbits"
+    ],
+    [
+      "document-skills",
+      "anthropic-agent-skills"
+    ],
+    [
+      "pyright-lsp",
+      "claude-plugins-official"
+    ],
+    [
+      "spec-to-code-compliance",
+      "trailofbits"
+    ],
+    [
+      "greptile",
+      "claude-plugins-official"
+    ],
+    [
+      "dwarf-expert",
       "trailofbits"
     ],
     [
@@ -158,16 +114,60 @@
       "trailofbits"
     ],
     [
-      "ultimate-workflow",
-      "ultimate-workflow-local"
+      "semgrep-rule-creator",
+      "trailofbits"
     ],
     [
-      "context7",
+      "feature-dev",
       "claude-plugins-official"
     ],
     [
-      "playwright",
+      "content-skills",
+      "baoyu-skills"
+    ],
+    [
+      "rust-analyzer-lsp",
       "claude-plugins-official"
+    ],
+    [
+      "building-secure-contracts",
+      "trailofbits"
+    ],
+    [
+      "plugin-factory",
+      "trailofbits"
+    ],
+    [
+      "ai-generation-skills",
+      "baoyu-skills"
+    ],
+    [
+      "plugin-dev",
+      "claude-plugins-official"
+    ],
+    [
+      "property-based-testing",
+      "trailofbits"
+    ],
+    [
+      "superpowers",
+      "claude-plugins-official"
+    ],
+    [
+      "static-analysis",
+      "trailofbits"
+    ],
+    [
+      "rlm-agent",
+      "rlm-local"
+    ],
+    [
+      "code-review",
+      "claude-plugins-official"
+    ],
+    [
+      "fix-review",
+      "trailofbits"
     ]
   ],
   "plugins": [

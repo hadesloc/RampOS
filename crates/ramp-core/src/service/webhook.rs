@@ -247,4 +247,39 @@ impl WebhookService {
 
         Ok(())
     }
+
+    /// Get events for an intent
+    pub async fn get_events_by_intent(
+        &self,
+        tenant_id: &TenantId,
+        intent_id: &IntentId,
+    ) -> Result<Vec<WebhookEventRow>> {
+        self.webhook_repo
+            .get_events_by_intent(tenant_id, intent_id)
+            .await
+    }
+
+    /// List webhook events
+    pub async fn list_events(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<WebhookEventRow>> {
+        self.webhook_repo.list_events(tenant_id, limit, offset).await
+    }
+
+    /// Get a specific webhook event
+    pub async fn get_event(
+        &self,
+        tenant_id: &TenantId,
+        event_id: &str,
+    ) -> Result<Option<WebhookEventRow>> {
+        self.webhook_repo.get_event(tenant_id, event_id).await
+    }
+
+    /// Retry a webhook event
+    pub async fn retry_event(&self, tenant_id: &TenantId, event_id: &str) -> Result<()> {
+        self.webhook_repo.retry_event(tenant_id, event_id).await
+    }
 }

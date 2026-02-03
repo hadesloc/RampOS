@@ -57,6 +57,36 @@ client := rampos.NewClient("your-api-key", "your-api-secret")
 
 ## API Reference
 
+### Examples
+
+Complete examples are available in the [examples](./examples) directory.
+
+#### Create Pay-In
+```go
+client := rampos.NewClient(
+    rampos.WithAPIKey("your-api-key"),
+    rampos.WithAPISecret("your-api-secret"),
+)
+
+intent, err := client.Payins.Create(context.Background(), &rampos.CreatePayinRequest{
+    UserID:    "usr_123",
+    AmountVND: 1000000,
+})
+```
+
+#### Create Pay-Out
+```go
+intent, err := client.Payouts.Create(context.Background(), &rampos.CreatePayoutRequest{
+    UserID:    "usr_123",
+    AmountVND: 1000000,
+    BankAccount: rampos.BankAccount{
+        BankCode:      "970415",
+        AccountNumber: "101000000000",
+        AccountName:   "NGUYEN VAN A",
+    },
+})
+```
+
 ### Intents
 
 #### Create Pay-In

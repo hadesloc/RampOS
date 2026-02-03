@@ -7,6 +7,7 @@ pub mod config;
 pub mod history;
 pub mod kyc;
 pub mod kyt;
+pub mod providers;
 pub mod reconciliation;
 pub mod reports;
 pub mod rule_parser;
