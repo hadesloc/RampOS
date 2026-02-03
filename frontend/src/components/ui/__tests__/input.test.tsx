@@ -35,7 +35,8 @@ describe('Input', () => {
   it('accepts custom className', () => {
     render(<Input className="custom-input" placeholder="Custom" />)
     const input = screen.getByPlaceholderText('Custom')
-    expect(input).toHaveClass('custom-input')
+    // The className is now applied to the wrapper div, not the input element directly
+    expect(input.parentElement).toHaveClass('custom-input')
   })
 
   it('renders with default value', () => {

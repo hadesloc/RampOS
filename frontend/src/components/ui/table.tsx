@@ -1,6 +1,6 @@
 import * as React from "react"
-
 import { cn } from "@/lib/utils"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const Table = React.forwardRef<
   HTMLTableElement,
@@ -18,21 +18,43 @@ Table.displayName = "Table"
 
 const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
-  React.HTMLAttributes<HTMLTableSectionElement>
->(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn("[&_tr]:border-b", className)} {...props} />
+  React.HTMLAttributes<HTMLTableSectionElement> & { sticky?: boolean }
+>(({ className, sticky, ...props }, ref) => (
+  <thead
+    ref={ref}
+    className={cn(
+      "[&_tr]:border-b",
+      sticky && "sticky top-0 z-10 bg-background",
+      className
+    )}
+    {...props}
+  />
 ))
 TableHeader.displayName = "TableHeader"
 
 const TableBody = React.forwardRef<
   HTMLTableSectionElement,
-  React.HTMLAttributes<HTMLTableSectionElement>
->(({ className, ...props }, ref) => (
+  React.HTMLAttributes<HTMLTableSectionElement> & { isLoading?: boolean; columns?: number; rows?: number }
+>(({ className, isLoading, columns = 5, rows = 5, children, ...props }, ref) => (
   <tbody
     ref={ref}
     className={cn("[&_tr:last-child]:border-0", className)}
     {...props}
-  />
+  >
+    {isLoading ? (
+      Array.from({ length: rows }).map((_, i) => (
+        <tr key={i} className="border-b transition-colors hover:bg-muted/50">
+          {Array.from({ length: columns }).map((_, j) => (
+            <td key={j} className="p-4 align-middle">
+              <Skeleton className="h-4 w-[80%]" />
+            </td>
+          ))}
+        </tr>
+      ))
+    ) : (
+      children
+    )}
+  </tbody>
 ))
 TableBody.displayName = "TableBody"
 
