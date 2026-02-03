@@ -15,6 +15,7 @@ use ramp_compliance::{
 };
 use ramp_core::event::InMemoryEventPublisher;
 use ramp_core::repository::intent::IntentRow;
+use ramp_core::repository::IntentRepository;
 use ramp_core::repository::tenant::TenantRow;
 use ramp_core::repository::user::UserRow;
 use ramp_core::service::{
@@ -166,6 +167,7 @@ async fn setup_portal_app() -> TestPortalApp {
         idempotency_handler: None,
         aa_service: None,
         portal_auth_config: create_portal_auth_config(),
+        bank_confirmation_repo: None,
     };
 
     let router = create_router(app_state);
