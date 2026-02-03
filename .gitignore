@@ -4,6 +4,7 @@
 /node_modules
 /.env
 /.next/
+.worktrees/
 *.log
 *.pem
 *.key
