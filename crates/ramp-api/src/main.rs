@@ -4,13 +4,13 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
 
+use ramp_aa::types::ChainConfig;
 use ramp_api::{
     create_router,
     handlers::aa::AAServiceState,
     middleware::{IdempotencyConfig, IdempotencyHandler},
     router::AppState,
 };
-use ramp_aa::types::ChainConfig;
 use ramp_common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig};
 use ramp_core::{
     config::Config,
@@ -155,16 +155,21 @@ async fn main() -> anyhow::Result<()> {
             .parse()
             .map_err(|e| anyhow::anyhow!("AA_CHAIN_ID must be a valid number: {}", e))?;
 
-        let chain_name = std::env::var("AA_CHAIN_NAME")
-            .unwrap_or_else(|_| "Ethereum Mainnet".to_string());
+        let chain_name =
+            std::env::var("AA_CHAIN_NAME").unwrap_or_else(|_| "Ethereum Mainnet".to_string());
 
-        let bundler_url = std::env::var("AA_BUNDLER_URL")
-            .unwrap_or_else(|_| "http://localhost:4337".to_string());
+        let bundler_url =
+            std::env::var("AA_BUNDLER_URL").unwrap_or_else(|_| "http://localhost:4337".to_string());
 
         let entry_point_address = std::env::var("AA_ENTRY_POINT_ADDRESS")
             .unwrap_or_else(|_| "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789".to_string())
             .parse()
-            .map_err(|e| anyhow::anyhow!("AA_ENTRY_POINT_ADDRESS must be a valid Ethereum address: {}", e))?;
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "AA_ENTRY_POINT_ADDRESS must be a valid Ethereum address: {}",
+                    e
+                )
+            })?;
 
         let paymaster_address = std::env::var("AA_PAYMASTER_ADDRESS")
             .ok()

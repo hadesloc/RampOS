@@ -165,6 +165,7 @@ pub(crate) fn check_admin_key_operator(headers: &HeaderMap) -> Result<AdminAuth,
 }
 
 /// Check admin key with Admin role requirement
+#[allow(dead_code)]
 pub(crate) fn check_admin_key_admin(headers: &HeaderMap) -> Result<AdminAuth, ApiError> {
     check_admin_key_with_role(headers, AdminRole::Admin)
 }

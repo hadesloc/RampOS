@@ -34,17 +34,17 @@ pub trait SmartAccountFactory: Send + Sync {
 
 /// Smart account service
 pub struct SmartAccountService {
-    chain_id: u64,
+    _chain_id: u64,
     factory_address: Address,
-    entry_point: Address,
+    _entry_point: Address,
 }
 
 impl SmartAccountService {
     pub fn new(chain_id: u64, factory_address: Address, entry_point: Address) -> Self {
         Self {
-            chain_id,
+            _chain_id: chain_id,
             factory_address,
-            entry_point,
+            _entry_point: entry_point,
         }
     }
 

@@ -1,0 +1,3 @@
+{
+  "/(admin)/ledger/page": "app/(admin)/ledger/page.js"
+}

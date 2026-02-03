@@ -36,6 +36,7 @@ async-nats = { workspace = true, optional = true }
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"], optional = true }
 sha2.workspace = true
 rand.workspace = true
+subtle = "2.5"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

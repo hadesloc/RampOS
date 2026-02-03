@@ -154,10 +154,11 @@ struct PendingWorkflow {
     workflow_id: String,
     run_id: String,
     task: WorkflowTask,
-    created_at: chrono::DateTime<chrono::Utc>,
+    _created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ActiveWorkflow {
     workflow_id: String,
     run_id: String,
@@ -214,7 +215,7 @@ impl TemporalWorker {
             workflow_id: workflow_id.clone(),
             run_id,
             task,
-            created_at: now,
+            _created_at: now,
         };
 
         self.pending_tasks.write().await.push(pending);
@@ -284,6 +285,7 @@ impl TemporalWorker {
 /// Reference struct for worker operations
 #[derive(Clone)]
 struct TemporalWorkerRefs {
+    #[allow(dead_code)]
     config: TemporalWorkerConfig,
     intent_repo: Arc<dyn IntentRepository>,
     ledger_repo: Arc<dyn LedgerRepository>,

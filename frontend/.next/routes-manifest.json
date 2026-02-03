@@ -1,1 +1,194 @@
-{"version":3,"pages404":true,"caseSensitive":false,"basePath":"","redirects":[{"source":"/:path+/","destination":"/:path+","internal":true,"statusCode":308,"regex":"^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"}],"headers":[],"dynamicRoutes":[],"staticRoutes":[{"page":"/","regex":"^/(?:/)?$","routeKeys":{},"namedRegex":"^/(?:/)?$"},{"page":"/_not-found","regex":"^/_not\\-found(?:/)?$","routeKeys":{},"namedRegex":"^/_not\\-found(?:/)?$"},{"page":"/compliance","regex":"^/compliance(?:/)?$","routeKeys":{},"namedRegex":"^/compliance(?:/)?$"},{"page":"/intents","regex":"^/intents(?:/)?$","routeKeys":{},"namedRegex":"^/intents(?:/)?$"},{"page":"/ledger","regex":"^/ledger(?:/)?$","routeKeys":{},"namedRegex":"^/ledger(?:/)?$"},{"page":"/portal","regex":"^/portal(?:/)?$","routeKeys":{},"namedRegex":"^/portal(?:/)?$"},{"page":"/portal/assets","regex":"^/portal/assets(?:/)?$","routeKeys":{},"namedRegex":"^/portal/assets(?:/)?$"},{"page":"/portal/deposit","regex":"^/portal/deposit(?:/)?$","routeKeys":{},"namedRegex":"^/portal/deposit(?:/)?$"},{"page":"/portal/kyc","regex":"^/portal/kyc(?:/)?$","routeKeys":{},"namedRegex":"^/portal/kyc(?:/)?$"},{"page":"/portal/login","regex":"^/portal/login(?:/)?$","routeKeys":{},"namedRegex":"^/portal/login(?:/)?$"},{"page":"/portal/register","regex":"^/portal/register(?:/)?$","routeKeys":{},"namedRegex":"^/portal/register(?:/)?$"},{"page":"/portal/settings","regex":"^/portal/settings(?:/)?$","routeKeys":{},"namedRegex":"^/portal/settings(?:/)?$"},{"page":"/portal/transactions","regex":"^/portal/transactions(?:/)?$","routeKeys":{},"namedRegex":"^/portal/transactions(?:/)?$"},{"page":"/portal/withdraw","regex":"^/portal/withdraw(?:/)?$","routeKeys":{},"namedRegex":"^/portal/withdraw(?:/)?$"},{"page":"/settings","regex":"^/settings(?:/)?$","routeKeys":{},"namedRegex":"^/settings(?:/)?$"},{"page":"/users","regex":"^/users(?:/)?$","routeKeys":{},"namedRegex":"^/users(?:/)?$"},{"page":"/webhooks","regex":"^/webhooks(?:/)?$","routeKeys":{},"namedRegex":"^/webhooks(?:/)?$"}],"dataRoutes":[],"rsc":{"header":"RSC","varyHeader":"RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Url","prefetchHeader":"Next-Router-Prefetch","didPostponeHeader":"x-nextjs-postponed","contentTypeHeader":"text/x-component","suffix":".rsc","prefetchSuffix":".prefetch.rsc"},"rewrites":[{"source":"/api/v1/:path*","destination":"http://localhost:8080/api/v1/:path*","regex":"^/api/v1(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))?(?:/)?$"}]}
+{
+  "version": 3,
+  "pages404": true,
+  "appType": "app",
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "priority": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        }
+      ],
+      "regex": "^(?:/(.*))(?:/)?$"
+    }
+  ],
+  "rewrites": {
+    "beforeFiles": [],
+    "afterFiles": [
+      {
+        "source": "/api/v1/:path*",
+        "destination": "http://localhost:8080/api/v1/:path*",
+        "regex": "^/api/v1(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))?(?:/)?$"
+      }
+    ],
+    "fallback": []
+  },
+  "dynamicRoutes": [
+    {
+      "page": "/api/proxy/[...path]",
+      "regex": "^/api/proxy/(.+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPpath": "nxtPpath"
+      },
+      "namedRegex": "^/api/proxy/(?<nxtPpath>.+?)(?:/)?$"
+    }
+  ],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_global-error",
+      "regex": "^/_global\\-error(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_global\\-error(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/compliance",
+      "regex": "^/compliance(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/compliance(?:/)?$"
+    },
+    {
+      "page": "/intents",
+      "regex": "^/intents(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/intents(?:/)?$"
+    },
+    {
+      "page": "/ledger",
+      "regex": "^/ledger(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/ledger(?:/)?$"
+    },
+    {
+      "page": "/portal",
+      "regex": "^/portal(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/portal(?:/)?$"
+    },
+    {
+      "page": "/portal/assets",
+      "regex": "^/portal/assets(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/portal/assets(?:/)?$"
+    },
+    {
+      "page": "/portal/deposit",
+      "regex": "^/portal/deposit(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/portal/deposit(?:/)?$"
+    },
+    {
+      "page": "/portal/kyc",
+      "regex": "^/portal/kyc(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/portal/kyc(?:/)?$"
+    },
+    {
+      "page": "/portal/login",
+      "regex": "^/portal/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/portal/login(?:/)?$"
+    },
+    {
+      "page": "/portal/register",
+      "regex": "^/portal/register(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/portal/register(?:/)?$"
+    },
+    {
+      "page": "/portal/settings",
+      "regex": "^/portal/settings(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/portal/settings(?:/)?$"
+    },
+    {
+      "page": "/portal/transactions",
+      "regex": "^/portal/transactions(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/portal/transactions(?:/)?$"
+    },
+    {
+      "page": "/portal/withdraw",
+      "regex": "^/portal/withdraw(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/portal/withdraw(?:/)?$"
+    },
+    {
+      "page": "/settings",
+      "regex": "^/settings(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/settings(?:/)?$"
+    },
+    {
+      "page": "/users",
+      "regex": "^/users(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/users(?:/)?$"
+    },
+    {
+      "page": "/webhooks",
+      "regex": "^/webhooks(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/webhooks(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "rsc",
+    "varyHeader": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "prefetchHeader": "next-router-prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSegmentHeader": "next-router-segment-prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments",
+    "clientParamParsing": false,
+    "dynamicRSCPrerender": false
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  }
+}

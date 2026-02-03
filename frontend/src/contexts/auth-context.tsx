@@ -101,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Store refresh token
     if (typeof window !== "undefined") {
+      // TODO: Migrate to httpOnly cookies for better security
       localStorage.setItem("refresh_token", session.refreshToken);
     }
 

@@ -1,1 +1,21 @@
-{"/_not-found":"/_not-found","/portal/deposit/page":"/portal/deposit","/portal/assets/page":"/portal/assets","/portal/register/page":"/portal/register","/portal/withdraw/page":"/portal/withdraw","/portal/login/page":"/portal/login","/portal/kyc/page":"/portal/kyc","/portal/settings/page":"/portal/settings","/portal/page":"/portal","/portal/transactions/page":"/portal/transactions","/(admin)/page":"/","/(admin)/intents/page":"/intents","/(admin)/compliance/page":"/compliance","/(admin)/settings/page":"/settings","/(admin)/ledger/page":"/ledger","/(admin)/webhooks/page":"/webhooks","/(admin)/users/page":"/users"}
+{
+  "/(admin)/compliance/page": "/compliance",
+  "/(admin)/intents/page": "/intents",
+  "/(admin)/ledger/page": "/ledger",
+  "/(admin)/page": "/",
+  "/(admin)/settings/page": "/settings",
+  "/(admin)/users/page": "/users",
+  "/(admin)/webhooks/page": "/webhooks",
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/api/proxy/[...path]/route": "/api/proxy/[...path]",
+  "/portal/assets/page": "/portal/assets",
+  "/portal/deposit/page": "/portal/deposit",
+  "/portal/kyc/page": "/portal/kyc",
+  "/portal/login/page": "/portal/login",
+  "/portal/page": "/portal",
+  "/portal/register/page": "/portal/register",
+  "/portal/settings/page": "/portal/settings",
+  "/portal/transactions/page": "/portal/transactions",
+  "/portal/withdraw/page": "/portal/withdraw"
+}

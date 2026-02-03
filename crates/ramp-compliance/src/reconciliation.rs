@@ -9,12 +9,9 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Cursor;
-// use std::sync::Arc; // Unused
 use thiserror::Error;
 use tracing::info;
 use uuid::Uuid;
-
-// use ramp_common::types::{IntentId, TenantId}; // Unused
 
 #[derive(Debug, Error)]
 pub enum ReconError {

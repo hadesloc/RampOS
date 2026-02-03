@@ -265,9 +265,7 @@ mod tests {
     use crate::test_utils::MockIntentRepository;
     use crate::workflows::{BankConfirmation, PayinWorkflowInput};
     use chrono::Utc;
-    use ramp_common::types::IntentId;
     use std::sync::Arc;
-    use std::time::Duration;
 
     #[tokio::test]
     async fn test_payin_workflow_happy_path() {

@@ -224,6 +224,12 @@ pub struct CompensatedStep<T> {
     compensation: Option<CompensationAction>,
 }
 
+impl<T> Default for CompensatedStep<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> CompensatedStep<T> {
     /// Create a new compensated step
     pub fn new() -> Self {

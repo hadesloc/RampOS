@@ -73,8 +73,9 @@ impl AAServiceState {
         let signer_key = match std::env::var("PAYMASTER_SIGNER_KEY") {
             Ok(key) if !key.is_empty() => {
                 // Expect hex-encoded private key (32 bytes = 64 hex chars)
-                hex::decode(key.trim_start_matches("0x"))
-                    .map_err(|e| anyhow::anyhow!("PAYMASTER_SIGNER_KEY must be a valid hex string: {}", e))?
+                hex::decode(key.trim_start_matches("0x")).map_err(|e| {
+                    anyhow::anyhow!("PAYMASTER_SIGNER_KEY must be a valid hex string: {}", e)
+                })?
             }
             Ok(_) => {
                 // Empty key provided - always error, no fallback
@@ -699,6 +700,7 @@ async fn verify_account_ownership(
 /// Returns:
 /// - `true` if the account belongs to the user within the tenant
 /// - `false` if the account does not belong to the user or is not found
+#[allow(dead_code)]
 async fn verify_account_user_ownership(
     aa_state: &AAServiceState,
     tenant_id: &TenantId,
@@ -981,9 +983,18 @@ mod tests {
             }
 
             /// Add account with both tenant_id and user_id
-            pub fn add_account_with_user(&self, address: &str, tenant_id: &str, user_id: &str, chain_id: u64) {
+            pub fn add_account_with_user(
+                &self,
+                address: &str,
+                tenant_id: &str,
+                user_id: &str,
+                chain_id: u64,
+            ) {
                 let mut accounts = self.accounts.lock().unwrap();
-                accounts.insert(address.to_lowercase(), (tenant_id.to_string(), user_id.to_string(), chain_id));
+                accounts.insert(
+                    address.to_lowercase(),
+                    (tenant_id.to_string(), user_id.to_string(), chain_id),
+                );
             }
         }
 
@@ -996,7 +1007,9 @@ mod tests {
                 chain_id: u64,
             ) -> ramp_common::Result<bool> {
                 let accounts = self.accounts.lock().unwrap();
-                if let Some((stored_tenant, _, stored_chain)) = accounts.get(&address.to_lowercase()) {
+                if let Some((stored_tenant, _, stored_chain)) =
+                    accounts.get(&address.to_lowercase())
+                {
                     Ok(stored_tenant == &tenant_id.0 && *stored_chain == chain_id)
                 } else {
                     Ok(false)
@@ -1011,8 +1024,12 @@ mod tests {
                 chain_id: u64,
             ) -> ramp_common::Result<bool> {
                 let accounts = self.accounts.lock().unwrap();
-                if let Some((stored_tenant, stored_user, stored_chain)) = accounts.get(&address.to_lowercase()) {
-                    Ok(stored_tenant == &tenant_id.0 && stored_user == user_id && *stored_chain == chain_id)
+                if let Some((stored_tenant, stored_user, stored_chain)) =
+                    accounts.get(&address.to_lowercase())
+                {
+                    Ok(stored_tenant == &tenant_id.0
+                        && stored_user == user_id
+                        && *stored_chain == chain_id)
                 } else {
                     Ok(false)
                 }
@@ -1103,7 +1120,8 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
+        let state =
+            AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
 
         let tenant_a = TenantId::new("tenant_a");
         let tenant_b = TenantId::new("tenant_b");
@@ -1135,7 +1153,8 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
+        let state =
+            AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
 
         let tenant_id = TenantId::new("any_tenant");
         let address: Address = "0xabcdef1234567890abcdef1234567890abcdef12"
@@ -1164,7 +1183,8 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
+        let state =
+            AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
 
         let tenant_id = TenantId::new("tenant_a");
         let address: Address = "0x1234567890123456789012345678901234567890"
@@ -1240,7 +1260,8 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
+        let state =
+            AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
 
         let tenant_a = TenantId::new("tenant_a");
         let address: Address = "0x1234567890123456789012345678901234567890"
@@ -1276,7 +1297,8 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
+        let state =
+            AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
 
         let tenant_b = TenantId::new("tenant_b");
         let address: Address = "0x1234567890123456789012345678901234567890"
@@ -1309,7 +1331,8 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
+        let state =
+            AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
 
         let tenant_a = TenantId::new("tenant_a");
         let address: Address = "0x1234567890123456789012345678901234567890"
@@ -1336,7 +1359,8 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
+        let state =
+            AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
 
         let tenant_id = TenantId::new("any_tenant");
         let address: Address = "0xabcdef1234567890abcdef1234567890abcdef12"
@@ -1344,8 +1368,7 @@ mod tests {
             .unwrap();
 
         // Unknown address should return false
-        let result =
-            verify_account_user_ownership(&state, &tenant_id, "any_user", address).await;
+        let result = verify_account_user_ownership(&state, &tenant_id, "any_user", address).await;
         assert!(!result);
     }
 }

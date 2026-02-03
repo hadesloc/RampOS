@@ -1,5 +1,16 @@
 {
   "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
     "x-next-cache-tags": "_N_T_/layout,_N_T_/(admin)/layout,_N_T_/(admin)/intents/layout,_N_T_/(admin)/intents/page,_N_T_/intents"
-  }
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/!KGFkbWluKQ/intents/__PAGE__",
+    "/!KGFkbWluKQ/intents",
+    "/!KGFkbWluKQ",
+    "/_index",
+    "/_head"
+  ]
 }

@@ -16,7 +16,7 @@ pub mod compensation;
 pub mod payin;
 pub mod payout;
 pub mod trade;
-pub mod worker;
+// pub mod worker;
 
 pub use activities::{payin_activities, trade_activities};
 pub use compensation::{CompensationAction, CompensationChain};

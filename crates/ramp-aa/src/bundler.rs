@@ -80,7 +80,7 @@ pub trait Bundler: Send + Sync {
 pub struct BundlerClient {
     http_client: reqwest::Client,
     bundler_url: String,
-    chain_config: ChainConfig,
+    _chain_config: ChainConfig,
 }
 
 impl BundlerClient {
@@ -88,7 +88,7 @@ impl BundlerClient {
         Self {
             http_client: reqwest::Client::new(),
             bundler_url: chain_config.bundler_url.clone(),
-            chain_config,
+            _chain_config: chain_config,
         }
     }
 

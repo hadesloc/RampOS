@@ -716,12 +716,15 @@ impl TenantRepository for MockTenantRepository {
     async fn get_by_api_key_hash(&self, hash: &str) -> Result<Option<TenantRow>> {
         let tenants = self.tenants.lock().unwrap();
         // SECURITY: Use constant-time comparison to prevent timing attacks
-        Ok(tenants.iter().find(|t| {
-            let stored = t.api_key_hash.as_bytes();
-            let provided = hash.as_bytes();
-            // Only compare if lengths match to avoid early return on length mismatch
-            stored.len() == provided.len() && bool::from(stored.ct_eq(provided))
-        }).cloned())
+        Ok(tenants
+            .iter()
+            .find(|t| {
+                let stored = t.api_key_hash.as_bytes();
+                let provided = hash.as_bytes();
+                // Only compare if lengths match to avoid early return on length mismatch
+                stored.len() == provided.len() && bool::from(stored.ct_eq(provided))
+            })
+            .cloned())
     }
 
     async fn create(&self, tenant: &TenantRow) -> Result<()> {

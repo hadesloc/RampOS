@@ -1,1 +1,0 @@
-{"rustc":17121929302607382446,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[13725771896966532416,"build_script_build",false,15537035555454758547]],"local":[{"RerunIfChanged":{"output":"release\\build\\rust_decimal-5492fee5cf3a0f2f\\output","paths":["README.md"]}}],"rustflags":[],"config":0,"compile_kind":0}

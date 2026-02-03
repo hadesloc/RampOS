@@ -1,6 +1,6 @@
 # Installed Claude Code Resources
 
-Generated: 2026-02-03T07:48:17.762853
+Generated: 2026-02-03T10:07:56.680492
 
 **This list shows ONLY resources that are currently ENABLED in Claude Code settings.**
 

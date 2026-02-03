@@ -225,9 +225,7 @@ fn format_json_error(err: &axum::extract::rejection::JsonRejection) -> String {
         JsonRejection::JsonDataError(e) => {
             let msg = e.body_text();
             // Try to extract the field name and provide a cleaner message
-            if msg.contains("missing field") {
-                msg.to_string()
-            } else if msg.contains("invalid type") {
+            if msg.contains("missing field") || msg.contains("invalid type") {
                 msg.to_string()
             } else {
                 format!("Invalid JSON data: {}", msg)

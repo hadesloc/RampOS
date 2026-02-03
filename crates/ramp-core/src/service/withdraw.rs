@@ -1370,13 +1370,9 @@ mod tests {
             ..Default::default()
         };
 
-        let policy_engine = WithdrawPolicyEngine::new(
-            config,
-            case_manager,
-            None,
-            transaction_store,
-        )
-        .with_data_provider(data_provider);
+        let policy_engine =
+            WithdrawPolicyEngine::new(config, case_manager, None, transaction_store)
+                .with_data_provider(data_provider);
 
         let service = WithdrawService::new(
             intent_repo.clone(),

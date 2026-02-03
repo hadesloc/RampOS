@@ -19,14 +19,14 @@ pub struct ApiKeyPair {
 /// Onboarding service for managing tenant lifecycle
 pub struct OnboardingService {
     tenant_repo: Arc<dyn TenantRepository>,
-    ledger_service: Arc<LedgerService>,
+    _ledger_service: Arc<LedgerService>,
 }
 
 impl OnboardingService {
     pub fn new(tenant_repo: Arc<dyn TenantRepository>, ledger_service: Arc<LedgerService>) -> Self {
         Self {
             tenant_repo,
-            ledger_service,
+            _ledger_service: ledger_service,
         }
     }
 

@@ -1,0 +1,235 @@
+warning: this function has too many arguments (8/7)
+   --> crates\ramp-compliance\src\case.rs:127:5
+    |
+127 | /     pub async fn list_cases(
+128 | |         &self,
+129 | |         tenant_id: &TenantId,
+130 | |         status: Option<CaseStatus>,
+...   |
+135 | |         offset: i64,
+136 | |     ) -> Result<Vec<AmlCase>> {
+    | |_____________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#too_many_arguments
+    = note: `#[warn(clippy::too_many_arguments)]` on by default
+
+warning: this function has too many arguments (8/7)
+  --> crates\ramp-compliance\src\store\postgres.rs:14:15
+   |
+14 |   #[async_trait]
+   |  _______________^
+15 | | pub trait CaseStore: Send + Sync {
+16 | |     async fn create_case(&self, case: &AmlCase) -> Result<String>;
+17 | |     async fn get_case(&self, case_id: &str) -> Result<Option<AmlCase>>;
+18 | |     async fn list_cases(
+   | |____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#too_many_arguments
+
+warning: `ramp-compliance` (lib) generated 2 warnings
+warning: field `chain_config` is never read
+  --> crates\ramp-aa\src\bundler.rs:83:5
+   |
+80 | pub struct BundlerClient {
+   |            ------------- field in this struct
+...
+83 |     chain_config: ChainConfig,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `chain_id` and `entry_point` are never read
+  --> crates\ramp-aa\src\smart_account.rs:37:5
+   |
+36 | pub struct SmartAccountService {
+   |            ------------------- fields in this struct
+37 |     chain_id: u64,
+   |     ^^^^^^^^
+38 |     factory_address: Address,
+39 |     entry_point: Address,
+   |     ^^^^^^^^^^^
+
+warning: field `ledger_service` is never read
+  --> crates\ramp-core\src\service\onboarding.rs:22:5
+   |
+20 | pub struct OnboardingService {
+   |            ----------------- field in this struct
+21 |     tenant_repo: Arc<dyn TenantRepository>,
+22 |     ledger_service: Arc<LedgerService>,
+   |     ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `tenant_repo` is never read
+  --> crates\ramp-core\src\service\webhook.rs:42:5
+   |
+40 | pub struct WebhookService {
+   |            -------------- field in this struct
+41 |     webhook_repo: Arc<dyn WebhookRepository>,
+42 |     tenant_repo: Arc<dyn TenantRepository>,
+   |     ^^^^^^^^^^^
+
+warning: method `schedule_retry` is never used
+   --> crates\ramp-core\src\service\webhook.rs:217:14
+    |
+ 47 | impl WebhookService {
+    | ------------------- method in this implementation
+...
+217 |     async fn schedule_retry(&self, event_id: &EventId, error: &str, attempts: i32) -> Result<()> {
+    |              ^^^^^^^^^^^^^^
+
+warning: field `created_at` is never read
+   --> crates\ramp-core\src\temporal_worker.rs:157:5
+    |
+153 | struct PendingWorkflow {
+    |        --------------- field in this struct
+...
+157 |     created_at: chrono::DateTime<chrono::Utc>,
+    |     ^^^^^^^^^^
+    |
+    = note: `PendingWorkflow` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `workflow_id`, `run_id`, `task`, and `started_at` are never read
+   --> crates\ramp-core\src\temporal_worker.rs:162:5
+    |
+161 | struct ActiveWorkflow {
+    |        -------------- fields in this struct
+162 |     workflow_id: String,
+    |     ^^^^^^^^^^^
+163 |     run_id: String,
+    |     ^^^^^^
+164 |     task: WorkflowTask,
+    |     ^^^^
+165 |     status: WorkflowStatus,
+166 |     started_at: chrono::DateTime<chrono::Utc>,
+    |     ^^^^^^^^^^
+    |
+    = note: `ActiveWorkflow` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `config` is never read
+   --> crates\ramp-core\src\temporal_worker.rs:287:5
+    |
+286 | struct TemporalWorkerRefs {
+    |        ------------------ field in this struct
+287 |     config: TemporalWorkerConfig,
+    |     ^^^^^^
+    |
+    = note: `TemporalWorkerRefs` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: field `created_at` is never read
+   --> crates\ramp-core\src\workflows\worker.rs:219:5
+    |
+215 | struct PendingWorkflow {
+    |        --------------- field in this struct
+...
+219 |     created_at: chrono::DateTime<chrono::Utc>,
+    |     ^^^^^^^^^^
+    |
+    = note: `PendingWorkflow` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `workflow_id`, `run_id`, `task`, and `started_at` are never read
+   --> crates\ramp-core\src\workflows\worker.rs:224:5
+    |
+223 | struct ActiveWorkflow {
+    |        -------------- fields in this struct
+224 |     workflow_id: String,
+    |     ^^^^^^^^^^^
+225 |     run_id: String,
+    |     ^^^^^^
+226 |     task: WorkflowTask,
+    |     ^^^^
+227 |     status: WorkflowStatus,
+228 |     started_at: chrono::DateTime<chrono::Utc>,
+    |     ^^^^^^^^^^
+    |
+    = note: `ActiveWorkflow` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: very complex type used. Consider factoring parts into `type` definitions
+  --> crates\ramp-core\src\workflows\compensation.rs:34:24
+   |
+34 |     pub compensate_fn: Option<Pin<Box<dyn Future<Output = Result<(), String>> + Send>>>,
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#type_complexity
+   = note: `#[warn(clippy::type_complexity)]` on by default
+
+warning: you should consider adding a `Default` implementation for `CompensatedStep<T>`
+   --> crates\ramp-core\src\workflows\compensation.rs:229:5
+    |
+229 | /     pub fn new() -> Self {
+230 | |         Self {
+231 | |             result: None,
+232 | |             compensation: None,
+233 | |         }
+234 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#new_without_default
+    = note: `#[warn(clippy::new_without_default)]` on by default
+help: try adding this
+    |
+227 + impl<T> Default for CompensatedStep<T> {
+228 +     fn default() -> Self {
+229 +         Self::new()
+230 +     }
+231 + }
+    |
+
+warning: `ramp-aa` (lib) generated 2 warnings
+warning: `ramp-core` (lib) generated 10 warnings
+warning: empty lines after doc comment
+   --> crates\ramp-api\src\handlers\admin\reports.rs:130:1
+    |
+130 | / /// But the requirement also says "export_csv" in ReportGenerator.
+131 | |
+132 | | /// Let's assume for now we generate on the fly and stream the response for simplicity,
+133 | | /// OR we interpret "report_id" as a type if it's not a UUID.
+...   |
+176 | | /// I'll stick to the "Generate and Export" pattern for now as it fits the `ReportGenerator` API best.
+177 | |
+    | |_^
+178 |   pub async fn export_aml_report(
+    |   ------------------------------ the comment documents this function
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#empty_line_after_doc_comments
+    = note: `#[warn(clippy::empty_line_after_doc_comments)]` on by default
+    = help: if the empty lines are unintentional, remove them
+
+warning: function `verify_account_user_ownership` is never used
+   --> crates\ramp-api\src\handlers\aa.rs:703:10
+    |
+703 | async fn verify_account_user_ownership(
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `check_admin_key_admin` is never used
+   --> crates\ramp-api\src\handlers\admin\tier.rs:168:15
+    |
+168 | pub(crate) fn check_admin_key_admin(headers: &HeaderMap) -> Result<AdminAuth, ApiError> {
+    |               ^^^^^^^^^^^^^^^^^^^^^
+
+warning: this `if` has identical blocks
+   --> crates\ramp-api\src\extract.rs:228:46
+    |
+228 |               if msg.contains("missing field") {
+    |  ______________________________________________^
+229 | |                 msg.to_string()
+230 | |             } else if msg.contains("invalid type") {
+    | |_____________^
+    |
+note: same as this
+   --> crates\ramp-api\src\extract.rs:230:52
+    |
+230 |               } else if msg.contains("invalid type") {
+    |  ____________________________________________________^
+231 | |                 msg.to_string()
+232 | |             } else {
+    | |_____________^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#if_same_then_else
+    = note: `#[warn(clippy::if_same_then_else)]` on by default
+
+warning: `ramp-api` (lib) generated 4 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.18s
+warning: the following packages contain code that will be rejected by a future version of Rust: redis v0.24.0
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 3`

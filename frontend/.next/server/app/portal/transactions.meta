@@ -1,5 +1,16 @@
 {
   "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
     "x-next-cache-tags": "_N_T_/layout,_N_T_/portal/layout,_N_T_/portal/transactions/layout,_N_T_/portal/transactions/page,_N_T_/portal/transactions"
-  }
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/portal/transactions/__PAGE__",
+    "/portal/transactions",
+    "/portal",
+    "/_index",
+    "/_head"
+  ]
 }

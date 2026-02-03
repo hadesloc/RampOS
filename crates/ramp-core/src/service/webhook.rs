@@ -39,6 +39,7 @@ impl std::fmt::Display for WebhookEventType {
 
 pub struct WebhookService {
     webhook_repo: Arc<dyn WebhookRepository>,
+    #[allow(dead_code)]
     tenant_repo: Arc<dyn TenantRepository>,
     #[cfg(feature = "http-client")]
     http_client: reqwest::Client,
@@ -214,6 +215,7 @@ impl WebhookService {
     }
 
     /// Schedule a retry with exponential backoff
+    #[allow(dead_code)]
     async fn schedule_retry(&self, event_id: &EventId, error: &str, attempts: i32) -> Result<()> {
         let max_attempts = 10;
 

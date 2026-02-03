@@ -188,6 +188,7 @@ export function setAuthToken(token: string | null): void {
   authToken = token;
   if (typeof window !== 'undefined') {
     if (token) {
+      // TODO: Migrate to httpOnly cookies for better security
       localStorage.setItem('auth_token', token);
     } else {
       localStorage.removeItem('auth_token');
