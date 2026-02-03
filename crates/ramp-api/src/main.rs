@@ -2,13 +2,15 @@
 
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::{info, Level};
+use tracing::info;
 
 use ramp_api::{
     create_router,
+    handlers::aa::AAServiceState,
     middleware::{IdempotencyConfig, IdempotencyHandler},
     router::AppState,
 };
+use ramp_aa::types::ChainConfig;
 use ramp_common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig};
 use ramp_core::{
     config::Config,
@@ -16,7 +18,7 @@ use ramp_core::{
     jobs::intent_timeout::IntentTimeoutJob,
     repository::{
         intent::PgIntentRepository, ledger::PgLedgerRepository, tenant::PgTenantRepository,
-        user::PgUserRepository, webhook::PgWebhookRepository,
+        user::PgUserRepository, webhook::PgWebhookRepository, PgSmartAccountRepository,
     },
     service::{
         ledger::LedgerService, onboarding::OnboardingService, payin::PayinService,
@@ -26,7 +28,6 @@ use ramp_core::{
 
 use ramp_compliance::case::CaseManager;
 use ramp_compliance::reports::ReportGenerator;
-use ramp_compliance::storage::S3DocumentStorage;
 use ramp_compliance::store::postgres::PostgresCaseStore;
 
 #[tokio::main]
@@ -140,6 +141,51 @@ async fn main() -> anyhow::Result<()> {
         ramp_api::middleware::RateLimitConfig::default(),
     ));
 
+    // Create AA (Account Abstraction) service if enabled
+    let aa_service = if std::env::var("AA_ENABLED").unwrap_or_default() == "true" {
+        info!("Account Abstraction (AA) service enabled");
+
+        // Create smart account repository for ownership verification
+        let smart_account_repo = Arc::new(PgSmartAccountRepository::new(pool.clone()));
+
+        // Get chain configuration from environment
+        let chain_id: u64 = std::env::var("AA_CHAIN_ID")
+            .unwrap_or_else(|_| "1".to_string())
+            .parse()
+            .expect("AA_CHAIN_ID must be a valid number");
+
+        let chain_name = std::env::var("AA_CHAIN_NAME")
+            .unwrap_or_else(|_| "Ethereum Mainnet".to_string());
+
+        let bundler_url = std::env::var("AA_BUNDLER_URL")
+            .unwrap_or_else(|_| "http://localhost:4337".to_string());
+
+        let entry_point_address = std::env::var("AA_ENTRY_POINT_ADDRESS")
+            .unwrap_or_else(|_| "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789".to_string())
+            .parse()
+            .expect("AA_ENTRY_POINT_ADDRESS must be a valid Ethereum address");
+
+        let paymaster_address = std::env::var("AA_PAYMASTER_ADDRESS")
+            .ok()
+            .and_then(|s| s.parse().ok());
+
+        let chain_config = ChainConfig {
+            chain_id,
+            name: chain_name,
+            entry_point_address,
+            bundler_url,
+            paymaster_address,
+        };
+
+        Some(AAServiceState::new_with_repo(
+            chain_config,
+            Some(smart_account_repo),
+        ))
+    } else {
+        info!("Account Abstraction (AA) service disabled - set AA_ENABLED=true to enable");
+        None
+    };
+
     // Create application state
     let app_state = AppState {
         payin_service,
@@ -154,7 +200,7 @@ async fn main() -> anyhow::Result<()> {
         case_manager: case_manager.clone(),
         rate_limiter: Some(rate_limiter),
         idempotency_handler: Some(idempotency_handler),
-        aa_service: None, // AA service temporarily disabled
+        aa_service,
     };
 
     // Create router

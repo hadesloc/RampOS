@@ -13,15 +13,14 @@
 //! 2. Update intent state to FAILED
 //! 3. Send failure notification
 
-use std::sync::Arc;
-use tracing::{info, warn, error, instrument};
-use ramp_common::types::*;
-use crate::workflows::{
-    TradeWorkflowInput, TradeWorkflowResult,
-    trade_activities,
-    compensation::{CompensationChain, CompensationAction},
-};
 use crate::repository::intent::IntentRepository;
+use crate::workflows::{
+    compensation::{CompensationAction, CompensationChain},
+    trade_activities, TradeWorkflowInput, TradeWorkflowResult,
+};
+use ramp_common::types::*;
+use std::sync::Arc;
+use tracing::{error, info, instrument, warn};
 
 /// Trade Workflow Implementation
 pub struct TradeWorkflow {
@@ -35,10 +34,7 @@ impl TradeWorkflow {
 
     /// Execute the trade workflow
     #[instrument(skip(self), fields(intent_id = %input.intent_id, trade_id = %input.trade_id))]
-    pub async fn execute(
-        &self,
-        input: TradeWorkflowInput,
-    ) -> Result<TradeWorkflowResult, String> {
+    pub async fn execute(&self, input: TradeWorkflowInput) -> Result<TradeWorkflowResult, String> {
         info!("Starting trade workflow execution");
 
         let intent_id = IntentId(input.intent_id.clone());
@@ -62,16 +58,22 @@ impl TradeWorkflow {
             info!("Trade failed compliance check, flagging for review");
 
             // Flag for review and create compliance case
-            let case_id = trade_activities::flag_for_review(
+            let _case_id = trade_activities::flag_for_review(
                 &input.intent_id,
-                "Compliance check failed - trade exceeds threshold"
-            ).await.unwrap_or_else(|e| {
+                "Compliance check failed - trade exceeds threshold",
+            )
+            .await
+            .unwrap_or_else(|e| {
                 warn!(error = %e, "Failed to create compliance case");
                 format!("CASE_ERROR_{}", input.intent_id)
             });
 
             // Update state to COMPLIANCE_HOLD
-            if let Err(e) = self.intent_repo.update_state(&tenant_id, &intent_id, "COMPLIANCE_HOLD").await {
+            if let Err(e) = self
+                .intent_repo
+                .update_state(&tenant_id, &intent_id, "COMPLIANCE_HOLD")
+                .await
+            {
                 error!(error = %e, "Failed to update state to COMPLIANCE_HOLD");
             }
 
@@ -84,7 +86,11 @@ impl TradeWorkflow {
         }
 
         // Update state to POST_TRADE_CHECKED
-        if let Err(e) = self.intent_repo.update_state(&tenant_id, &intent_id, "POST_TRADE_CHECKED").await {
+        if let Err(e) = self
+            .intent_repo
+            .update_state(&tenant_id, &intent_id, "POST_TRADE_CHECKED")
+            .await
+        {
             error!(error = %e, "Failed to update state to POST_TRADE_CHECKED");
         }
 
@@ -98,11 +104,16 @@ impl TradeWorkflow {
             // If ledger settlement fails, flag for manual review
             let _ = trade_activities::flag_for_review(
                 &input.intent_id,
-                &format!("Ledger settlement failed: {}", e)
-            ).await;
+                &format!("Ledger settlement failed: {}", e),
+            )
+            .await;
 
             // Update state to indicate failure
-            if let Err(e2) = self.intent_repo.update_state(&tenant_id, &intent_id, "SETTLEMENT_FAILED").await {
+            if let Err(e2) = self
+                .intent_repo
+                .update_state(&tenant_id, &intent_id, "SETTLEMENT_FAILED")
+                .await
+            {
                 error!(error = %e2, "Failed to update state to SETTLEMENT_FAILED");
             }
 
@@ -110,21 +121,26 @@ impl TradeWorkflow {
         }
 
         // Add compensation for settlement (in case later steps fail)
-        compensation_chain.add(CompensationAction::new(
-            "settle_in_ledger",
-            async move {
-                trade_activities::reverse_settlement(&settle_input, "Workflow rollback").await
-            },
-        ));
+        compensation_chain.add(CompensationAction::new("settle_in_ledger", async move {
+            trade_activities::reverse_settlement(&settle_input, "Workflow rollback").await
+        }));
 
         // Update state to SETTLED_LEDGER
-        if let Err(e) = self.intent_repo.update_state(&tenant_id, &intent_id, "SETTLED_LEDGER").await {
+        if let Err(e) = self
+            .intent_repo
+            .update_state(&tenant_id, &intent_id, "SETTLED_LEDGER")
+            .await
+        {
             error!(error = %e, "Failed to update state to SETTLED_LEDGER");
             // Continue - the settlement is done, state update is secondary
         }
 
         // Step 3: Complete
-        if let Err(e) = self.intent_repo.update_state(&tenant_id, &intent_id, "COMPLETED").await {
+        if let Err(e) = self
+            .intent_repo
+            .update_state(&tenant_id, &intent_id, "COMPLETED")
+            .await
+        {
             error!(error = %e, "Failed to update state to COMPLETED");
             // This is concerning but not fatal - the trade is settled
             // In production, this would trigger an alert for reconciliation
@@ -153,9 +169,16 @@ impl TradeWorkflow {
     pub async fn execute_with_compensation(
         &self,
         input: TradeWorkflowInput,
-    ) -> Result<TradeWorkflowResult, (String, Option<crate::workflows::compensation::CompensationResult>)> {
+    ) -> Result<
+        TradeWorkflowResult,
+        (
+            String,
+            Option<crate::workflows::compensation::CompensationResult>,
+        ),
+    > {
         // Create compensation chain that will be used if we need to rollback
-        let mut compensation_chain = CompensationChain::new(format!("trade-{}-comp", input.trade_id));
+        let mut compensation_chain =
+            CompensationChain::new(format!("trade-{}-comp", input.trade_id));
 
         let intent_id = IntentId(input.intent_id.clone());
         let tenant_id = TenantId::new(&input.tenant_id);
@@ -170,7 +193,10 @@ impl TradeWorkflow {
 
         if !compliance_passed {
             let _ = trade_activities::flag_for_review(&input.intent_id, "Compliance failed").await;
-            let _ = self.intent_repo.update_state(&tenant_id, &intent_id, "COMPLIANCE_HOLD").await;
+            let _ = self
+                .intent_repo
+                .update_state(&tenant_id, &intent_id, "COMPLIANCE_HOLD")
+                .await;
 
             return Ok(TradeWorkflowResult {
                 intent_id: input.intent_id,
@@ -180,7 +206,10 @@ impl TradeWorkflow {
             });
         }
 
-        let _ = self.intent_repo.update_state(&tenant_id, &intent_id, "POST_TRADE_CHECKED").await;
+        let _ = self
+            .intent_repo
+            .update_state(&tenant_id, &intent_id, "POST_TRADE_CHECKED")
+            .await;
 
         // Step 2: Settle in ledger
         let settle_input = input.clone();
@@ -190,20 +219,24 @@ impl TradeWorkflow {
         }
 
         // Register compensation
-        compensation_chain.add(CompensationAction::new(
-            "reverse_settlement",
-            async move {
-                trade_activities::reverse_settlement(&settle_input, "Compensation rollback").await
-            },
-        ));
+        compensation_chain.add(CompensationAction::new("reverse_settlement", async move {
+            trade_activities::reverse_settlement(&settle_input, "Compensation rollback").await
+        }));
 
         // Step 3: Complete - if this fails, we need to compensate
-        if let Err(e) = self.intent_repo.update_state(&tenant_id, &intent_id, "COMPLETED").await {
+        if let Err(e) = self
+            .intent_repo
+            .update_state(&tenant_id, &intent_id, "COMPLETED")
+            .await
+        {
             // State update failed after settlement - this is a problem
             // We should compensate and fail
             error!(error = %e, "Failed to complete trade, initiating compensation");
             let comp_result = compensation_chain.compensate().await;
-            let _ = self.intent_repo.update_state(&tenant_id, &intent_id, "ROLLED_BACK").await;
+            let _ = self
+                .intent_repo
+                .update_state(&tenant_id, &intent_id, "ROLLED_BACK")
+                .await;
             return Err((format!("Failed to complete: {}", e), Some(comp_result)));
         }
 
@@ -233,19 +266,30 @@ impl TradeWorkflow {
         let tenant_id = TenantId::new(&input.tenant_id);
 
         // Update state to show manual approval
-        if let Err(e) = self.intent_repo.update_state(&tenant_id, &intent_id, "MANUALLY_APPROVED").await {
+        if let Err(e) = self
+            .intent_repo
+            .update_state(&tenant_id, &intent_id, "MANUALLY_APPROVED")
+            .await
+        {
             error!(error = %e, "Failed to update state to MANUALLY_APPROVED");
         }
 
         // Proceed with settlement
         if let Err(e) = trade_activities::settle_in_ledger(&input).await {
             error!(error = %e, "Failed to settle trade in ledger after manual approval");
-            let _ = self.intent_repo.update_state(&tenant_id, &intent_id, "SETTLEMENT_FAILED").await;
+            let _ = self
+                .intent_repo
+                .update_state(&tenant_id, &intent_id, "SETTLEMENT_FAILED")
+                .await;
             return Err(format!("Ledger settlement failed: {}", e));
         }
 
         // Complete
-        if let Err(e) = self.intent_repo.update_state(&tenant_id, &intent_id, "COMPLETED").await {
+        if let Err(e) = self
+            .intent_repo
+            .update_state(&tenant_id, &intent_id, "COMPLETED")
+            .await
+        {
             error!(error = %e, "Failed to update state to COMPLETED");
         }
 
@@ -272,7 +316,11 @@ impl TradeWorkflow {
         let tenant_id = TenantId::new(&input.tenant_id);
 
         // Update state to REJECTED
-        if let Err(e) = self.intent_repo.update_state(&tenant_id, &intent_id, "REJECTED").await {
+        if let Err(e) = self
+            .intent_repo
+            .update_state(&tenant_id, &intent_id, "REJECTED")
+            .await
+        {
             error!(error = %e, "Failed to update state to REJECTED");
         }
 
@@ -352,7 +400,7 @@ mod tests {
             trade_id: "trade-buy-123".to_string(),
             symbol: "ETH/VND".to_string(),
             price: "50000000".to_string(),
-            vnd_delta: -50_000_000, // Paying 50M VND
+            vnd_delta: -50_000_000,          // Paying 50M VND
             crypto_delta: "1.0".to_string(), // Receiving 1 ETH
             timestamp: "2024-01-01T00:00:00Z".to_string(),
         };
@@ -375,7 +423,7 @@ mod tests {
             trade_id: "trade-sell-123".to_string(),
             symbol: "BTC/VND".to_string(),
             price: "1000000000".to_string(),
-            vnd_delta: 100_000_000, // Receiving 100M VND
+            vnd_delta: 100_000_000,           // Receiving 100M VND
             crypto_delta: "-0.1".to_string(), // Paying 0.1 BTC
             timestamp: "2024-01-01T00:00:00Z".to_string(),
         };
@@ -425,7 +473,9 @@ mod tests {
             timestamp: "2024-01-01T00:00:00Z".to_string(),
         };
 
-        let result = workflow.resume_from_hold(input, "Approved by compliance team").await;
+        let result = workflow
+            .resume_from_hold(input, "Approved by compliance team")
+            .await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap().status, "COMPLETED");

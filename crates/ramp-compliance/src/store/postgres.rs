@@ -71,7 +71,7 @@ impl CaseStore for PostgresCaseStore {
             "#,
         )
         .bind(&case.id)
-        .bind(&case.tenant_id.to_string())
+        .bind(case.tenant_id.to_string())
         .bind(case.user_id.as_ref().map(|u| u.to_string()))
         .bind(case.intent_id.as_ref().map(|i| i.to_string()))
         .bind(serde_json::to_string(&case.case_type).unwrap_or_default())
@@ -116,11 +116,10 @@ impl CaseStore for PostgresCaseStore {
             let case_type: CaseType = serde_json::from_str(&case_type_str)
                 .unwrap_or(CaseType::Other("Unknown".to_string()));
 
-            let severity: CaseSeverity = serde_json::from_str(&severity_str)
-                .unwrap_or(CaseSeverity::Low);
+            let severity: CaseSeverity =
+                serde_json::from_str(&severity_str).unwrap_or(CaseSeverity::Low);
 
-            let status: CaseStatus = serde_json::from_str(&status_str)
-                .unwrap_or(CaseStatus::Open);
+            let status: CaseStatus = serde_json::from_str(&status_str).unwrap_or(CaseStatus::Open);
 
             Ok(Some(AmlCase {
                 id: row.try_get("id")?,
@@ -178,7 +177,9 @@ impl CaseStore for PostgresCaseStore {
         }
 
         if let Some(user_id) = user_id {
-            builder.push(" AND user_id = ").push_bind(user_id.to_string());
+            builder
+                .push(" AND user_id = ")
+                .push_bind(user_id.to_string());
         }
 
         builder
@@ -204,9 +205,8 @@ impl CaseStore for PostgresCaseStore {
         assigned_to: Option<&str>,
         user_id: Option<&UserId>,
     ) -> Result<i64> {
-        let mut builder = QueryBuilder::new(
-            "SELECT COUNT(*) as count FROM compliance_cases WHERE tenant_id = ",
-        );
+        let mut builder =
+            QueryBuilder::new("SELECT COUNT(*) as count FROM compliance_cases WHERE tenant_id = ");
         builder.push_bind(tenant_id.to_string());
 
         if let Some(status) = status {
@@ -224,7 +224,9 @@ impl CaseStore for PostgresCaseStore {
         }
 
         if let Some(user_id) = user_id {
-            builder.push(" AND user_id = ").push_bind(user_id.to_string());
+            builder
+                .push(" AND user_id = ")
+                .push_bind(user_id.to_string());
         }
 
         let row = builder
@@ -331,8 +333,8 @@ impl CaseStore for PostgresCaseStore {
         let mut notes = Vec::new();
         for row in rows {
             let note_type_str: String = row.try_get("note_type")?;
-            let note_type: NoteType = serde_json::from_str(&note_type_str)
-                .unwrap_or(NoteType::Comment);
+            let note_type: NoteType =
+                serde_json::from_str(&note_type_str).unwrap_or(NoteType::Comment);
 
             notes.push(CaseNote {
                 id: row.try_get("id")?,
@@ -404,11 +406,10 @@ impl PostgresCaseStore {
             let case_type: CaseType = serde_json::from_str(&case_type_str)
                 .unwrap_or(CaseType::Other("Unknown".to_string()));
 
-            let severity: CaseSeverity = serde_json::from_str(&severity_str)
-                .unwrap_or(CaseSeverity::Low);
+            let severity: CaseSeverity =
+                serde_json::from_str(&severity_str).unwrap_or(CaseSeverity::Low);
 
-            let status: CaseStatus = serde_json::from_str(&status_str)
-                .unwrap_or(CaseStatus::Open);
+            let status: CaseStatus = serde_json::from_str(&status_str).unwrap_or(CaseStatus::Open);
 
             cases.push(AmlCase {
                 id: row.try_get("id")?,

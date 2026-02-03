@@ -84,10 +84,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch {
           // Wallet might not exist yet
         }
-      } catch (err) {
+      } catch {
         // Token is invalid, clear it
         setAuthToken(null);
-        console.error("Failed to restore session:", err);
       } finally {
         setIsLoading(false);
       }
@@ -300,8 +299,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const walletData = await walletApi.getAccount();
       setWallet(walletData);
-    } catch (err) {
-      console.error("Failed to refresh wallet:", err);
+    } catch {
+      // Wallet refresh failed silently
     }
   }, [user]);
 

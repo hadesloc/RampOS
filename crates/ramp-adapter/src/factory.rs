@@ -1,8 +1,8 @@
 //! Adapter factory for managing multiple banking adapters
 
 use crate::adapters::mock::MockAdapter;
-use crate::adapters::vietqr::VietQRAdapter;
 use crate::adapters::napas::NapasAdapter;
+use crate::adapters::vietqr::VietQRAdapter;
 use crate::traits::RailsAdapter;
 use crate::types::AdapterConfig;
 use ramp_common::{Error, Result};

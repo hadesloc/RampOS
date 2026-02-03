@@ -9,11 +9,11 @@ use rust_decimal::Decimal;
 use std::sync::Arc;
 use tracing::info;
 
+use crate::event::EventPublisher;
 use crate::repository::{
     intent::{IntentRepository, IntentRow},
     ledger::LedgerRepository,
 };
-use crate::event::EventPublisher;
 
 /// Trade executed event from exchange
 #[derive(Debug, Clone)]
@@ -21,9 +21,9 @@ pub struct TradeExecutedRequest {
     pub tenant_id: TenantId,
     pub user_id: UserId,
     pub trade_id: String,
-    pub symbol: String,        // e.g., "BTC/VND"
+    pub symbol: String, // e.g., "BTC/VND"
     pub price: Decimal,
-    pub vnd_delta: VndAmount,  // negative = user paid VND, positive = user received VND
+    pub vnd_delta: VndAmount, // negative = user paid VND, positive = user received VND
     pub crypto_delta: Decimal, // negative = user paid crypto, positive = user received crypto
     pub timestamp: Timestamp,
     pub idempotency_key: Option<IdempotencyKey>,
@@ -151,7 +151,8 @@ impl TradeService {
             req.crypto_delta.abs(),
             crypto_currency,
             is_buy,
-        ).map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?;
+        )
+        .map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?;
 
         self.ledger_repo.record_transaction(tx).await?;
 
@@ -211,21 +212,21 @@ impl TradeService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{MockIntentRepository, MockLedgerRepository};
     use crate::event::InMemoryEventPublisher;
-    use std::sync::Arc;
+    use crate::test_utils::{MockIntentRepository, MockLedgerRepository};
     use rust_decimal_macros::dec;
+    use std::sync::Arc;
 
-    fn create_test_service() -> (TradeService, Arc<MockIntentRepository>, Arc<MockLedgerRepository>) {
+    fn create_test_service() -> (
+        TradeService,
+        Arc<MockIntentRepository>,
+        Arc<MockLedgerRepository>,
+    ) {
         let intent_repo = Arc::new(MockIntentRepository::new());
         let ledger_repo = Arc::new(MockLedgerRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
 
-        let service = TradeService::new(
-            intent_repo.clone(),
-            ledger_repo.clone(),
-            event_publisher,
-        );
+        let service = TradeService::new(intent_repo.clone(), ledger_repo.clone(), event_publisher);
 
         (service, intent_repo, ledger_repo)
     }
@@ -239,9 +240,9 @@ mod tests {
             user_id: UserId::new("user1"),
             trade_id: "trade123".to_string(),
             symbol: "BTC/VND".to_string(),
-            price: dec!(1000000000), // 1B VND per BTC
+            price: dec!(1000000000),                      // 1B VND per BTC
             vnd_delta: VndAmount::from_i64(-100_000_000), // User paid 100M VND
-            crypto_delta: dec!(0.1), // User received 0.1 BTC
+            crypto_delta: dec!(0.1),                      // User received 0.1 BTC
             timestamp: Timestamp::now(),
             idempotency_key: None,
             metadata: serde_json::json!({}),
@@ -269,9 +270,9 @@ mod tests {
             user_id: UserId::new("user1"),
             trade_id: "trade456".to_string(),
             symbol: "ETH/VND".to_string(),
-            price: dec!(50000000), // 50M VND per ETH
+            price: dec!(50000000),                       // 50M VND per ETH
             vnd_delta: VndAmount::from_i64(100_000_000), // User received 100M VND
-            crypto_delta: dec!(-2.0), // User paid 2 ETH
+            crypto_delta: dec!(-2.0),                    // User paid 2 ETH
             timestamp: Timestamp::now(),
             idempotency_key: None,
             metadata: serde_json::json!({}),
@@ -354,10 +355,25 @@ mod tests {
             Arc::new(InMemoryEventPublisher::new()),
         );
 
-        assert_eq!(service.parse_crypto_currency("BTC/VND"), LedgerCurrency::BTC);
-        assert_eq!(service.parse_crypto_currency("ETH/VND"), LedgerCurrency::ETH);
-        assert_eq!(service.parse_crypto_currency("USDT/VND"), LedgerCurrency::USDT);
-        assert_eq!(service.parse_crypto_currency("USDC/VND"), LedgerCurrency::USDC);
-        assert_eq!(service.parse_crypto_currency("XRP/VND"), LedgerCurrency::Other);
+        assert_eq!(
+            service.parse_crypto_currency("BTC/VND"),
+            LedgerCurrency::BTC
+        );
+        assert_eq!(
+            service.parse_crypto_currency("ETH/VND"),
+            LedgerCurrency::ETH
+        );
+        assert_eq!(
+            service.parse_crypto_currency("USDT/VND"),
+            LedgerCurrency::USDT
+        );
+        assert_eq!(
+            service.parse_crypto_currency("USDC/VND"),
+            LedgerCurrency::USDC
+        );
+        assert_eq!(
+            service.parse_crypto_currency("XRP/VND"),
+            LedgerCurrency::Other
+        );
     }
 }

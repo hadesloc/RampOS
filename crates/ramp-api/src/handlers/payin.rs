@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Extension, Path, State},
+    extract::{Extension, State},
     http::HeaderMap,
     Json,
 };
@@ -10,7 +10,6 @@ use ramp_core::service::payin::{
 };
 use std::sync::Arc;
 use tracing::{info, instrument};
-use validator::Validate;
 
 use crate::dto::{
     ConfirmPayinRequest, ConfirmPayinResponse, CreatePayinRequest, CreatePayinResponse,
@@ -60,7 +59,7 @@ pub async fn create_payin(
     let idempotency_key = headers
         .get("Idempotency-Key")
         .and_then(|v| v.to_str().ok())
-        .map(|s| IdempotencyKey::new(s));
+        .map(IdempotencyKey::new);
 
     // Build service request
     let service_req = ServiceRequest {

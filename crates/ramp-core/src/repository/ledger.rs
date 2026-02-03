@@ -1,14 +1,14 @@
+use crate::repository::set_rls_context;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ramp_common::{
-    ledger::{AccountType, EntryDirection, LedgerCurrency, LedgerEntry, LedgerTransaction},
+    ledger::{AccountType, EntryDirection, LedgerCurrency, LedgerTransaction},
     types::{IntentId, TenantId, UserId},
     Result,
 };
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool, Row};
-use crate::repository::set_rls_context;
+use sqlx::{FromRow, PgPool};
 
 /// Ledger entry database row
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
@@ -35,7 +35,11 @@ pub trait LedgerRepository: Send + Sync {
     async fn record_transaction(&self, tx: LedgerTransaction) -> Result<()>;
 
     /// Get entries for an intent
-    async fn get_entries_by_intent(&self, tenant_id: &TenantId, intent_id: &IntentId) -> Result<Vec<LedgerEntryRow>>;
+    async fn get_entries_by_intent(
+        &self,
+        tenant_id: &TenantId,
+        intent_id: &IntentId,
+    ) -> Result<Vec<LedgerEntryRow>>;
 
     /// Get balance for an account
     async fn get_balance(
@@ -101,7 +105,9 @@ impl LedgerRepository for PgLedgerRepository {
             .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         // Set RLS context for the transaction
-        set_rls_context(&mut db_tx, &tx.tenant_id).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut db_tx, &tx.tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         for entry in &tx.entries {
             // Get current balance for this account
@@ -194,9 +200,19 @@ impl LedgerRepository for PgLedgerRepository {
     }
 
     /// Get entries for an intent
-    async fn get_entries_by_intent(&self, tenant_id: &TenantId, intent_id: &IntentId) -> Result<Vec<LedgerEntryRow>> {
-        let mut tx = self.pool.begin().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
-        set_rls_context(&mut tx, tenant_id).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+    async fn get_entries_by_intent(
+        &self,
+        tenant_id: &TenantId,
+        intent_id: &IntentId,
+    ) -> Result<Vec<LedgerEntryRow>> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         let rows = sqlx::query_as::<_, LedgerEntryRow>(
             "SELECT * FROM ledger_entries WHERE tenant_id = $1 AND intent_id = $2 ORDER BY sequence",
@@ -207,7 +223,9 @@ impl LedgerRepository for PgLedgerRepository {
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
-        tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         Ok(rows)
     }
@@ -219,8 +237,14 @@ impl LedgerRepository for PgLedgerRepository {
         account_type: &AccountType,
         currency: &LedgerCurrency,
     ) -> Result<Decimal> {
-        let mut tx = self.pool.begin().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
-        set_rls_context(&mut tx, tenant_id).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         let balance: Option<Decimal> = sqlx::query_scalar(
             r#"
@@ -240,7 +264,9 @@ impl LedgerRepository for PgLedgerRepository {
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
-        tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         Ok(balance.unwrap_or(Decimal::ZERO))
     }
@@ -250,8 +276,14 @@ impl LedgerRepository for PgLedgerRepository {
         tenant_id: &TenantId,
         user_id: &UserId,
     ) -> Result<Vec<BalanceRow>> {
-        let mut tx = self.pool.begin().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
-        set_rls_context(&mut tx, tenant_id).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         let rows = sqlx::query_as::<_, BalanceRow>(
             r#"
@@ -267,7 +299,9 @@ impl LedgerRepository for PgLedgerRepository {
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
-        tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
         Ok(rows)
     }
 

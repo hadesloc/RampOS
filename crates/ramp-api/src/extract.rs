@@ -142,7 +142,7 @@ impl IntoResponse for ValidationRejection {
         let field_count = details.len();
 
         let message = if field_count == 1 {
-            format!("Validation failed for 1 field")
+            "Validation failed for 1 field".to_string()
         } else {
             format!("Validation failed for {} fields", field_count)
         };

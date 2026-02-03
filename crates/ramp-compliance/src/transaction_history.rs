@@ -247,10 +247,9 @@ impl TransactionHistoryStore for MockTransactionHistoryStore {
             if &record.tenant_id == tenant_id
                 && &record.user_id == user_id
                 && record.transaction_type == transaction_type
+                && latest.is_none_or(|ts| record.created_at > ts)
             {
-                if latest.map_or(true, |ts| record.created_at > ts) {
-                    latest = Some(record.created_at);
-                }
+                latest = Some(record.created_at);
             }
         }
 

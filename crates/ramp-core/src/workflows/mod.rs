@@ -8,20 +8,20 @@
 //! Note: These are workflow definitions that would be executed by a Temporal worker.
 //! The actual Temporal SDK integration requires the temporal-sdk crate.
 
-use std::time::Duration;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
-pub mod worker;
-pub mod payout;
-pub mod trade;
-pub mod payin;
 pub mod activities;
 pub mod compensation;
+pub mod payin;
+pub mod payout;
+pub mod trade;
+pub mod worker;
 
-pub use payout::{PayoutWorkflowInput, PayoutWorkflowResult, BankAccountInfo, SettlementResult};
-pub use payin::PayinWorkflow;
 pub use activities::{payin_activities, trade_activities};
 pub use compensation::{CompensationAction, CompensationChain};
+pub use payin::PayinWorkflow;
+pub use payout::{BankAccountInfo, PayoutWorkflowInput, PayoutWorkflowResult, SettlementResult};
 
 /// Payin workflow input
 #[derive(Debug, Clone, Serialize, Deserialize)]

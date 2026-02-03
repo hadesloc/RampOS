@@ -584,11 +584,7 @@ pub mod patterns {
                 amount,
                 crypto_currency,
             )
-            .credit(
-                AccountType::ClearingCryptoPending,
-                amount,
-                crypto_currency,
-            )
+            .credit(AccountType::ClearingCryptoPending, amount, crypto_currency)
             .build()
     }
 
@@ -601,11 +597,7 @@ pub mod patterns {
         crypto_currency: LedgerCurrency,
     ) -> Result<LedgerTransaction, LedgerError> {
         LedgerTransactionBuilder::new(tenant_id, intent_id, "Crypto withdraw confirmed")
-            .debit(
-                AccountType::ClearingCryptoPending,
-                amount,
-                crypto_currency,
-            )
+            .debit(AccountType::ClearingCryptoPending, amount, crypto_currency)
             .credit(AccountType::AssetCrypto, amount, crypto_currency)
             .build()
     }
@@ -620,11 +612,7 @@ pub mod patterns {
         crypto_currency: LedgerCurrency,
     ) -> Result<LedgerTransaction, LedgerError> {
         LedgerTransactionBuilder::new(tenant_id, intent_id, "Crypto withdraw reversed")
-            .debit(
-                AccountType::ClearingCryptoPending,
-                amount,
-                crypto_currency,
-            )
+            .debit(AccountType::ClearingCryptoPending, amount, crypto_currency)
             .credit_user(
                 user_id,
                 AccountType::LiabilityUserCrypto,
@@ -707,8 +695,8 @@ mod tests {
             TenantId::new("test"),
             UserId::new("user1"),
             IntentId::new_payout(),
-            Decimal::from(1000000),  // original
-            Decimal::from(700000),   // settled
+            Decimal::from(1000000), // original
+            Decimal::from(700000),  // settled
             "Partial settlement",
         );
 
@@ -726,8 +714,8 @@ mod tests {
             TenantId::new("test"),
             UserId::new("user1"),
             IntentId::new_payout(),
-            Decimal::from(500000),   // original
-            Decimal::from(600000),   // settled (more than original)
+            Decimal::from(500000), // original
+            Decimal::from(600000), // settled (more than original)
             "Invalid",
         );
 
@@ -751,26 +739,28 @@ mod tests {
             user_id.clone(),
             intent_id.clone(),
             amount,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(initiated.is_balanced());
         // User balance debited, ClearingBankPending credited
-        let user_entry = initiated.entries.iter()
+        let user_entry = initiated
+            .entries
+            .iter()
             .find(|e| e.user_id.is_some())
             .unwrap();
         assert_eq!(user_entry.direction, EntryDirection::Debit);
         assert_eq!(user_entry.account_type, AccountType::LiabilityUserVnd);
 
         // Step 2a: Confirm payout (success path)
-        let confirmed = patterns::payout_vnd_confirmed(
-            tenant_id.clone(),
-            intent_id.clone(),
-            amount,
-        ).unwrap();
+        let confirmed =
+            patterns::payout_vnd_confirmed(tenant_id.clone(), intent_id.clone(), amount).unwrap();
 
         assert!(confirmed.is_balanced());
         // ClearingBankPending debited, AssetBank credited
-        let clearing_entry = confirmed.entries.iter()
+        let clearing_entry = confirmed
+            .entries
+            .iter()
             .find(|e| e.account_type == AccountType::ClearingBankPending)
             .unwrap();
         assert_eq!(clearing_entry.direction, EntryDirection::Debit);
@@ -782,11 +772,14 @@ mod tests {
             intent_id.clone(),
             amount,
             "Bank rejected",
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(reversed.is_balanced());
         // ClearingBankPending debited, User balance credited (refund)
-        let refund_entry = reversed.entries.iter()
+        let refund_entry = reversed
+            .entries
+            .iter()
             .find(|e| e.user_id.is_some())
             .unwrap();
         assert_eq!(refund_entry.direction, EntryDirection::Credit);

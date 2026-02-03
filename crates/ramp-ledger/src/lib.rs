@@ -6,22 +6,22 @@ pub use ramp_common::ledger::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ramp_common::types::{IntentId, TenantId};
     use rust_decimal_macros::dec;
-    use ramp_common::types::{TenantId, IntentId};
 
     #[test]
     fn test_double_entry_posting() {
         let tenant_id = TenantId::new("tenant1");
         let intent_id = IntentId::new_payin();
 
-        let tx = LedgerTransactionBuilder::new(
-            tenant_id,
-            intent_id,
-            "Test Posting"
-        )
-        .debit(AccountType::AssetBank, dec!(100), LedgerCurrency::VND)
-        .credit(AccountType::LiabilityUserVnd, dec!(100), LedgerCurrency::VND)
-        .build();
+        let tx = LedgerTransactionBuilder::new(tenant_id, intent_id, "Test Posting")
+            .debit(AccountType::AssetBank, dec!(100), LedgerCurrency::VND)
+            .credit(
+                AccountType::LiabilityUserVnd,
+                dec!(100),
+                LedgerCurrency::VND,
+            )
+            .build();
 
         assert!(tx.is_ok());
         let tx = tx.unwrap();

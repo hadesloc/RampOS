@@ -9,12 +9,12 @@ use rust_decimal::Decimal;
 use std::sync::Arc;
 use tracing::info;
 
+use crate::event::EventPublisher;
 use crate::repository::{
     intent::{IntentRepository, IntentRow},
     ledger::LedgerRepository,
     user::UserRepository,
 };
-use crate::event::EventPublisher;
 
 use ramp_compliance::types::KycTier;
 
@@ -136,22 +136,26 @@ impl PayoutService {
         let amount = req.amount_vnd.0;
 
         if daily_limit > Decimal::ZERO && amount > daily_limit {
-             return Err(Error::UserLimitExceeded {
-                limit_type: format!("Single transaction limit exceeded. Limit: {}, Amount: {}", daily_limit, amount)
+            return Err(Error::UserLimitExceeded {
+                limit_type: format!(
+                    "Single transaction limit exceeded. Limit: {}, Amount: {}",
+                    daily_limit, amount
+                ),
             });
         }
 
         // Check cumulative daily usage
-        let daily_usage = self.intent_repo
+        let daily_usage = self
+            .intent_repo
             .get_daily_payout_amount(&req.tenant_id, &req.user_id)
             .await?;
 
         if daily_limit > Decimal::ZERO && (daily_usage + amount) > daily_limit {
-             return Err(Error::UserLimitExceeded {
+            return Err(Error::UserLimitExceeded {
                 limit_type: format!(
                     "Daily payout limit exceeded. Limit: {}, Used: {}, Requested: {}",
                     daily_limit, daily_usage, amount
-                )
+                ),
             });
         }
 
@@ -384,12 +388,12 @@ fn parse_payout_state(state: &str) -> PayoutState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{MockIntentRepository, MockLedgerRepository, MockUserRepository};
     use crate::event::InMemoryEventPublisher;
     use crate::repository::user::UserRow;
-    use std::sync::Arc;
-    use rust_decimal_macros::dec;
+    use crate::test_utils::{MockIntentRepository, MockLedgerRepository, MockUserRepository};
     use ramp_common::ledger::{AccountType, LedgerCurrency};
+    use rust_decimal_macros::dec;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_create_payout_success() {
@@ -535,12 +539,16 @@ mod tests {
 
         // The second transaction should be the reversal
         let reversal_tx = &txs[1];
-        assert!(reversal_tx.description.contains("reversed") || reversal_tx.description.contains("Account closed"));
+        assert!(
+            reversal_tx.description.contains("reversed")
+                || reversal_tx.description.contains("Account closed")
+        );
         assert!(reversal_tx.is_balanced());
 
         // Verify events were published
         let events = event_publisher.get_events().await;
-        let reversed_events: Vec<_> = events.iter()
+        let reversed_events: Vec<_> = events
+            .iter()
             .filter(|e| e.get("type").and_then(|t| t.as_str()) == Some("payout.reversed"))
             .collect();
         assert!(!reversed_events.is_empty());
@@ -631,7 +639,10 @@ mod tests {
     #[test]
     fn test_parse_payout_state_reversed() {
         assert_eq!(parse_payout_state("REVERSED"), PayoutState::Reversed);
-        assert_eq!(parse_payout_state("BANK_REJECTED"), PayoutState::BankRejected);
+        assert_eq!(
+            parse_payout_state("BANK_REJECTED"),
+            PayoutState::BankRejected
+        );
         assert_eq!(parse_payout_state("TIMEOUT"), PayoutState::Timeout);
     }
 }

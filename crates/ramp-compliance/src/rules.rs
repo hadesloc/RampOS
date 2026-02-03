@@ -1,6 +1,5 @@
-pub mod version;
 pub mod sanctions;
-
+pub mod version;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};

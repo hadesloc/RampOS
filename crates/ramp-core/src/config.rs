@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
@@ -29,8 +29,9 @@ pub struct DatabaseConfig {
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
-            url: std::env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://rampos:dev_rampos_2026_secure@localhost:5432/rampos".to_string()),
+            url: std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+                "postgres://rampos:dev_rampos_2026_secure@localhost:5432/rampos".to_string()
+            }),
             max_connections: 100,
             min_connections: 10,
             connect_timeout_secs: 30,
@@ -99,7 +100,7 @@ impl Default for WebhookConfig {
         Self {
             retry_max_attempts: 10,
             retry_initial_delay_ms: 1000,
-            retry_max_delay_ms: 3600000, // 1 hour
+            retry_max_delay_ms: 3600000,   // 1 hour
             signature_tolerance_secs: 300, // 5 minutes
         }
     }
@@ -112,18 +113,5 @@ impl Config {
             .build()?;
 
         cfg.try_deserialize()
-    }
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            database: DatabaseConfig::default(),
-            redis: RedisConfig::default(),
-            nats: NatsConfig::default(),
-            server: ServerConfig::default(),
-            webhook: WebhookConfig::default(),
-            storage: None,
-        }
     }
 }

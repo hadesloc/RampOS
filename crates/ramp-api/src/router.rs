@@ -201,9 +201,18 @@ pub fn create_router(state: AppState) -> Router {
             .route("/accounts", post(handlers::aa::create_account))
             .route("/accounts/:address", get(handlers::aa::get_account))
             .route("/user-operations", post(handlers::aa::send_user_operation))
-            .route("/user-operations/estimate", post(handlers::aa::estimate_gas))
-            .route("/user-operations/:hash", get(handlers::aa::get_user_operation))
-            .route("/user-operations/:hash/receipt", get(handlers::aa::get_user_operation_receipt))
+            .route(
+                "/user-operations/estimate",
+                post(handlers::aa::estimate_gas),
+            )
+            .route(
+                "/user-operations/:hash",
+                get(handlers::aa::get_user_operation),
+            )
+            .route(
+                "/user-operations/:hash/receipt",
+                get(handlers::aa::get_user_operation_receipt),
+            )
             .with_state(aa_service.clone());
 
         // SECURITY FIX: Apply stricter rate limiting to AA routes

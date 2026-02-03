@@ -8,8 +8,8 @@ use std::sync::Arc;
 use tracing::{info, warn};
 
 use crate::case::CaseManager;
-use crate::rules::{AmlRule, RuleContext, RuleResult};
 use crate::rules::sanctions::SanctionsRule;
+use crate::rules::{AmlRule, RuleContext, RuleResult};
 use crate::sanctions::{SanctionsProvider, SanctionsResult};
 use crate::transaction_history::{TransactionHistoryStore, TransactionRecord};
 use crate::types::{CaseSeverity, CaseType, ComplianceCheckResult, RiskScore};
@@ -92,7 +92,8 @@ impl AmlEngine {
 
         let case_store = Arc::new(InMemoryCaseStore::new());
         let case_manager = Arc::new(CaseManager::new(case_store));
-        let transaction_store: Arc<dyn TransactionHistoryStore> = Arc::new(MockTransactionHistoryStore::new());
+        let transaction_store: Arc<dyn TransactionHistoryStore> =
+            Arc::new(MockTransactionHistoryStore::new());
 
         Self {
             rules: vec![], // No rules = all transactions pass
@@ -172,11 +173,11 @@ impl AmlEngine {
 
         cases_created.push(case_id);
 
-            warn!(
-                intent_id = %tx.intent_id,
-                entity = "***",
-                "Sanctions match detected"
-            );
+        warn!(
+            intent_id = %tx.intent_id,
+            entity = "***",
+            "Sanctions match detected"
+        );
 
         Ok(())
     }
@@ -270,9 +271,7 @@ impl AmlEngine {
                         }
                     }
                     Err(e) => {
-                        return self
-                            .handle_sanctions_failure(tx, &e.to_string())
-                            .await;
+                        return self.handle_sanctions_failure(tx, &e.to_string()).await;
                     }
                 }
             }
@@ -295,9 +294,7 @@ impl AmlEngine {
                         }
                     }
                     Err(e) => {
-                        return self
-                            .handle_sanctions_failure(tx, &e.to_string())
-                            .await;
+                        return self.handle_sanctions_failure(tx, &e.to_string()).await;
                     }
                 }
             }
@@ -306,8 +303,8 @@ impl AmlEngine {
         // Check if any critical sanctions rules were triggered
         if requires_review && total_risk_score >= 100.0 {
             // Short-circuit if sanctions match found (critical)
-             let final_risk = RiskScore::new(100.0);
-             return Ok(ComplianceCheckResult {
+            let final_risk = RiskScore::new(100.0);
+            return Ok(ComplianceCheckResult {
                 passed: false,
                 risk_score: final_risk,
                 flags,
@@ -315,7 +312,6 @@ impl AmlEngine {
                 cases_created,
             });
         }
-
 
         for rule in &self.rules {
             let result = rule.evaluate(&context).await?;
@@ -598,10 +594,7 @@ impl AmlRule for UnusualPayoutRule {
         if delta < self.min_time_between {
             return Ok(RuleResult {
                 passed: false,
-                reason: format!(
-                    "Payout {} minutes after last payin",
-                    delta.num_minutes()
-                ),
+                reason: format!("Payout {} minutes after last payin", delta.num_minutes()),
                 risk_score: Some(RiskScore::new(55.0)),
                 severity: Some(CaseSeverity::Medium),
                 create_case: true,
@@ -615,9 +608,9 @@ impl AmlRule for UnusualPayoutRule {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::transaction_history::MockTransactionHistoryStore;
     use rust_decimal::dec;
     use std::sync::Arc;
-    use crate::transaction_history::MockTransactionHistoryStore;
 
     #[cfg(test)]
     #[allow(dead_code)]

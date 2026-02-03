@@ -66,7 +66,7 @@ impl TierManager {
 
         // Must be in approved status generally
         if info.kyc_status != KycStatus::Approved {
-             return false;
+            return false;
         }
 
         match target_tier {

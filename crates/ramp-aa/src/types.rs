@@ -52,10 +52,10 @@ impl ChainConfig {
 /// Smart account type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SmartAccountType {
-    SimpleAccount,    // Basic ERC-4337 account
-    SafeAccount,      // Safe (Gnosis) based
-    KernelAccount,    // ZeroDev Kernel
-    BiconomyAccount,  // Biconomy
+    SimpleAccount,   // Basic ERC-4337 account
+    SafeAccount,     // Safe (Gnosis) based
+    KernelAccount,   // ZeroDev Kernel
+    BiconomyAccount, // Biconomy
 }
 
 /// User operation status

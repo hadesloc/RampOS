@@ -1,16 +1,40 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "forge-std/Test.sol";
-import "../src/RampOSAccount.sol";
-import "../src/RampOSAccountFactory.sol";
-import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+import { Test } from "forge-std/Test.sol";
+import { RampOSAccount } from "../src/RampOSAccount.sol";
+import { RampOSAccountFactory } from "../src/RampOSAccountFactory.sol";
+import { IEntryPoint } from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
+/// @title MockTarget
+/// @notice Mock contract for testing session key target and selector restrictions
+contract MockTarget {
+    uint256 public value;
+
+    function setValue(uint256 _value) external {
+        value = _value;
+    }
+
+    function increment() external {
+        value++;
+    }
+
+    function decrement() external {
+        value--;
+    }
+}
+
+/**
+ * @title RampOSAccountTest
+ * @notice Comprehensive unit tests for RampOSAccount smart contract
+ */
 contract RampOSAccountTest is Test {
     RampOSAccountFactory factory;
     IEntryPoint entryPoint;
     address owner;
     uint256 ownerKey;
+    MockTarget mockTarget;
+    MockTarget mockTarget2;
 
     function setUp() public {
         // Use a mock entry point for testing
@@ -21,6 +45,10 @@ contract RampOSAccountTest is Test {
 
         // Deploy factory
         factory = new RampOSAccountFactory(entryPoint);
+
+        // Deploy mock targets
+        mockTarget = new MockTarget();
+        mockTarget2 = new MockTarget();
     }
 
     function test_CreateAccount() public {
@@ -94,20 +122,261 @@ contract RampOSAccountTest is Test {
         }
     }
 
-    function test_SessionKey() public {
+    function test_SessionKeyWithPermissions() public {
         uint256 salt = 12345;
         RampOSAccount account = factory.createAccount(owner, salt);
 
         // Create session key
-        (address sessionKey, ) = makeAddrAndKey("session");
+        (address sessionKey,) = makeAddrAndKey("session");
         uint48 validAfter = uint48(block.timestamp);
         uint48 validUntil = uint48(block.timestamp + 1 hours);
 
+        // Create permissions
+        address[] memory allowedTargets = new address[](1);
+        allowedTargets[0] = address(mockTarget);
+
+        bytes4[] memory allowedSelectors = new bytes4[](1);
+        allowedSelectors[0] = MockTarget.setValue.selector;
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0.1 ether,
+            dailyLimit: 1 ether
+        });
+
         // Add session key
         vm.prank(owner);
-        account.addSessionKey(sessionKey, validAfter, validUntil, bytes32(0));
+        account.addSessionKey(sessionKey, validAfter, validUntil, permissions);
+
+        // Verify session key is valid
+        assertTrue(account.isValidSessionKey(sessionKey));
+
+        // Verify permissions stored correctly
+        RampOSAccount.SessionKeyPermissions memory storedPerms =
+            account.getSessionKeyPermissions(sessionKey);
+        assertEq(storedPerms.allowedTargets.length, 1);
+        assertEq(storedPerms.allowedTargets[0], address(mockTarget));
+        assertEq(storedPerms.allowedSelectors.length, 1);
+        assertEq(storedPerms.allowedSelectors[0], MockTarget.setValue.selector);
+        assertEq(storedPerms.spendingLimit, 0.1 ether);
+        assertEq(storedPerms.dailyLimit, 1 ether);
+    }
+
+    function test_SessionKeyLegacy() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        // Create session key
+        (address sessionKey,) = makeAddrAndKey("session");
+        uint48 validAfter = uint48(block.timestamp);
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+
+        // Add session key using legacy method
+        vm.prank(owner);
+        account.addSessionKeyLegacy(sessionKey, validAfter, validUntil, bytes32(0));
 
         // Verify
+        assertTrue(account.isValidSessionKey(sessionKey));
+
+        // Legacy keys should have empty permissions (unlimited)
+        RampOSAccount.SessionKeyPermissions memory storedPerms =
+            account.getSessionKeyPermissions(sessionKey);
+        assertEq(storedPerms.allowedTargets.length, 0);
+        assertEq(storedPerms.allowedSelectors.length, 0);
+        assertEq(storedPerms.spendingLimit, 0);
+        assertEq(storedPerms.dailyLimit, 0);
+    }
+
+    function test_UpdateSessionKeyPermissions() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        // Create and add session key
+        (address sessionKey,) = makeAddrAndKey("session");
+        uint48 validAfter = uint48(block.timestamp);
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+
+        // Initial permissions
+        address[] memory allowedTargets = new address[](1);
+        allowedTargets[0] = address(mockTarget);
+        bytes4[] memory allowedSelectors = new bytes4[](0);
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0.1 ether,
+            dailyLimit: 1 ether
+        });
+
+        vm.prank(owner);
+        account.addSessionKey(sessionKey, validAfter, validUntil, permissions);
+
+        // Update permissions
+        address[] memory newAllowedTargets = new address[](2);
+        newAllowedTargets[0] = address(mockTarget);
+        newAllowedTargets[1] = address(mockTarget2);
+
+        RampOSAccount.SessionKeyPermissions memory newPermissions =
+            RampOSAccount.SessionKeyPermissions({
+                allowedTargets: newAllowedTargets,
+                allowedSelectors: allowedSelectors,
+                spendingLimit: 0.5 ether,
+                dailyLimit: 5 ether
+            });
+
+        vm.prank(owner);
+        account.updateSessionKeyPermissions(sessionKey, newPermissions);
+
+        // Verify updated permissions
+        RampOSAccount.SessionKeyPermissions memory storedPerms =
+            account.getSessionKeyPermissions(sessionKey);
+        assertEq(storedPerms.allowedTargets.length, 2);
+        assertEq(storedPerms.spendingLimit, 0.5 ether);
+        assertEq(storedPerms.dailyLimit, 5 ether);
+    }
+
+    function test_SessionKeyTargetRestriction() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        // Create session key
+        (address sessionKey,) = makeAddrAndKey("session");
+        uint48 validAfter = uint48(block.timestamp);
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+
+        // Only allow mockTarget
+        address[] memory allowedTargets = new address[](1);
+        allowedTargets[0] = address(mockTarget);
+        bytes4[] memory allowedSelectors = new bytes4[](0);
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0,
+            dailyLimit: 0
+        });
+
+        vm.prank(owner);
+        account.addSessionKey(sessionKey, validAfter, validUntil, permissions);
+
+        // Verify isTargetAllowed
+        assertTrue(account.isTargetAllowed(sessionKey, address(mockTarget)));
+        assertFalse(account.isTargetAllowed(sessionKey, address(mockTarget2)));
+    }
+
+    function test_SessionKeySelectorRestriction() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        // Create session key
+        (address sessionKey,) = makeAddrAndKey("session");
+        uint48 validAfter = uint48(block.timestamp);
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+
+        // Only allow setValue and increment
+        address[] memory allowedTargets = new address[](0);
+        bytes4[] memory allowedSelectors = new bytes4[](2);
+        allowedSelectors[0] = MockTarget.setValue.selector;
+        allowedSelectors[1] = MockTarget.increment.selector;
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0,
+            dailyLimit: 0
+        });
+
+        vm.prank(owner);
+        account.addSessionKey(sessionKey, validAfter, validUntil, permissions);
+
+        // Verify isSelectorAllowed
+        assertTrue(account.isSelectorAllowed(sessionKey, MockTarget.setValue.selector));
+        assertTrue(account.isSelectorAllowed(sessionKey, MockTarget.increment.selector));
+        assertFalse(account.isSelectorAllowed(sessionKey, MockTarget.decrement.selector));
+    }
+
+    function test_SessionKeySpendingInfo() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        // Create session key with limits
+        (address sessionKey,) = makeAddrAndKey("session");
+        uint48 validAfter = uint48(block.timestamp);
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+
+        address[] memory allowedTargets = new address[](0);
+        bytes4[] memory allowedSelectors = new bytes4[](0);
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0.1 ether,
+            dailyLimit: 1 ether
+        });
+
+        vm.prank(owner);
+        account.addSessionKey(sessionKey, validAfter, validUntil, permissions);
+
+        // Check spending info
+        (uint256 dailySpent, uint256 dailyRemaining, uint256 spendingLimit) =
+            account.getSessionKeySpendingInfo(sessionKey);
+        assertEq(dailySpent, 0);
+        assertEq(dailyRemaining, 1 ether);
+        assertEq(spendingLimit, 0.1 ether);
+    }
+
+    function test_SessionKeyUnlimitedPermissions() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        // Create session key with no restrictions
+        (address sessionKey,) = makeAddrAndKey("session");
+        uint48 validAfter = uint48(block.timestamp);
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+
+        address[] memory allowedTargets = new address[](0);
+        bytes4[] memory allowedSelectors = new bytes4[](0);
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0,
+            dailyLimit: 0
+        });
+
+        vm.prank(owner);
+        account.addSessionKey(sessionKey, validAfter, validUntil, permissions);
+
+        // With no restrictions, any target/selector should be allowed
+        assertTrue(account.isTargetAllowed(sessionKey, address(mockTarget)));
+        assertTrue(account.isTargetAllowed(sessionKey, address(mockTarget2)));
+        assertTrue(account.isTargetAllowed(sessionKey, address(0x1234)));
+        assertTrue(account.isSelectorAllowed(sessionKey, bytes4(0xdeadbeef)));
+    }
+
+    function test_RemoveSessionKey() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        // Create session key
+        (address sessionKey,) = makeAddrAndKey("session");
+        uint48 validAfter = uint48(block.timestamp);
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+
+        address[] memory allowedTargets = new address[](0);
+        bytes4[] memory allowedSelectors = new bytes4[](0);
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0.1 ether,
+            dailyLimit: 1 ether
+        });
+
+        vm.prank(owner);
+        account.addSessionKey(sessionKey, validAfter, validUntil, permissions);
+
         assertTrue(account.isValidSessionKey(sessionKey));
 
         // Remove session key
@@ -116,6 +385,12 @@ contract RampOSAccountTest is Test {
 
         // Verify removed
         assertFalse(account.isValidSessionKey(sessionKey));
+
+        // Permissions should also be cleared
+        RampOSAccount.SessionKeyPermissions memory storedPerms =
+            account.getSessionKeyPermissions(sessionKey);
+        assertEq(storedPerms.allowedTargets.length, 0);
+        assertEq(storedPerms.spendingLimit, 0);
     }
 
     function test_RevertNonOwner() public {
@@ -128,5 +403,151 @@ contract RampOSAccountTest is Test {
         vm.prank(attacker);
         vm.expectRevert(RampOSAccount.NotOwnerOrEntryPoint.selector);
         account.execute(attacker, 0, "");
+    }
+
+    function test_RevertNonOwnerAddSessionKey() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        address attacker = makeAddr("attacker");
+        (address sessionKey,) = makeAddrAndKey("session");
+
+        address[] memory allowedTargets = new address[](0);
+        bytes4[] memory allowedSelectors = new bytes4[](0);
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0,
+            dailyLimit: 0
+        });
+
+        // Try to add session key as non-owner
+        vm.prank(attacker);
+        vm.expectRevert(RampOSAccount.NotOwner.selector);
+        account.addSessionKey(
+            sessionKey, uint48(block.timestamp), uint48(block.timestamp + 1 hours), permissions
+        );
+    }
+
+    function test_RevertUpdateNonExistentSessionKey() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        (address sessionKey,) = makeAddrAndKey("session");
+
+        address[] memory allowedTargets = new address[](0);
+        bytes4[] memory allowedSelectors = new bytes4[](0);
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0,
+            dailyLimit: 0
+        });
+
+        // Try to update non-existent session key
+        vm.prank(owner);
+        vm.expectRevert("Session key not found");
+        account.updateSessionKeyPermissions(sessionKey, permissions);
+    }
+
+    function test_SessionKeyExpiry() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        // Create session key
+        (address sessionKey,) = makeAddrAndKey("session");
+        uint48 validAfter = uint48(block.timestamp);
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+
+        address[] memory allowedTargets = new address[](0);
+        bytes4[] memory allowedSelectors = new bytes4[](0);
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0,
+            dailyLimit: 0
+        });
+
+        vm.prank(owner);
+        account.addSessionKey(sessionKey, validAfter, validUntil, permissions);
+
+        // Valid now
+        assertTrue(account.isValidSessionKey(sessionKey));
+
+        // Warp to after expiry
+        vm.warp(block.timestamp + 2 hours);
+
+        // Should be invalid
+        assertFalse(account.isValidSessionKey(sessionKey));
+    }
+
+    function test_SessionKeyNotYetValid() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        // Create session key valid in 1 hour
+        (address sessionKey,) = makeAddrAndKey("session");
+        uint48 validAfter = uint48(block.timestamp + 1 hours);
+        uint48 validUntil = uint48(block.timestamp + 2 hours);
+
+        address[] memory allowedTargets = new address[](0);
+        bytes4[] memory allowedSelectors = new bytes4[](0);
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0,
+            dailyLimit: 0
+        });
+
+        vm.prank(owner);
+        account.addSessionKey(sessionKey, validAfter, validUntil, permissions);
+
+        // Not valid yet
+        assertFalse(account.isValidSessionKey(sessionKey));
+
+        // Warp to valid period
+        vm.warp(block.timestamp + 1.5 hours);
+
+        // Now valid
+        assertTrue(account.isValidSessionKey(sessionKey));
+    }
+
+    function test_PermissionsHashConsistency() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        // Create session key
+        (address sessionKey,) = makeAddrAndKey("session");
+        uint48 validAfter = uint48(block.timestamp);
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+
+        address[] memory allowedTargets = new address[](1);
+        allowedTargets[0] = address(mockTarget);
+        bytes4[] memory allowedSelectors = new bytes4[](1);
+        allowedSelectors[0] = MockTarget.setValue.selector;
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0.1 ether,
+            dailyLimit: 1 ether
+        });
+
+        vm.prank(owner);
+        account.addSessionKey(sessionKey, validAfter, validUntil, permissions);
+
+        // Get stored permissionsHash
+        (,,, bytes32 storedHash) = account.sessionKeys(sessionKey);
+
+        // Compute expected hash
+        bytes32 expectedHash = keccak256(
+            abi.encode(allowedTargets, allowedSelectors, uint256(0.1 ether), uint256(1 ether))
+        );
+
+        assertEq(storedHash, expectedHash);
     }
 }

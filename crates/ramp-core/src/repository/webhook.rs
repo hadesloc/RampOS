@@ -1,9 +1,12 @@
+use crate::repository::set_rls_context;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ramp_common::{types::{EventId, IntentId, TenantId}, Result};
+use ramp_common::{
+    types::{EventId, IntentId, TenantId},
+    Result,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
-use crate::repository::set_rls_context;
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct WebhookEventRow {
@@ -46,7 +49,11 @@ pub trait WebhookRepository: Send + Sync {
     async fn mark_permanently_failed(&self, id: &EventId, error: &str) -> Result<()>;
 
     /// Get events for an intent
-    async fn get_events_by_intent(&self, tenant_id: &TenantId, intent_id: &IntentId) -> Result<Vec<WebhookEventRow>>;
+    async fn get_events_by_intent(
+        &self,
+        tenant_id: &TenantId,
+        intent_id: &IntentId,
+    ) -> Result<Vec<WebhookEventRow>>;
 }
 
 pub struct PgWebhookRepository {
@@ -62,8 +69,14 @@ impl PgWebhookRepository {
 #[async_trait]
 impl WebhookRepository for PgWebhookRepository {
     async fn queue_event(&self, event: &WebhookEventRow) -> Result<()> {
-        let mut tx = self.pool.begin().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
-        set_rls_context(&mut tx, &TenantId(event.tenant_id.clone())).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, &TenantId(event.tenant_id.clone()))
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         sqlx::query(
             r#"
@@ -79,15 +92,17 @@ impl WebhookRepository for PgWebhookRepository {
         .bind(&event.intent_id)
         .bind(&event.payload)
         .bind(&event.status)
-        .bind(&event.attempts)
-        .bind(&event.max_attempts)
+        .bind(event.attempts)
+        .bind(event.max_attempts)
         .bind(event.next_attempt_at)
         .bind(event.created_at)
         .execute(&mut *tx)
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
-        tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
         Ok(())
     }
 
@@ -180,9 +195,19 @@ impl WebhookRepository for PgWebhookRepository {
         Ok(())
     }
 
-    async fn get_events_by_intent(&self, tenant_id: &TenantId, intent_id: &IntentId) -> Result<Vec<WebhookEventRow>> {
-        let mut tx = self.pool.begin().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
-        set_rls_context(&mut tx, tenant_id).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+    async fn get_events_by_intent(
+        &self,
+        tenant_id: &TenantId,
+        intent_id: &IntentId,
+    ) -> Result<Vec<WebhookEventRow>> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         let rows = sqlx::query_as::<_, WebhookEventRow>(
             "SELECT * FROM webhook_events WHERE intent_id = $1 ORDER BY created_at",
@@ -192,7 +217,9 @@ impl WebhookRepository for PgWebhookRepository {
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
-        tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
         Ok(rows)
     }
 }

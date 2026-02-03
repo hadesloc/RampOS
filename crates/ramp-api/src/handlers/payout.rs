@@ -7,7 +7,6 @@ use ramp_common::types::*;
 use ramp_core::service::payout::{CreatePayoutRequest as ServiceRequest, PayoutService};
 use std::sync::Arc;
 use tracing::{info, instrument};
-use validator::Validate;
 
 use crate::dto::{CreatePayoutRequest, CreatePayoutResponse};
 use crate::error::ApiError;
@@ -54,7 +53,7 @@ pub async fn create_payout(
     let idempotency_key = headers
         .get("Idempotency-Key")
         .and_then(|v| v.to_str().ok())
-        .map(|s| IdempotencyKey::new(s));
+        .map(IdempotencyKey::new);
 
     // Build service request
     let service_req = ServiceRequest {

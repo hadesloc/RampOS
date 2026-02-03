@@ -115,12 +115,14 @@ impl BundlerClient {
                 message: e.to_string(),
             })?;
 
-        let body: BundlerResponse<T> = response.json().await.map_err(|e| {
-            ramp_common::Error::ExternalService {
-                service: "Bundler".into(),
-                message: e.to_string(),
-            }
-        })?;
+        let body: BundlerResponse<T> =
+            response
+                .json()
+                .await
+                .map_err(|e| ramp_common::Error::ExternalService {
+                    service: "Bundler".into(),
+                    message: e.to_string(),
+                })?;
 
         if let Some(error) = body.error {
             return Err(ramp_common::Error::ExternalService {
@@ -129,10 +131,11 @@ impl BundlerClient {
             });
         }
 
-        body.result.ok_or_else(|| ramp_common::Error::ExternalService {
-            service: "Bundler".into(),
-            message: "Empty response".into(),
-        })
+        body.result
+            .ok_or_else(|| ramp_common::Error::ExternalService {
+                service: "Bundler".into(),
+                message: "Empty response".into(),
+            })
     }
 }
 
@@ -152,9 +155,9 @@ impl Bundler for BundlerClient {
         let params = serde_json::json!([user_op, entry_point]);
         let hash: String = self.rpc_call("eth_sendUserOperation", params).await?;
 
-        Ok(hash.parse().map_err(|_| ramp_common::Error::Internal(
-            "Invalid hash from bundler".into(),
-        ))?)
+        Ok(hash
+            .parse()
+            .map_err(|_| ramp_common::Error::Internal("Invalid hash from bundler".into()))?)
     }
 
     async fn estimate_user_operation_gas(
@@ -177,7 +180,8 @@ impl Bundler for BundlerClient {
     }
 
     async fn supported_entry_points(&self) -> Result<Vec<Address>> {
-        self.rpc_call("eth_supportedEntryPoints", serde_json::json!([])).await
+        self.rpc_call("eth_supportedEntryPoints", serde_json::json!([]))
+            .await
     }
 
     async fn chain_id(&self) -> Result<u64> {

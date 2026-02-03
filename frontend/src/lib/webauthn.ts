@@ -29,8 +29,9 @@ export async function isConditionalMediationAvailable(): Promise<boolean> {
   if (!isWebAuthnSupported()) return false;
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pkc = PublicKeyCredential as any;
+    const pkc = PublicKeyCredential as unknown as {
+      isConditionalMediationAvailable?: () => Promise<boolean>;
+    };
     return await pkc.isConditionalMediationAvailable?.() ?? false;
   } catch {
     return false;

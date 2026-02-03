@@ -75,8 +75,7 @@ export default function DepositPage() {
       ]);
       setVndDepositInfo(vndInfo);
       setCryptoDepositInfo(cryptoInfo);
-    } catch (err) {
-      console.error("Failed to fetch deposit info:", err);
+    } catch {
       setError("Failed to load deposit information. Please try again.");
     } finally {
       setIsLoading(false);
@@ -112,9 +111,8 @@ export default function DepositPage() {
 
       form.reset();
       router.push("/portal/transactions");
-    } catch (err) {
+    } catch {
       toast.error("Failed to submit deposit request");
-      console.error(err);
     } finally {
       setIsSubmitting(false);
     }

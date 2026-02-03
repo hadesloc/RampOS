@@ -1,7 +1,7 @@
 use ethers::types::{Address, U256};
 use ramp_common::{types::TenantId, Result};
 
-use crate::types::{SessionKey, SessionPermission, PermissionRule};
+use crate::types::{PermissionRule, SessionKey, SessionPermission};
 use crate::user_operation::UserOperation;
 
 /// Policy engine for AA operations
@@ -11,7 +11,9 @@ pub struct PolicyEngine {
 
 impl PolicyEngine {
     pub fn new(tenant_id: TenantId) -> Self {
-        Self { _tenant_id: tenant_id }
+        Self {
+            _tenant_id: tenant_id,
+        }
     }
 
     /// Validate UserOperation against policies
@@ -83,7 +85,10 @@ impl PolicyEngine {
                         result.add_violation("Outside allowed time window");
                     }
                 }
-                PermissionRule::RateLimit { count: _, period_secs: _ } => {
+                PermissionRule::RateLimit {
+                    count: _,
+                    period_secs: _,
+                } => {
                     // Would need to query recent usage
                 }
             }

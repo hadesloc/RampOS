@@ -66,7 +66,7 @@ async fn setup_app() -> TestApp {
         status: "ACTIVE".to_string(),
         api_key_hash: api_key_hash.clone(),
         webhook_secret_hash: "secret".to_string(),
-            webhook_secret_encrypted: None,
+        webhook_secret_encrypted: None,
         webhook_url: Some("http://localhost:3000/webhook".to_string()),
         config: serde_json::json!({}),
         daily_payin_limit_vnd: None,

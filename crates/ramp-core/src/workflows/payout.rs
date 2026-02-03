@@ -1,19 +1,18 @@
-use std::time::Duration;
-use std::sync::Arc;
-use tracing::{info, error, warn, instrument};
-use serde::{Deserialize, Serialize};
 use chrono::Utc;
 use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use std::time::Duration;
+use tracing::{error, info, instrument, warn};
 
+use crate::event::EventPublisher;
+use crate::repository::{intent::IntentRepository, ledger::LedgerRepository};
 use ramp_common::{
+    ledger::{patterns, AccountType, LedgerCurrency, LedgerError},
     types::*,
-    Result,
-    ledger::{AccountType, LedgerCurrency, LedgerError, patterns},
-    Error,
+    Error, Result,
 };
 use ramp_compliance::aml::{AmlEngine, TransactionData, TransactionType};
-use crate::repository::{intent::IntentRepository, ledger::LedgerRepository};
-use crate::event::EventPublisher;
 
 /// Payout workflow input
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,28 +124,37 @@ impl PayoutWorkflow {
 
         // 0. Sanctions Screening
         if let Some(sanctions) = &self.sanctions_service {
-             let screening_result = sanctions.screen_user(&input.bank_account.account_name, None).await?;
-             if screening_result.risk_score.is_high_risk() {
-                 warn!("Sanctions check failed for payout");
-                 self.update_state(&tenant_id, &intent_id, "REJECTED_SANCTIONS").await?;
-                 return Ok(self.failure_result(input.intent_id, "Sanctions check failed".to_string()));
-             } else if screening_result.risk_score.is_medium_risk() {
-                 // Create case but allow or hold?
-                 // For now, let's say we hold.
-                 // But wait, workflow doesn't support holding for manual review easily here without interrupting flow.
-                 // We will just log warn and create case (in screening service if it did, but here we do it).
-                 warn!("Sanctions medium risk match");
-                 // Proceed with caution (or maybe hold). Let's fail for safety in this strict implementation.
-                 // Real world: create case and hold.
-                 self.update_state(&tenant_id, &intent_id, "HELD_FOR_COMPLIANCE").await?;
-                 return Ok(self.failure_result(input.intent_id, "Held for sanctions review".to_string()));
-             }
+            let screening_result = sanctions
+                .screen_user(&input.bank_account.account_name, None)
+                .await?;
+            if screening_result.risk_score.is_high_risk() {
+                warn!("Sanctions check failed for payout");
+                self.update_state(&tenant_id, &intent_id, "REJECTED_SANCTIONS")
+                    .await?;
+                return Ok(
+                    self.failure_result(input.intent_id, "Sanctions check failed".to_string())
+                );
+            } else if screening_result.risk_score.is_medium_risk() {
+                // Create case but allow or hold?
+                // For now, let's say we hold.
+                // But wait, workflow doesn't support holding for manual review easily here without interrupting flow.
+                // We will just log warn and create case (in screening service if it did, but here we do it).
+                warn!("Sanctions medium risk match");
+                // Proceed with caution (or maybe hold). Let's fail for safety in this strict implementation.
+                // Real world: create case and hold.
+                self.update_state(&tenant_id, &intent_id, "HELD_FOR_COMPLIANCE")
+                    .await?;
+                return Ok(
+                    self.failure_result(input.intent_id, "Held for sanctions review".to_string())
+                );
+            }
         }
 
         // 1. Validate Balance
         if !self.validate_balance(&tenant_id, &user_id, amount).await? {
             warn!("Insufficient balance for payout");
-            self.update_state(&tenant_id, &intent_id, "REJECTED_INSUFFICIENT_FUNDS").await?;
+            self.update_state(&tenant_id, &intent_id, "REJECTED_INSUFFICIENT_FUNDS")
+                .await?;
             return Ok(self.failure_result(input.intent_id, "Insufficient funds".to_string()));
         }
 
@@ -155,25 +163,29 @@ impl PayoutWorkflow {
 
         if !aml_passed {
             warn!("AML check failed for payout");
-            self.update_state(&tenant_id, &intent_id, "REJECTED_COMPLIANCE").await?;
+            self.update_state(&tenant_id, &intent_id, "REJECTED_COMPLIANCE")
+                .await?;
             return Ok(self.failure_result(input.intent_id, "Compliance check failed".to_string()));
         }
 
-        self.update_state(&tenant_id, &intent_id, "POLICY_APPROVED").await?;
+        self.update_state(&tenant_id, &intent_id, "POLICY_APPROVED")
+            .await?;
 
         // 3. Hold Funds (Create Ledger Entries)
-        if let Err(e) = self.hold_funds(
-            &tenant_id,
-            &user_id,
-            &intent_id,
-            amount
-        ).await {
+        if let Err(e) = self
+            .hold_funds(&tenant_id, &user_id, &intent_id, amount)
+            .await
+        {
             error!(error = %e, "Failed to hold funds");
-            self.update_state(&tenant_id, &intent_id, "SYSTEM_ERROR").await?;
-            return Ok(self.failure_result(input.intent_id, "System error holding funds".to_string()));
+            self.update_state(&tenant_id, &intent_id, "SYSTEM_ERROR")
+                .await?;
+            return Ok(
+                self.failure_result(input.intent_id, "System error holding funds".to_string())
+            );
         }
 
-        self.update_state(&tenant_id, &intent_id, "FUNDS_HELD").await?;
+        self.update_state(&tenant_id, &intent_id, "FUNDS_HELD")
+            .await?;
 
         // 4. Submit to Bank (Create Intent/Instruction)
         let bank_tx_id = match self.submit_to_bank(&input).await {
@@ -181,19 +193,25 @@ impl PayoutWorkflow {
             Err(e) => {
                 error!(error = %e, "Failed to submit to bank");
                 // Rollback hold
-                let _ = self.reverse_funds(
-                    &tenant_id,
-                    &user_id,
-                    &intent_id,
-                    ReversalReason::SubmissionFailed(e.to_string()),
-                    amount,
-                ).await;
-                self.update_state(&tenant_id, &intent_id, "REVERSED").await?;
-                return Ok(self.failure_result(input.intent_id, format!("Bank submission failed: {}", e)));
+                let _ = self
+                    .reverse_funds(
+                        &tenant_id,
+                        &user_id,
+                        &intent_id,
+                        ReversalReason::SubmissionFailed(e.to_string()),
+                        amount,
+                    )
+                    .await;
+                self.update_state(&tenant_id, &intent_id, "REVERSED")
+                    .await?;
+                return Ok(
+                    self.failure_result(input.intent_id, format!("Bank submission failed: {}", e))
+                );
             }
         };
 
-        self.update_state(&tenant_id, &intent_id, "SUBMITTED_TO_BANK").await?;
+        self.update_state(&tenant_id, &intent_id, "SUBMITTED_TO_BANK")
+            .await?;
 
         // 5. Wait for Settlement
         let timeout = Duration::from_secs(2 * 60 * 60); // 2 hours
@@ -213,58 +231,61 @@ impl PayoutWorkflow {
                         );
 
                         // Finalize the settled portion
-                        if let Err(e) = self.finalize_settlement(
-                            &tenant_id,
-                            &intent_id,
-                            settled_amount
-                        ).await {
+                        if let Err(e) = self
+                            .finalize_settlement(&tenant_id, &intent_id, settled_amount)
+                            .await
+                        {
                             error!(error = %e, "Failed to finalize partial settlement in ledger");
                         }
 
                         // Reverse the unsettled portion
-                        let _ = self.reverse_funds(
-                            &tenant_id,
-                            &user_id,
-                            &intent_id,
-                            ReversalReason::PartialSuccess { settled_amount },
-                            amount,
-                        ).await;
+                        let _ = self
+                            .reverse_funds(
+                                &tenant_id,
+                                &user_id,
+                                &intent_id,
+                                ReversalReason::PartialSuccess { settled_amount },
+                                amount,
+                            )
+                            .await;
 
-                        self.update_state(&tenant_id, &intent_id, "COMPLETED").await?;
+                        self.update_state(&tenant_id, &intent_id, "COMPLETED")
+                            .await?;
 
-                        let _ = self.event_publisher.publish_intent_status_changed(
-                            &intent_id,
-                            &tenant_id,
-                            "COMPLETED"
-                        ).await;
+                        let _ = self
+                            .event_publisher
+                            .publish_intent_status_changed(&intent_id, &tenant_id, "COMPLETED")
+                            .await;
 
                         return Ok(PayoutWorkflowResult {
                             intent_id: input.intent_id,
                             status: "COMPLETED".to_string(),
                             bank_tx_id: Some(bank_tx_id),
                             completed_at: result.settled_at,
-                            rejection_reason: Some(format!("Partial settlement: {} of {} VND", settled_amount, amount)),
+                            rejection_reason: Some(format!(
+                                "Partial settlement: {} of {} VND",
+                                settled_amount, amount
+                            )),
                         });
                     }
                 }
 
                 // 6. Complete (full success)
-                if let Err(e) = self.finalize_settlement(
-                    &tenant_id,
-                    &intent_id,
-                    amount
-                ).await {
+                if let Err(e) = self
+                    .finalize_settlement(&tenant_id, &intent_id, amount)
+                    .await
+                {
                     error!(error = %e, "Failed to finalize settlement in ledger");
                 }
 
-                self.update_state(&tenant_id, &intent_id, "COMPLETED").await?;
+                self.update_state(&tenant_id, &intent_id, "COMPLETED")
+                    .await?;
 
                 // 7. Webhook
-                let _ = self.event_publisher.publish_intent_status_changed(
-                    &intent_id,
-                    &tenant_id,
-                    "COMPLETED"
-                ).await;
+                let _ = self
+                    .event_publisher
+                    .publish_intent_status_changed(&intent_id, &tenant_id, "COMPLETED")
+                    .await;
 
                 Ok(PayoutWorkflowResult {
                     intent_id: input.intent_id,
@@ -276,71 +297,88 @@ impl PayoutWorkflow {
             }
             Some(result) => {
                 // Settlement failed/rejected
-                let reason = result.rejection_reason.unwrap_or_else(|| "Unknown rejection".to_string());
+                let reason = result
+                    .rejection_reason
+                    .unwrap_or_else(|| "Unknown rejection".to_string());
 
                 // Reverse funds
-                let _ = self.reverse_funds(
-                    &tenant_id,
-                    &user_id,
-                    &intent_id,
-                    ReversalReason::BankRejected(reason.clone()),
-                    amount,
-                ).await;
+                let _ = self
+                    .reverse_funds(
+                        &tenant_id,
+                        &user_id,
+                        &intent_id,
+                        ReversalReason::BankRejected(reason.clone()),
+                        amount,
+                    )
+                    .await;
 
-                self.update_state(&tenant_id, &intent_id, "REVERSED").await?;
+                self.update_state(&tenant_id, &intent_id, "REVERSED")
+                    .await?;
 
-                let _ = self.event_publisher.publish_intent_status_changed(
-                    &intent_id,
-                    &tenant_id,
-                    "REVERSED"
-                ).await;
+                let _ = self
+                    .event_publisher
+                    .publish_intent_status_changed(&intent_id, &tenant_id, "REVERSED")
+                    .await;
 
                 // Also publish payout reversed event for webhook consumers
-                let _ = self.event_publisher.publish_payout_reversed(
-                    &intent_id,
-                    &tenant_id,
-                    &reason,
-                ).await;
+                let _ = self
+                    .event_publisher
+                    .publish_payout_reversed(&intent_id, &tenant_id, &reason)
+                    .await;
 
                 Ok(self.failure_result(input.intent_id, reason))
             }
             None => {
                 // Timeout - reverse funds and mark as reversed
-                let _ = self.reverse_funds(
-                    &tenant_id,
-                    &user_id,
-                    &intent_id,
-                    ReversalReason::Timeout,
-                    amount,
-                ).await;
+                let _ = self
+                    .reverse_funds(
+                        &tenant_id,
+                        &user_id,
+                        &intent_id,
+                        ReversalReason::Timeout,
+                        amount,
+                    )
+                    .await;
 
-                self.update_state(&tenant_id, &intent_id, "REVERSED").await?;
+                self.update_state(&tenant_id, &intent_id, "REVERSED")
+                    .await?;
 
-                let _ = self.event_publisher.publish_intent_status_changed(
-                    &intent_id,
-                    &tenant_id,
-                    "REVERSED"
-                ).await;
+                let _ = self
+                    .event_publisher
+                    .publish_intent_status_changed(&intent_id, &tenant_id, "REVERSED")
+                    .await;
 
-                let _ = self.event_publisher.publish_payout_reversed(
-                    &intent_id,
-                    &tenant_id,
-                    "Settlement timeout - funds returned to user",
-                ).await;
+                let _ = self
+                    .event_publisher
+                    .publish_payout_reversed(
+                        &intent_id,
+                        &tenant_id,
+                        "Settlement timeout - funds returned to user",
+                    )
+                    .await;
 
                 Ok(PayoutWorkflowResult {
                     intent_id: input.intent_id,
                     status: "REVERSED".to_string(),
                     bank_tx_id: Some(bank_tx_id),
                     completed_at: None,
-                    rejection_reason: Some("Settlement timeout - funds returned to user".to_string()),
+                    rejection_reason: Some(
+                        "Settlement timeout - funds returned to user".to_string(),
+                    ),
                 })
             }
         }
     }
 
-    async fn update_state(&self, tenant_id: &TenantId, intent_id: &IntentId, state: &str) -> Result<()> {
-        self.intent_repo.update_state(tenant_id, intent_id, state).await
+    async fn update_state(
+        &self,
+        tenant_id: &TenantId,
+        intent_id: &IntentId,
+        state: &str,
+    ) -> Result<()> {
+        self.intent_repo
+            .update_state(tenant_id, intent_id, state)
+            .await
     }
 
     fn failure_result(&self, intent_id: String, reason: String) -> PayoutWorkflowResult {
@@ -361,20 +399,20 @@ impl PayoutWorkflow {
         user_id: &UserId,
         amount: Decimal,
     ) -> Result<bool> {
-        let balance = self.ledger_repo.get_balance(
-            tenant_id,
-            Some(user_id),
-            &AccountType::LiabilityUserVnd,
-            &LedgerCurrency::VND
-        ).await?;
+        let balance = self
+            .ledger_repo
+            .get_balance(
+                tenant_id,
+                Some(user_id),
+                &AccountType::LiabilityUserVnd,
+                &LedgerCurrency::VND,
+            )
+            .await?;
 
         Ok(balance >= amount)
     }
 
-    async fn run_aml_check(
-        &self,
-        input: &PayoutWorkflowInput,
-    ) -> Result<bool> {
+    async fn run_aml_check(&self, input: &PayoutWorkflowInput) -> Result<bool> {
         let tx_data = TransactionData {
             intent_id: IntentId(input.intent_id.clone()),
             tenant_id: TenantId(input.tenant_id.clone()),
@@ -407,14 +445,15 @@ impl PayoutWorkflow {
             user_id.clone(),
             intent_id.clone(),
             amount,
-        ).map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?;
+        )
+        .map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?;
 
         self.ledger_repo.record_transaction(tx).await
     }
 
     async fn submit_to_bank(&self, input: &PayoutWorkflowInput) -> Result<String> {
-         // In production: Call rails adapter
-         Ok(format!("BANK_TX_{}", input.intent_id))
+        // In production: Call rails adapter
+        Ok(format!("BANK_TX_{}", input.intent_id))
     }
 
     async fn finalize_settlement(
@@ -423,11 +462,8 @@ impl PayoutWorkflow {
         intent_id: &IntentId,
         amount: Decimal,
     ) -> Result<()> {
-        let tx = patterns::payout_vnd_confirmed(
-            tenant_id.clone(),
-            intent_id.clone(),
-            amount,
-        ).map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?;
+        let tx = patterns::payout_vnd_confirmed(tenant_id.clone(), intent_id.clone(), amount)
+            .map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?;
 
         self.ledger_repo.record_transaction(tx).await
     }
@@ -459,7 +495,8 @@ impl PayoutWorkflow {
                     original_amount,
                     *settled_amount,
                     &reason.to_string(),
-                ).map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?
+                )
+                .map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?
             }
             _ => {
                 // Full reversal for bank rejection, timeout, submission failure, or cancellation
@@ -469,7 +506,8 @@ impl PayoutWorkflow {
                     intent_id.clone(),
                     original_amount,
                     &reason.to_string(),
-                ).map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?
+                )
+                .map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?
             }
         };
 
@@ -487,8 +525,8 @@ impl PayoutWorkflow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{MockIntentRepository, MockLedgerRepository};
     use crate::event::InMemoryEventPublisher;
+    use crate::test_utils::{MockIntentRepository, MockLedgerRepository};
     use ramp_common::ledger::EntryDirection;
     use ramp_compliance::aml::AmlEngine;
     use rust_decimal_macros::dec;
@@ -522,12 +560,12 @@ mod tests {
             ReversalReason::BankRejected("Invalid account".to_string()).to_string(),
             "Bank rejected: Invalid account"
         );
+        assert_eq!(ReversalReason::Timeout.to_string(), "Settlement timeout");
         assert_eq!(
-            ReversalReason::Timeout.to_string(),
-            "Settlement timeout"
-        );
-        assert_eq!(
-            ReversalReason::PartialSuccess { settled_amount: dec!(500000) }.to_string(),
+            ReversalReason::PartialSuccess {
+                settled_amount: dec!(500000)
+            }
+            .to_string(),
             "Partial success (settled: 500000)"
         );
         assert_eq!(
@@ -548,20 +586,25 @@ mod tests {
             IntentId::new_payout(),
             dec!(1000000),
             "Bank rejected: Invalid account",
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(tx.is_balanced());
         assert_eq!(tx.entries.len(), 2);
 
         // First entry: Debit ClearingBankPending (release held funds)
-        let debit_entry = tx.entries.iter()
+        let debit_entry = tx
+            .entries
+            .iter()
             .find(|e| e.direction == EntryDirection::Debit)
             .unwrap();
         assert_eq!(debit_entry.account_type, AccountType::ClearingBankPending);
         assert_eq!(debit_entry.amount, dec!(1000000));
 
         // Second entry: Credit user's VND balance (refund)
-        let credit_entry = tx.entries.iter()
+        let credit_entry = tx
+            .entries
+            .iter()
             .find(|e| e.direction == EntryDirection::Credit)
             .unwrap();
         assert_eq!(credit_entry.account_type, AccountType::LiabilityUserVnd);
@@ -575,21 +618,26 @@ mod tests {
             TenantId::new("tenant1"),
             UserId::new("user1"),
             IntentId::new_payout(),
-            dec!(1000000),  // Original amount
-            dec!(700000),   // Settled amount
+            dec!(1000000), // Original amount
+            dec!(700000),  // Settled amount
             "Partial settlement",
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(tx.is_balanced());
         assert_eq!(tx.entries.len(), 2);
 
         // Reversal amount should be 300000 (1000000 - 700000)
-        let debit_entry = tx.entries.iter()
+        let debit_entry = tx
+            .entries
+            .iter()
             .find(|e| e.direction == EntryDirection::Debit)
             .unwrap();
         assert_eq!(debit_entry.amount, dec!(300000));
 
-        let credit_entry = tx.entries.iter()
+        let credit_entry = tx
+            .entries
+            .iter()
             .find(|e| e.direction == EntryDirection::Credit)
             .unwrap();
         assert_eq!(credit_entry.amount, dec!(300000));
@@ -601,8 +649,8 @@ mod tests {
             TenantId::new("tenant1"),
             UserId::new("user1"),
             IntentId::new_payout(),
-            dec!(500000),   // Original amount
-            dec!(700000),   // Settled amount (more than original - invalid)
+            dec!(500000), // Original amount
+            dec!(700000), // Settled amount (more than original - invalid)
             "Invalid partial",
         );
 
@@ -617,13 +665,15 @@ mod tests {
         let user_id = UserId::new("user1");
         let intent_id = IntentId::new_payout();
 
-        let result = workflow.reverse_funds(
-            &tenant_id,
-            &user_id,
-            &intent_id,
-            ReversalReason::BankRejected("Account closed".to_string()),
-            dec!(500000),
-        ).await;
+        let result = workflow
+            .reverse_funds(
+                &tenant_id,
+                &user_id,
+                &intent_id,
+                ReversalReason::BankRejected("Account closed".to_string()),
+                dec!(500000),
+            )
+            .await;
 
         assert!(result.is_ok());
 
@@ -641,13 +691,15 @@ mod tests {
         let user_id = UserId::new("user1");
         let intent_id = IntentId::new_payout();
 
-        let result = workflow.reverse_funds(
-            &tenant_id,
-            &user_id,
-            &intent_id,
-            ReversalReason::Timeout,
-            dec!(1000000),
-        ).await;
+        let result = workflow
+            .reverse_funds(
+                &tenant_id,
+                &user_id,
+                &intent_id,
+                ReversalReason::Timeout,
+                dec!(1000000),
+            )
+            .await;
 
         assert!(result.is_ok());
 
@@ -664,13 +716,17 @@ mod tests {
         let user_id = UserId::new("user1");
         let intent_id = IntentId::new_payout();
 
-        let result = workflow.reverse_funds(
-            &tenant_id,
-            &user_id,
-            &intent_id,
-            ReversalReason::PartialSuccess { settled_amount: dec!(600000) },
-            dec!(1000000),
-        ).await;
+        let result = workflow
+            .reverse_funds(
+                &tenant_id,
+                &user_id,
+                &intent_id,
+                ReversalReason::PartialSuccess {
+                    settled_amount: dec!(600000),
+                },
+                dec!(1000000),
+            )
+            .await;
 
         assert!(result.is_ok());
 
@@ -698,4 +754,3 @@ mod tests {
         assert_eq!(result.settled_amount, Some(700000));
     }
 }
-

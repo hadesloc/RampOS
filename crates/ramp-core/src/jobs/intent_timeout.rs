@@ -1,8 +1,8 @@
+use crate::service::TimeoutService;
+use ramp_common::Result;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{error, info};
-use ramp_common::Result;
-use crate::service::TimeoutService;
 
 pub struct IntentTimeoutJob {
     timeout_service: Arc<TimeoutService>,
@@ -32,16 +32,18 @@ impl IntentTimeoutJob {
 
     /// Process a batch of expired intents
     pub async fn process_expired(&self) -> Result<usize> {
-        self.timeout_service.process_expired_batch(self.batch_size).await
+        self.timeout_service
+            .process_expired_batch(self.batch_size)
+            .await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::MockIntentRepository;
     use crate::event::InMemoryEventPublisher;
-    use crate::repository::intent::{IntentRow, IntentRepository};
+    use crate::repository::intent::{IntentRepository, IntentRow};
+    use crate::test_utils::MockIntentRepository;
     use chrono::Utc;
     use rust_decimal_macros::dec;
 

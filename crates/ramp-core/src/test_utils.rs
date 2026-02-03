@@ -1,19 +1,14 @@
-use std::sync::{Arc, Mutex};
-use async_trait::async_trait;
-use ramp_common::{
-    intent::*,
-    ledger::*,
-    types::*,
-    Result,
-};
-use rust_decimal::Decimal;
-use chrono::{DateTime, Utc};
 use crate::repository::{
     intent::{IntentRepository, IntentRow},
-    ledger::{LedgerRepository, LedgerEntryRow, BalanceRow},
-    user::{UserRepository, UserRow},
+    ledger::{BalanceRow, LedgerEntryRow, LedgerRepository},
     tenant::{TenantRepository, TenantRow},
+    user::{UserRepository, UserRow},
 };
+use async_trait::async_trait;
+use chrono::{DateTime, Datelike, Utc};
+use ramp_common::{ledger::*, types::*, Result};
+use rust_decimal::Decimal;
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
 pub struct MockIntentRepository {
@@ -22,7 +17,9 @@ pub struct MockIntentRepository {
 
 impl MockIntentRepository {
     pub fn new() -> Self {
-        Self { intents: Arc::new(Mutex::new(Vec::new())) }
+        Self {
+            intents: Arc::new(Mutex::new(Vec::new())),
+        }
     }
 }
 
@@ -44,17 +41,36 @@ impl IntentRepository for MockIntentRepository {
         Ok(intents.iter().find(|i| i.id == id.0).cloned())
     }
 
-    async fn get_by_idempotency_key(&self, _tenant_id: &TenantId, key: &IdempotencyKey) -> Result<Option<IntentRow>> {
+    async fn get_by_idempotency_key(
+        &self,
+        _tenant_id: &TenantId,
+        key: &IdempotencyKey,
+    ) -> Result<Option<IntentRow>> {
         let intents = self.intents.lock().unwrap();
-        Ok(intents.iter().find(|i| i.idempotency_key == Some(key.0.clone())).cloned())
+        Ok(intents
+            .iter()
+            .find(|i| i.idempotency_key == Some(key.0.clone()))
+            .cloned())
     }
 
-    async fn get_by_reference_code(&self, _tenant_id: &TenantId, code: &ReferenceCode) -> Result<Option<IntentRow>> {
+    async fn get_by_reference_code(
+        &self,
+        _tenant_id: &TenantId,
+        code: &ReferenceCode,
+    ) -> Result<Option<IntentRow>> {
         let intents = self.intents.lock().unwrap();
-        Ok(intents.iter().find(|i| i.reference_code == Some(code.0.clone())).cloned())
+        Ok(intents
+            .iter()
+            .find(|i| i.reference_code == Some(code.0.clone()))
+            .cloned())
     }
 
-    async fn update_state(&self, _tenant_id: &TenantId, id: &IntentId, new_state: &str) -> Result<()> {
+    async fn update_state(
+        &self,
+        _tenant_id: &TenantId,
+        id: &IntentId,
+        new_state: &str,
+    ) -> Result<()> {
         let mut intents = self.intents.lock().unwrap();
         if let Some(intent) = intents.iter_mut().find(|i| i.id == id.0) {
             intent.state = new_state.to_string();
@@ -62,7 +78,13 @@ impl IntentRepository for MockIntentRepository {
         Ok(())
     }
 
-    async fn update_bank_confirmed(&self, _tenant_id: &TenantId, id: &IntentId, bank_tx_id: &str, actual_amount: Decimal) -> Result<()> {
+    async fn update_bank_confirmed(
+        &self,
+        _tenant_id: &TenantId,
+        id: &IntentId,
+        bank_tx_id: &str,
+        actual_amount: Decimal,
+    ) -> Result<()> {
         let mut intents = self.intents.lock().unwrap();
         if let Some(intent) = intents.iter_mut().find(|i| i.id == id.0) {
             intent.bank_tx_id = Some(bank_tx_id.to_string());
@@ -71,7 +93,13 @@ impl IntentRepository for MockIntentRepository {
         Ok(())
     }
 
-    async fn list_by_user(&self, tenant_id: &TenantId, user_id: &UserId, limit: i64, _offset: i64) -> Result<Vec<IntentRow>> {
+    async fn list_by_user(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        limit: i64,
+        _offset: i64,
+    ) -> Result<Vec<IntentRow>> {
         let intents = self.intents.lock().unwrap();
         let filtered: Vec<_> = intents
             .iter()
@@ -89,7 +117,18 @@ impl IntentRepository for MockIntentRepository {
             .iter()
             .filter(|i| {
                 if let Some(expires_at) = i.expires_at {
-                    expires_at < now && !["COMPLETED", "EXPIRED", "CANCELLED", "TIMEOUT", "REJECTED_BY_POLICY", "BANK_REJECTED", "SUSPECTED_FRAUD", "REVERSED"].contains(&i.state.as_str())
+                    expires_at < now
+                        && ![
+                            "COMPLETED",
+                            "EXPIRED",
+                            "CANCELLED",
+                            "TIMEOUT",
+                            "REJECTED_BY_POLICY",
+                            "BANK_REJECTED",
+                            "SUSPECTED_FRAUD",
+                            "REVERSED",
+                        ]
+                        .contains(&i.state.as_str())
                 } else {
                     false
                 }
@@ -100,19 +139,35 @@ impl IntentRepository for MockIntentRepository {
         Ok(expired)
     }
 
-    async fn get_daily_payin_amount(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<Decimal> {
+    async fn get_daily_payin_amount(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Decimal> {
         let intents = self.intents.lock().unwrap();
         let now = Utc::now();
-        let start_of_day = now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_local_timezone(Utc).unwrap();
+        let start_of_day = now
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_local_timezone(Utc)
+            .unwrap();
 
         let amount: Decimal = intents
             .iter()
             .filter(|i| {
-                i.tenant_id == tenant_id.0 &&
-                i.user_id == user_id.0 &&
-                i.intent_type == "PAYIN_VND" &&
-                ["COMPLETED", "INSTRUCTION_ISSUED", "FUNDS_PENDING", "FUNDS_CONFIRMED", "VND_CREDITED"].contains(&i.state.as_str()) &&
-                i.created_at >= start_of_day
+                i.tenant_id == tenant_id.0
+                    && i.user_id == user_id.0
+                    && i.intent_type == "PAYIN_VND"
+                    && [
+                        "COMPLETED",
+                        "INSTRUCTION_ISSUED",
+                        "FUNDS_PENDING",
+                        "FUNDS_CONFIRMED",
+                        "VND_CREDITED",
+                    ]
+                    .contains(&i.state.as_str())
+                    && i.created_at >= start_of_day
             })
             .map(|i| i.amount)
             .sum();
@@ -120,24 +175,207 @@ impl IntentRepository for MockIntentRepository {
         Ok(amount)
     }
 
-    async fn get_daily_payout_amount(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<Decimal> {
+    async fn get_daily_payout_amount(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Decimal> {
         let intents = self.intents.lock().unwrap();
         let now = Utc::now();
-        let start_of_day = now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_local_timezone(Utc).unwrap();
+        let start_of_day = now
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_local_timezone(Utc)
+            .unwrap();
 
         let amount: Decimal = intents
             .iter()
             .filter(|i| {
-                i.tenant_id == tenant_id.0 &&
-                i.user_id == user_id.0 &&
-                i.intent_type == "PAYOUT_VND" &&
-                ["COMPLETED", "PAYOUT_CREATED", "POLICY_APPROVED", "PAYOUT_SUBMITTED", "PAYOUT_CONFIRMED"].contains(&i.state.as_str()) &&
-                i.created_at >= start_of_day
+                i.tenant_id == tenant_id.0
+                    && i.user_id == user_id.0
+                    && i.intent_type == "PAYOUT_VND"
+                    && [
+                        "COMPLETED",
+                        "PAYOUT_CREATED",
+                        "POLICY_APPROVED",
+                        "PAYOUT_SUBMITTED",
+                        "PAYOUT_CONFIRMED",
+                    ]
+                    .contains(&i.state.as_str())
+                    && i.created_at >= start_of_day
             })
             .map(|i| i.amount)
             .sum();
 
         Ok(amount)
+    }
+
+    async fn get_daily_withdraw_amount(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Decimal> {
+        let intents = self.intents.lock().unwrap();
+        let now = Utc::now();
+        let start_of_day = now
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_local_timezone(Utc)
+            .unwrap();
+
+        let amount: Decimal = intents
+            .iter()
+            .filter(|i| {
+                i.tenant_id == tenant_id.0
+                    && i.user_id == user_id.0
+                    && i.intent_type == "WITHDRAW_ONCHAIN"
+                    && [
+                        "CREATED",
+                        "POLICY_APPROVED",
+                        "KYT_CHECKED",
+                        "SIGNED",
+                        "BROADCASTED",
+                        "CONFIRMING",
+                        "CONFIRMED",
+                        "COMPLETED",
+                    ]
+                    .contains(&i.state.as_str())
+                    && i.created_at >= start_of_day
+            })
+            .map(|i| i.amount)
+            .sum();
+
+        Ok(amount)
+    }
+
+    async fn get_monthly_withdraw_amount(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Decimal> {
+        let intents = self.intents.lock().unwrap();
+        let now = Utc::now();
+        let start_of_month = now
+            .date_naive()
+            .with_day(1)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_local_timezone(Utc)
+            .unwrap();
+
+        let amount: Decimal = intents
+            .iter()
+            .filter(|i| {
+                i.tenant_id == tenant_id.0
+                    && i.user_id == user_id.0
+                    && i.intent_type == "WITHDRAW_ONCHAIN"
+                    && [
+                        "CREATED",
+                        "POLICY_APPROVED",
+                        "KYT_CHECKED",
+                        "SIGNED",
+                        "BROADCASTED",
+                        "CONFIRMING",
+                        "CONFIRMED",
+                        "COMPLETED",
+                    ]
+                    .contains(&i.state.as_str())
+                    && i.created_at >= start_of_month
+            })
+            .map(|i| i.amount)
+            .sum();
+
+        Ok(amount)
+    }
+
+    async fn get_hourly_withdraw_count(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<u32> {
+        let intents = self.intents.lock().unwrap();
+        let now = Utc::now();
+        let hour_ago = now - chrono::Duration::hours(1);
+
+        let count = intents
+            .iter()
+            .filter(|i| {
+                i.tenant_id == tenant_id.0
+                    && i.user_id == user_id.0
+                    && i.intent_type == "WITHDRAW_ONCHAIN"
+                    && ![
+                        "CANCELLED",
+                        "REJECTED_BY_POLICY",
+                        "REJECTED_INSUFFICIENT_BALANCE",
+                    ]
+                    .contains(&i.state.as_str())
+                    && i.created_at >= hour_ago
+            })
+            .count();
+
+        Ok(count as u32)
+    }
+
+    async fn get_daily_withdraw_count(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<u32> {
+        let intents = self.intents.lock().unwrap();
+        let now = Utc::now();
+        let start_of_day = now
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_local_timezone(Utc)
+            .unwrap();
+
+        let count = intents
+            .iter()
+            .filter(|i| {
+                i.tenant_id == tenant_id.0
+                    && i.user_id == user_id.0
+                    && i.intent_type == "WITHDRAW_ONCHAIN"
+                    && ![
+                        "CANCELLED",
+                        "REJECTED_BY_POLICY",
+                        "REJECTED_INSUFFICIENT_BALANCE",
+                    ]
+                    .contains(&i.state.as_str())
+                    && i.created_at >= start_of_day
+            })
+            .count();
+
+        Ok(count as u32)
+    }
+
+    async fn get_last_withdraw_time(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Option<DateTime<Utc>>> {
+        let intents = self.intents.lock().unwrap();
+
+        let last = intents
+            .iter()
+            .filter(|i| {
+                i.tenant_id == tenant_id.0
+                    && i.user_id == user_id.0
+                    && i.intent_type == "WITHDRAW_ONCHAIN"
+                    && ![
+                        "CANCELLED",
+                        "REJECTED_BY_POLICY",
+                        "REJECTED_INSUFFICIENT_BALANCE",
+                    ]
+                    .contains(&i.state.as_str())
+            })
+            .max_by_key(|i| i.created_at)
+            .map(|i| i.created_at);
+
+        Ok(last)
     }
 }
 
@@ -161,13 +399,20 @@ impl MockLedgerRepository {
         }
     }
 
-    pub fn set_balance(&self, _tenant_id: &TenantId, _user_id: Option<&UserId>, account_type: &AccountType, currency: &LedgerCurrency, amount: Decimal) {
-         let mut balances = self.balances.lock().unwrap();
-         balances.push(BalanceRow {
-             account_type: account_type.to_string(),
-             currency: currency.to_string(),
-             balance: amount,
-         });
+    pub fn set_balance(
+        &self,
+        _tenant_id: &TenantId,
+        _user_id: Option<&UserId>,
+        account_type: &AccountType,
+        currency: &LedgerCurrency,
+        amount: Decimal,
+    ) {
+        let mut balances = self.balances.lock().unwrap();
+        balances.push(BalanceRow {
+            account_type: account_type.to_string(),
+            currency: currency.to_string(),
+            balance: amount,
+        });
     }
 }
 
@@ -178,7 +423,11 @@ impl LedgerRepository for MockLedgerRepository {
         Ok(())
     }
 
-    async fn get_entries_by_intent(&self, tenant_id: &TenantId, intent_id: &IntentId) -> Result<Vec<LedgerEntryRow>> {
+    async fn get_entries_by_intent(
+        &self,
+        tenant_id: &TenantId,
+        intent_id: &IntentId,
+    ) -> Result<Vec<LedgerEntryRow>> {
         // Return entries from recorded transactions matching the intent
         let txs = self.transactions.lock().unwrap();
         let entries: Vec<LedgerEntryRow> = txs
@@ -206,17 +455,27 @@ impl LedgerRepository for MockLedgerRepository {
         Ok(entries)
     }
 
-    async fn get_balance(&self, _tenant_id: &TenantId, _user_id: Option<&UserId>, account_type: &AccountType, currency: &LedgerCurrency) -> Result<Decimal> {
+    async fn get_balance(
+        &self,
+        _tenant_id: &TenantId,
+        _user_id: Option<&UserId>,
+        account_type: &AccountType,
+        currency: &LedgerCurrency,
+    ) -> Result<Decimal> {
         let balances = self.balances.lock().unwrap();
         for b in balances.iter() {
-             if b.account_type == account_type.to_string() && b.currency == currency.to_string() {
-                 return Ok(b.balance);
-             }
+            if b.account_type == account_type.to_string() && b.currency == currency.to_string() {
+                return Ok(b.balance);
+            }
         }
         Ok(Decimal::ZERO)
     }
 
-    async fn get_user_balances(&self, _tenant_id: &TenantId, _user_id: &UserId) -> Result<Vec<BalanceRow>> {
+    async fn get_user_balances(
+        &self,
+        _tenant_id: &TenantId,
+        _user_id: &UserId,
+    ) -> Result<Vec<BalanceRow>> {
         Ok(self.balances.lock().unwrap().clone())
     }
 
@@ -232,7 +491,9 @@ impl LedgerRepository for MockLedgerRepository {
         let balances = self.balances.lock().unwrap();
         let current_balance = balances
             .iter()
-            .find(|b| b.account_type == account_type.to_string() && b.currency == currency.to_string())
+            .find(|b| {
+                b.account_type == account_type.to_string() && b.currency == currency.to_string()
+            })
             .map(|b| b.balance)
             .unwrap_or(Decimal::ZERO);
         drop(balances);
@@ -264,7 +525,9 @@ impl Default for MockUserRepository {
 
 impl MockUserRepository {
     pub fn new() -> Self {
-        Self { users: Arc::new(Mutex::new(Vec::new())) }
+        Self {
+            users: Arc::new(Mutex::new(Vec::new())),
+        }
     }
 
     pub fn add_user(&self, user: UserRow) {
@@ -284,7 +547,12 @@ impl UserRepository for MockUserRepository {
         Ok(())
     }
 
-    async fn update_kyc_tier(&self, _tenant_id: &TenantId, user_id: &UserId, tier: i16) -> Result<()> {
+    async fn update_kyc_tier(
+        &self,
+        _tenant_id: &TenantId,
+        user_id: &UserId,
+        tier: i16,
+    ) -> Result<()> {
         let mut users = self.users.lock().unwrap();
         if let Some(user) = users.iter_mut().find(|u| u.id == user_id.0) {
             user.kyc_tier = tier;
@@ -292,16 +560,26 @@ impl UserRepository for MockUserRepository {
         Ok(())
     }
 
-    async fn update_risk_score(&self, _tenant_id: &TenantId, user_id: &UserId, score: Decimal) -> Result<()> {
-         let mut users = self.users.lock().unwrap();
+    async fn update_risk_score(
+        &self,
+        _tenant_id: &TenantId,
+        user_id: &UserId,
+        score: Decimal,
+    ) -> Result<()> {
+        let mut users = self.users.lock().unwrap();
         if let Some(user) = users.iter_mut().find(|u| u.id == user_id.0) {
             user.risk_score = Some(score);
         }
         Ok(())
     }
 
-    async fn update_status(&self, _tenant_id: &TenantId, user_id: &UserId, status: &str) -> Result<()> {
-         let mut users = self.users.lock().unwrap();
+    async fn update_status(
+        &self,
+        _tenant_id: &TenantId,
+        user_id: &UserId,
+        status: &str,
+    ) -> Result<()> {
+        let mut users = self.users.lock().unwrap();
         if let Some(user) = users.iter_mut().find(|u| u.id == user_id.0) {
             user.status = status.to_string();
         }
@@ -340,9 +618,9 @@ impl UserRepository for MockUserRepository {
         let mut filtered: Vec<UserRow> = users
             .iter()
             .filter(|user| user.tenant_id == tenant_id.0)
-            .filter(|user| kyc_tier.map_or(true, |tier| user.kyc_tier == tier))
-            .filter(|user| status.map_or(true, |status| user.status == status))
-            .filter(|user| search.map_or(true, |query| user.id.contains(query)))
+            .filter(|user| kyc_tier.is_none_or(|tier| user.kyc_tier == tier))
+            .filter(|user| status.is_none_or(|status| user.status == status))
+            .filter(|user| search.is_none_or(|query| user.id.contains(query)))
             .cloned()
             .collect();
 
@@ -368,9 +646,9 @@ impl UserRepository for MockUserRepository {
         let count = users
             .iter()
             .filter(|user| user.tenant_id == tenant_id.0)
-            .filter(|user| kyc_tier.map_or(true, |tier| user.kyc_tier == tier))
-            .filter(|user| status.map_or(true, |status| user.status == status))
-            .filter(|user| search.map_or(true, |query| user.id.contains(query)))
+            .filter(|user| kyc_tier.is_none_or(|tier| user.kyc_tier == tier))
+            .filter(|user| status.is_none_or(|status| user.status == status))
+            .filter(|user| search.is_none_or(|query| user.id.contains(query)))
             .count();
         Ok(count as i64)
     }
@@ -417,7 +695,9 @@ impl Default for MockTenantRepository {
 
 impl MockTenantRepository {
     pub fn new() -> Self {
-        Self { tenants: Arc::new(Mutex::new(Vec::new())) }
+        Self {
+            tenants: Arc::new(Mutex::new(Vec::new())),
+        }
     }
 
     pub fn add_tenant(&self, tenant: TenantRow) {
@@ -466,7 +746,12 @@ impl TenantRepository for MockTenantRepository {
         Ok(())
     }
 
-    async fn update_webhook_secret(&self, id: &TenantId, hash: &str, encrypted: &[u8]) -> Result<()> {
+    async fn update_webhook_secret(
+        &self,
+        id: &TenantId,
+        hash: &str,
+        encrypted: &[u8],
+    ) -> Result<()> {
         let mut tenants = self.tenants.lock().unwrap();
         if let Some(tenant) = tenants.iter_mut().find(|t| t.id == id.0) {
             tenant.webhook_secret_hash = hash.to_string();
@@ -475,7 +760,12 @@ impl TenantRepository for MockTenantRepository {
         Ok(())
     }
 
-    async fn update_limits(&self, id: &TenantId, daily_payin: Option<Decimal>, daily_payout: Option<Decimal>) -> Result<()> {
+    async fn update_limits(
+        &self,
+        id: &TenantId,
+        daily_payin: Option<Decimal>,
+        daily_payout: Option<Decimal>,
+    ) -> Result<()> {
         let mut tenants = self.tenants.lock().unwrap();
         if let Some(tenant) = tenants.iter_mut().find(|t| t.id == id.0) {
             tenant.daily_payin_limit_vnd = daily_payin;
@@ -532,14 +822,29 @@ mod tests {
 
         repo.create(&intent).await.unwrap();
 
-        let found = repo.get_by_id(&TenantId::new("tenant-1"), &IntentId("intent-1".to_string())).await.unwrap();
+        let found = repo
+            .get_by_id(
+                &TenantId::new("tenant-1"),
+                &IntentId("intent-1".to_string()),
+            )
+            .await
+            .unwrap();
         assert!(found.is_some());
         assert_eq!(found.unwrap().id, "intent-1");
 
-        let by_idem = repo.get_by_idempotency_key(&TenantId::new("tenant-1"), &IdempotencyKey::new("idem-1")).await.unwrap();
+        let by_idem = repo
+            .get_by_idempotency_key(&TenantId::new("tenant-1"), &IdempotencyKey::new("idem-1"))
+            .await
+            .unwrap();
         assert!(by_idem.is_some());
 
-        let by_ref = repo.get_by_reference_code(&TenantId::new("tenant-1"), &ReferenceCode("REF123".to_string())).await.unwrap();
+        let by_ref = repo
+            .get_by_reference_code(
+                &TenantId::new("tenant-1"),
+                &ReferenceCode("REF123".to_string()),
+            )
+            .await
+            .unwrap();
         assert!(by_ref.is_some());
     }
 
@@ -563,12 +868,20 @@ mod tests {
 
         repo.add_user(user);
 
-        let found = repo.get_by_id(&TenantId::new("tenant-1"), &UserId::new("user-1")).await.unwrap();
+        let found = repo
+            .get_by_id(&TenantId::new("tenant-1"), &UserId::new("user-1"))
+            .await
+            .unwrap();
         assert!(found.is_some());
         assert_eq!(found.unwrap().kyc_tier, 1);
 
-        repo.update_kyc_tier(&TenantId::new("tenant-1"), &UserId::new("user-1"), 2).await.unwrap();
-        let updated = repo.get_by_id(&TenantId::new("tenant-1"), &UserId::new("user-1")).await.unwrap();
+        repo.update_kyc_tier(&TenantId::new("tenant-1"), &UserId::new("user-1"), 2)
+            .await
+            .unwrap();
+        let updated = repo
+            .get_by_id(&TenantId::new("tenant-1"), &UserId::new("user-1"))
+            .await
+            .unwrap();
         assert_eq!(updated.unwrap().kyc_tier, 2);
     }
 

@@ -143,7 +143,7 @@ async fn setup_test_app() -> TestContext {
         status: "ACTIVE".to_string(),
         api_key_hash,
         webhook_secret_hash: "secret".to_string(),
-            webhook_secret_encrypted: None,
+        webhook_secret_encrypted: None,
         webhook_url: None,
         config: serde_json::json!({}),
         daily_payin_limit_vnd: None,

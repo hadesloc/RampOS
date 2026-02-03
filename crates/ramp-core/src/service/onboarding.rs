@@ -1,12 +1,7 @@
 use chrono::Utc;
-use ramp_common::{
-    ledger::{AccountType, LedgerCurrency, LedgerTransaction, LedgerTransactionBuilder},
-    types::TenantId,
-    Result,
-};
-use rand::Rng;
+use ramp_common::{types::TenantId, Result};
 use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -28,10 +23,7 @@ pub struct OnboardingService {
 }
 
 impl OnboardingService {
-    pub fn new(
-        tenant_repo: Arc<dyn TenantRepository>,
-        ledger_service: Arc<LedgerService>,
-    ) -> Self {
+    pub fn new(tenant_repo: Arc<dyn TenantRepository>, ledger_service: Arc<LedgerService>) -> Self {
         Self {
             tenant_repo,
             ledger_service,
@@ -39,16 +31,12 @@ impl OnboardingService {
     }
 
     /// Create a new tenant record
-    pub async fn create_tenant(
-        &self,
-        name: &str,
-        config: serde_json::Value,
-    ) -> Result<TenantRow> {
+    pub async fn create_tenant(&self, name: &str, config: serde_json::Value) -> Result<TenantRow> {
         let tenant_id = TenantId::new(format!("t_{}", Uuid::now_v7()));
         let now = Utc::now();
 
         // Generate initial API key (will be replaced by generate_api_keys)
-        let (api_key_pair, api_key_hash) = self.generate_api_key_internal();
+        let (_api_key_pair, api_key_hash) = self.generate_api_key_internal();
 
         // Generate webhook secret (will be exposed to user separately)
         let (webhook_secret, webhook_secret_hash) = self.generate_secret_internal();
@@ -78,7 +66,9 @@ impl OnboardingService {
     /// Generate new API keys for a tenant
     pub async fn generate_api_keys(&self, tenant_id: &TenantId) -> Result<ApiKeyPair> {
         let (key_pair, hash) = self.generate_api_key_internal();
-        self.tenant_repo.update_api_key_hash(tenant_id, &hash).await?;
+        self.tenant_repo
+            .update_api_key_hash(tenant_id, &hash)
+            .await?;
         Ok(key_pair)
     }
 

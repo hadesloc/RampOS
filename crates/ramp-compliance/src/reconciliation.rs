@@ -294,8 +294,8 @@ impl ReconEngine {
         let mut transactions = Vec::new();
 
         for result in rdr.deserialize() {
-            let record: RailsTransaction = result
-                .map_err(|e| ReconError::Parsing(e.to_string()))?;
+            let record: RailsTransaction =
+                result.map_err(|e| ReconError::Parsing(e.to_string()))?;
             transactions.push(record);
         }
 
@@ -464,21 +464,23 @@ impl ReconEngine {
 
         // Timestamp check (if settled_at is available)
         if let Some(settled_at) = rampos.settled_at {
-             let time_diff = settled_at.signed_duration_since(rails.timestamp).abs();
-             if time_diff > self.config.timestamp_tolerance {
-                 batch.discrepancies.push(
+            let time_diff = settled_at.signed_duration_since(rails.timestamp).abs();
+            if time_diff > self.config.timestamp_tolerance {
+                batch.discrepancies.push(
                     Discrepancy::new(
                         DiscrepancyType::TimestampMismatch,
                         DiscrepancySeverity::Low,
                         format!(
                             "Timestamp mismatch: RampOS={}, Rails={}, Diff={}s",
-                            settled_at, rails.timestamp, time_diff.num_seconds()
+                            settled_at,
+                            rails.timestamp,
+                            time_diff.num_seconds()
                         ),
                     )
                     .with_intent(&rampos.intent_id)
                     .with_rails_tx(&rails.tx_id),
                 );
-             }
+            }
         }
     }
 }

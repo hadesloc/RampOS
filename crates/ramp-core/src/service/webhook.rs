@@ -6,7 +6,6 @@
 
 use chrono::{Duration, Utc};
 use ramp_common::{
-    crypto::generate_webhook_signature,
     types::{EventId, IntentId, TenantId},
     Result,
 };
@@ -159,11 +158,7 @@ impl WebhookService {
         // Generate signature using the actual secret (decrypted)
         // NOTE: In production, decrypt webhook_secret here using application encryption key
         let timestamp = Utc::now().timestamp();
-        let signature = generate_webhook_signature(
-            &webhook_secret,
-            timestamp,
-            &payload_bytes,
-        );
+        let signature = generate_webhook_signature(&webhook_secret, timestamp, &payload_bytes);
 
         // Send request
         let response = self
@@ -183,9 +178,7 @@ impl WebhookService {
                 let status = resp.status().as_u16() as i32;
 
                 if resp.status().is_success() {
-                    self.webhook_repo
-                        .mark_delivered(&event_id, status)
-                        .await?;
+                    self.webhook_repo.mark_delivered(&event_id, status).await?;
 
                     info!(
                         event_id = %event.id,
@@ -194,12 +187,14 @@ impl WebhookService {
                     );
                 } else {
                     let error = format!("HTTP {}", status);
-                    self.schedule_retry(&event_id, &error, event.attempts).await?;
+                    self.schedule_retry(&event_id, &error, event.attempts)
+                        .await?;
                 }
             }
             Err(e) => {
                 let error = e.to_string();
-                self.schedule_retry(&event_id, &error, event.attempts).await?;
+                self.schedule_retry(&event_id, &error, event.attempts)
+                    .await?;
             }
         }
 

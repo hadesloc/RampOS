@@ -1,10 +1,10 @@
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use mockall::mock;
 use ramp_common::{
     types::{EventId, IntentId, TenantId},
     Result,
 };
-use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::repository::{
@@ -46,8 +46,8 @@ mock! {
 mod tests {
     use super::*;
     use crate::service::webhook::{WebhookEventType, WebhookService};
-    use std::sync::Arc;
     use serde_json::json;
+    use std::sync::Arc;
 
     // Helper to create a dummy event
     fn create_dummy_event() -> WebhookEventRow {
@@ -97,18 +97,17 @@ mod tests {
             .times(1)
             .returning(|_| Ok(()));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        );
+        let service = WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo));
 
         let tenant_id = TenantId::new("tenant_1");
-        let result = service.queue_event(
-            &tenant_id,
-            WebhookEventType::IntentStatusChanged,
-            None,
-            json!({"test": "data"}),
-        ).await;
+        let result = service
+            .queue_event(
+                &tenant_id,
+                WebhookEventType::IntentStatusChanged,
+                None,
+                json!({"test": "data"}),
+            )
+            .await;
 
         assert!(result.is_ok());
     }
@@ -141,10 +140,7 @@ mod tests {
             .times(1)
             .returning(move |_| Ok(vec![event_clone.clone()]));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        );
+        let service = WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo));
 
         // When http-client is disabled, this should just log and succeed
         // However, if we are running with --features http-client but it fails to compile deps,

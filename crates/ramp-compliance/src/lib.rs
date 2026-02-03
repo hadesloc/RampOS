@@ -12,12 +12,13 @@ pub mod reports;
 pub mod rule_parser;
 pub mod rules;
 pub mod sanctions;
-pub mod transaction_history;
 #[cfg(test)]
 mod sanctions_test;
 pub mod storage;
 pub mod store;
+pub mod transaction_history;
 pub mod types;
+pub mod withdraw_policy;
 
 pub use actions::{ActionTrigger, ComplianceAction, EscalationLevel};
 pub use aml::AmlEngine;
@@ -34,9 +35,16 @@ pub use sanctions::{
     MockSanctionsProvider, OpenSanctionsProvider, SanctionsProvider, SanctionsResult,
     SanctionsScreeningService,
 };
+pub use store::mock::InMemoryCaseStore;
 pub use transaction_history::{
     MockTransactionHistoryStore, PostgresTransactionHistoryStore, TransactionHistoryStore,
     TransactionRecord,
 };
-pub use store::mock::InMemoryCaseStore;
 pub use types::*;
+pub use withdraw_policy::{
+    DenialCode, PolicyResult, TierWithdrawLimits, VelocityThresholds, WithdrawPolicyConfig,
+    WithdrawPolicyDataProvider, WithdrawPolicyEngine, WithdrawPolicyRequest,
+};
+
+#[cfg(any(test, feature = "testing"))]
+pub use withdraw_policy::MockWithdrawPolicyDataProvider;

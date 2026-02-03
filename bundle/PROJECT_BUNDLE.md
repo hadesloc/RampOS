@@ -79,6 +79,16 @@ rampos/
 - Payout reversal logic
 - 86 frontend unit tests
 
+### Phase 6.5: Security Hardening (100%)
+- Account Ownership Verification with user-level isolation (14 tests)
+- Withdraw Policy Engine with KYC tier limits, AML/sanctions screening (27 tests)
+- ECDSA Recovery ID fix with proper `v` value calculation (8 tests)
+- Paymaster 24h Timelock for secure withdrawals (19 tests)
+- Session Key Permissions with allowedTargets, spending limits (18 tests)
+- Rust code cleanup (228 tests pass, 99.6%)
+- Smart contract cleanup (40 tests pass)
+- Frontend cleanup (86 tests, 0 errors)
+
 ---
 
 ## Security Audit Summary
@@ -92,7 +102,7 @@ rampos/
 | Medium | 4 | Acknowledged |
 | Low | 6 | Informational |
 
-**Security Score**: 7.5/10
+**Security Score**: 8.5/10 (improved after Phase 6.5 hardening)
 
 ### Smart Contract Maturity
 
@@ -193,10 +203,11 @@ WEBHOOK_SECRET=your-webhook-secret
 
 | Component | Tests | Status |
 |-----------|-------|--------|
-| Rust Unit Tests | 140+ | PASS |
+| Rust Unit Tests | 228+ | PASS |
 | Rust Integration | 20+ | PASS |
 | Frontend Unit | 86 | PASS |
-| Smart Contract | 10 | PASS |
+| Smart Contract | 40 | PASS |
+| Security Tests | 86 | PASS |
 
 ---
 

@@ -1,13 +1,12 @@
 use async_trait::async_trait;
 use ramp_common::{
     types::{TenantId, UserId},
-    Result,
-    Error,
+    Error, Result,
 };
-use ramp_compliance::kyc::{TierManager, TierDataProvider, UserKycInfo};
-use ramp_compliance::types::{KycTier, KycStatus};
-use tracing::info;
+use ramp_compliance::kyc::{TierDataProvider, TierManager, UserKycInfo};
+use ramp_compliance::types::{KycStatus, KycTier};
 use std::sync::Arc;
+use tracing::info;
 
 use crate::event::EventPublisher;
 use crate::repository::user::{UserRepository, UserRow};
@@ -39,17 +38,34 @@ impl UserService {
         TierManager::new(provider)
     }
 
-    pub async fn upgrade_user_tier(&self, tenant_id: &TenantId, user_id: &UserId, target_tier: KycTier) -> Result<()> {
+    pub async fn upgrade_user_tier(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        target_tier: KycTier,
+    ) -> Result<()> {
         let manager = self.tier_manager();
         manager.upgrade_tier(tenant_id, user_id, target_tier).await
     }
 
-    pub async fn downgrade_user_tier(&self, tenant_id: &TenantId, user_id: &UserId, target_tier: KycTier, reason: &str) -> Result<()> {
+    pub async fn downgrade_user_tier(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        target_tier: KycTier,
+        reason: &str,
+    ) -> Result<()> {
         let manager = self.tier_manager();
-        manager.downgrade_tier(tenant_id, user_id, target_tier, reason).await
+        manager
+            .downgrade_tier(tenant_id, user_id, target_tier, reason)
+            .await
     }
 
-    pub async fn get_user_kyc_info(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<UserKycInfo> {
+    pub async fn get_user_kyc_info(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<UserKycInfo> {
         let provider = UserServiceTierProvider {
             repo: self.repo.clone(),
             event_publisher: self.event_publisher.clone(),
@@ -84,11 +100,7 @@ impl UserService {
         Ok((users, total))
     }
 
-    pub async fn count_users_by_status(
-        &self,
-        tenant_id: &TenantId,
-        status: &str,
-    ) -> Result<i64> {
+    pub async fn count_users_by_status(&self, tenant_id: &TenantId, status: &str) -> Result<i64> {
         self.repo
             .count_users(tenant_id, None, Some(status), None)
             .await
@@ -99,7 +111,9 @@ impl UserService {
         tenant_id: &TenantId,
         kyc_status: &str,
     ) -> Result<i64> {
-        self.repo.count_users_by_kyc_status(tenant_id, kyc_status).await
+        self.repo
+            .count_users_by_kyc_status(tenant_id, kyc_status)
+            .await
     }
 
     pub async fn count_users_created_since(
@@ -130,7 +144,9 @@ impl UserService {
         if daily_payin_limit_vnd.is_some() || daily_payout_limit_vnd.is_some() {
             let payin = daily_payin_limit_vnd.map(rust_decimal::Decimal::from);
             let payout = daily_payout_limit_vnd.map(rust_decimal::Decimal::from);
-            self.repo.update_limits(tenant_id, user_id, payin, payout).await?;
+            self.repo
+                .update_limits(tenant_id, user_id, payin, payout)
+                .await?;
         }
 
         Ok(())
@@ -145,8 +161,15 @@ struct UserServiceTierProvider {
 
 #[async_trait]
 impl TierDataProvider for UserServiceTierProvider {
-    async fn get_user_kyc_info(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<UserKycInfo> {
-        let user = self.repo.get_by_id(tenant_id, user_id).await?
+    async fn get_user_kyc_info(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<UserKycInfo> {
+        let user = self
+            .repo
+            .get_by_id(tenant_id, user_id)
+            .await?
             .ok_or_else(|| Error::NotFound(format!("User {}", user_id)))?;
 
         // Convert i16 to KycTier
@@ -179,9 +202,16 @@ impl TierDataProvider for UserServiceTierProvider {
         })
     }
 
-    async fn update_tier_and_limits(&self, tenant_id: &TenantId, user_id: &UserId, tier: KycTier) -> Result<()> {
+    async fn update_tier_and_limits(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        tier: KycTier,
+    ) -> Result<()> {
         // Update tier in repo
-        self.repo.update_kyc_tier(tenant_id, user_id, tier as i16).await?;
+        self.repo
+            .update_kyc_tier(tenant_id, user_id, tier as i16)
+            .await?;
 
         // Note: Repository update_kyc_tier handles updating the tier column.
         // Limits are calculated dynamically or stored?
@@ -196,7 +226,14 @@ impl TierDataProvider for UserServiceTierProvider {
         Ok(())
     }
 
-    async fn emit_tier_change_event(&self, tenant_id: &TenantId, user_id: &UserId, old_tier: KycTier, new_tier: KycTier, reason: Option<String>) -> Result<()> {
+    async fn emit_tier_change_event(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        old_tier: KycTier,
+        new_tier: KycTier,
+        reason: Option<String>,
+    ) -> Result<()> {
         info!(
             tenant_id = %tenant_id,
             user_id = %user_id,

@@ -4,24 +4,24 @@
 //! in workflows. Activities are the building blocks that interact with external
 //! services, databases, and other systems.
 
-use std::sync::Arc;
-use std::time::Duration;
-use rust_decimal::Decimal;
-use tracing::{info, warn, error, instrument};
+use crate::repository::ledger::LedgerRepository;
+use crate::repository::tenant::TenantRepository;
+use crate::repository::webhook::WebhookRepository;
+use crate::service::webhook::{WebhookEventType, WebhookService};
 use ramp_common::{
     ledger::{patterns, LedgerCurrency, LedgerError},
     types::*,
 };
-use crate::repository::ledger::LedgerRepository;
-use crate::repository::webhook::WebhookRepository;
-use crate::repository::tenant::TenantRepository;
-use crate::service::webhook::{WebhookService, WebhookEventType};
 use ramp_compliance::{
     case::CaseManager,
-    types::{CaseType, CaseSeverity},
+    types::{CaseSeverity, CaseType},
 };
+use rust_decimal::Decimal;
+use std::sync::Arc;
+use std::time::Duration;
+use tracing::{info, instrument, warn};
 
-use super::{PayinWorkflowInput, TradeWorkflowInput, BankConfirmation};
+use super::{BankConfirmation, PayinWorkflowInput, TradeWorkflowInput};
 
 /// Activity context provides shared dependencies for activities
 #[derive(Clone)]
@@ -74,14 +74,20 @@ pub mod payin_activities {
     /// 3. Return the reference code for tracking
     #[instrument(skip(input), fields(intent_id = %input.intent_id, rails = %input.rails_provider))]
     pub async fn issue_instruction(input: &PayinWorkflowInput) -> Result<String, String> {
-        info!("Issuing payment instruction via {} adapter", input.rails_provider);
+        info!(
+            "Issuing payment instruction via {} adapter",
+            input.rails_provider
+        );
 
         // In simulation mode, just return the reference code
         // In production, this would call the actual rails adapter
         let reference_code = if std::env::var("TEMPORAL_MODE").unwrap_or_default() == "production" {
             // Production: Call real rails adapter
             // Example: rails_adapter.create_virtual_account(input).await?
-            info!("Production mode: Would call {} rails adapter", input.rails_provider);
+            info!(
+                "Production mode: Would call {} rails adapter",
+                input.rails_provider
+            );
 
             // Generate a unique reference code for this payment instruction
             let ref_code = format!("VA_{}_{}", input.rails_provider, input.reference_code);
@@ -98,7 +104,10 @@ pub mod payin_activities {
             ref_code
         } else {
             // Simulation mode: Return the provided reference code
-            info!("Simulation mode: Returning reference code {}", input.reference_code);
+            info!(
+                "Simulation mode: Returning reference code {}",
+                input.reference_code
+            );
             input.reference_code.clone()
         };
 
@@ -150,7 +159,8 @@ pub mod payin_activities {
                 user.clone(),
                 intent.clone(),
                 decimal_amount,
-            ).map_err(|e: LedgerError| e.to_string())?;
+            )
+            .map_err(|e: LedgerError| e.to_string())?;
 
             // Record the transaction
             ctx.ledger_repo
@@ -192,23 +202,17 @@ pub mod payin_activities {
             };
 
             // Extract intent_id from payload if present
-            let intent_id = payload.get("intent_id")
+            let intent_id = payload
+                .get("intent_id")
                 .and_then(|v| v.as_str())
                 .map(|s| IntentId(s.to_string()));
 
             // Create webhook service and queue event
-            let webhook_service = WebhookService::new(
-                ctx.webhook_repo.clone(),
-                ctx.tenant_repo.clone(),
-            );
+            let webhook_service =
+                WebhookService::new(ctx.webhook_repo.clone(), ctx.tenant_repo.clone());
 
             webhook_service
-                .queue_event(
-                    &tenant,
-                    webhook_type,
-                    intent_id.as_ref(),
-                    payload,
-                )
+                .queue_event(&tenant, webhook_type, intent_id.as_ref(), payload)
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -245,9 +249,7 @@ pub mod payin_activities {
             // Create reverse ledger transaction
             // Debit user's VND liability (reduce what we owe them)
             // Credit bank asset (money stays with us)
-            use ramp_common::ledger::{
-                LedgerTransactionBuilder, AccountType, LedgerCurrency,
-            };
+            use ramp_common::ledger::{AccountType, LedgerCurrency, LedgerTransactionBuilder};
 
             let tx = LedgerTransactionBuilder::new(
                 tenant.clone(),
@@ -260,11 +262,7 @@ pub mod payin_activities {
                 decimal_amount,
                 LedgerCurrency::VND,
             )
-            .credit(
-                AccountType::AssetBank,
-                decimal_amount,
-                LedgerCurrency::VND,
-            )
+            .credit(AccountType::AssetBank, decimal_amount, LedgerCurrency::VND)
             .build()
             .map_err(|e| e.to_string())?;
 
@@ -337,7 +335,8 @@ pub mod trade_activities {
 
             // Parse amounts
             let vnd_amount = Decimal::from(input.vnd_delta.abs());
-            let crypto_amount: Decimal = input.crypto_delta
+            let crypto_amount: Decimal = input
+                .crypto_delta
                 .parse()
                 .map_err(|_| "Invalid crypto amount")?;
             let crypto_amount = crypto_amount.abs();
@@ -359,7 +358,8 @@ pub mod trade_activities {
                 crypto_amount,
                 crypto_currency,
                 is_buy,
-            ).map_err(|e: LedgerError| e.to_string())?;
+            )
+            .map_err(|e: LedgerError| e.to_string())?;
 
             // Record the transaction
             ctx.ledger_repo
@@ -385,10 +385,7 @@ pub mod trade_activities {
     /// Creates a compliance case for the trade when it fails compliance checks
     /// or exhibits suspicious patterns.
     #[instrument(skip(), fields(intent_id = %intent_id, reason = %reason))]
-    pub async fn flag_for_review(
-        intent_id: &str,
-        reason: &str,
-    ) -> Result<String, String> {
+    pub async fn flag_for_review(intent_id: &str, reason: &str) -> Result<String, String> {
         info!("Flagging trade for manual review");
 
         let ctx = get_context();
@@ -410,7 +407,8 @@ pub mod trade_activities {
             };
 
             // Create AML case
-            let case_id = ctx.case_manager
+            let case_id = ctx
+                .case_manager
                 .create_case(
                     &tenant_id,
                     None,
@@ -440,7 +438,10 @@ pub mod trade_activities {
     ///
     /// Reverses the ledger entries for a trade that needs to be rolled back.
     #[instrument(skip(input), fields(trade_id = %input.trade_id))]
-    pub async fn reverse_settlement(input: &TradeWorkflowInput, reason: &str) -> Result<(), String> {
+    pub async fn reverse_settlement(
+        input: &TradeWorkflowInput,
+        reason: &str,
+    ) -> Result<(), String> {
         info!(reason = %reason, "Reversing trade settlement");
 
         let ctx = get_context();
@@ -452,7 +453,8 @@ pub mod trade_activities {
 
             // Parse amounts
             let vnd_amount = Decimal::from(input.vnd_delta.abs());
-            let crypto_amount: Decimal = input.crypto_delta
+            let crypto_amount: Decimal = input
+                .crypto_delta
                 .parse()
                 .map_err(|_| "Invalid crypto amount")?;
             let crypto_amount = crypto_amount.abs();
@@ -473,7 +475,8 @@ pub mod trade_activities {
                 crypto_amount,
                 crypto_currency,
                 reversal_is_buy,
-            ).map_err(|e: LedgerError| e.to_string())?;
+            )
+            .map_err(|e: LedgerError| e.to_string())?;
 
             ctx.ledger_repo
                 .record_transaction(tx)
@@ -512,12 +515,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_credit_vnd_balance_simulation() {
-        let result = payin_activities::credit_vnd_balance(
-            "tenant1",
-            "user1",
-            "intent-123",
-            1000000,
-        ).await;
+        let result =
+            payin_activities::credit_vnd_balance("tenant1", "user1", "intent-123", 1000000).await;
         assert!(result.is_ok());
     }
 
@@ -561,10 +560,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_flag_for_review_simulation() {
-        let result = trade_activities::flag_for_review(
-            "intent-123",
-            "Large transaction detected",
-        ).await;
+        let result =
+            trade_activities::flag_for_review("intent-123", "Large transaction detected").await;
         assert!(result.is_ok());
         assert!(result.unwrap().contains("CASE_"));
     }

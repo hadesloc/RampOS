@@ -4,10 +4,9 @@ use axum::{
     Json,
 };
 use ramp_common::types::TenantId;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::Arc;
 use tracing::info;
-use validator::Validate;
 
 use crate::dto::{CreateTenantRequest, SuspendTenantRequest, UpdateTenantRequest};
 use crate::error::ApiError;

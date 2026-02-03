@@ -9,13 +9,13 @@
 //! - Workflow definitions and Temporal worker
 
 pub mod config;
+pub mod event;
+pub mod jobs;
 pub mod repository;
 pub mod service;
 pub mod state_machine;
-pub mod event;
-pub mod jobs;
-pub mod workflows;
 pub mod temporal_worker;
+pub mod workflows;
 
 pub mod test_utils;
 

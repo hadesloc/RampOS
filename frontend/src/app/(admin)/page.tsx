@@ -109,8 +109,7 @@ export default function DashboardPage() {
         setStats(statsData);
         setRecentIntents(intentsData.data);
         setLoading(false);
-      } catch (err) {
-        console.warn("API unavailable, using mock data:", err);
+      } catch {
         // Fallback to mock data for development
         const mockStats: DashboardStats = {
           intents: {

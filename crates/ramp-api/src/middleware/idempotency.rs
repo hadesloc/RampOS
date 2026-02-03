@@ -142,6 +142,12 @@ pub struct MemoryIdempotencyStore {
     locks: Arc<Mutex<HashMap<String, u64>>>,
 }
 
+impl Default for MemoryIdempotencyStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryIdempotencyStore {
     pub fn new() -> Self {
         Self {
@@ -327,7 +333,7 @@ pub async fn idempotency_middleware(
         );
 
         let status = StatusCode::from_u16(stored.status_code).unwrap_or(StatusCode::OK);
-        let mut response = Response::builder()
+        let response = Response::builder()
             .status(status)
             .header("Content-Type", stored.content_type)
             .header("Idempotent-Replayed", "true")

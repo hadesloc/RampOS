@@ -147,7 +147,7 @@ impl AmlRule for DeviceAnomalyRule {
             Err(_) => {
                 // FAIL-SAFE: If device info is missing, REJECT or REQUIRE REVIEW
                 // Do NOT pass silently.
-                 return Ok(RuleResult {
+                return Ok(RuleResult {
                     passed: false,
                     reason: "Missing device information".to_string(),
                     risk_score: Some(RiskScore::new(80.0)),
@@ -340,9 +340,7 @@ impl DeviceHistoryStore for MockDeviceHistoryStore {
         let mut map = self.history.lock().unwrap();
         let mut device_map = self.device_users.lock().unwrap();
 
-        let history = map
-            .entry(user_id.to_string())
-            .or_default();
+        let history = map.entry(user_id.to_string()).or_default();
 
         // Update Devices
         if !history

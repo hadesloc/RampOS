@@ -62,8 +62,8 @@ export default function PortalPage() {
           const balanceData = await walletApi.getBalances();
           setBalances(balanceData);
         }
-      } catch (err) {
-        console.error("Failed to fetch data:", err);
+      } catch {
+        // Failed to fetch data, silently continue
       } finally {
         setIsLoadingBalances(false);
       }

@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "forge-std/Test.sol";
-import "../src/RampOSAccountFactory.sol";
-import "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+import { Test } from "forge-std/Test.sol";
+import { RampOSAccountFactory } from "../src/RampOSAccountFactory.sol";
+import { RampOSAccount } from "../src/RampOSAccount.sol";
+import { IEntryPoint } from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
+/**
+ * @title RampOSAccountFactoryTest
+ * @notice Unit tests for RampOSAccountFactory
+ */
 contract RampOSAccountFactoryTest is Test {
     RampOSAccountFactory factory;
     IEntryPoint entryPoint;
     address owner;
 
     function setUp() public {
-        // Use a mock entry point
+        // Use canonical ERC-4337 entry point address
         entryPoint = IEntryPoint(address(0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789));
 
         factory = new RampOSAccountFactory(entryPoint);
@@ -44,5 +49,10 @@ contract RampOSAccountFactoryTest is Test {
         // Calling create again should return existing address
         RampOSAccount account2 = factory.createAccount(owner, salt);
         assertEq(address(account2), addr1);
+    }
+
+    function test_FactoryImmutables() public view {
+        assertEq(address(factory.ENTRY_POINT()), address(entryPoint));
+        assertTrue(address(factory.ACCOUNT_IMPLEMENTATION()) != address(0));
     }
 }

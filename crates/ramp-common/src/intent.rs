@@ -188,7 +188,11 @@ impl PayoutState {
                 PayoutState::Timeout,
             ],
             PayoutState::Confirmed => vec![PayoutState::Completed],
-            PayoutState::Timeout => vec![PayoutState::Submitted, PayoutState::ManualReview, PayoutState::Reversed],
+            PayoutState::Timeout => vec![
+                PayoutState::Submitted,
+                PayoutState::ManualReview,
+                PayoutState::Reversed,
+            ],
             PayoutState::BankRejected => vec![PayoutState::Reversed],
             PayoutState::ManualReview => vec![
                 PayoutState::PolicyApproved,
@@ -198,9 +202,9 @@ impl PayoutState {
             ],
             PayoutState::Cancelled => vec![PayoutState::Reversed],
             // Terminal states
-            PayoutState::Completed
-            | PayoutState::RejectedByPolicy
-            | PayoutState::Reversed => vec![],
+            PayoutState::Completed | PayoutState::RejectedByPolicy | PayoutState::Reversed => {
+                vec![]
+            }
         }
     }
 

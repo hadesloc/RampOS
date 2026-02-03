@@ -24,7 +24,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use tracing::{info, warn, error, instrument};
+use tracing::{error, info, instrument, warn};
 
 /// A compensation action that can be executed to undo a workflow step
 pub struct CompensationAction {
@@ -143,10 +143,7 @@ impl CompensationChain {
             };
         }
 
-        info!(
-            steps = self.actions.len(),
-            "Starting compensation rollback"
-        );
+        info!(steps = self.actions.len(), "Starting compensation rollback");
 
         let mut result = CompensationResult {
             total: self.actions.len(),
@@ -311,17 +308,13 @@ mod tests {
     async fn test_compensation_chain_with_failure() {
         let mut chain = CompensationChain::new("test-workflow");
 
-        chain.add(CompensationAction::new("step1", async {
-            Ok(())
-        }));
+        chain.add(CompensationAction::new("step1", async { Ok(()) }));
 
         chain.add(CompensationAction::new("step2", async {
             Err("Compensation failed".to_string())
         }));
 
-        chain.add(CompensationAction::new("step3", async {
-            Ok(())
-        }));
+        chain.add(CompensationAction::new("step3", async { Ok(()) }));
 
         let result = chain.compensate().await;
 

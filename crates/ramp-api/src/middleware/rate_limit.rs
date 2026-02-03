@@ -164,6 +164,12 @@ pub struct MemoryRateLimitStore {
     history: Arc<Mutex<HashMap<String, Vec<u64>>>>,
 }
 
+impl Default for MemoryRateLimitStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryRateLimitStore {
     pub fn new() -> Self {
         Self {
@@ -189,7 +195,7 @@ impl RateLimitStore for MemoryRateLimitStore {
         let window_start = now - window_seconds;
 
         let mut history = self.history.lock().unwrap();
-        let entries = history.entry(full_key).or_insert_with(Vec::new);
+        let entries = history.entry(full_key).or_default();
 
         // Remove old entries
         entries.retain(|&ts| ts > window_start);

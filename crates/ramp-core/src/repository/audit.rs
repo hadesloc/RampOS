@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ramp_common::{types::TenantId, Result};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
 use sha2::{Digest, Sha256};
+use sqlx::{FromRow, PgPool};
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct AuditLogRow {
@@ -68,7 +68,7 @@ impl AuditRepository for PgAuditRepository {
         .bind(&event.ip_address)
         .bind(&event.user_agent)
         .bind(&event.request_id)
-        .bind(&event.created_at)
+        .bind(event.created_at)
         .bind(&entry_hash)
         .execute(&self.pool)
         .await

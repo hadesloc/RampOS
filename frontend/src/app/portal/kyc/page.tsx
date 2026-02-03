@@ -98,8 +98,8 @@ export default function KYCPage() {
     try {
       const status = await kycApi.getStatus();
       setKycStatus(status);
-    } catch (err) {
-      console.error("Failed to fetch KYC status:", err);
+    } catch {
+      // Failed to fetch KYC status silently
     } finally {
       setIsLoadingStatus(false);
     }
@@ -146,8 +146,7 @@ export default function KYCPage() {
           ? "ID_BACK"
           : "SELFIE";
       await kycApi.uploadDocument(docType, file);
-    } catch (err) {
-      console.error("Failed to upload document:", err);
+    } catch {
       setError(`Failed to upload ${type}. Please try again.`);
       setUploadedDocs((prev) => ({ ...prev, [type]: null }));
     } finally {

@@ -33,8 +33,18 @@ pub trait TenantRepository: Send + Sync {
     async fn update_status(&self, id: &TenantId, status: &str) -> Result<()>;
     async fn update_webhook_url(&self, id: &TenantId, url: &str) -> Result<()>;
     async fn update_api_key_hash(&self, id: &TenantId, hash: &str) -> Result<()>;
-    async fn update_webhook_secret(&self, id: &TenantId, hash: &str, encrypted: &[u8]) -> Result<()>;
-    async fn update_limits(&self, id: &TenantId, daily_payin: Option<Decimal>, daily_payout: Option<Decimal>) -> Result<()>;
+    async fn update_webhook_secret(
+        &self,
+        id: &TenantId,
+        hash: &str,
+        encrypted: &[u8],
+    ) -> Result<()>;
+    async fn update_limits(
+        &self,
+        id: &TenantId,
+        daily_payin: Option<Decimal>,
+        daily_payout: Option<Decimal>,
+    ) -> Result<()>;
     async fn update_config(&self, id: &TenantId, config: &serde_json::Value) -> Result<()>;
     async fn list_ids(&self) -> Result<Vec<TenantId>>;
 }
@@ -90,10 +100,10 @@ impl TenantRepository for PgTenantRepository {
         .bind(&tenant.webhook_secret_hash)
         .bind(&tenant.webhook_url)
         .bind(&tenant.config)
-        .bind(&tenant.daily_payin_limit_vnd)
-        .bind(&tenant.daily_payout_limit_vnd)
-        .bind(&tenant.created_at)
-        .bind(&tenant.updated_at)
+        .bind(tenant.daily_payin_limit_vnd)
+        .bind(tenant.daily_payout_limit_vnd)
+        .bind(tenant.created_at)
+        .bind(tenant.updated_at)
         .execute(&self.pool)
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
@@ -134,7 +144,12 @@ impl TenantRepository for PgTenantRepository {
         Ok(())
     }
 
-    async fn update_webhook_secret(&self, id: &TenantId, hash: &str, encrypted: &[u8]) -> Result<()> {
+    async fn update_webhook_secret(
+        &self,
+        id: &TenantId,
+        hash: &str,
+        encrypted: &[u8],
+    ) -> Result<()> {
         sqlx::query(
             "UPDATE tenants SET webhook_secret_hash = $1, webhook_secret_encrypted = $2, updated_at = NOW() WHERE id = $3"
         )

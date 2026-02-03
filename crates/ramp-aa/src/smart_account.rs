@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use ethers::types::{Address, Bytes, U256};
-use ramp_common::{types::{TenantId, UserId}, Result};
+use ramp_common::{
+    types::{TenantId, UserId},
+    Result,
+};
 use tracing::info;
 
 use crate::types::SmartAccountType;
@@ -93,7 +96,7 @@ impl SmartAccountService {
 
         // SimpleAccount init code hash (simplified)
         // In production, would use actual bytecode
-        let init_code_hash = keccak256(&[0u8; 32]);
+        let init_code_hash = keccak256([0u8; 32]);
 
         // CREATE2 address = keccak256(0xff ++ factory ++ salt ++ init_code_hash)[12:]
         let mut data = Vec::with_capacity(85);

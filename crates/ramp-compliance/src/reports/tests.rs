@@ -1,11 +1,10 @@
 #[cfg(test)]
 mod report_tests {
     use crate::reports::types::{DailyReport, Report}; // Add missing import
+    use crate::storage::MockDocumentStorage;
     use chrono::Utc;
     use ramp_common::types::TenantId;
     use std::sync::Arc;
-    use crate::storage::MockDocumentStorage;
-
 
     // Helper to get a mocked pool or skip tests if no DB available
     // For unit tests without DB, we need to mock the sqlx queries which is hard.

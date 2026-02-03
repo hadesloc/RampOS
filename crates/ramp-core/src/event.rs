@@ -1,14 +1,21 @@
 //! Event publishing for RampOS
 
 use async_trait::async_trait;
-use ramp_common::{types::{IntentId, TenantId, UserId}, Result};
+use ramp_common::{
+    types::{IntentId, TenantId, UserId},
+    Result,
+};
 use ramp_compliance::types::KycTier;
 
 /// Event publisher trait
 #[async_trait]
 pub trait EventPublisher: Send + Sync {
     /// Publish intent created event
-    async fn publish_intent_created(&self, intent_id: &IntentId, tenant_id: &TenantId) -> Result<()>;
+    async fn publish_intent_created(
+        &self,
+        intent_id: &IntentId,
+        tenant_id: &TenantId,
+    ) -> Result<()>;
 
     /// Publish intent status changed event
     async fn publish_intent_status_changed(
@@ -54,12 +61,13 @@ pub struct NatsEventPublisher {
 #[cfg(feature = "nats")]
 impl NatsEventPublisher {
     pub async fn new(url: &str, stream_prefix: &str) -> Result<Self> {
-        let client = async_nats::connect(url)
-            .await
-            .map_err(|e| ramp_common::Error::ExternalService {
-                service: "NATS".into(),
-                message: e.to_string(),
-            })?;
+        let client =
+            async_nats::connect(url)
+                .await
+                .map_err(|e| ramp_common::Error::ExternalService {
+                    service: "NATS".into(),
+                    message: e.to_string(),
+                })?;
 
         Ok(Self {
             client,
@@ -83,7 +91,11 @@ impl NatsEventPublisher {
 #[cfg(feature = "nats")]
 #[async_trait]
 impl EventPublisher for NatsEventPublisher {
-    async fn publish_intent_created(&self, intent_id: &IntentId, tenant_id: &TenantId) -> Result<()> {
+    async fn publish_intent_created(
+        &self,
+        intent_id: &IntentId,
+        tenant_id: &TenantId,
+    ) -> Result<()> {
         let subject = format!("{}.intent.created", self.stream_prefix);
         let payload = serde_json::json!({
             "intent_id": intent_id.0,
@@ -183,7 +195,11 @@ impl InMemoryEventPublisher {
 
 #[async_trait]
 impl EventPublisher for InMemoryEventPublisher {
-    async fn publish_intent_created(&self, intent_id: &IntentId, tenant_id: &TenantId) -> Result<()> {
+    async fn publish_intent_created(
+        &self,
+        intent_id: &IntentId,
+        tenant_id: &TenantId,
+    ) -> Result<()> {
         let event = serde_json::json!({
             "type": "intent.created",
             "intent_id": intent_id.0,

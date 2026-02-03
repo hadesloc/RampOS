@@ -6,7 +6,7 @@ use axum::{
 };
 use ethers::types::{Address, Bytes, H256, U256};
 use std::sync::Arc;
-use tracing::{info, instrument};
+use tracing::{info, instrument, warn};
 
 use crate::dto::{
     CreateAccountRequest, CreateAccountResponse, EstimateGasRequest, EstimateGasResponse,
@@ -24,6 +24,7 @@ use ramp_aa::{
     user_operation::UserOperation,
 };
 use ramp_common::types::{TenantId, UserId};
+use ramp_core::repository::{CreateSmartAccountRequest, SmartAccountRepository};
 
 /// AA Service state containing all AA-related services
 #[derive(Clone)]
@@ -32,11 +33,21 @@ pub struct AAServiceState {
     pub bundler_client: Arc<BundlerClient>,
     pub paymaster_service: Arc<PaymasterService>,
     pub chain_config: ChainConfig,
+    /// Repository for smart account ownership verification
+    pub smart_account_repo: Option<Arc<dyn SmartAccountRepository>>,
 }
 
 impl AAServiceState {
     /// Create a new AA service state from configuration
     pub fn new(chain_config: ChainConfig) -> Self {
+        Self::new_with_repo(chain_config, None)
+    }
+
+    /// Create a new AA service state with optional smart account repository
+    pub fn new_with_repo(
+        chain_config: ChainConfig,
+        smart_account_repo: Option<Arc<dyn SmartAccountRepository>>,
+    ) -> Self {
         let bundler_client = Arc::new(BundlerClient::new(chain_config.clone()));
 
         let smart_account_service = Arc::new(SmartAccountService::new(
@@ -47,9 +58,7 @@ impl AAServiceState {
 
         // Create paymaster service with signer key from environment
         // SECURITY: In production, this should come from HSM/Vault
-        let paymaster_address = chain_config
-            .paymaster_address
-            .unwrap_or_else(|| Address::zero());
+        let paymaster_address = chain_config.paymaster_address.unwrap_or_else(Address::zero);
 
         // CRITICAL: Require PAYMASTER_SIGNER_KEY in production
         let signer_key = match std::env::var("PAYMASTER_SIGNER_KEY") {
@@ -63,18 +72,28 @@ impl AAServiceState {
                 if std::env::var("RAMPOS_ENV").unwrap_or_default() == "production" {
                     panic!("CRITICAL: PAYMASTER_SIGNER_KEY cannot be empty in production");
                 }
-                tracing::warn!("PAYMASTER_SIGNER_KEY is empty - using test key (NOT FOR PRODUCTION)");
-                // Test key for development only - DO NOT USE IN PRODUCTION
-                vec![0u8; 32]
+                tracing::warn!(
+                    "PAYMASTER_SIGNER_KEY is empty - using test key (NOT FOR PRODUCTION)"
+                );
+                // Valid test key for development only - DO NOT USE IN PRODUCTION
+                // This is the scalar 1, which is a valid secp256k1 private key
+                let mut key = vec![0u8; 32];
+                key[31] = 1; // Set last byte to 1
+                key
             }
             Err(_) => {
                 // Key not set at all
                 if std::env::var("RAMPOS_ENV").unwrap_or_default() == "production" {
                     panic!("CRITICAL: PAYMASTER_SIGNER_KEY environment variable is required in production");
                 }
-                tracing::warn!("PAYMASTER_SIGNER_KEY not set - using test key (NOT FOR PRODUCTION)");
-                // Test key for development only - DO NOT USE IN PRODUCTION
-                vec![0u8; 32]
+                tracing::warn!(
+                    "PAYMASTER_SIGNER_KEY not set - using test key (NOT FOR PRODUCTION)"
+                );
+                // Valid test key for development only - DO NOT USE IN PRODUCTION
+                // This is the scalar 1, which is a valid secp256k1 private key
+                let mut key = vec![0u8; 32];
+                key[31] = 1; // Set last byte to 1
+                key
             }
         };
 
@@ -85,6 +104,7 @@ impl AAServiceState {
             bundler_client,
             paymaster_service,
             chain_config,
+            smart_account_repo,
         }
     }
 }
@@ -139,7 +159,47 @@ pub async fn create_account(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    tracing::Span::current().record("account_address", &format!("{:?}", account.address));
+    tracing::Span::current().record("account_address", format!("{:?}", account.address));
+
+    // Save the smart account mapping to database for ownership verification
+    if let Some(ref repo) = aa_state.smart_account_repo {
+        let create_req = CreateSmartAccountRequest {
+            tenant_id: req.tenant_id.clone(),
+            user_id: req.user_id.clone(),
+            address: format!("{:?}", account.address),
+            owner_address: format!("{:?}", account.owner),
+            account_type: format!("{:?}", account.account_type),
+            chain_id: aa_state.chain_config.chain_id,
+            factory_address: Some(format!("{:?}", aa_state.chain_config.entry_point_address)),
+            entry_point_address: Some(format!("{:?}", aa_state.chain_config.entry_point_address)),
+        };
+
+        if let Err(e) = repo.create(&create_req).await {
+            warn!(
+                tenant_id = %req.tenant_id,
+                user_id = %req.user_id,
+                account_address = %account.address,
+                error = %e,
+                "Failed to save smart account to database - ownership verification may fail"
+            );
+            // Don't fail the request, but log the error
+            // The account was created successfully on the AA service
+        } else {
+            info!(
+                tenant_id = %req.tenant_id,
+                user_id = %req.user_id,
+                account_address = %account.address,
+                "Smart account saved to database for ownership verification"
+            );
+        }
+    } else {
+        warn!(
+            tenant_id = %req.tenant_id,
+            user_id = %req.user_id,
+            account_address = %account.address,
+            "Smart account repository not configured - ownership verification will use fallback"
+        );
+    }
 
     info!(
         tenant_id = %req.tenant_id,
@@ -201,11 +261,8 @@ pub async fn get_account(
     //
     // NOTE: This is a simplified check. In production, you should maintain
     // a database mapping of accounts to tenants for efficient lookups.
-    let is_authorized = verify_account_ownership(
-        &aa_state,
-        &tenant_ctx.tenant_id,
-        account_address,
-    ).await;
+    let is_authorized =
+        verify_account_ownership(&aa_state, &tenant_ctx.tenant_id, account_address).await;
 
     if !is_authorized {
         tracing::warn!(
@@ -288,7 +345,7 @@ pub async fn send_user_operation(
     // Convert DTO to UserOperation
     let user_op = convert_dto_to_user_op(&req.user_operation)?;
 
-    tracing::Span::current().record("sender", &format!("{:?}", user_op.sender));
+    tracing::Span::current().record("sender", format!("{:?}", user_op.sender));
 
     // Handle sponsorship if requested
     let final_user_op = if req.sponsor {
@@ -330,7 +387,7 @@ pub async fn send_user_operation(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    tracing::Span::current().record("user_op_hash", &format!("{:?}", user_op_hash));
+    tracing::Span::current().record("user_op_hash", format!("{:?}", user_op_hash));
 
     info!(
         tenant_id = %req.tenant_id,
@@ -382,7 +439,7 @@ pub async fn estimate_gas(
     // Convert DTO to UserOperation
     let user_op = convert_dto_to_user_op(&req.user_operation)?;
 
-    tracing::Span::current().record("sender", &format!("{:?}", user_op.sender));
+    tracing::Span::current().record("sender", format!("{:?}", user_op.sender));
 
     // Estimate gas via bundler
     let estimation: GasEstimation = aa_state
@@ -525,39 +582,170 @@ pub async fn get_user_operation_receipt(
 /// Verify that a smart account address belongs to the given tenant.
 ///
 /// SECURITY: This function checks account ownership to prevent unauthorized access.
-/// In production, this should query a database that maps accounts to tenants.
-/// The current implementation is a placeholder that always returns true for
-/// non-zero addresses (indicating the account lookup infrastructure is not yet
-/// implemented).
+/// It queries the database to verify that the account was created by this tenant.
 ///
-/// TODO: Implement proper account-to-tenant mapping in database for production.
+/// Returns:
+/// - `true` if the account belongs to the tenant
+/// - `false` if the account does not belong to the tenant or is not found
 async fn verify_account_ownership(
-    _aa_state: &AAServiceState,
+    aa_state: &AAServiceState,
     tenant_id: &TenantId,
     account_address: Address,
 ) -> bool {
-    // In production, query database to verify:
-    // SELECT 1 FROM smart_accounts WHERE address = $1 AND tenant_id = $2
-    //
-    // For now, we implement a basic check:
-    // 1. Zero address is never authorized
-    // 2. Non-zero addresses require database lookup (not yet implemented)
-
+    // Zero address is never authorized
     if account_address == Address::zero() {
         return false;
     }
 
-    // TODO: Replace with actual database lookup
-    // For now, log a warning that this is a placeholder
-    tracing::warn!(
+    // Format address for database lookup
+    let address_str = format!("{:?}", account_address);
+    let chain_id = aa_state.chain_config.chain_id;
+
+    // Query database for ownership verification
+    if let Some(ref repo) = aa_state.smart_account_repo {
+        match repo
+            .verify_ownership(tenant_id, &address_str, chain_id)
+            .await
+        {
+            Ok(is_owner) => {
+                if !is_owner {
+                    warn!(
+                        tenant_id = %tenant_id,
+                        address = %account_address,
+                        chain_id = chain_id,
+                        "Account ownership verification failed - account not found for tenant"
+                    );
+                }
+                return is_owner;
+            }
+            Err(e) => {
+                // Log error but don't expose database errors to caller
+                warn!(
+                    tenant_id = %tenant_id,
+                    address = %account_address,
+                    error = %e,
+                    "Database error during account ownership verification"
+                );
+                // SECURITY: Fail closed - deny access if we can't verify ownership
+                return false;
+            }
+        }
+    }
+
+    // Fallback: No repository configured
+    // SECURITY: In production, this should fail closed (return false)
+    // For backward compatibility, we log a warning and allow access
+    // This behavior should be removed once all deployments have the repository configured
+    if std::env::var("RAMPOS_ENV").unwrap_or_default() == "production" {
+        warn!(
+            tenant_id = %tenant_id,
+            address = %account_address,
+            "SECURITY: Smart account repository not configured in production - denying access"
+        );
+        return false;
+    }
+
+    warn!(
         tenant_id = %tenant_id,
         address = %account_address,
-        "Account ownership verification is using placeholder implementation - implement database lookup for production"
+        "Smart account repository not configured - using permissive fallback (NOT FOR PRODUCTION)"
     );
 
-    // TEMPORARY: Return true for non-zero addresses
-    // In production, this MUST be replaced with actual database verification
-    // that checks the account was created by this tenant
+    // TEMPORARY: Return true for non-production environments without repository
+    // This maintains backward compatibility during migration
+    true
+}
+
+/// Verify that a smart account address belongs to the given user within a tenant.
+///
+/// SECURITY: This function provides user-level access control in addition to tenant-level.
+/// It queries the database to verify that the account was created by this specific user.
+///
+/// Use this for operations that should be restricted to the account owner only,
+/// such as sending transactions or modifying account settings.
+///
+/// Returns:
+/// - `true` if the account belongs to the user within the tenant
+/// - `false` if the account does not belong to the user or is not found
+async fn verify_account_user_ownership(
+    aa_state: &AAServiceState,
+    tenant_id: &TenantId,
+    user_id: &str,
+    account_address: Address,
+) -> bool {
+    // Zero address is never authorized
+    if account_address == Address::zero() {
+        return false;
+    }
+
+    // Empty user_id is never authorized
+    if user_id.is_empty() {
+        warn!(
+            tenant_id = %tenant_id,
+            address = %account_address,
+            "User ownership verification failed - empty user_id"
+        );
+        return false;
+    }
+
+    // Format address for database lookup
+    let address_str = format!("{:?}", account_address);
+    let chain_id = aa_state.chain_config.chain_id;
+
+    // Query database for user ownership verification
+    if let Some(ref repo) = aa_state.smart_account_repo {
+        match repo
+            .verify_user_ownership(tenant_id, user_id, &address_str, chain_id)
+            .await
+        {
+            Ok(is_owner) => {
+                if !is_owner {
+                    warn!(
+                        tenant_id = %tenant_id,
+                        user_id = %user_id,
+                        address = %account_address,
+                        chain_id = chain_id,
+                        "User ownership verification failed - account not found for user"
+                    );
+                }
+                return is_owner;
+            }
+            Err(e) => {
+                // Log error but don't expose database errors to caller
+                warn!(
+                    tenant_id = %tenant_id,
+                    user_id = %user_id,
+                    address = %account_address,
+                    error = %e,
+                    "Database error during user ownership verification"
+                );
+                // SECURITY: Fail closed - deny access if we can't verify ownership
+                return false;
+            }
+        }
+    }
+
+    // Fallback: No repository configured
+    // SECURITY: In production, this MUST fail closed
+    if std::env::var("RAMPOS_ENV").unwrap_or_default() == "production" {
+        warn!(
+            tenant_id = %tenant_id,
+            user_id = %user_id,
+            address = %account_address,
+            "SECURITY: Smart account repository not configured in production - denying access"
+        );
+        return false;
+    }
+
+    warn!(
+        tenant_id = %tenant_id,
+        user_id = %user_id,
+        address = %account_address,
+        "Smart account repository not configured - using permissive fallback (NOT FOR PRODUCTION)"
+    );
+
+    // TEMPORARY: Return true for non-production environments without repository
+    // This maintains backward compatibility during migration
     true
 }
 
@@ -698,5 +886,434 @@ mod tests {
         assert_eq!(dto.sender, "0x0000000000000000000000000000000000000000");
         assert_eq!(dto.nonce, "1");
         assert_eq!(dto.call_data, "0x1234");
+    }
+
+    #[test]
+    fn test_aa_service_state_creation() {
+        // Test that AAServiceState can be created without a repository
+        let chain_config = ChainConfig {
+            chain_id: 1,
+            name: "Ethereum Mainnet".to_string(),
+            entry_point_address: Address::zero(),
+            bundler_url: "http://localhost:4337".to_string(),
+            paymaster_address: None,
+        };
+
+        let state = AAServiceState::new(chain_config.clone());
+        assert!(state.smart_account_repo.is_none());
+        assert_eq!(state.chain_config.chain_id, 1);
+    }
+
+    #[test]
+    fn test_create_smart_account_request() {
+        let req = CreateSmartAccountRequest {
+            tenant_id: "tenant_123".to_string(),
+            user_id: "user_456".to_string(),
+            address: "0x1234567890123456789012345678901234567890".to_string(),
+            owner_address: "0x0987654321098765432109876543210987654321".to_string(),
+            account_type: "SimpleAccount".to_string(),
+            chain_id: 1,
+            factory_address: None,
+            entry_point_address: Some("0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789".to_string()),
+        };
+
+        assert_eq!(req.tenant_id, "tenant_123");
+        assert_eq!(req.user_id, "user_456");
+        assert_eq!(req.chain_id, 1);
+    }
+
+    /// Mock repository for testing
+    #[cfg(test)]
+    mod mock_repo {
+        use super::*;
+        use async_trait::async_trait;
+        use ramp_core::repository::{CreateSmartAccountRequest, SmartAccountRow};
+        use std::collections::HashMap;
+        use std::sync::Mutex;
+
+        /// Account data stored in mock: (tenant_id, user_id, chain_id)
+        pub struct MockSmartAccountRepository {
+            accounts: Mutex<HashMap<String, (String, String, u64)>>, // address -> (tenant_id, user_id, chain_id)
+        }
+
+        impl MockSmartAccountRepository {
+            pub fn new() -> Self {
+                Self {
+                    accounts: Mutex::new(HashMap::new()),
+                }
+            }
+
+            /// Add account with tenant_id only (backward compatibility)
+            pub fn add_account(&self, address: &str, tenant_id: &str, chain_id: u64) {
+                self.add_account_with_user(address, tenant_id, "", chain_id);
+            }
+
+            /// Add account with both tenant_id and user_id
+            pub fn add_account_with_user(&self, address: &str, tenant_id: &str, user_id: &str, chain_id: u64) {
+                let mut accounts = self.accounts.lock().unwrap();
+                accounts.insert(address.to_lowercase(), (tenant_id.to_string(), user_id.to_string(), chain_id));
+            }
+        }
+
+        #[async_trait]
+        impl SmartAccountRepository for MockSmartAccountRepository {
+            async fn verify_ownership(
+                &self,
+                tenant_id: &TenantId,
+                address: &str,
+                chain_id: u64,
+            ) -> ramp_common::Result<bool> {
+                let accounts = self.accounts.lock().unwrap();
+                if let Some((stored_tenant, _, stored_chain)) = accounts.get(&address.to_lowercase()) {
+                    Ok(stored_tenant == &tenant_id.0 && *stored_chain == chain_id)
+                } else {
+                    Ok(false)
+                }
+            }
+
+            async fn verify_user_ownership(
+                &self,
+                tenant_id: &TenantId,
+                user_id: &str,
+                address: &str,
+                chain_id: u64,
+            ) -> ramp_common::Result<bool> {
+                let accounts = self.accounts.lock().unwrap();
+                if let Some((stored_tenant, stored_user, stored_chain)) = accounts.get(&address.to_lowercase()) {
+                    Ok(stored_tenant == &tenant_id.0 && stored_user == user_id && *stored_chain == chain_id)
+                } else {
+                    Ok(false)
+                }
+            }
+
+            async fn get_by_address(
+                &self,
+                _address: &str,
+                _chain_id: u64,
+            ) -> ramp_common::Result<Option<SmartAccountRow>> {
+                Ok(None)
+            }
+
+            async fn get_by_address_for_tenant(
+                &self,
+                _tenant_id: &TenantId,
+                _address: &str,
+                _chain_id: u64,
+            ) -> ramp_common::Result<Option<SmartAccountRow>> {
+                Ok(None)
+            }
+
+            async fn get_by_user(
+                &self,
+                _tenant_id: &TenantId,
+                _user_id: &str,
+            ) -> ramp_common::Result<Vec<SmartAccountRow>> {
+                Ok(vec![])
+            }
+
+            async fn create(
+                &self,
+                req: &CreateSmartAccountRequest,
+            ) -> ramp_common::Result<SmartAccountRow> {
+                let mut accounts = self.accounts.lock().unwrap();
+                accounts.insert(
+                    req.address.to_lowercase(),
+                    (req.tenant_id.clone(), req.user_id.clone(), req.chain_id),
+                );
+                Err(ramp_common::Error::Database("Not implemented".to_string()))
+            }
+
+            async fn update_deployment_status(
+                &self,
+                _id: &str,
+                _is_deployed: bool,
+                _tx_hash: Option<&str>,
+            ) -> ramp_common::Result<()> {
+                Ok(())
+            }
+
+            async fn update_status(&self, _id: &str, _status: &str) -> ramp_common::Result<()> {
+                Ok(())
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_verify_account_ownership_zero_address() {
+        let chain_config = ChainConfig {
+            chain_id: 1,
+            name: "Ethereum Mainnet".to_string(),
+            entry_point_address: Address::zero(),
+            bundler_url: "http://localhost:4337".to_string(),
+            paymaster_address: None,
+        };
+
+        let state = AAServiceState::new(chain_config);
+        let tenant_id = TenantId::new("test_tenant");
+
+        // Zero address should always return false
+        let result = verify_account_ownership(&state, &tenant_id, Address::zero()).await;
+        assert!(!result);
+    }
+
+    #[tokio::test]
+    async fn test_verify_account_ownership_with_mock_repo() {
+        use mock_repo::MockSmartAccountRepository;
+
+        let mock_repo = MockSmartAccountRepository::new();
+        mock_repo.add_account("0x1234567890123456789012345678901234567890", "tenant_a", 1);
+
+        let chain_config = ChainConfig {
+            chain_id: 1,
+            name: "Ethereum Mainnet".to_string(),
+            entry_point_address: Address::zero(),
+            bundler_url: "http://localhost:4337".to_string(),
+            paymaster_address: None,
+        };
+
+        let state = AAServiceState::new_with_repo(chain_config, Some(Arc::new(mock_repo)));
+
+        let tenant_a = TenantId::new("tenant_a");
+        let tenant_b = TenantId::new("tenant_b");
+        let address: Address = "0x1234567890123456789012345678901234567890"
+            .parse()
+            .unwrap();
+
+        // Tenant A should have access
+        let result = verify_account_ownership(&state, &tenant_a, address).await;
+        assert!(result);
+
+        // Tenant B should NOT have access
+        let result = verify_account_ownership(&state, &tenant_b, address).await;
+        assert!(!result);
+    }
+
+    #[tokio::test]
+    async fn test_verify_account_ownership_unknown_address() {
+        use mock_repo::MockSmartAccountRepository;
+
+        let mock_repo = MockSmartAccountRepository::new();
+        // Don't add any accounts
+
+        let chain_config = ChainConfig {
+            chain_id: 1,
+            name: "Ethereum Mainnet".to_string(),
+            entry_point_address: Address::zero(),
+            bundler_url: "http://localhost:4337".to_string(),
+            paymaster_address: None,
+        };
+
+        let state = AAServiceState::new_with_repo(chain_config, Some(Arc::new(mock_repo)));
+
+        let tenant_id = TenantId::new("any_tenant");
+        let address: Address = "0xabcdef1234567890abcdef1234567890abcdef12"
+            .parse()
+            .unwrap();
+
+        // Unknown address should return false
+        let result = verify_account_ownership(&state, &tenant_id, address).await;
+        assert!(!result);
+    }
+
+    #[tokio::test]
+    async fn test_verify_account_ownership_chain_mismatch() {
+        use mock_repo::MockSmartAccountRepository;
+
+        let mock_repo = MockSmartAccountRepository::new();
+        // Add account on chain 1
+        mock_repo.add_account("0x1234567890123456789012345678901234567890", "tenant_a", 1);
+
+        // But state is for chain 137 (Polygon)
+        let chain_config = ChainConfig {
+            chain_id: 137,
+            name: "Polygon Mainnet".to_string(),
+            entry_point_address: Address::zero(),
+            bundler_url: "http://localhost:4337".to_string(),
+            paymaster_address: None,
+        };
+
+        let state = AAServiceState::new_with_repo(chain_config, Some(Arc::new(mock_repo)));
+
+        let tenant_id = TenantId::new("tenant_a");
+        let address: Address = "0x1234567890123456789012345678901234567890"
+            .parse()
+            .unwrap();
+
+        // Should fail because chain ID doesn't match
+        let result = verify_account_ownership(&state, &tenant_id, address).await;
+        assert!(!result);
+    }
+
+    // ==========================================================================
+    // User Ownership Verification Tests
+    // ==========================================================================
+
+    #[tokio::test]
+    async fn test_verify_user_ownership_zero_address() {
+        let chain_config = ChainConfig {
+            chain_id: 1,
+            name: "Ethereum Mainnet".to_string(),
+            entry_point_address: Address::zero(),
+            bundler_url: "http://localhost:4337".to_string(),
+            paymaster_address: None,
+        };
+
+        let state = AAServiceState::new(chain_config);
+        let tenant_id = TenantId::new("test_tenant");
+
+        // Zero address should always return false
+        let result =
+            verify_account_user_ownership(&state, &tenant_id, "user_123", Address::zero()).await;
+        assert!(!result);
+    }
+
+    #[tokio::test]
+    async fn test_verify_user_ownership_empty_user_id() {
+        let chain_config = ChainConfig {
+            chain_id: 1,
+            name: "Ethereum Mainnet".to_string(),
+            entry_point_address: Address::zero(),
+            bundler_url: "http://localhost:4337".to_string(),
+            paymaster_address: None,
+        };
+
+        let state = AAServiceState::new(chain_config);
+        let tenant_id = TenantId::new("test_tenant");
+        let address: Address = "0x1234567890123456789012345678901234567890"
+            .parse()
+            .unwrap();
+
+        // Empty user_id should always return false
+        let result = verify_account_user_ownership(&state, &tenant_id, "", address).await;
+        assert!(!result);
+    }
+
+    #[tokio::test]
+    async fn test_verify_user_ownership_with_mock_repo() {
+        use mock_repo::MockSmartAccountRepository;
+
+        let mock_repo = MockSmartAccountRepository::new();
+        mock_repo.add_account_with_user(
+            "0x1234567890123456789012345678901234567890",
+            "tenant_a",
+            "user_123",
+            1,
+        );
+
+        let chain_config = ChainConfig {
+            chain_id: 1,
+            name: "Ethereum Mainnet".to_string(),
+            entry_point_address: Address::zero(),
+            bundler_url: "http://localhost:4337".to_string(),
+            paymaster_address: None,
+        };
+
+        let state = AAServiceState::new_with_repo(chain_config, Some(Arc::new(mock_repo)));
+
+        let tenant_a = TenantId::new("tenant_a");
+        let address: Address = "0x1234567890123456789012345678901234567890"
+            .parse()
+            .unwrap();
+
+        // User 123 should have access
+        let result = verify_account_user_ownership(&state, &tenant_a, "user_123", address).await;
+        assert!(result);
+
+        // User 456 should NOT have access (different user)
+        let result = verify_account_user_ownership(&state, &tenant_a, "user_456", address).await;
+        assert!(!result);
+    }
+
+    #[tokio::test]
+    async fn test_verify_user_ownership_different_tenant() {
+        use mock_repo::MockSmartAccountRepository;
+
+        let mock_repo = MockSmartAccountRepository::new();
+        mock_repo.add_account_with_user(
+            "0x1234567890123456789012345678901234567890",
+            "tenant_a",
+            "user_123",
+            1,
+        );
+
+        let chain_config = ChainConfig {
+            chain_id: 1,
+            name: "Ethereum Mainnet".to_string(),
+            entry_point_address: Address::zero(),
+            bundler_url: "http://localhost:4337".to_string(),
+            paymaster_address: None,
+        };
+
+        let state = AAServiceState::new_with_repo(chain_config, Some(Arc::new(mock_repo)));
+
+        let tenant_b = TenantId::new("tenant_b");
+        let address: Address = "0x1234567890123456789012345678901234567890"
+            .parse()
+            .unwrap();
+
+        // Same user_id but different tenant should NOT have access
+        let result = verify_account_user_ownership(&state, &tenant_b, "user_123", address).await;
+        assert!(!result);
+    }
+
+    #[tokio::test]
+    async fn test_verify_user_ownership_chain_mismatch() {
+        use mock_repo::MockSmartAccountRepository;
+
+        let mock_repo = MockSmartAccountRepository::new();
+        mock_repo.add_account_with_user(
+            "0x1234567890123456789012345678901234567890",
+            "tenant_a",
+            "user_123",
+            1, // Chain 1
+        );
+
+        // State is for chain 137 (Polygon)
+        let chain_config = ChainConfig {
+            chain_id: 137,
+            name: "Polygon Mainnet".to_string(),
+            entry_point_address: Address::zero(),
+            bundler_url: "http://localhost:4337".to_string(),
+            paymaster_address: None,
+        };
+
+        let state = AAServiceState::new_with_repo(chain_config, Some(Arc::new(mock_repo)));
+
+        let tenant_a = TenantId::new("tenant_a");
+        let address: Address = "0x1234567890123456789012345678901234567890"
+            .parse()
+            .unwrap();
+
+        // Should fail because chain ID doesn't match
+        let result = verify_account_user_ownership(&state, &tenant_a, "user_123", address).await;
+        assert!(!result);
+    }
+
+    #[tokio::test]
+    async fn test_verify_user_ownership_unknown_address() {
+        use mock_repo::MockSmartAccountRepository;
+
+        let mock_repo = MockSmartAccountRepository::new();
+        // Don't add any accounts
+
+        let chain_config = ChainConfig {
+            chain_id: 1,
+            name: "Ethereum Mainnet".to_string(),
+            entry_point_address: Address::zero(),
+            bundler_url: "http://localhost:4337".to_string(),
+            paymaster_address: None,
+        };
+
+        let state = AAServiceState::new_with_repo(chain_config, Some(Arc::new(mock_repo)));
+
+        let tenant_id = TenantId::new("any_tenant");
+        let address: Address = "0xabcdef1234567890abcdef1234567890abcdef12"
+            .parse()
+            .unwrap();
+
+        // Unknown address should return false
+        let result =
+            verify_account_user_ownership(&state, &tenant_id, "any_user", address).await;
+        assert!(!result);
     }
 }

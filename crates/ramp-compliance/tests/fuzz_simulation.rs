@@ -1,6 +1,6 @@
 use ramp_compliance::rule_parser::RuleParser;
-use rand::{Rng, thread_rng};
 use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 
 #[test]
 fn fuzz_rule_parser_simulation() {
@@ -15,9 +15,7 @@ fn fuzz_rule_parser_simulation() {
     while start_time.elapsed() < max_duration {
         // 1. Completely random alphanumeric strings
         let len = rng.gen_range(0..1024);
-        let s: String = (0..len)
-            .map(|_| rng.sample(Alphanumeric) as char)
-            .collect();
+        let s: String = (0..len).map(|_| rng.sample(Alphanumeric) as char).collect();
 
         let _ = RuleParser::parse_json(&s);
         let _ = RuleParser::parse(&s);
@@ -62,7 +60,7 @@ fn fuzz_rule_parser_simulation() {
 
         iterations += 1;
         if iterations % 10000 == 0 {
-             // Avoid printing too much
+            // Avoid printing too much
         }
     }
 

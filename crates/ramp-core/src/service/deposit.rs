@@ -14,12 +14,12 @@ use rust_decimal::Decimal;
 use std::sync::Arc;
 use tracing::{info, warn};
 
+use crate::event::EventPublisher;
 use crate::repository::{
     intent::{IntentRepository, IntentRow},
     ledger::LedgerRepository,
     user::UserRepository,
 };
-use crate::event::EventPublisher;
 
 /// Request to create a deposit intent when an on-chain transfer is detected
 #[derive(Debug, Clone)]
@@ -112,7 +112,7 @@ impl DepositService {
             ChainId::Ethereum => 12,
             ChainId::Polygon => 128,
             ChainId::BnbChain => 15,
-            ChainId::Arbitrum => 1,  // L2 finality is faster
+            ChainId::Arbitrum => 1, // L2 finality is faster
             ChainId::Optimism => 1,
             ChainId::Base => 1,
             ChainId::Solana => 32,
@@ -229,12 +229,16 @@ impl DepositService {
         let current_state = parse_deposit_state(&intent.state);
 
         // Only process if in valid state
-        if !matches!(current_state, DepositState::Detected | DepositState::Confirming) {
+        if !matches!(
+            current_state,
+            DepositState::Detected | DepositState::Confirming
+        ) {
             return Ok(current_state);
         }
 
         // Get required confirmations from metadata
-        let required_confirmations: u32 = intent.metadata
+        let required_confirmations: u32 = intent
+            .metadata
             .get("required_confirmations")
             .and_then(|v| v.as_u64())
             .map(|v| v as u32)
@@ -464,9 +468,9 @@ fn parse_deposit_state(state: &str) -> DepositState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{MockIntentRepository, MockLedgerRepository, MockUserRepository};
     use crate::event::InMemoryEventPublisher;
     use crate::repository::user::UserRow;
+    use crate::test_utils::{MockIntentRepository, MockLedgerRepository, MockUserRepository};
     use rust_decimal_macros::dec;
 
     fn create_test_user() -> UserRow {
@@ -729,10 +733,16 @@ mod tests {
         let tenant_id = TenantId::new("tenant1");
 
         // Move through states: DETECTED -> CONFIRMED -> KYT_CHECKED
-        intent_repo.update_state(&tenant_id, &intent_id, "KYT_CHECKED").await.unwrap();
+        intent_repo
+            .update_state(&tenant_id, &intent_id, "KYT_CHECKED")
+            .await
+            .unwrap();
 
         // Credit deposit
-        service.credit_deposit(&tenant_id, &intent_id).await.unwrap();
+        service
+            .credit_deposit(&tenant_id, &intent_id)
+            .await
+            .unwrap();
 
         // Check ledger transaction was recorded
         let txs = ledger_repo.transactions.lock().unwrap();

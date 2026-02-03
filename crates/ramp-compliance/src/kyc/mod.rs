@@ -13,8 +13,8 @@ use ramp_common::{
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::types::{KycStatus, KycTier};
 use crate::storage::{DocumentStorage, DocumentType, StorageResult};
+use crate::types::{KycStatus, KycTier};
 
 /// KYC verification request
 #[derive(Debug, Clone)]

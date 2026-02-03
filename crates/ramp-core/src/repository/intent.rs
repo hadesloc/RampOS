@@ -1,14 +1,13 @@
+use crate::repository::set_rls_context;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ramp_common::{
-    intent::{IntentType, PayinState, PayoutState, TradeState},
-    types::{IdempotencyKey, IntentId, ReferenceCode, TenantId, UserId, VndAmount},
+    types::{IdempotencyKey, IntentId, ReferenceCode, TenantId, UserId},
     Result,
 };
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
-use crate::repository::set_rls_context;
 
 /// Intent database row
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
@@ -60,7 +59,12 @@ pub trait IntentRepository: Send + Sync {
     ) -> Result<Option<IntentRow>>;
 
     /// Update intent state
-    async fn update_state(&self, tenant_id: &TenantId, id: &IntentId, new_state: &str) -> Result<()>;
+    async fn update_state(
+        &self,
+        tenant_id: &TenantId,
+        id: &IntentId,
+        new_state: &str,
+    ) -> Result<()>;
 
     /// Update intent with bank confirmation
     async fn update_bank_confirmed(
@@ -72,10 +76,50 @@ pub trait IntentRepository: Send + Sync {
     ) -> Result<()>;
 
     /// Get total payin amount for a user today
-    async fn get_daily_payin_amount(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<Decimal>;
+    async fn get_daily_payin_amount(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Decimal>;
 
     /// Get total payout amount for a user today
-    async fn get_daily_payout_amount(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<Decimal>;
+    async fn get_daily_payout_amount(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Decimal>;
+
+    /// Get total withdrawal amount for a user today (on-chain withdrawals)
+    async fn get_daily_withdraw_amount(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Decimal>;
+
+    /// Get total withdrawal amount for a user this month (on-chain withdrawals)
+    async fn get_monthly_withdraw_amount(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Decimal>;
+
+    /// Get count of withdrawals in the last hour
+    async fn get_hourly_withdraw_count(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<u32>;
+
+    /// Get count of withdrawals today
+    async fn get_daily_withdraw_count(&self, tenant_id: &TenantId, user_id: &UserId)
+        -> Result<u32>;
+
+    /// Get the last withdrawal timestamp
+    async fn get_last_withdraw_time(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Option<DateTime<Utc>>>;
 
     /// List intents for a user
     async fn list_by_user(
@@ -104,8 +148,14 @@ impl PgIntentRepository {
 #[async_trait]
 impl IntentRepository for PgIntentRepository {
     async fn create(&self, intent: &IntentRow) -> Result<()> {
-        let mut tx = self.pool.begin().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
-        set_rls_context(&mut tx, &TenantId(intent.tenant_id.clone())).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, &TenantId(intent.tenant_id.clone()))
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         sqlx::query(
             r#"
@@ -126,9 +176,9 @@ impl IntentRepository for PgIntentRepository {
         .bind(&intent.intent_type)
         .bind(&intent.state)
         .bind(&intent.state_history)
-        .bind(&intent.amount)
+        .bind(intent.amount)
         .bind(&intent.currency)
-        .bind(&intent.actual_amount)
+        .bind(intent.actual_amount)
         .bind(&intent.rails_provider)
         .bind(&intent.reference_code)
         .bind(&intent.bank_tx_id)
@@ -138,21 +188,29 @@ impl IntentRepository for PgIntentRepository {
         .bind(&intent.to_address)
         .bind(&intent.metadata)
         .bind(&intent.idempotency_key)
-        .bind(&intent.created_at)
-        .bind(&intent.updated_at)
-        .bind(&intent.expires_at)
+        .bind(intent.created_at)
+        .bind(intent.updated_at)
+        .bind(intent.expires_at)
         .execute(&mut *tx)
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
-        tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         Ok(())
     }
 
     async fn get_by_id(&self, tenant_id: &TenantId, id: &IntentId) -> Result<Option<IntentRow>> {
-        let mut tx = self.pool.begin().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
-        set_rls_context(&mut tx, tenant_id).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         let row = sqlx::query_as::<_, IntentRow>(
             "SELECT * FROM intents WHERE tenant_id = $1 AND id = $2",
@@ -163,7 +221,9 @@ impl IntentRepository for PgIntentRepository {
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
-        tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
         Ok(row)
     }
 
@@ -172,8 +232,14 @@ impl IntentRepository for PgIntentRepository {
         tenant_id: &TenantId,
         key: &IdempotencyKey,
     ) -> Result<Option<IntentRow>> {
-        let mut tx = self.pool.begin().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
-        set_rls_context(&mut tx, tenant_id).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         let row = sqlx::query_as::<_, IntentRow>(
             "SELECT * FROM intents WHERE tenant_id = $1 AND idempotency_key = $2",
@@ -184,7 +250,9 @@ impl IntentRepository for PgIntentRepository {
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
-        tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
         Ok(row)
     }
 
@@ -193,8 +261,14 @@ impl IntentRepository for PgIntentRepository {
         tenant_id: &TenantId,
         code: &ReferenceCode,
     ) -> Result<Option<IntentRow>> {
-        let mut tx = self.pool.begin().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
-        set_rls_context(&mut tx, tenant_id).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         let row = sqlx::query_as::<_, IntentRow>(
             "SELECT * FROM intents WHERE tenant_id = $1 AND reference_code = $2",
@@ -205,13 +279,26 @@ impl IntentRepository for PgIntentRepository {
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
-        tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
         Ok(row)
     }
 
-    async fn update_state(&self, tenant_id: &TenantId, id: &IntentId, new_state: &str) -> Result<()> {
-        let mut tx = self.pool.begin().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
-        set_rls_context(&mut tx, tenant_id).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+    async fn update_state(
+        &self,
+        tenant_id: &TenantId,
+        id: &IntentId,
+        new_state: &str,
+    ) -> Result<()> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         sqlx::query("UPDATE intents SET state = $1 WHERE id = $2 AND tenant_id = $3")
             .bind(new_state)
@@ -221,7 +308,9 @@ impl IntentRepository for PgIntentRepository {
             .await
             .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
-        tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
         Ok(())
     }
 
@@ -232,8 +321,14 @@ impl IntentRepository for PgIntentRepository {
         bank_tx_id: &str,
         actual_amount: Decimal,
     ) -> Result<()> {
-        let mut tx = self.pool.begin().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
-        set_rls_context(&mut tx, tenant_id).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         sqlx::query(
             "UPDATE intents SET bank_tx_id = $1, actual_amount = $2 WHERE id = $3 AND tenant_id = $4",
@@ -246,13 +341,25 @@ impl IntentRepository for PgIntentRepository {
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
-        tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
         Ok(())
     }
 
-    async fn get_daily_payin_amount(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<Decimal> {
-        let mut tx = self.pool.begin().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
-        set_rls_context(&mut tx, tenant_id).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+    async fn get_daily_payin_amount(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Decimal> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         let row: (Option<Decimal>,) = sqlx::query_as(
             r#"
@@ -272,13 +379,25 @@ impl IntentRepository for PgIntentRepository {
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
-        tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
         Ok(row.0.unwrap_or(Decimal::ZERO))
     }
 
-    async fn get_daily_payout_amount(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<Decimal> {
-        let mut tx = self.pool.begin().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
-        set_rls_context(&mut tx, tenant_id).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+    async fn get_daily_payout_amount(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Decimal> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         let row: (Option<Decimal>,) = sqlx::query_as(
             r#"
@@ -298,8 +417,199 @@ impl IntentRepository for PgIntentRepository {
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
-        tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
         Ok(row.0.unwrap_or(Decimal::ZERO))
+    }
+
+    async fn get_daily_withdraw_amount(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Decimal> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        let row: (Option<Decimal>,) = sqlx::query_as(
+            r#"
+            SELECT SUM(amount)
+            FROM intents
+            WHERE tenant_id = $1
+              AND user_id = $2
+              AND intent_type = 'WITHDRAW_ONCHAIN'
+              AND state IN ('CREATED', 'POLICY_APPROVED', 'KYT_CHECKED', 'SIGNED', 'BROADCASTED', 'CONFIRMING', 'CONFIRMED', 'COMPLETED')
+              AND created_at >= CURRENT_DATE
+              AND created_at < CURRENT_DATE + INTERVAL '1 day'
+            "#,
+        )
+        .bind(&tenant_id.0)
+        .bind(&user_id.0)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        Ok(row.0.unwrap_or(Decimal::ZERO))
+    }
+
+    async fn get_monthly_withdraw_amount(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Decimal> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        let row: (Option<Decimal>,) = sqlx::query_as(
+            r#"
+            SELECT SUM(amount)
+            FROM intents
+            WHERE tenant_id = $1
+              AND user_id = $2
+              AND intent_type = 'WITHDRAW_ONCHAIN'
+              AND state IN ('CREATED', 'POLICY_APPROVED', 'KYT_CHECKED', 'SIGNED', 'BROADCASTED', 'CONFIRMING', 'CONFIRMED', 'COMPLETED')
+              AND created_at >= DATE_TRUNC('month', CURRENT_DATE)
+              AND created_at < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
+            "#,
+        )
+        .bind(&tenant_id.0)
+        .bind(&user_id.0)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        Ok(row.0.unwrap_or(Decimal::ZERO))
+    }
+
+    async fn get_hourly_withdraw_count(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<u32> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        let row: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*)
+            FROM intents
+            WHERE tenant_id = $1
+              AND user_id = $2
+              AND intent_type = 'WITHDRAW_ONCHAIN'
+              AND state NOT IN ('CANCELLED', 'REJECTED_BY_POLICY', 'REJECTED_INSUFFICIENT_BALANCE')
+              AND created_at >= NOW() - INTERVAL '1 hour'
+            "#,
+        )
+        .bind(&tenant_id.0)
+        .bind(&user_id.0)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        Ok(row.0 as u32)
+    }
+
+    async fn get_daily_withdraw_count(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<u32> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        let row: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*)
+            FROM intents
+            WHERE tenant_id = $1
+              AND user_id = $2
+              AND intent_type = 'WITHDRAW_ONCHAIN'
+              AND state NOT IN ('CANCELLED', 'REJECTED_BY_POLICY', 'REJECTED_INSUFFICIENT_BALANCE')
+              AND created_at >= CURRENT_DATE
+              AND created_at < CURRENT_DATE + INTERVAL '1 day'
+            "#,
+        )
+        .bind(&tenant_id.0)
+        .bind(&user_id.0)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        Ok(row.0 as u32)
+    }
+
+    async fn get_last_withdraw_time(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+    ) -> Result<Option<DateTime<Utc>>> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        let row: Option<(DateTime<Utc>,)> = sqlx::query_as(
+            r#"
+            SELECT created_at
+            FROM intents
+            WHERE tenant_id = $1
+              AND user_id = $2
+              AND intent_type = 'WITHDRAW_ONCHAIN'
+              AND state NOT IN ('CANCELLED', 'REJECTED_BY_POLICY', 'REJECTED_INSUFFICIENT_BALANCE')
+            ORDER BY created_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(&tenant_id.0)
+        .bind(&user_id.0)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        Ok(row.map(|r| r.0))
     }
 
     async fn list_by_user(
@@ -309,8 +619,14 @@ impl IntentRepository for PgIntentRepository {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<IntentRow>> {
-        let mut tx = self.pool.begin().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
-        set_rls_context(&mut tx, tenant_id).await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         let rows = sqlx::query_as::<_, IntentRow>(
             r#"
@@ -328,7 +644,9 @@ impl IntentRepository for PgIntentRepository {
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
-        tx.commit().await.map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
         Ok(rows)
     }
 

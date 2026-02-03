@@ -266,7 +266,7 @@ pub async fn list_cases(
         .map(parse_case_severity)
         .transpose()
         .map_err(ApiError::Validation)?;
-    let user_id = query.user_id.as_ref().map(|id| UserId::new(id));
+    let user_id = query.user_id.as_ref().map(UserId::new);
 
     let cases = app_state
         .case_manager
@@ -346,7 +346,7 @@ pub async fn update_case(
         "Updating case"
     );
 
-    let case = app_state
+    let _case = app_state
         .case_manager
         .get_case(&case_id)
         .await
@@ -754,7 +754,7 @@ pub async fn get_dashboard(
 pub async fn list_recon_batches(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
-    Query(query): Query<ListCasesQuery>,
+    Query(_query): Query<ListCasesQuery>,
 ) -> Result<Json<Vec<ReconBatchResponse>>, ApiError> {
     super::tier::check_admin_key(&headers)?;
     info!(

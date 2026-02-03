@@ -111,8 +111,8 @@ export default function WithdrawPage() {
       try {
         const data = await walletApi.getBalances();
         setBalances(data);
-      } catch (err) {
-        console.error("Failed to fetch balances:", err);
+      } catch {
+        // Failed to fetch balances silently
       } finally {
         setIsLoadingBalances(false);
       }
@@ -148,9 +148,8 @@ export default function WithdrawPage() {
       );
       vndForm.reset();
       router.push("/portal/transactions");
-    } catch (err) {
+    } catch {
       toast.error("Failed to submit withdrawal request");
-      console.error(err);
     } finally {
       setIsSubmitting(false);
     }
@@ -172,9 +171,8 @@ export default function WithdrawPage() {
       toast.success(`Withdrawal request for ${values.amount} USDT submitted`);
       cryptoForm.reset();
       router.push("/portal/transactions");
-    } catch (err) {
+    } catch {
       toast.error("Failed to submit withdrawal request");
-      console.error(err);
     } finally {
       setIsSubmitting(false);
     }

@@ -153,8 +153,8 @@ export default function TransactionsPage() {
           total: response.total,
           totalPages: response.totalPages,
         }));
-      } catch (err) {
-        console.error("Failed to fetch transactions:", err);
+      } catch {
+        // Failed to fetch transactions silently
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);

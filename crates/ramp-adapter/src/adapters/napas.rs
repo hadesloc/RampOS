@@ -1,7 +1,7 @@
 use async_trait::async_trait;
+use chrono::Utc;
 use ramp_common::Result;
 use rust_decimal::Decimal;
-use chrono::Utc;
 
 use crate::traits::RailsAdapter;
 use crate::types::*;
@@ -57,10 +57,13 @@ impl RailsAdapter for NapasAdapter {
         payload: &[u8],
         signature: Option<&str>,
     ) -> Result<PayinConfirmation> {
-        let signature = signature
-            .ok_or_else(|| ramp_common::Error::Validation("Missing webhook signature".to_string()))?;
+        let signature = signature.ok_or_else(|| {
+            ramp_common::Error::Validation("Missing webhook signature".to_string())
+        })?;
         if !self.verify_webhook_signature(payload, signature) {
-            return Err(ramp_common::Error::Validation("Invalid webhook signature".to_string()));
+            return Err(ramp_common::Error::Validation(
+                "Invalid webhook signature".to_string(),
+            ));
         }
 
         let data: serde_json::Value = serde_json::from_slice(payload)
@@ -91,10 +94,13 @@ impl RailsAdapter for NapasAdapter {
         payload: &[u8],
         signature: Option<&str>,
     ) -> Result<PayoutConfirmation> {
-        let signature = signature
-            .ok_or_else(|| ramp_common::Error::Validation("Missing webhook signature".to_string()))?;
+        let signature = signature.ok_or_else(|| {
+            ramp_common::Error::Validation("Missing webhook signature".to_string())
+        })?;
         if !self.verify_webhook_signature(payload, signature) {
-            return Err(ramp_common::Error::Validation("Invalid webhook signature".to_string()));
+            return Err(ramp_common::Error::Validation(
+                "Invalid webhook signature".to_string(),
+            ));
         }
 
         let data: serde_json::Value = serde_json::from_slice(payload)

@@ -135,7 +135,15 @@ impl CaseManager {
         offset: i64,
     ) -> Result<Vec<AmlCase>> {
         self.store
-            .list_cases(tenant_id, status, severity, assigned_to, user_id, limit, offset)
+            .list_cases(
+                tenant_id,
+                status,
+                severity,
+                assigned_to,
+                user_id,
+                limit,
+                offset,
+            )
             .await
     }
 

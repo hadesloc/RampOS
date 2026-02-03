@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ramp_common::{types::{TenantId, UserId}, Result};
+use ramp_common::{
+    types::{TenantId, UserId},
+    Result,
+};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool, QueryBuilder, Row};
@@ -25,9 +28,24 @@ pub struct UserRow {
 pub trait UserRepository: Send + Sync {
     async fn get_by_id(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<Option<UserRow>>;
     async fn create(&self, user: &UserRow) -> Result<()>;
-    async fn update_kyc_tier(&self, tenant_id: &TenantId, user_id: &UserId, tier: i16) -> Result<()>;
-    async fn update_risk_score(&self, tenant_id: &TenantId, user_id: &UserId, score: Decimal) -> Result<()>;
-    async fn update_status(&self, tenant_id: &TenantId, user_id: &UserId, status: &str) -> Result<()>;
+    async fn update_kyc_tier(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        tier: i16,
+    ) -> Result<()>;
+    async fn update_risk_score(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        score: Decimal,
+    ) -> Result<()>;
+    async fn update_status(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        status: &str,
+    ) -> Result<()>;
     async fn update_limits(
         &self,
         tenant_id: &TenantId,
@@ -76,14 +94,13 @@ impl PgUserRepository {
 #[async_trait]
 impl UserRepository for PgUserRepository {
     async fn get_by_id(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<Option<UserRow>> {
-        let row = sqlx::query_as::<_, UserRow>(
-            "SELECT * FROM users WHERE tenant_id = $1 AND id = $2",
-        )
-        .bind(&tenant_id.0)
-        .bind(&user_id.0)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        let row =
+            sqlx::query_as::<_, UserRow>("SELECT * FROM users WHERE tenant_id = $1 AND id = $2")
+                .bind(&tenant_id.0)
+                .bind(&user_id.0)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         Ok(row)
     }
@@ -142,15 +159,13 @@ impl UserRepository for PgUserRepository {
         user_id: &UserId,
         score: Decimal,
     ) -> Result<()> {
-        sqlx::query(
-            "UPDATE users SET risk_score = $1 WHERE tenant_id = $2 AND id = $3",
-        )
-        .bind(score)
-        .bind(&tenant_id.0)
-        .bind(&user_id.0)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        sqlx::query("UPDATE users SET risk_score = $1 WHERE tenant_id = $2 AND id = $3")
+            .bind(score)
+            .bind(&tenant_id.0)
+            .bind(&user_id.0)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         Ok(())
     }
@@ -161,15 +176,13 @@ impl UserRepository for PgUserRepository {
         user_id: &UserId,
         status: &str,
     ) -> Result<()> {
-        sqlx::query(
-            "UPDATE users SET status = $1 WHERE tenant_id = $2 AND id = $3",
-        )
-        .bind(status)
-        .bind(&tenant_id.0)
-        .bind(&user_id.0)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        sqlx::query("UPDATE users SET status = $1 WHERE tenant_id = $2 AND id = $3")
+            .bind(status)
+            .bind(&tenant_id.0)
+            .bind(&user_id.0)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         Ok(())
     }
@@ -246,7 +259,8 @@ impl UserRepository for PgUserRepository {
         status: Option<&str>,
         search: Option<&str>,
     ) -> Result<i64> {
-        let mut builder = QueryBuilder::new("SELECT COUNT(*) as count FROM users WHERE tenant_id = ");
+        let mut builder =
+            QueryBuilder::new("SELECT COUNT(*) as count FROM users WHERE tenant_id = ");
         builder.push_bind(&tenant_id.0);
 
         if let Some(tier) = kyc_tier {

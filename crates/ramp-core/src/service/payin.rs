@@ -1,20 +1,15 @@
 use chrono::{Duration, Utc};
-use ramp_common::{
-    intent::{PayinIntent, PayinState},
-    ledger::{patterns, AccountType, LedgerCurrency},
-    types::*,
-    Error, Result,
-};
+use ramp_common::{intent::PayinState, ledger::patterns, types::*, Error, Result};
 use rust_decimal::Decimal;
 use std::sync::Arc;
 use tracing::{info, warn};
 
-use crate::repository::{
-    intent::{IntentRepository, IntentRow, PgIntentRepository},
-    ledger::{LedgerRepository, PgLedgerRepository},
-    user::{UserRepository, PgUserRepository},
-};
 use crate::event::EventPublisher;
+use crate::repository::{
+    intent::{IntentRepository, IntentRow},
+    ledger::LedgerRepository,
+    user::UserRepository,
+};
 
 use ramp_compliance::types::KycTier;
 
@@ -149,22 +144,26 @@ impl PayinService {
         let amount = req.amount_vnd.0;
 
         if daily_limit > Decimal::ZERO && amount > daily_limit {
-             return Err(Error::UserLimitExceeded {
-                limit_type: format!("Single transaction limit exceeded. Limit: {}, Amount: {}", daily_limit, amount)
+            return Err(Error::UserLimitExceeded {
+                limit_type: format!(
+                    "Single transaction limit exceeded. Limit: {}, Amount: {}",
+                    daily_limit, amount
+                ),
             });
         }
 
         // Check cumulative daily usage
-        let daily_usage = self.intent_repo
+        let daily_usage = self
+            .intent_repo
             .get_daily_payin_amount(&req.tenant_id, &req.user_id)
             .await?;
 
         if daily_limit > Decimal::ZERO && (daily_usage + amount) > daily_limit {
-             return Err(Error::UserLimitExceeded {
+            return Err(Error::UserLimitExceeded {
                 limit_type: format!(
                     "Daily payin limit exceeded. Limit: {}, Used: {}, Requested: {}",
                     daily_limit, daily_usage, amount
-                )
+                ),
             });
         }
 
@@ -359,11 +358,11 @@ fn parse_payin_state(state: &str) -> PayinState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{MockIntentRepository, MockLedgerRepository, MockUserRepository};
     use crate::event::InMemoryEventPublisher;
     use crate::repository::user::UserRow;
-    use std::sync::Arc;
+    use crate::test_utils::{MockIntentRepository, MockLedgerRepository, MockUserRepository};
     use rust_decimal_macros::dec;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_create_payin() {

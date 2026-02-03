@@ -2,8 +2,10 @@ use super::{DocumentStorage, DocumentType, StorageError, StorageResult};
 use async_trait::async_trait;
 use aws_config::SdkConfig;
 use aws_sdk_s3::{
-    presigning::PresigningConfig, primitives::ByteStream, // config::Region unused
-    types::ServerSideEncryption, Client,
+    presigning::PresigningConfig,
+    primitives::ByteStream, // config::Region unused
+    types::ServerSideEncryption,
+    Client,
 };
 use std::time::Duration;
 use uuid::Uuid;

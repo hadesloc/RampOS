@@ -13,16 +13,15 @@
 //! 2. Send failure webhook notification
 //! 3. Update intent state to FAILED
 
-use std::time::Duration;
-use std::sync::Arc;
-use tracing::{info, warn, error, instrument};
-use ramp_common::types::*;
-use crate::workflows::{
-    PayinWorkflowInput, PayinWorkflowResult, BankConfirmation,
-    payin_activities,
-    compensation::{CompensationChain, CompensationAction},
-};
 use crate::repository::intent::IntentRepository;
+use crate::workflows::{
+    compensation::{CompensationAction, CompensationChain},
+    payin_activities, BankConfirmation, PayinWorkflowInput, PayinWorkflowResult,
+};
+use ramp_common::types::*;
+use std::sync::Arc;
+use std::time::Duration;
+use tracing::{error, info, instrument, warn};
 
 /// Payin Workflow Implementation
 ///
@@ -45,7 +44,7 @@ impl PayinWorkflow {
     pub async fn execute<F, Fut>(
         &self,
         input: PayinWorkflowInput,
-        signal_provider: F
+        signal_provider: F,
     ) -> Result<PayinWorkflowResult, String>
     where
         F: Fn(String, Duration) -> Fut,
@@ -75,7 +74,11 @@ impl PayinWorkflow {
         };
 
         // Update state to INSTRUCTION_ISSUED
-        if let Err(e) = self.intent_repo.update_state(&tenant_id, &intent_id, "INSTRUCTION_ISSUED").await {
+        if let Err(e) = self
+            .intent_repo
+            .update_state(&tenant_id, &intent_id, "INSTRUCTION_ISSUED")
+            .await
+        {
             error!(error = %e, "Failed to update state to INSTRUCTION_ISSUED");
             // Non-fatal, continue workflow
         }
@@ -113,7 +116,9 @@ impl PayinWorkflow {
                     &input.user_id,
                     &input.intent_id,
                     conf.amount,
-                ).await {
+                )
+                .await
+                {
                     error!(error = %e, "Failed to credit balance");
 
                     // Send failure webhook
@@ -126,7 +131,8 @@ impl PayinWorkflow {
                             "reason": "Credit balance failed",
                             "bank_tx_id": conf.bank_tx_id,
                         }),
-                    ).await;
+                    )
+                    .await;
 
                     return Ok(PayinWorkflowResult {
                         intent_id: input.intent_id,
@@ -137,21 +143,23 @@ impl PayinWorkflow {
                 }
 
                 // Add compensation for credit (in case later steps fail)
-                compensation_chain.add(CompensationAction::new(
-                    "credit_vnd_balance",
-                    async move {
-                        payin_activities::reverse_credit(
-                            &credit_input.tenant_id,
-                            &credit_input.user_id,
-                            &credit_input.intent_id,
-                            credit_amount,
-                            "Workflow rollback",
-                        ).await
-                    },
-                ));
+                compensation_chain.add(CompensationAction::new("credit_vnd_balance", async move {
+                    payin_activities::reverse_credit(
+                        &credit_input.tenant_id,
+                        &credit_input.user_id,
+                        &credit_input.intent_id,
+                        credit_amount,
+                        "Workflow rollback",
+                    )
+                    .await
+                }));
 
                 // Update intent to completed
-                if let Err(e) = self.intent_repo.update_state(&tenant_id, &intent_id, "COMPLETED").await {
+                if let Err(e) = self
+                    .intent_repo
+                    .update_state(&tenant_id, &intent_id, "COMPLETED")
+                    .await
+                {
                     error!(error = %e, "Failed to update state to COMPLETED");
                     // This is more serious - we've credited but can't update state
                     // In production, this would trigger an alert
@@ -169,7 +177,9 @@ impl PayinWorkflow {
                         "amount": conf.amount,
                         "settled_at": conf.settled_at,
                     }),
-                ).await {
+                )
+                .await
+                {
                     warn!(error = %e, "Failed to send completion webhook");
                     // Don't fail the workflow for webhook failure
                 }
@@ -186,7 +196,11 @@ impl PayinWorkflow {
             }
             None => {
                 // Timeout - mark as expired
-                if let Err(e) = self.intent_repo.update_state(&tenant_id, &intent_id, "EXPIRED").await {
+                if let Err(e) = self
+                    .intent_repo
+                    .update_state(&tenant_id, &intent_id, "EXPIRED")
+                    .await
+                {
                     error!(error = %e, "Failed to update state to EXPIRED");
                 }
 
@@ -199,7 +213,8 @@ impl PayinWorkflow {
                         "status": "EXPIRED",
                         "expires_at": input.expires_at,
                     }),
-                ).await;
+                )
+                .await;
 
                 Ok(PayinWorkflowResult {
                     intent_id: input.intent_id,
@@ -219,7 +234,13 @@ impl PayinWorkflow {
         &self,
         input: PayinWorkflowInput,
         signal_provider: F,
-    ) -> Result<PayinWorkflowResult, (String, Option<crate::workflows::compensation::CompensationResult>)>
+    ) -> Result<
+        PayinWorkflowResult,
+        (
+            String,
+            Option<crate::workflows::compensation::CompensationResult>,
+        ),
+    >
     where
         F: Fn(String, Duration) -> Fut,
         Fut: std::future::Future<Output = Option<BankConfirmation>>,
@@ -242,11 +263,11 @@ impl PayinWorkflow {
 mod tests {
     use super::*;
     use crate::test_utils::MockIntentRepository;
-    use crate::workflows::{PayinWorkflowInput, BankConfirmation};
+    use crate::workflows::{BankConfirmation, PayinWorkflowInput};
+    use chrono::Utc;
     use ramp_common::types::IntentId;
     use std::sync::Arc;
     use std::time::Duration;
-    use chrono::Utc;
 
     #[tokio::test]
     async fn test_payin_workflow_happy_path() {
@@ -294,9 +315,7 @@ mod tests {
         };
 
         // Mock signal provider that returns None (timeout)
-        let signal_provider = |_, _| async {
-            None
-        };
+        let signal_provider = |_, _| async { None };
 
         let result = workflow.execute(input, signal_provider).await.unwrap();
 

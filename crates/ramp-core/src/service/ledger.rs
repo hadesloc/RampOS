@@ -22,13 +22,15 @@ impl LedgerService {
         // Verify transaction is balanced
         if !tx.is_balanced() {
             return Err(ramp_common::Error::LedgerImbalance {
-                debit: tx.entries
+                debit: tx
+                    .entries
                     .iter()
                     .filter(|e| matches!(e.direction, ramp_common::ledger::EntryDirection::Debit))
                     .map(|e| e.amount)
                     .sum::<Decimal>()
                     .to_string(),
-                credit: tx.entries
+                credit: tx
+                    .entries
                     .iter()
                     .filter(|e| matches!(e.direction, ramp_common::ledger::EntryDirection::Credit))
                     .map(|e| e.amount)
@@ -57,7 +59,9 @@ impl LedgerService {
         account_type: &AccountType,
         currency: &LedgerCurrency,
     ) -> Result<Decimal> {
-        self.repo.get_balance(tenant_id, user_id, account_type, currency).await
+        self.repo
+            .get_balance(tenant_id, user_id, account_type, currency)
+            .await
     }
 
     /// Get all balances for a user
@@ -90,11 +94,13 @@ impl LedgerService {
 mod tests {
     use super::*;
     use crate::test_utils::MockLedgerRepository;
-    use std::sync::Arc;
-    use rust_decimal_macros::dec;
-    use ramp_common::ledger::{AccountType, LedgerCurrency, LedgerTransaction, LedgerEntry, EntryDirection};
-    use uuid::Uuid;
     use chrono::Utc;
+    use ramp_common::ledger::{
+        AccountType, EntryDirection, LedgerCurrency, LedgerEntry, LedgerTransaction,
+    };
+    use rust_decimal_macros::dec;
+    use std::sync::Arc;
+    use uuid::Uuid;
 
     #[tokio::test]
     async fn test_balance_calculations() {
@@ -109,10 +115,13 @@ mod tests {
             Some(&user_id),
             &AccountType::LiabilityUserVnd,
             &LedgerCurrency::VND,
-            dec!(1000000)
+            dec!(1000000),
         );
 
-        let balance = service.get_user_vnd_balance(&tenant_id, &user_id).await.unwrap();
+        let balance = service
+            .get_user_vnd_balance(&tenant_id, &user_id)
+            .await
+            .unwrap();
         assert_eq!(balance, dec!(1000000));
     }
 
@@ -155,7 +164,7 @@ mod tests {
                     created_at: Utc::now(),
                     balance_after: dec!(0),
                     sequence: 0,
-                }
+                },
             ],
             description: "test".to_string(),
             created_at: Utc::now(),
@@ -203,7 +212,7 @@ mod tests {
                     created_at: Utc::now(),
                     balance_after: dec!(0),
                     sequence: 0,
-                }
+                },
             ],
             description: "test".to_string(),
             created_at: Utc::now(),

@@ -19,27 +19,23 @@
 //! - `TEMPORAL_TASK_QUEUE`: Task queue name (default: rampos-workflows)
 //! - `TEMPORAL_WORKER_ID`: Unique worker identifier
 
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{error, info, warn, instrument};
-use serde::{Deserialize, Serialize};
+use tracing::{error, info, instrument, warn};
 
-use crate::workflows::{
-    PayinWorkflowInput, PayinWorkflowResult, BankConfirmation,
-    PayoutWorkflowInput, PayoutWorkflowResult, SettlementResult,
-    TradeWorkflowInput, TradeWorkflowResult,
-    WorkflowConfig, RetryPolicy,
-    payin_activities, trade_activities,
-};
-use crate::workflows::payout::PayoutWorkflow;
-use crate::workflows::trade::TradeWorkflow;
-use crate::workflows::payin::PayinWorkflow;
+use crate::event::EventPublisher;
 use crate::repository::intent::IntentRepository;
 use crate::repository::ledger::LedgerRepository;
-use crate::event::EventPublisher;
-use ramp_common::{Result, Error};
-use ramp_common::types::*;
+use crate::workflows::payin::PayinWorkflow;
+use crate::workflows::payout::PayoutWorkflow;
+use crate::workflows::trade::TradeWorkflow;
+use crate::workflows::{
+    BankConfirmation, PayinWorkflowInput, PayinWorkflowResult, PayoutWorkflowInput,
+    PayoutWorkflowResult, RetryPolicy, SettlementResult, TradeWorkflowInput, TradeWorkflowResult,
+};
+use ramp_common::{Error, Result};
 use ramp_compliance::aml::AmlEngine;
 
 /// Temporal execution mode
@@ -55,7 +51,11 @@ pub enum TemporalMode {
 impl TemporalMode {
     /// Parse from environment variable
     pub fn from_env() -> Self {
-        match std::env::var("TEMPORAL_MODE").unwrap_or_default().to_lowercase().as_str() {
+        match std::env::var("TEMPORAL_MODE")
+            .unwrap_or_default()
+            .to_lowercase()
+            .as_str()
+        {
             "production" | "prod" => TemporalMode::Production,
             _ => TemporalMode::Simulation,
         }
@@ -117,8 +117,7 @@ impl TemporalWorkerConfig {
             mode: TemporalMode::from_env(),
             server_url: std::env::var("TEMPORAL_SERVER_URL")
                 .unwrap_or_else(|_| "http://localhost:7233".to_string()),
-            namespace: std::env::var("TEMPORAL_NAMESPACE")
-                .unwrap_or_else(|_| "rampos".to_string()),
+            namespace: std::env::var("TEMPORAL_NAMESPACE").unwrap_or_else(|_| "rampos".to_string()),
             task_queue: std::env::var("TEMPORAL_TASK_QUEUE")
                 .unwrap_or_else(|_| "rampos-workflows".to_string()),
             worker_id: std::env::var("TEMPORAL_WORKER_ID")
@@ -187,10 +186,7 @@ pub enum WorkflowSignal {
         result: SettlementResult,
     },
     /// Cancel workflow
-    Cancel {
-        intent_id: String,
-        reason: String,
-    },
+    Cancel { intent_id: String, reason: String },
 }
 
 /// Temporal worker service
@@ -417,14 +413,17 @@ impl TemporalWorkerRefs {
         // Add to active workflows
         {
             let mut active = self.active_workflows.write().await;
-            active.insert(workflow_id.clone(), ActiveWorkflow {
-                workflow_id: workflow_id.clone(),
-                run_id: run_id.clone(),
-                task: task.task.clone(),
-                status: WorkflowStatus::Running,
-                started_at: now,
-                last_activity: now,
-            });
+            active.insert(
+                workflow_id.clone(),
+                ActiveWorkflow {
+                    workflow_id: workflow_id.clone(),
+                    run_id: run_id.clone(),
+                    task: task.task.clone(),
+                    status: WorkflowStatus::Running,
+                    started_at: now,
+                    last_activity: now,
+                },
+            );
         }
 
         // Execute the workflow with retry logic
@@ -443,7 +442,7 @@ impl TemporalWorkerRefs {
         }
 
         match result {
-            Ok(wf_result) => {
+            Ok(_wf_result) => {
                 info!(
                     workflow_id = %workflow_id,
                     "Workflow completed successfully"
@@ -496,7 +495,7 @@ impl TemporalWorkerRefs {
                     // Apply exponential backoff
                     delay = Duration::from_secs_f64(
                         (delay.as_secs_f64() * self.config.retry_policy.backoff_coefficient)
-                            .min(self.config.retry_policy.maximum_interval.as_secs_f64())
+                            .min(self.config.retry_policy.maximum_interval.as_secs_f64()),
                     );
                 }
             }
@@ -521,25 +520,32 @@ impl TemporalWorkerRefs {
     }
 
     #[instrument(skip(self), fields(intent_id = %input.intent_id))]
-    async fn execute_payin_workflow(&self, input: PayinWorkflowInput) -> Result<PayinWorkflowResult> {
+    async fn execute_payin_workflow(
+        &self,
+        input: PayinWorkflowInput,
+    ) -> Result<PayinWorkflowResult> {
         info!("Executing payin workflow");
 
         let workflow = PayinWorkflow::new(self.intent_repo.clone());
         let this = self.clone();
 
         // Execute workflow with signal provider
-        let result = workflow.execute(input, move |intent_id, timeout| {
-            let this = this.clone();
-            async move {
-                this.wait_for_bank_signal(&intent_id, timeout).await
-            }
-        }).await.map_err(|e| Error::Internal(e))?;
+        let result = workflow
+            .execute(input, move |intent_id, timeout| {
+                let this = this.clone();
+                async move { this.wait_for_bank_signal(&intent_id, timeout).await }
+            })
+            .await
+            .map_err(Error::Internal)?;
 
         Ok(result)
     }
 
     #[instrument(skip(self), fields(intent_id = %input.intent_id))]
-    async fn execute_payout_workflow(&self, input: PayoutWorkflowInput) -> Result<PayoutWorkflowResult> {
+    async fn execute_payout_workflow(
+        &self,
+        input: PayoutWorkflowInput,
+    ) -> Result<PayoutWorkflowResult> {
         let workflow = PayoutWorkflow::new(
             self.intent_repo.clone(),
             self.ledger_repo.clone(),
@@ -550,20 +556,23 @@ impl TemporalWorkerRefs {
 
         let this = self.clone();
 
-        let result = workflow.run(input, move |bank_tx_id, timeout| {
-            let this = this.clone();
-            async move {
-                this.wait_for_settlement_signal(&bank_tx_id, timeout).await
-            }
-        }).await?;
+        let result = workflow
+            .run(input, move |bank_tx_id, timeout| {
+                let this = this.clone();
+                async move { this.wait_for_settlement_signal(&bank_tx_id, timeout).await }
+            })
+            .await?;
 
         Ok(result)
     }
 
     #[instrument(skip(self), fields(intent_id = %input.intent_id, trade_id = %input.trade_id))]
-    async fn execute_trade_workflow(&self, input: TradeWorkflowInput) -> Result<TradeWorkflowResult> {
+    async fn execute_trade_workflow(
+        &self,
+        input: TradeWorkflowInput,
+    ) -> Result<TradeWorkflowResult> {
         let workflow = TradeWorkflow::new(self.intent_repo.clone());
-        let result = workflow.execute(input).await.map_err(|e| Error::Internal(e))?;
+        let result = workflow.execute(input).await.map_err(Error::Internal)?;
         Ok(result)
     }
 
@@ -588,7 +597,9 @@ impl TemporalWorkerRefs {
                 });
 
                 if let Some(idx) = pos {
-                    if let WorkflowSignal::BankConfirmation { confirmation, .. } = signals.remove(idx) {
+                    if let WorkflowSignal::BankConfirmation { confirmation, .. } =
+                        signals.remove(idx)
+                    {
                         return Some(confirmation);
                     }
                 }
@@ -619,7 +630,9 @@ impl TemporalWorkerRefs {
                 });
 
                 if let Some(idx) = pos {
-                    if let WorkflowSignal::SettlementConfirmation { result, .. } = signals.remove(idx) {
+                    if let WorkflowSignal::SettlementConfirmation { result, .. } =
+                        signals.remove(idx)
+                    {
                         return Some(result);
                     }
                 }
@@ -652,7 +665,9 @@ impl WorkflowClient {
 
     /// Start a payout workflow
     pub async fn start_payout(&self, input: PayoutWorkflowInput) -> Result<String> {
-        self.worker.start_workflow(WorkflowTask::Payout(input)).await
+        self.worker
+            .start_workflow(WorkflowTask::Payout(input))
+            .await
     }
 
     /// Start a trade workflow
@@ -668,14 +683,16 @@ impl WorkflowClient {
         amount: i64,
         settled_at: String,
     ) -> Result<()> {
-        self.worker.signal_workflow(WorkflowSignal::BankConfirmation {
-            intent_id,
-            confirmation: BankConfirmation {
-                bank_tx_id,
-                amount,
-                settled_at,
-            },
-        }).await
+        self.worker
+            .signal_workflow(WorkflowSignal::BankConfirmation {
+                intent_id,
+                confirmation: BankConfirmation {
+                    bank_tx_id,
+                    amount,
+                    settled_at,
+                },
+            })
+            .await
     }
 
     /// Signal settlement result
@@ -686,38 +703,35 @@ impl WorkflowClient {
         settled_at: Option<String>,
         rejection_reason: Option<String>,
     ) -> Result<()> {
-        self.worker.signal_workflow(WorkflowSignal::SettlementConfirmation {
-            bank_tx_id: bank_tx_id.clone(),
-            result: SettlementResult {
-                success,
-                bank_tx_id,
-                settled_at,
-                rejection_reason,
-                settled_amount: None,
-            },
-        }).await
+        self.worker
+            .signal_workflow(WorkflowSignal::SettlementConfirmation {
+                bank_tx_id: bank_tx_id.clone(),
+                result: SettlementResult {
+                    success,
+                    bank_tx_id,
+                    settled_at,
+                    rejection_reason,
+                    settled_amount: None,
+                },
+            })
+            .await
     }
 
     /// Cancel a workflow
     pub async fn cancel_workflow(&self, intent_id: String, reason: String) -> Result<()> {
-        self.worker.signal_workflow(WorkflowSignal::Cancel {
-            intent_id,
-            reason,
-        }).await
+        self.worker
+            .signal_workflow(WorkflowSignal::Cancel { intent_id, reason })
+            .await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{MockIntentRepository, MockLedgerRepository};
     use crate::event::InMemoryEventPublisher;
+    use crate::test_utils::{MockIntentRepository, MockLedgerRepository};
     use crate::workflows::BankAccountInfo;
-    use ramp_compliance::{
-        case::CaseManager,
-        InMemoryCaseStore,
-        MockTransactionHistoryStore,
-    };
+    use ramp_compliance::{case::CaseManager, InMemoryCaseStore, MockTransactionHistoryStore};
 
     #[tokio::test]
     async fn test_temporal_mode_from_env() {
@@ -914,7 +928,10 @@ mod tests {
             timestamp: "2024-01-01T00:00:00Z".to_string(),
         };
 
-        worker.start_workflow(WorkflowTask::Trade(input)).await.unwrap();
+        worker
+            .start_workflow(WorkflowTask::Trade(input))
+            .await
+            .unwrap();
 
         assert_eq!(worker.pending_count().await, 1);
     }

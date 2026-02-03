@@ -2,14 +2,13 @@
 
 use axum::{
     extract::{Extension, Path, State},
-    http::StatusCode,
     Json,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
 
-use ramp_common::types::{IntentId, TenantId};
+use ramp_common::types::IntentId;
 use ramp_core::repository::intent::{IntentRepository, IntentRow};
 
 use crate::error::ApiError;

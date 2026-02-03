@@ -17,7 +17,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { ArrowUpRight, ArrowDownRight, Wallet, Loader2 } from "lucide-react";
+import { Wallet, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { walletApi, Balance } from "@/lib/portal-api";
 import { useRouter } from "next/navigation";
@@ -81,8 +81,8 @@ export default function AssetsPage() {
       try {
         const data = await walletApi.getBalances();
         setBalances(data);
-      } catch (err) {
-        console.error("Failed to fetch balances:", err);
+      } catch {
+        // Failed to fetch balances silently
       } finally {
         setIsLoading(false);
       }

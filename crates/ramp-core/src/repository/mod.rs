@@ -1,13 +1,13 @@
 //! Repository layer - Database access
 
-use crate::repository::audit::AuditRepository;
-use ramp_common::types::{TenantId, UserId};
+use ramp_common::types::TenantId;
 use sqlx::{PgPool, Postgres, Transaction};
 use tracing::warn;
 
 pub mod audit;
 pub mod intent;
 pub mod ledger;
+pub mod smart_account;
 pub mod tenant;
 pub mod user;
 pub mod webhook;
@@ -15,6 +15,9 @@ pub mod webhook;
 pub use audit::PgAuditRepository;
 pub use intent::IntentRepository;
 pub use ledger::LedgerRepository;
+pub use smart_account::{
+    CreateSmartAccountRequest, PgSmartAccountRepository, SmartAccountRepository, SmartAccountRow,
+};
 pub use tenant::TenantRepository;
 pub use user::UserRepository;
 pub use webhook::WebhookRepository;
@@ -75,7 +78,7 @@ pub async fn log_security_event(
         INSERT INTO audit_log (
             tenant_id, actor_type, action, resource_type, details, entry_hash
         ) VALUES ($1, 'SYSTEM', $2, 'SECURITY', $3, 'hash_placeholder')
-        "#
+        "#,
     )
     .bind(&tenant_id.0)
     .bind(action)

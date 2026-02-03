@@ -1,9 +1,9 @@
 //! Example adapter implementations
 
 pub mod mock;
-pub mod vietqr;
 pub mod napas;
+pub mod vietqr;
 
 pub use mock::MockAdapter;
-pub use vietqr::VietQRAdapter;
 pub use napas::NapasAdapter;
+pub use vietqr::VietQRAdapter;

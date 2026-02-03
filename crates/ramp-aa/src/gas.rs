@@ -1,10 +1,10 @@
-use ethers::prelude::*;
-use ethers::types::{Address, Bytes, U256, transaction::eip2718::TypedTransaction};
 use crate::user_operation::UserOperation;
+use ethers::prelude::*;
+use ethers::types::{transaction::eip2718::TypedTransaction, Address, Bytes, U256};
 use ramp_common::Result;
 use std::sync::Arc;
 // use ethers::providers::Middleware; // Unused
-use ethers::providers::{Middleware, ProviderError};
+use ethers::providers::Middleware;
 
 // Removed orphan impl From<ProviderError> for ramp_common::Error
 // impl From<ProviderError> for ramp_common::Error { ... }
@@ -52,7 +52,9 @@ impl<M: Middleware> GasEstimator<M> {
 
     /// Get current gas price
     pub async fn get_gas_price(&self) -> Result<U256> {
-        self.provider.get_gas_price().await
+        self.provider
+            .get_gas_price()
+            .await
             .map_err(|e| ramp_common::Error::Provider(e.to_string()))
     }
 
@@ -68,9 +70,8 @@ impl<M: Middleware> GasEstimator<M> {
         // 16 gas per non-zero byte, 4 gas per zero byte
 
         // Helper to calc bytes cost
-        let calc_bytes_cost = |bytes: &Bytes| -> u64 {
-            bytes.iter().map(|&b| if b == 0 { 4 } else { 16 }).sum()
-        };
+        let calc_bytes_cost =
+            |bytes: &Bytes| -> u64 { bytes.iter().map(|&b| if b == 0 { 4 } else { 16 }).sum() };
 
         gas += calc_bytes_cost(&user_op.call_data);
         gas += calc_bytes_cost(&user_op.init_code);
@@ -103,7 +104,10 @@ impl<M: Middleware> GasEstimator<M> {
         // unless it's an execute call.
 
         // Estimate gas
-        let gas = self.provider.estimate_gas(&TypedTransaction::Eip1559(tx), None).await
+        let gas = self
+            .provider
+            .estimate_gas(&TypedTransaction::Eip1559(tx), None)
+            .await
             .map_err(|e| ramp_common::Error::Provider(e.to_string()))?;
 
         let gas_u64 = gas.as_u64();
@@ -132,7 +136,10 @@ impl<M: Middleware> GasEstimator<M> {
 
     /// Estimate current fees
     async fn estimate_fees(&self) -> Result<(U256, U256)> {
-        let (max_fee, max_priority) = self.provider.estimate_eip1559_fees(None).await
+        let (max_fee, max_priority) = self
+            .provider
+            .estimate_eip1559_fees(None)
+            .await
             .map_err(|e| ramp_common::Error::Provider(e.to_string()))?;
 
         Ok((max_fee, max_priority))

@@ -4,7 +4,6 @@ use ramp_common::types::*;
 use ramp_core::service::trade::{TradeExecutedRequest as ServiceRequest, TradeService};
 use std::sync::Arc;
 use tracing::{info, instrument};
-use validator::Validate;
 
 use crate::dto::{TradeExecutedRequest, TradeExecutedResponse};
 use crate::error::ApiError;
@@ -52,7 +51,7 @@ pub async fn record_trade(
     let idempotency_key = headers
         .get("Idempotency-Key")
         .and_then(|v| v.to_str().ok())
-        .map(|s| IdempotencyKey::new(s));
+        .map(IdempotencyKey::new);
 
     // Build service request
     let service_req = ServiceRequest {

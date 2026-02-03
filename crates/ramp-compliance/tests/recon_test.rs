@@ -1,6 +1,6 @@
 use chrono::{Duration, Utc};
 use ramp_compliance::reconciliation::{
-    RailsTransaction, RamposTransaction, ReconBatch, ReconConfig, ReconEngine, DiscrepancyType
+    DiscrepancyType, RailsTransaction, RamposTransaction, ReconBatch, ReconConfig, ReconEngine,
 };
 use rust_decimal::Decimal;
 
@@ -88,15 +88,27 @@ fn test_reconciliation_logic() {
     assert_eq!(batch.discrepancy_count, 3); // tx2 amount mismatch, tx3 missing in rails, bank4 missing in rampos
 
     // Verify amount mismatch
-    let amount_mismatch = batch.discrepancies.iter().find(|d| d.discrepancy_type == DiscrepancyType::AmountMismatch).unwrap();
+    let amount_mismatch = batch
+        .discrepancies
+        .iter()
+        .find(|d| d.discrepancy_type == DiscrepancyType::AmountMismatch)
+        .unwrap();
     assert_eq!(amount_mismatch.intent_id.as_deref(), Some("tx2"));
 
     // Verify missing in rails
-    let missing_in_rails = batch.discrepancies.iter().find(|d| d.discrepancy_type == DiscrepancyType::MissingInRails).unwrap();
+    let missing_in_rails = batch
+        .discrepancies
+        .iter()
+        .find(|d| d.discrepancy_type == DiscrepancyType::MissingInRails)
+        .unwrap();
     assert_eq!(missing_in_rails.intent_id.as_deref(), Some("tx3"));
 
     // Verify missing in rampos
-    let missing_in_rampos = batch.discrepancies.iter().find(|d| d.discrepancy_type == DiscrepancyType::MissingInRampos).unwrap();
+    let missing_in_rampos = batch
+        .discrepancies
+        .iter()
+        .find(|d| d.discrepancy_type == DiscrepancyType::MissingInRampos)
+        .unwrap();
     assert_eq!(missing_in_rampos.rails_tx_id.as_deref(), Some("bank4"));
 }
 

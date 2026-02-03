@@ -191,7 +191,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_sanctions_rule_no_match() {
-        let provider = Arc::new(MockSanctionsProvider { should_match: false });
+        let provider = Arc::new(MockSanctionsProvider {
+            should_match: false,
+        });
         let rule = SanctionsRule::new(provider);
 
         let ctx = RuleContext {

@@ -12,7 +12,9 @@ use std::sync::Arc;
 #[ignore]
 async fn test_case_store_integration() {
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let pool = PgPool::connect(&database_url).await.expect("Failed to connect to database");
+    let pool = PgPool::connect(&database_url)
+        .await
+        .expect("Failed to connect to database");
 
     // Initialize store and manager
     let store = Arc::new(PostgresCaseStore::new(pool.clone()));
@@ -41,7 +43,10 @@ async fn test_case_store_integration() {
         .await
         .expect("Failed to get user cases");
     assert!(!cases.is_empty());
-    let case = cases.iter().find(|c| c.id == case_id).expect("Case not found");
+    let case = cases
+        .iter()
+        .find(|c| c.id == case_id)
+        .expect("Case not found");
     assert_eq!(case.status, CaseStatus::Open);
     assert_eq!(case.case_type, CaseType::LargeTransaction);
 

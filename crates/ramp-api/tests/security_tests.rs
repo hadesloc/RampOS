@@ -112,6 +112,46 @@ impl IntentRepository for MockIntentRepository {
         Ok(rust_decimal::Decimal::ZERO)
     }
 
+    async fn get_daily_withdraw_amount(
+        &self,
+        _tenant_id: &TenantId,
+        _user_id: &ramp_common::types::UserId,
+    ) -> ramp_common::Result<rust_decimal::Decimal> {
+        Ok(rust_decimal::Decimal::ZERO)
+    }
+
+    async fn get_monthly_withdraw_amount(
+        &self,
+        _tenant_id: &TenantId,
+        _user_id: &ramp_common::types::UserId,
+    ) -> ramp_common::Result<rust_decimal::Decimal> {
+        Ok(rust_decimal::Decimal::ZERO)
+    }
+
+    async fn get_hourly_withdraw_count(
+        &self,
+        _tenant_id: &TenantId,
+        _user_id: &ramp_common::types::UserId,
+    ) -> ramp_common::Result<u32> {
+        Ok(0)
+    }
+
+    async fn get_daily_withdraw_count(
+        &self,
+        _tenant_id: &TenantId,
+        _user_id: &ramp_common::types::UserId,
+    ) -> ramp_common::Result<u32> {
+        Ok(0)
+    }
+
+    async fn get_last_withdraw_time(
+        &self,
+        _tenant_id: &TenantId,
+        _user_id: &ramp_common::types::UserId,
+    ) -> ramp_common::Result<Option<chrono::DateTime<chrono::Utc>>> {
+        Ok(None)
+    }
+
     async fn list_by_user(
         &self,
         _tenant_id: &TenantId,

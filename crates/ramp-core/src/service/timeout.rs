@@ -1,12 +1,11 @@
-use std::sync::Arc;
-use tracing::{info, warn, error};
+use crate::event::EventPublisher;
+use crate::repository::intent::{IntentRepository, IntentRow};
 use ramp_common::{
-    intent::IntentType,
     types::{IntentId, TenantId},
     Result,
 };
-use crate::repository::intent::{IntentRepository, IntentRow};
-use crate::event::EventPublisher;
+use std::sync::Arc;
+use tracing::{error, info, warn};
 
 pub struct TimeoutService {
     intent_repo: Arc<dyn IntentRepository>,
@@ -58,7 +57,9 @@ impl TimeoutService {
         );
 
         // Update state in database
-        self.intent_repo.update_state(&tenant_id, &intent_id, new_state).await?;
+        self.intent_repo
+            .update_state(&tenant_id, &intent_id, new_state)
+            .await?;
 
         // Send notification
         self.event_publisher
@@ -94,9 +95,9 @@ impl TimeoutService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::MockIntentRepository;
     use crate::event::InMemoryEventPublisher;
     use crate::repository::intent::IntentRow;
+    use crate::test_utils::MockIntentRepository;
     use chrono::Utc;
     use rust_decimal_macros::dec;
 
@@ -105,10 +106,7 @@ mod tests {
         let intent_repo = Arc::new(MockIntentRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
 
-        let service = TimeoutService::new(
-            intent_repo.clone(),
-            event_publisher.clone(),
-        );
+        let service = TimeoutService::new(intent_repo.clone(), event_publisher.clone());
 
         // Add an expired payin
         let expired_payin = IntentRow {

@@ -55,10 +55,12 @@ impl CaseStore for InMemoryCaseStore {
             .await
             .values()
             .filter(|case| &case.tenant_id == tenant_id)
-            .filter(|case| status.map_or(true, |status| case.status == status))
-            .filter(|case| severity.map_or(true, |severity| case.severity == severity))
-            .filter(|case| assigned_to.map_or(true, |assignee| case.assigned_to.as_deref() == Some(assignee)))
-            .filter(|case| user_id.map_or(true, |user_id| case.user_id.as_ref() == Some(user_id)))
+            .filter(|case| status.is_none_or(|status| case.status == status))
+            .filter(|case| severity.is_none_or(|severity| case.severity == severity))
+            .filter(|case| {
+                assigned_to.is_none_or(|assignee| case.assigned_to.as_deref() == Some(assignee))
+            })
+            .filter(|case| user_id.is_none_or(|user_id| case.user_id.as_ref() == Some(user_id)))
             .cloned()
             .collect();
 
@@ -88,10 +90,12 @@ impl CaseStore for InMemoryCaseStore {
             .await
             .values()
             .filter(|case| &case.tenant_id == tenant_id)
-            .filter(|case| status.map_or(true, |status| case.status == status))
-            .filter(|case| severity.map_or(true, |severity| case.severity == severity))
-            .filter(|case| assigned_to.map_or(true, |assignee| case.assigned_to.as_deref() == Some(assignee)))
-            .filter(|case| user_id.map_or(true, |user_id| case.user_id.as_ref() == Some(user_id)))
+            .filter(|case| status.is_none_or(|status| case.status == status))
+            .filter(|case| severity.is_none_or(|severity| case.severity == severity))
+            .filter(|case| {
+                assigned_to.is_none_or(|assignee| case.assigned_to.as_deref() == Some(assignee))
+            })
+            .filter(|case| user_id.is_none_or(|user_id| case.user_id.as_ref() == Some(user_id)))
             .count();
         Ok(count as i64)
     }
@@ -177,7 +181,10 @@ impl CaseStore for InMemoryCaseStore {
             .values()
             .filter(|case| {
                 &case.tenant_id == tenant_id
-                    && matches!(case.status, CaseStatus::Open | CaseStatus::Review | CaseStatus::Hold)
+                    && matches!(
+                        case.status,
+                        CaseStatus::Open | CaseStatus::Review | CaseStatus::Hold
+                    )
             })
             .cloned()
             .collect())
