@@ -40,6 +40,12 @@ import { TransactionRow } from "@/components/portal/transaction-row";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContainer } from "@/components/layout/page-container";
 import { useRouter } from "next/navigation";
+import {
+  Transaction,
+  TransactionFilters,
+  PaginatedResponse,
+  transactionApi,
+} from "@/lib/portal-api";
 
 // Helper Functions
 function formatCurrency(amount: string, currency: string): string {

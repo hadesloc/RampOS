@@ -99,6 +99,7 @@ export function WithdrawCard({
                                     className="absolute right-1 top-1 h-7 text-xs text-primary font-bold hover:bg-primary/10"
                                     onClick={handleMax}
                                     disabled={loading || isSubmitting}
+                                    aria-label="Use maximum balance"
                                 >
                                     MAX
                                 </Button>

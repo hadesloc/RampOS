@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { casesApi, type AmlCase } from "@/lib/api";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, FileText, AlertCircle, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { StatCard } from "@/components/dashboard/stat-card";
+import { StatusBadge } from "@/components/dashboard/status-badge";
+import { Card, CardContent } from "@/components/ui/card";
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleString("vi-VN", {
@@ -19,32 +22,32 @@ function formatDate(dateStr: string): string {
 function getSeverityColor(severity: string): string {
   switch (severity) {
     case "CRITICAL":
-      return "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-400";
+      return "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-400 border-transparent hover:bg-red-200 dark:hover:bg-red-500/25";
     case "HIGH":
-      return "bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-400";
+      return "bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-400 border-transparent hover:bg-orange-200 dark:hover:bg-orange-500/25";
     case "MEDIUM":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-400";
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-400 border-transparent hover:bg-yellow-200 dark:hover:bg-yellow-500/25";
     case "LOW":
-      return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400";
+      return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400 border-transparent hover:bg-green-200 dark:hover:bg-green-500/25";
     default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-transparent hover:bg-gray-200 dark:hover:bg-gray-700";
   }
 }
 
 function getStatusColor(status: string): string {
   switch (status) {
     case "OPEN":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-400";
+      return "bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-400 border-transparent hover:bg-blue-200 dark:hover:bg-blue-500/25";
     case "REVIEW":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-400";
+      return "bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-400 border-transparent hover:bg-purple-200 dark:hover:bg-purple-500/25";
     case "HOLD":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-400";
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-400 border-transparent hover:bg-yellow-200 dark:hover:bg-yellow-500/25";
     case "RELEASED":
-      return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400";
+      return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400 border-transparent hover:bg-green-200 dark:hover:bg-green-500/25";
     case "REPORTED":
-      return "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-400";
+      return "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-400 border-transparent hover:bg-red-200 dark:hover:bg-red-500/25";
     default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-transparent hover:bg-gray-200 dark:hover:bg-gray-700";
   }
 }
 
@@ -128,18 +131,26 @@ export default function CompliancePage() {
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-lg border bg-card p-4">
-          <div className="text-sm text-muted-foreground">Total Cases</div>
-          <div className="text-2xl font-bold">{stats.total}</div>
-        </div>
-        <div className="rounded-lg border bg-card p-4">
-          <div className="text-sm text-muted-foreground">Open Cases</div>
-          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.open}</div>
-        </div>
-        <div className="rounded-lg border bg-card p-4">
-          <div className="text-sm text-muted-foreground">Critical</div>
-          <div className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.critical}</div>
-        </div>
+        <StatCard
+            title="Total Cases"
+            value={stats.total}
+            icon={<FileText className="h-4 w-4" />}
+            loading={loading}
+        />
+        <StatCard
+            title="Open Cases"
+            value={stats.open}
+            icon={<AlertCircle className="h-4 w-4" />}
+            loading={loading}
+            className={stats.open > 0 ? "border-blue-200 dark:border-blue-800" : ""}
+        />
+        <StatCard
+            title="Critical Issues"
+            value={stats.critical}
+            icon={<ShieldAlert className="h-4 w-4" />}
+            loading={loading}
+            className={stats.critical > 0 ? "border-red-200 dark:border-red-800" : ""}
+        />
       </div>
 
       {/* Filters */}
@@ -171,7 +182,7 @@ export default function CompliancePage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-md border">
+      <div className="rounded-md border bg-card">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -210,22 +221,17 @@ export default function CompliancePage() {
                 </td>
                 <td className="px-4 py-3">{c.case_type}</td>
                 <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getSeverityColor(
-                      c.severity
-                    )}`}
-                  >
-                    {c.severity}
-                  </span>
+                  <StatusBadge
+                    status={c.severity}
+                    className={getSeverityColor(c.severity)}
+                    showDot
+                  />
                 </td>
                 <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(
-                      c.status
-                    )}`}
-                  >
-                    {c.status}
-                  </span>
+                  <StatusBadge
+                    status={c.status}
+                    className={getStatusColor(c.status)}
+                  />
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {c.assigned_to || "Unassigned"}
@@ -235,27 +241,33 @@ export default function CompliancePage() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2">
-                      <button
-                        className="text-blue-600 dark:text-blue-400 hover:underline text-xs"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                         onClick={() => alert(`View details for ${c.id}`)}
                       >
                         View
-                      </button>
+                      </Button>
                       {c.status === 'OPEN' && (
-                          <button
-                            className="text-purple-600 dark:text-purple-400 hover:underline text-xs"
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-purple-600 dark:text-purple-400 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20"
                             onClick={() => handleStatusUpdate(c.id, 'REVIEW')}
                           >
                             Review
-                          </button>
+                          </Button>
                       )}
                       {(c.status === 'OPEN' || c.status === 'REVIEW') && (
-                          <button
-                            className="text-green-600 dark:text-green-400 hover:underline text-xs"
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-green-600 dark:text-green-400 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20"
                             onClick={() => handleStatusUpdate(c.id, 'RELEASED')}
                           >
                             Release
-                          </button>
+                          </Button>
                       )}
                   </div>
                 </td>

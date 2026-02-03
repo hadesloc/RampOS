@@ -112,7 +112,7 @@ export function DepositCard({
                                             <p className="font-mono text-sm w-full truncate">{walletAddress}</p>
                                         </div>
                                          <div className="flex justify-end">
-                                            <Button variant="outline" size="sm" className="gap-2 h-8" onClick={() => navigator.clipboard.writeText(walletAddress)}>
+                                            <Button variant="outline" size="sm" className="gap-2 h-8" onClick={() => navigator.clipboard.writeText(walletAddress)} aria-label="Copy wallet address">
                                                 <Copy className="h-3.5 w-3.5" /> Copy Address
                                             </Button>
                                         </div>

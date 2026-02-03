@@ -156,18 +156,20 @@ export function PortalSidebar() {
                              <div className={cn("hidden md:block", !isCollapsed && "hidden")}>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <Link
-                                        href={item.href}
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
                                         className={cn(
-                                            "flex h-10 w-full items-center justify-center rounded-md transition-colors hover:bg-primary/5 hover:text-foreground",
-                                            isActive
-                                            ? "bg-primary/10 text-primary"
-                                            : "text-muted-foreground"
+                                            "h-10 w-10 rounded-md transition-colors hover:bg-primary/5 hover:text-foreground",
+                                            isActive ? "bg-primary/10 text-primary" : "text-muted-foreground"
                                         )}
-                                        >
-                                        <item.icon className="h-5 w-5" />
-                                        <span className="sr-only">{item.title}</span>
+                                        asChild
+                                    >
+                                        <Link href={item.href}>
+                                            <item.icon className="h-5 w-5" />
+                                            <span className="sr-only">{item.title}</span>
                                         </Link>
+                                    </Button>
                                     </TooltipTrigger>
                                     <TooltipContent side="right" className="font-medium">
                                         {item.title}

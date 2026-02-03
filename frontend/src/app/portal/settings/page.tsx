@@ -18,6 +18,7 @@ import { Shield, User, Bell, Key, Loader2, LogOut } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContainer } from "@/components/layout/page-container";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/auth-context";
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(false);

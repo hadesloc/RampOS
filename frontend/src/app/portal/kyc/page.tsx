@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Clock, CheckCircle2, XCircle, AlertCircle, Loader2, Upload, Camera } from "lucide-react";
+import { KYCStatus, kycApi } from "@/lib/portal-api";
+import { useAuth } from "@/contexts/auth-context";
 import {
   Card,
   CardContent,
