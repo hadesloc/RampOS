@@ -9,6 +9,7 @@ use chrono::{DateTime, Datelike, Utc};
 use ramp_common::{ledger::*, types::*, Result};
 use rust_decimal::Decimal;
 use std::sync::{Arc, Mutex};
+use subtle::ConstantTimeEq;
 
 #[derive(Clone)]
 pub struct MockIntentRepository {
@@ -714,7 +715,13 @@ impl TenantRepository for MockTenantRepository {
 
     async fn get_by_api_key_hash(&self, hash: &str) -> Result<Option<TenantRow>> {
         let tenants = self.tenants.lock().unwrap();
-        Ok(tenants.iter().find(|t| t.api_key_hash == hash).cloned())
+        // SECURITY: Use constant-time comparison to prevent timing attacks
+        Ok(tenants.iter().find(|t| {
+            let stored = t.api_key_hash.as_bytes();
+            let provided = hash.as_bytes();
+            // Only compare if lengths match to avoid early return on length mismatch
+            stored.len() == provided.len() && bool::from(stored.ct_eq(provided))
+        }).cloned())
     }
 
     async fn create(&self, tenant: &TenantRow) -> Result<()> {

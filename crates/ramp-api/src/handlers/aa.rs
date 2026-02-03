@@ -39,15 +39,24 @@ pub struct AAServiceState {
 
 impl AAServiceState {
     /// Create a new AA service state from configuration
-    pub fn new(chain_config: ChainConfig) -> Self {
+    ///
+    /// # Errors
+    /// Returns an error if PAYMASTER_SIGNER_KEY is not set or is invalid
+    pub fn new(chain_config: ChainConfig) -> Result<Self, anyhow::Error> {
         Self::new_with_repo(chain_config, None)
     }
 
     /// Create a new AA service state with optional smart account repository
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - PAYMASTER_SIGNER_KEY environment variable is not set
+    /// - PAYMASTER_SIGNER_KEY is empty
+    /// - PAYMASTER_SIGNER_KEY is not a valid hex string
     pub fn new_with_repo(
         chain_config: ChainConfig,
         smart_account_repo: Option<Arc<dyn SmartAccountRepository>>,
-    ) -> Self {
+    ) -> Result<Self, anyhow::Error> {
         let bundler_client = Arc::new(BundlerClient::new(chain_config.clone()));
 
         let smart_account_service = Arc::new(SmartAccountService::new(
@@ -60,42 +69,65 @@ impl AAServiceState {
         // SECURITY: In production, this should come from HSM/Vault
         let paymaster_address = chain_config.paymaster_address.unwrap_or_else(Address::zero);
 
-        // CRITICAL: Require PAYMASTER_SIGNER_KEY in production
+        // CRITICAL: PAYMASTER_SIGNER_KEY is always required - no fallback keys
         let signer_key = match std::env::var("PAYMASTER_SIGNER_KEY") {
             Ok(key) if !key.is_empty() => {
                 // Expect hex-encoded private key (32 bytes = 64 hex chars)
                 hex::decode(key.trim_start_matches("0x"))
-                    .expect("PAYMASTER_SIGNER_KEY must be a valid hex string")
+                    .map_err(|e| anyhow::anyhow!("PAYMASTER_SIGNER_KEY must be a valid hex string: {}", e))?
             }
             Ok(_) => {
-                // Empty key provided
-                if std::env::var("RAMPOS_ENV").unwrap_or_default() == "production" {
-                    panic!("CRITICAL: PAYMASTER_SIGNER_KEY cannot be empty in production");
-                }
-                tracing::warn!(
-                    "PAYMASTER_SIGNER_KEY is empty - using test key (NOT FOR PRODUCTION)"
-                );
-                // Valid test key for development only - DO NOT USE IN PRODUCTION
-                // This is the scalar 1, which is a valid secp256k1 private key
-                let mut key = vec![0u8; 32];
-                key[31] = 1; // Set last byte to 1
-                key
+                // Empty key provided - always error, no fallback
+                return Err(anyhow::anyhow!(
+                    "PAYMASTER_SIGNER_KEY environment variable cannot be empty"
+                ));
             }
             Err(_) => {
-                // Key not set at all
-                if std::env::var("RAMPOS_ENV").unwrap_or_default() == "production" {
-                    panic!("CRITICAL: PAYMASTER_SIGNER_KEY environment variable is required in production");
-                }
-                tracing::warn!(
-                    "PAYMASTER_SIGNER_KEY not set - using test key (NOT FOR PRODUCTION)"
-                );
-                // Valid test key for development only - DO NOT USE IN PRODUCTION
-                // This is the scalar 1, which is a valid secp256k1 private key
-                let mut key = vec![0u8; 32];
-                key[31] = 1; // Set last byte to 1
-                key
+                // Key not set at all - always error, no fallback
+                return Err(anyhow::anyhow!(
+                    "PAYMASTER_SIGNER_KEY environment variable is required"
+                ));
             }
         };
+
+        let paymaster_service = Arc::new(PaymasterService::new(paymaster_address, signer_key));
+
+        Ok(Self {
+            smart_account_service,
+            bundler_client,
+            paymaster_service,
+            chain_config,
+            smart_account_repo,
+        })
+    }
+
+    /// Create a new AA service state for testing only
+    /// This uses a dummy signer key and should NEVER be used in production
+    #[cfg(test)]
+    pub fn new_for_testing(chain_config: ChainConfig) -> Self {
+        Self::new_with_repo_for_testing(chain_config, None)
+    }
+
+    /// Create a new AA service state with optional repository for testing only
+    /// This uses a dummy signer key and should NEVER be used in production
+    #[cfg(test)]
+    pub fn new_with_repo_for_testing(
+        chain_config: ChainConfig,
+        smart_account_repo: Option<Arc<dyn SmartAccountRepository>>,
+    ) -> Self {
+        let bundler_client = Arc::new(BundlerClient::new(chain_config.clone()));
+
+        let smart_account_service = Arc::new(SmartAccountService::new(
+            chain_config.chain_id,
+            chain_config.entry_point_address,
+            chain_config.entry_point_address,
+        ));
+
+        let paymaster_address = chain_config.paymaster_address.unwrap_or_else(Address::zero);
+
+        // Test-only key - the scalar 1, which is a valid secp256k1 private key
+        let mut signer_key = vec![0u8; 32];
+        signer_key[31] = 1;
 
         let paymaster_service = Arc::new(PaymasterService::new(paymaster_address, signer_key));
 
@@ -648,12 +680,12 @@ async fn verify_account_ownership(
     warn!(
         tenant_id = %tenant_id,
         address = %account_address,
-        "Smart account repository not configured - using permissive fallback (NOT FOR PRODUCTION)"
+        "Smart account repository not configured - denying access (fail closed)"
     );
 
-    // TEMPORARY: Return true for non-production environments without repository
-    // This maintains backward compatibility during migration
-    true
+    // SECURITY: Fail closed - deny access when repository is not configured
+    // This ensures that without proper database configuration, no access is granted
+    false
 }
 
 /// Verify that a smart account address belongs to the given user within a tenant.
@@ -741,12 +773,12 @@ async fn verify_account_user_ownership(
         tenant_id = %tenant_id,
         user_id = %user_id,
         address = %account_address,
-        "Smart account repository not configured - using permissive fallback (NOT FOR PRODUCTION)"
+        "Smart account repository not configured - denying access (fail closed)"
     );
 
-    // TEMPORARY: Return true for non-production environments without repository
-    // This maintains backward compatibility during migration
-    true
+    // SECURITY: Fail closed - deny access when repository is not configured
+    // This ensures that without proper database configuration, no access is granted
+    false
 }
 
 /// Convert DTO to UserOperation
@@ -899,7 +931,7 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new(chain_config.clone());
+        let state = AAServiceState::new_for_testing(chain_config.clone());
         assert!(state.smart_account_repo.is_none());
         assert_eq!(state.chain_config.chain_id, 1);
     }
@@ -1048,7 +1080,7 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new(chain_config);
+        let state = AAServiceState::new_for_testing(chain_config);
         let tenant_id = TenantId::new("test_tenant");
 
         // Zero address should always return false
@@ -1071,7 +1103,7 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new_with_repo(chain_config, Some(Arc::new(mock_repo)));
+        let state = AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
 
         let tenant_a = TenantId::new("tenant_a");
         let tenant_b = TenantId::new("tenant_b");
@@ -1103,7 +1135,7 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new_with_repo(chain_config, Some(Arc::new(mock_repo)));
+        let state = AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
 
         let tenant_id = TenantId::new("any_tenant");
         let address: Address = "0xabcdef1234567890abcdef1234567890abcdef12"
@@ -1132,7 +1164,7 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new_with_repo(chain_config, Some(Arc::new(mock_repo)));
+        let state = AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
 
         let tenant_id = TenantId::new("tenant_a");
         let address: Address = "0x1234567890123456789012345678901234567890"
@@ -1158,7 +1190,7 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new(chain_config);
+        let state = AAServiceState::new_for_testing(chain_config);
         let tenant_id = TenantId::new("test_tenant");
 
         // Zero address should always return false
@@ -1177,7 +1209,7 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new(chain_config);
+        let state = AAServiceState::new_for_testing(chain_config);
         let tenant_id = TenantId::new("test_tenant");
         let address: Address = "0x1234567890123456789012345678901234567890"
             .parse()
@@ -1208,7 +1240,7 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new_with_repo(chain_config, Some(Arc::new(mock_repo)));
+        let state = AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
 
         let tenant_a = TenantId::new("tenant_a");
         let address: Address = "0x1234567890123456789012345678901234567890"
@@ -1244,7 +1276,7 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new_with_repo(chain_config, Some(Arc::new(mock_repo)));
+        let state = AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
 
         let tenant_b = TenantId::new("tenant_b");
         let address: Address = "0x1234567890123456789012345678901234567890"
@@ -1277,7 +1309,7 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new_with_repo(chain_config, Some(Arc::new(mock_repo)));
+        let state = AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
 
         let tenant_a = TenantId::new("tenant_a");
         let address: Address = "0x1234567890123456789012345678901234567890"
@@ -1304,7 +1336,7 @@ mod tests {
             paymaster_address: None,
         };
 
-        let state = AAServiceState::new_with_repo(chain_config, Some(Arc::new(mock_repo)));
+        let state = AAServiceState::new_with_repo_for_testing(chain_config, Some(Arc::new(mock_repo)));
 
         let tenant_id = TenantId::new("any_tenant");
         let address: Address = "0xabcdef1234567890abcdef1234567890abcdef12"

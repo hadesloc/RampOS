@@ -48,6 +48,7 @@ contract RampOSAccountFactory {
      * @return account The created or existing account instance
      */
     function createAccount(address owner, uint256 salt) external returns (RampOSAccount account) {
+        require(owner != address(0), "Invalid owner");
         address addr = getAddress(owner, salt);
 
         // Check if already deployed - return existing account

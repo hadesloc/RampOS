@@ -3,6 +3,7 @@
 /cache
 /node_modules
 /.env
+/.next/
 *.log
 *.pem
 *.key
@@ -15,3 +16,16 @@ k8s/base/secret.yaml
 !k8s/base/secret.example.yaml
 
 nul
+
+# Fuzz artifacts
+**/fuzz/target/
+
+# Semgrep results
+semgrep*.json
+
+# Test files
+test_*.txt
+
+# Audit artifacts
+audit_results/
+.sisyphus/

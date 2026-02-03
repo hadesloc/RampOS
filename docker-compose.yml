@@ -43,7 +43,7 @@ services:
         reservations:
           cpus: '0.05'
           memory: 64M
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-dev_redis_pass}
     volumes:
       - redis_data:/data
     healthcheck:

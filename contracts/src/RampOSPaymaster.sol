@@ -100,9 +100,11 @@ contract RampOSPaymaster is IPaymaster, Ownable {
         uint48 validAfter = uint48(bytes6(paymasterData[38:44]));
         bytes calldata signature = paymasterData[44:109];
 
-        // Verify signature
-        bytes32 hash = keccak256(abi.encodePacked(userOpHash, tenantId, validUntil, validAfter))
-            .toEthSignedMessageHash();
+        // Verify signature (includes chainid and contract address to prevent cross-chain replay)
+        bytes32 hash = keccak256(abi.encodePacked(
+            userOpHash, tenantId, validUntil, validAfter,
+            block.chainid, address(this)
+        )).toEthSignedMessageHash();
 
         if (hash.recover(signature) != verifyingSigner) {
             revert InvalidSignature();
@@ -216,6 +218,7 @@ contract RampOSPaymaster is IPaymaster, Ownable {
     /// @dev Only callable by owner. Emits SignerUpdated event.
     /// @param _signer The new signer address
     function setSigner(address _signer) external onlyOwner {
+        require(_signer != address(0), "Invalid signer");
         emit SignerUpdated(verifyingSigner, _signer);
         verifyingSigner = _signer;
     }

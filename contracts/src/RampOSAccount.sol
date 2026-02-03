@@ -143,6 +143,7 @@ contract RampOSAccount is BaseAccount, Initializable, UUPSUpgradeable {
 
     /// @notice Initialize the account with an owner
     function initialize(address anOwner) public virtual initializer {
+        require(anOwner != address(0), "Invalid owner");
         owner = anOwner;
         emit AccountInitialized(anOwner);
     }
@@ -160,9 +161,9 @@ contract RampOSAccount is BaseAccount, Initializable, UUPSUpgradeable {
         onlyOwnerOrEntryPoint
         checkSessionKeyPermissions(dest, value, data)
     {
-        _call(dest, value, data);
-        // Clear pending session key after execution
+        // Clear pending session key BEFORE external call to prevent reentrancy
         _pendingSessionKey = address(0);
+        _call(dest, value, data);
     }
 
     /// @notice Execute a batch of transactions
@@ -182,12 +183,12 @@ contract RampOSAccount is BaseAccount, Initializable, UUPSUpgradeable {
             }
         }
 
+        // Clear pending session key BEFORE external calls to prevent reentrancy
+        _pendingSessionKey = address(0);
+
         for (uint256 i = 0; i < dests.length; i++) {
             _call(dests[i], values[i], datas[i]);
         }
-
-        // Clear pending session key after execution
-        _pendingSessionKey = address(0);
     }
 
     /// @notice Add a session key with permissions
@@ -236,13 +237,21 @@ contract RampOSAccount is BaseAccount, Initializable, UUPSUpgradeable {
     }
 
     /// @notice Add a session key with raw permissionsHash (legacy compatibility)
-    /// @dev This creates a session key with unlimited permissions
+    /// @dev DEPRECATED: This creates a session key with unlimited permissions.
+    ///      Use addSessionKey() with explicit permissions instead.
+    ///      At least one limit must be specified to prevent unlimited access.
     function addSessionKeyLegacy(
         address key,
         uint48 validAfter,
         uint48 validUntil,
         bytes32 permissionsHash
     ) external onlyOwner {
+        // Require valid time bounds to prevent unlimited session keys
+        require(validUntil > validAfter, "Invalid time bounds");
+        require(validUntil > block.timestamp, "Session already expired");
+        // Limit session duration to 30 days max for legacy keys
+        require(validUntil <= block.timestamp + 30 days, "Session duration too long");
+
         sessionKeys[key] = SessionKey({
             key: key,
             validAfter: validAfter,

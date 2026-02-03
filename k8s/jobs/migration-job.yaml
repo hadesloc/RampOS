@@ -9,8 +9,16 @@ metadata:
 spec:
   template:
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       containers:
       - name: migration
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
         image: ghcr.io/rampos/rampos:latest
         command: ["/app/rampos-server", "migrate"]
         envFrom:

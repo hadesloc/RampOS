@@ -16,7 +16,7 @@ spec:
     namespace: rampos
   syncPolicy:
     automated:
-      prune: true
+      prune: false  # Change to false for production
       selfHeal: true
     syncOptions:
       - CreateNamespace=true

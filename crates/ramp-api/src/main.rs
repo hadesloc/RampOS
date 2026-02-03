@@ -44,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
     // Create database pool
     let pool = sqlx::PgPool::connect(&config.database.url)
         .await
-        .expect("Failed to connect to database");
+        .map_err(|e| anyhow::anyhow!("Failed to connect to database: {}", e))?;
 
     info!("Connected to database");
 
@@ -126,10 +126,11 @@ async fn main() -> anyhow::Result<()> {
     let case_manager = Arc::new(CaseManager::new(case_store));
 
     // Create Redis connection and idempotency handler
-    let redis_client = redis::Client::open(config.redis.url.as_str()).expect("Invalid Redis URL");
+    let redis_client = redis::Client::open(config.redis.url.as_str())
+        .map_err(|e| anyhow::anyhow!("Invalid Redis URL: {}", e))?;
     let redis_manager = redis::aio::ConnectionManager::new(redis_client)
         .await
-        .expect("Failed to connect to Redis");
+        .map_err(|e| anyhow::anyhow!("Failed to connect to Redis: {}", e))?;
 
     let idempotency_handler = Arc::new(IdempotencyHandler::with_redis(
         redis_manager.clone(),
@@ -152,7 +153,7 @@ async fn main() -> anyhow::Result<()> {
         let chain_id: u64 = std::env::var("AA_CHAIN_ID")
             .unwrap_or_else(|_| "1".to_string())
             .parse()
-            .expect("AA_CHAIN_ID must be a valid number");
+            .map_err(|e| anyhow::anyhow!("AA_CHAIN_ID must be a valid number: {}", e))?;
 
         let chain_name = std::env::var("AA_CHAIN_NAME")
             .unwrap_or_else(|_| "Ethereum Mainnet".to_string());
@@ -163,7 +164,7 @@ async fn main() -> anyhow::Result<()> {
         let entry_point_address = std::env::var("AA_ENTRY_POINT_ADDRESS")
             .unwrap_or_else(|_| "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789".to_string())
             .parse()
-            .expect("AA_ENTRY_POINT_ADDRESS must be a valid Ethereum address");
+            .map_err(|e| anyhow::anyhow!("AA_ENTRY_POINT_ADDRESS must be a valid Ethereum address: {}", e))?;
 
         let paymaster_address = std::env::var("AA_PAYMASTER_ADDRESS")
             .ok()
@@ -180,7 +181,7 @@ async fn main() -> anyhow::Result<()> {
         Some(AAServiceState::new_with_repo(
             chain_config,
             Some(smart_account_repo),
-        ))
+        )?)
     } else {
         info!("Account Abstraction (AA) service disabled - set AA_ENABLED=true to enable");
         None

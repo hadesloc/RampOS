@@ -5,8 +5,10 @@
  */
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
+const API_BASE_URL = typeof window === 'undefined'
+  ? (process.env.API_URL || 'http://localhost:8080')
+  : '/api/proxy';
+const API_KEY = typeof window === 'undefined' ? (process.env.API_KEY || '') : '';
 
 // Types
 export interface Intent {
