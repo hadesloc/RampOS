@@ -4,6 +4,7 @@ use axum::{
     Router,
 };
 use chrono::Utc;
+use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_common::{
     ledger::{AccountType, EntryDirection, LedgerCurrency},
@@ -140,6 +141,7 @@ async fn setup_test_app() -> TestContext {
         name: "E2E Flow Tenant".to_string(),
         status: "ACTIVE".to_string(),
         api_key_hash,
+        api_secret_encrypted: None,
         webhook_secret_hash: "secret".to_string(),
         webhook_secret_encrypted: None,
         webhook_url: Some("http://localhost:3000/webhook".to_string()),
@@ -208,13 +210,19 @@ async fn setup_test_app() -> TestContext {
         ledger_service,
         onboarding_service,
         user_service,
+        webhook_service: Arc::new(ramp_core::service::webhook::WebhookService::new(
+            Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
+            tenant_repo.clone(),
+        )),
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
         report_generator,
         case_manager,
+        rule_manager: None,
         rate_limiter: None,
         idempotency_handler: None,
         aa_service: None,
+        portal_auth_config: Arc::new(PortalAuthConfig::default()),
     };
 
     let app = create_router(app_state);

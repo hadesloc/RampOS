@@ -26,8 +26,8 @@ use ramp_core::service::{
 use crate::handlers;
 use crate::handlers::aa::AAServiceState;
 use crate::middleware::{
-    auth_middleware, idempotency_middleware, rate_limit_middleware, request_id_middleware,
-    IdempotencyHandler, RateLimiter,
+    auth_middleware, idempotency_middleware, portal_auth_middleware, rate_limit_middleware,
+    request_id_middleware, IdempotencyHandler, PortalAuthConfig, RateLimiter,
 };
 use crate::openapi::ApiDoc;
 
@@ -53,6 +53,7 @@ pub struct AppState {
     pub rate_limiter: Option<Arc<RateLimiter>>,
     pub idempotency_handler: Option<Arc<IdempotencyHandler>>,
     pub aa_service: Option<AAServiceState>,
+    pub portal_auth_config: Arc<PortalAuthConfig>,
 }
 
 /// Create the API router with full middleware stack
@@ -250,7 +251,17 @@ pub fn create_router(state: AppState) -> Router {
 
     // Portal routes (user authentication via JWT, not tenant API key)
     // These routes are for the end-user portal application
-    let portal_routes = handlers::portal::router().with_state(state.clone());
+    // Auth routes are excluded from JWT middleware (login/register don't need auth)
+    let portal_protected_routes = Router::new()
+        .nest("/kyc", handlers::portal::kyc::router())
+        .nest("/wallet", handlers::portal::wallet::router())
+        .nest("/transactions", handlers::portal::transactions::router())
+        .nest("/intents", handlers::portal::intents::router())
+        .layer(middleware::from_fn_with_state(
+            state.portal_auth_config.clone(),
+            portal_auth_middleware,
+        ))
+        .with_state(state.clone());
 
     // API v1 routes with authentication
     let mut api_v1 = Router::new()
@@ -283,16 +294,18 @@ pub fn create_router(state: AppState) -> Router {
     // OpenAPI documentation
     let openapi = ApiDoc::openapi();
 
-    // Auth routes for portal (no tenant auth required)
-    let auth_routes = handlers::portal::auth::router().with_state(state.clone());
-
     // Combine all routes
+    // Note: More specific routes should be registered first to ensure proper matching
     Router::new()
         .merge(health_routes)
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
         .nest("/v1", api_v1)
-        .nest("/v1/portal", portal_routes)
-        .nest("/v1/auth", auth_routes)
+        // Portal auth routes (no JWT required - these issue tokens)
+        .nest("/v1/portal/auth", handlers::portal::auth::router().with_state(state.clone()))
+        // Portal protected routes (JWT required)
+        .nest("/v1/portal", portal_protected_routes)
+        // Legacy auth endpoint (same as /v1/portal/auth for backwards compatibility)
+        .nest("/v1/auth", handlers::portal::auth::router().with_state(state.clone()))
         .layer(middleware::from_fn(request_id_middleware))
         .layer({
             let request_headers = Arc::new([
@@ -347,5 +360,6 @@ pub fn create_router(state: AppState) -> Router {
                 .allow_origin(origins)
                 .allow_methods(Any)
                 .allow_headers(Any)
+                .allow_credentials(true)
         })
 }

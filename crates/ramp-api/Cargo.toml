@@ -40,6 +40,13 @@ redis = { workspace = true }
 # Auth dependencies
 rand = { workspace = true }
 base64 = { workspace = true }
+jsonwebtoken = { workspace = true }
+time = { workspace = true }
+
+# HMAC signature verification
+hmac = "0.12"
+subtle = "2.5"
+http-body-util = "0.1"
 
 # OpenAPI documentation
 utoipa = { version = "4", features = ["axum_extras", "chrono", "uuid", "decimal"] }

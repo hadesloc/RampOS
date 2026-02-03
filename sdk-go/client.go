@@ -45,8 +45,12 @@ type Client struct {
 	httpClient *http.Client
 	tenantID   string
 
-	Payins  *PayinService
-	Payouts *PayoutService
+	Payins     *PayinService
+	Payouts    *PayoutService
+	Users      *UsersService
+	Ledger     *LedgerService
+	Compliance *ComplianceService
+	AA         *AAService
 }
 
 type PayinService struct {
@@ -106,6 +110,10 @@ func NewClient(apiKey, apiSecret string, opts ...ClientOption) *Client {
 
 	c.Payins = &PayinService{client: c}
 	c.Payouts = &PayoutService{client: c}
+	c.Users = &UsersService{client: c}
+	c.Ledger = &LedgerService{client: c}
+	c.Compliance = &ComplianceService{client: c}
+	c.AA = &AAService{client: c}
 
 	return c
 }

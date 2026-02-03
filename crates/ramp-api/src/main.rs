@@ -8,7 +8,7 @@ use ramp_aa::types::ChainConfig;
 use ramp_api::{
     create_router,
     handlers::aa::AAServiceState,
-    middleware::{IdempotencyConfig, IdempotencyHandler},
+    middleware::{IdempotencyConfig, IdempotencyHandler, PortalAuthConfig},
     router::AppState,
 };
 use ramp_common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig};
@@ -175,6 +175,9 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
+    // Create portal auth configuration
+    let portal_auth_config = Arc::new(PortalAuthConfig::default());
+
     // Create application state
     let app_state = AppState {
         payin_service,
@@ -192,6 +195,7 @@ async fn main() -> anyhow::Result<()> {
         rate_limiter: Some(rate_limiter),
         idempotency_handler: Some(idempotency_handler),
         aa_service,
+        portal_auth_config,
     };
 
     // Create router

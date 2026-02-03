@@ -809,6 +809,20 @@ impl TenantRepository for MockTenantRepository {
         Ok(())
     }
 
+    async fn update_api_credentials(
+        &self,
+        id: &TenantId,
+        api_key_hash: &str,
+        api_secret_encrypted: &[u8],
+    ) -> Result<()> {
+        let mut tenants = self.tenants.lock().unwrap();
+        if let Some(tenant) = tenants.iter_mut().find(|t| t.id == id.0) {
+            tenant.api_key_hash = api_key_hash.to_string();
+            tenant.api_secret_encrypted = Some(api_secret_encrypted.to_vec());
+        }
+        Ok(())
+    }
+
     async fn update_webhook_secret(
         &self,
         id: &TenantId,
@@ -848,6 +862,139 @@ impl TenantRepository for MockTenantRepository {
     async fn list_ids(&self) -> Result<Vec<TenantId>> {
         let tenants = self.tenants.lock().unwrap();
         Ok(tenants.iter().map(|t| TenantId(t.id.clone())).collect())
+    }
+}
+
+// ============================================================================
+// MockWebhookRepository
+// ============================================================================
+
+use crate::repository::webhook::{WebhookEventRow, WebhookRepository};
+
+#[derive(Clone)]
+pub struct MockWebhookRepository {
+    pub events: Arc<Mutex<Vec<WebhookEventRow>>>,
+}
+
+impl MockWebhookRepository {
+    pub fn new() -> Self {
+        Self {
+            events: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+}
+
+impl Default for MockWebhookRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl WebhookRepository for MockWebhookRepository {
+    async fn queue_event(&self, event: &WebhookEventRow) -> Result<()> {
+        self.events.lock().unwrap().push(event.clone());
+        Ok(())
+    }
+
+    async fn get_pending_events(&self, limit: i64) -> Result<Vec<WebhookEventRow>> {
+        let events = self.events.lock().unwrap();
+        Ok(events
+            .iter()
+            .filter(|e| e.status == "PENDING")
+            .take(limit as usize)
+            .cloned()
+            .collect())
+    }
+
+    async fn mark_delivered(&self, id: &EventId, response_status: i32) -> Result<()> {
+        let mut events = self.events.lock().unwrap();
+        if let Some(event) = events.iter_mut().find(|e| e.id == id.0) {
+            event.status = "DELIVERED".to_string();
+            event.response_status = Some(response_status);
+            event.delivered_at = Some(Utc::now());
+        }
+        Ok(())
+    }
+
+    async fn mark_failed(
+        &self,
+        id: &EventId,
+        error: &str,
+        next_attempt_at: DateTime<Utc>,
+    ) -> Result<()> {
+        let mut events = self.events.lock().unwrap();
+        if let Some(event) = events.iter_mut().find(|e| e.id == id.0) {
+            event.status = "FAILED".to_string();
+            event.last_error = Some(error.to_string());
+            event.next_attempt_at = Some(next_attempt_at);
+            event.attempts += 1;
+        }
+        Ok(())
+    }
+
+    async fn mark_permanently_failed(&self, id: &EventId, error: &str) -> Result<()> {
+        let mut events = self.events.lock().unwrap();
+        if let Some(event) = events.iter_mut().find(|e| e.id == id.0) {
+            event.status = "PERMANENTLY_FAILED".to_string();
+            event.last_error = Some(error.to_string());
+        }
+        Ok(())
+    }
+
+    async fn get_events_by_intent(
+        &self,
+        tenant_id: &TenantId,
+        intent_id: &IntentId,
+    ) -> Result<Vec<WebhookEventRow>> {
+        let events = self.events.lock().unwrap();
+        Ok(events
+            .iter()
+            .filter(|e| {
+                e.tenant_id == tenant_id.0 && e.intent_id.as_ref() == Some(&intent_id.0)
+            })
+            .cloned()
+            .collect())
+    }
+
+    async fn list_events(
+        &self,
+        tenant_id: &TenantId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<WebhookEventRow>> {
+        let events = self.events.lock().unwrap();
+        Ok(events
+            .iter()
+            .filter(|e| e.tenant_id == tenant_id.0)
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect())
+    }
+
+    async fn get_event(
+        &self,
+        tenant_id: &TenantId,
+        event_id: &str,
+    ) -> Result<Option<WebhookEventRow>> {
+        let events = self.events.lock().unwrap();
+        Ok(events
+            .iter()
+            .find(|e| e.tenant_id == tenant_id.0 && e.id == event_id)
+            .cloned())
+    }
+
+    async fn retry_event(&self, tenant_id: &TenantId, event_id: &str) -> Result<()> {
+        let mut events = self.events.lock().unwrap();
+        if let Some(event) = events
+            .iter_mut()
+            .find(|e| e.tenant_id == tenant_id.0 && e.id == event_id)
+        {
+            event.status = "PENDING".to_string();
+            event.next_attempt_at = Some(Utc::now());
+        }
+        Ok(())
     }
 }
 
@@ -956,6 +1103,7 @@ mod tests {
             name: "Test Tenant".to_string(),
             status: "ACTIVE".to_string(),
             api_key_hash: "hash123".to_string(),
+            api_secret_encrypted: None,
             webhook_secret_hash: "secret".to_string(),
             webhook_secret_encrypted: None,
             webhook_url: None,

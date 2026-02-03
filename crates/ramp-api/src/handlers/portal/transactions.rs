@@ -9,10 +9,9 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use chrono::Utc;
+use ramp_common::types::{IntentId, TenantId, UserId};
 use serde::{Deserialize, Serialize};
-use tracing::info;
-use uuid::Uuid;
+use tracing::{info, warn};
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -89,7 +88,7 @@ pub fn router() -> Router<AppState> {
 
 /// GET /v1/portal/transactions - List transactions with pagination and filters
 pub async fn list_transactions(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     Query(filters): Query<TransactionFilters>,
 ) -> Result<Json<PaginatedResponse<Transaction>>, ApiError> {
     info!(
@@ -132,101 +131,110 @@ pub async fn list_transactions(
         }
     }
 
-    // In production, this would:
-    // 1. Extract user from auth middleware
-    // 2. Query transactions with filters
-    // 3. Apply pagination
-    // 4. Return results
+    // TODO: Extract user from PortalUser middleware extractor
+    // For now, use placeholder values - in production this comes from JWT claims
+    let tenant_id = TenantId::new(&get_default_tenant_id());
+    let user_id = UserId::new("placeholder-user-id"); // TODO: Get from auth middleware
 
-    let now = Utc::now();
+    // Calculate offset for pagination
+    let offset = ((filters.page - 1) * filters.per_page) as i64;
+    let limit = filters.per_page as i64;
 
-    // Mock transactions
-    let transactions = vec![
-        Transaction {
-            id: Uuid::new_v4().to_string(),
-            tx_type: "DEPOSIT".to_string(),
-            status: "COMPLETED".to_string(),
-            amount: "10000000".to_string(),
-            currency: "VND".to_string(),
-            fee: Some("0".to_string()),
-            reference: "DEP123456".to_string(),
-            details: Some("Bank transfer deposit".to_string()),
-            tx_hash: None,
-            created_at: (now - chrono::Duration::hours(2)).to_rfc3339(),
-            updated_at: (now - chrono::Duration::hours(1)).to_rfc3339(),
-        },
-        Transaction {
-            id: Uuid::new_v4().to_string(),
-            tx_type: "TRADE".to_string(),
-            status: "COMPLETED".to_string(),
-            amount: "0.001".to_string(),
-            currency: "BTC".to_string(),
-            fee: Some("0.00001".to_string()),
-            reference: "TRD789012".to_string(),
-            details: Some("Buy BTC/VND".to_string()),
-            tx_hash: None,
-            created_at: (now - chrono::Duration::hours(1)).to_rfc3339(),
-            updated_at: (now - chrono::Duration::minutes(30)).to_rfc3339(),
-        },
-        Transaction {
-            id: Uuid::new_v4().to_string(),
-            tx_type: "WITHDRAW".to_string(),
-            status: "PENDING".to_string(),
-            amount: "5000000".to_string(),
-            currency: "VND".to_string(),
-            fee: Some("22000".to_string()),
-            reference: "WTH345678".to_string(),
-            details: Some("Bank withdrawal".to_string()),
-            tx_hash: None,
-            created_at: now.to_rfc3339(),
-            updated_at: now.to_rfc3339(),
-        },
-    ];
+    // Query real transactions from intent repository
+    let intent_rows = app_state
+        .intent_repo
+        .list_by_user(&tenant_id, &user_id, limit, offset)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to get user transactions from intent repo");
+            ApiError::Internal("Failed to retrieve transactions".to_string())
+        })?;
 
-    // Apply mock filtering
-    let filtered: Vec<Transaction> = transactions
+    // Convert IntentRow to Transaction DTO
+    let transactions: Vec<Transaction> = intent_rows
         .into_iter()
-        .filter(|tx| {
-            if let Some(ref t) = filters.tx_type {
-                if &tx.tx_type != t {
+        .filter(|row| {
+            // Apply type filter if provided
+            if let Some(ref tx_type) = filters.tx_type {
+                let row_type = match row.intent_type.as_str() {
+                    "PAY_IN" => "DEPOSIT",
+                    "PAY_OUT" => "WITHDRAW",
+                    _ => &row.intent_type,
+                };
+                if row_type != tx_type {
                     return false;
                 }
             }
-            if let Some(ref s) = filters.status {
-                if &tx.status != s {
+            // Apply status filter if provided
+            if let Some(ref status) = filters.status {
+                let row_status = map_intent_state_to_status(&row.state);
+                if row_status != *status {
                     return false;
                 }
             }
             true
         })
+        .map(|row| {
+            let tx_type = match row.intent_type.as_str() {
+                "PAY_IN" => "DEPOSIT".to_string(),
+                "PAY_OUT" => "WITHDRAW".to_string(),
+                _ => row.intent_type.clone(),
+            };
+            let status = map_intent_state_to_status(&row.state);
+
+            Transaction {
+                id: row.id.clone(),
+                tx_type,
+                status,
+                amount: row.amount.to_string(),
+                currency: row.currency.clone(),
+                fee: None, // TODO: Calculate fee from metadata
+                reference: row.reference_code.unwrap_or_else(|| format!("REF{}", &row.id[..8])),
+                details: row.metadata.get("description").and_then(|v| v.as_str()).map(String::from),
+                tx_hash: row.tx_hash,
+                created_at: row.created_at.to_rfc3339(),
+                updated_at: row.updated_at.to_rfc3339(),
+            }
+        })
         .collect();
 
-    let total = filtered.len() as i64;
+    // TODO: Get total count from repository for proper pagination
+    // For now, estimate based on returned results
+    let total = transactions.len() as i64;
     let total_pages = ((total as f64) / (filters.per_page as f64)).ceil() as i32;
 
-    // Apply pagination
-    let start = ((filters.page - 1) * filters.per_page) as usize;
-    let end = (start + filters.per_page as usize).min(filtered.len());
-    let data = if start < filtered.len() {
-        filtered[start..end].to_vec()
-    } else {
-        vec![]
-    };
-
     let response = PaginatedResponse {
-        data,
+        data: transactions,
         total,
         page: filters.page,
         per_page: filters.per_page,
-        total_pages,
+        total_pages: total_pages.max(1),
     };
 
     Ok(Json(response))
 }
 
+/// Map intent state to transaction status
+fn map_intent_state_to_status(state: &str) -> String {
+    match state {
+        "CREATED" | "PENDING" | "AWAITING_DEPOSIT" => "PENDING".to_string(),
+        "PROCESSING" | "CONFIRMING" => "PROCESSING".to_string(),
+        "COMPLETED" | "SETTLED" => "COMPLETED".to_string(),
+        "FAILED" | "REJECTED" => "FAILED".to_string(),
+        "CANCELLED" | "EXPIRED" => "CANCELLED".to_string(),
+        _ => "PENDING".to_string(),
+    }
+}
+
+/// Get the default tenant ID from environment
+fn get_default_tenant_id() -> String {
+    std::env::var("DEFAULT_TENANT_ID")
+        .unwrap_or_else(|_| "00000000-0000-0000-0000-000000000001".to_string())
+}
+
 /// GET /v1/portal/transactions/:id - Get transaction by ID
 pub async fn get_transaction(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     Path(tx_id): Path<String>,
 ) -> Result<Json<Transaction>, ApiError> {
     info!(tx_id = %tx_id, "Get transaction requested");
@@ -238,30 +246,53 @@ pub async fn get_transaction(
         ));
     }
 
-    // In production, this would:
-    // 1. Extract user from auth middleware
-    // 2. Query transaction by ID
-    // 3. Verify transaction belongs to user
-    // 4. Return transaction or 404
+    // TODO: Extract user from PortalUser middleware extractor
+    // For now, use placeholder values - in production this comes from JWT claims
+    let tenant_id = TenantId::new(&get_default_tenant_id());
+    let intent_id = IntentId::new(&tx_id);
 
-    // For now, return mock transaction
-    let now = Utc::now();
+    // Query real intent from repository
+    let intent_row = app_state
+        .intent_repo
+        .get_by_id(&tenant_id, &intent_id)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to get transaction from intent repo");
+            ApiError::Internal("Failed to retrieve transaction".to_string())
+        })?;
 
-    let transaction = Transaction {
-        id: tx_id,
-        tx_type: "DEPOSIT".to_string(),
-        status: "COMPLETED".to_string(),
-        amount: "10000000".to_string(),
-        currency: "VND".to_string(),
-        fee: Some("0".to_string()),
-        reference: "DEP123456".to_string(),
-        details: Some("Bank transfer deposit from Vietcombank".to_string()),
-        tx_hash: None,
-        created_at: (now - chrono::Duration::hours(2)).to_rfc3339(),
-        updated_at: (now - chrono::Duration::hours(1)).to_rfc3339(),
-    };
+    match intent_row {
+        Some(row) => {
+            // TODO: Verify intent belongs to user (from PortalUser extractor)
 
-    Ok(Json(transaction))
+            let tx_type = match row.intent_type.as_str() {
+                "PAY_IN" => "DEPOSIT".to_string(),
+                "PAY_OUT" => "WITHDRAW".to_string(),
+                _ => row.intent_type.clone(),
+            };
+            let status = map_intent_state_to_status(&row.state);
+
+            let transaction = Transaction {
+                id: row.id.clone(),
+                tx_type,
+                status,
+                amount: row.amount.to_string(),
+                currency: row.currency.clone(),
+                fee: None, // TODO: Calculate fee from metadata
+                reference: row.reference_code.unwrap_or_else(|| format!("REF{}", &row.id[..8])),
+                details: row.metadata.get("description").and_then(|v| v.as_str()).map(String::from),
+                tx_hash: row.tx_hash,
+                created_at: row.created_at.to_rfc3339(),
+                updated_at: row.updated_at.to_rfc3339(),
+            };
+
+            Ok(Json(transaction))
+        }
+        None => Err(ApiError::NotFound(format!(
+            "Transaction {} not found",
+            tx_id
+        ))),
+    }
 }
 
 #[cfg(test)]

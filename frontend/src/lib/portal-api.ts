@@ -3,6 +3,9 @@
  *
  * User-facing API client for the portal application.
  * Handles authentication, KYC, deposits, withdrawals, and transactions.
+ *
+ * Security: Auth tokens are stored in httpOnly cookies (set by the server).
+ * The client uses `credentials: 'include'` to send cookies with requests.
  */
 
 // API Configuration
@@ -18,11 +21,14 @@ export interface AuthUser {
   createdAt: string;
 }
 
-export interface AuthSession {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
+export interface AuthResponse {
   user: AuthUser;
+  expiresAt: number;
+}
+
+export interface SessionStatus {
+  authenticated: boolean;
+  user: AuthUser | null;
 }
 
 export interface WebAuthnChallenge {
@@ -181,46 +187,22 @@ export class PortalApiError extends Error {
   }
 }
 
-// Token storage
-let authToken: string | null = null;
-
-export function setAuthToken(token: string | null): void {
-  authToken = token;
-  if (typeof window !== 'undefined') {
-    if (token) {
-      // TODO: Migrate to httpOnly cookies for better security
-      localStorage.setItem('auth_token', token);
-    } else {
-      localStorage.removeItem('auth_token');
-    }
-  }
-}
-
-export function getAuthToken(): string | null {
-  if (authToken) return authToken;
-  if (typeof window !== 'undefined') {
-    authToken = localStorage.getItem('auth_token');
-  }
-  return authToken;
-}
-
-// HTTP client with auth and error handling
+// HTTP client with credentials for cookie-based auth
 async function portalRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  const token = getAuthToken();
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    ...(token && { 'Authorization': `Bearer ${token}` }),
     ...options.headers,
   };
 
   const response = await fetch(url, {
     ...options,
     headers,
+    credentials: 'include', // Send cookies with requests
   });
 
   if (!response.ok) {
@@ -258,11 +240,12 @@ export const authApi = {
   },
 
   // Complete WebAuthn registration
+  // Server sets auth cookies, returns user info
   completeRegistration: async (
     email: string,
     credential: WebAuthnCredentialResponse
-  ): Promise<AuthSession> => {
-    return portalRequest<AuthSession>('/v1/auth/webauthn/register/complete', {
+  ): Promise<AuthResponse> => {
+    return portalRequest<AuthResponse>('/v1/auth/webauthn/register/complete', {
       method: 'POST',
       body: JSON.stringify({ email, credential }),
     });
@@ -277,10 +260,11 @@ export const authApi = {
   },
 
   // Complete WebAuthn authentication
+  // Server sets auth cookies, returns user info
   completeAuthentication: async (
     credential: WebAuthnCredentialResponse
-  ): Promise<AuthSession> => {
-    return portalRequest<AuthSession>('/v1/auth/webauthn/login/complete', {
+  ): Promise<AuthResponse> => {
+    return portalRequest<AuthResponse>('/v1/auth/webauthn/login/complete', {
       method: 'POST',
       body: JSON.stringify({ credential }),
     });
@@ -295,32 +279,37 @@ export const authApi = {
   },
 
   // Verify magic link token
-  verifyMagicLink: async (token: string): Promise<AuthSession> => {
-    return portalRequest<AuthSession>('/v1/auth/magic-link/verify', {
+  // Server sets auth cookies, returns user info
+  verifyMagicLink: async (token: string): Promise<AuthResponse> => {
+    return portalRequest<AuthResponse>('/v1/auth/magic-link/verify', {
       method: 'POST',
       body: JSON.stringify({ token }),
     });
   },
 
-  // Refresh token
-  refreshToken: async (refreshToken: string): Promise<AuthSession> => {
-    return portalRequest<AuthSession>('/v1/auth/refresh', {
+  // Refresh token (uses refresh token from cookie)
+  // Server sets new auth cookies, returns user info
+  refreshToken: async (): Promise<AuthResponse> => {
+    return portalRequest<AuthResponse>('/v1/auth/refresh', {
       method: 'POST',
-      body: JSON.stringify({ refreshToken }),
     });
   },
 
-  // Logout
+  // Logout (clears auth cookies)
   logout: async (): Promise<void> => {
     await portalRequest<void>('/v1/auth/logout', {
       method: 'POST',
     });
-    setAuthToken(null);
   },
 
-  // Get current user
+  // Get current user (uses auth token from cookie)
   getMe: async (): Promise<AuthUser> => {
     return portalRequest<AuthUser>('/v1/auth/me');
+  },
+
+  // Check session status (uses auth token from cookie)
+  checkSession: async (): Promise<SessionStatus> => {
+    return portalRequest<SessionStatus>('/v1/auth/session');
   },
 };
 
@@ -348,13 +337,10 @@ export const kycApi = {
     formData.append('type', type);
     formData.append('file', file);
 
-    const token = getAuthToken();
     const response = await fetch(`${API_BASE_URL}/v1/portal/kyc/documents`, {
       method: 'POST',
-      headers: {
-        ...(token && { 'Authorization': `Bearer ${token}` }),
-      },
       body: formData,
+      credentials: 'include', // Send cookies with requests
     });
 
     if (!response.ok) {

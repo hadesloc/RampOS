@@ -3,7 +3,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use chrono::{Duration, Utc};
-use ramp_api::middleware::{IdempotencyConfig, IdempotencyHandler, RateLimitConfig, RateLimiter};
+use ramp_api::middleware::{IdempotencyConfig, IdempotencyHandler, PortalAuthConfig, RateLimitConfig, RateLimiter};
 use ramp_api::{create_router, AppState};
 use ramp_common::ledger::{AccountType, LedgerCurrency};
 use ramp_common::types::*;
@@ -59,6 +59,7 @@ async fn setup_app() -> TestApp {
         name: "Test Tenant".to_string(),
         status: "ACTIVE".to_string(),
         api_key_hash: api_key_hash.clone(),
+        api_secret_encrypted: None,
         webhook_secret_hash: "secret".to_string(),
         webhook_secret_encrypted: None,
         webhook_url: None,
@@ -143,13 +144,19 @@ async fn setup_app() -> TestApp {
         ledger_service,
         onboarding_service,
         user_service,
+        webhook_service: Arc::new(ramp_core::service::webhook::WebhookService::new(
+            Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
+            tenant_repo.clone(),
+        )),
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
         report_generator,
         case_manager,
+        rule_manager: None,
         rate_limiter,
         idempotency_handler,
         aa_service: None,
+        portal_auth_config: Arc::new(PortalAuthConfig::default()),
     };
 
     let router = create_router(app_state);

@@ -9,7 +9,16 @@ use uuid::Uuid;
 use crate::repository::tenant::{TenantRepository, TenantRow};
 use crate::service::ledger::LedgerService;
 
-/// API key pair (public key + secret key)
+/// API credentials (api_key for Bearer auth + api_secret for HMAC signing)
+#[derive(Debug, Clone, Serialize)]
+pub struct ApiCredentials {
+    /// API key for Bearer authentication (sent in Authorization header)
+    pub api_key: String,
+    /// API secret for HMAC signature verification (used to sign requests)
+    pub api_secret: String,
+}
+
+/// API key pair (public key + secret key) - DEPRECATED, use ApiCredentials
 #[derive(Debug, Clone, Serialize)]
 pub struct ApiKeyPair {
     pub public_key: String,
@@ -35,8 +44,9 @@ impl OnboardingService {
         let tenant_id = TenantId::new(format!("t_{}", Uuid::now_v7()));
         let now = Utc::now();
 
-        // Generate initial API key (will be replaced by generate_api_keys)
-        let (_api_key_pair, api_key_hash) = self.generate_api_key_internal();
+        // Generate initial API credentials (will be replaced by generate_api_credentials)
+        let (credentials, api_key_hash, api_secret_encrypted) =
+            self.generate_api_credentials_internal();
 
         // Generate webhook secret (will be exposed to user separately)
         let (webhook_secret, webhook_secret_hash) = self.generate_secret_internal();
@@ -46,6 +56,9 @@ impl OnboardingService {
             name: name.to_string(),
             status: "PENDING".to_string(),
             api_key_hash,
+            // Store the encrypted API secret for HMAC verification
+            // In production, this should be encrypted with a proper encryption key
+            api_secret_encrypted: Some(api_secret_encrypted),
             webhook_secret_hash,
             // Store the encrypted webhook secret for HMAC signing
             // In production, this should be encrypted with a proper encryption key
@@ -60,16 +73,42 @@ impl OnboardingService {
 
         self.tenant_repo.create(&tenant).await?;
 
+        // Log that credentials were generated (don't log the actual secrets!)
+        tracing::info!(
+            tenant_id = %tenant_id,
+            "Created tenant with API credentials (api_key: {}...)",
+            &credentials.api_key[..12]
+        );
+
         Ok(tenant)
     }
 
-    /// Generate new API keys for a tenant
-    pub async fn generate_api_keys(&self, tenant_id: &TenantId) -> Result<ApiKeyPair> {
-        let (key_pair, hash) = self.generate_api_key_internal();
+    /// Generate new API credentials for a tenant
+    /// Returns ApiCredentials containing api_key (for Bearer) and api_secret (for HMAC)
+    pub async fn generate_api_credentials(&self, tenant_id: &TenantId) -> Result<ApiCredentials> {
+        let (credentials, api_key_hash, api_secret_encrypted) =
+            self.generate_api_credentials_internal();
         self.tenant_repo
-            .update_api_key_hash(tenant_id, &hash)
+            .update_api_credentials(tenant_id, &api_key_hash, &api_secret_encrypted)
             .await?;
-        Ok(key_pair)
+
+        tracing::info!(
+            %tenant_id,
+            "Regenerated API credentials (api_key: {}...)",
+            &credentials.api_key[..12]
+        );
+
+        Ok(credentials)
+    }
+
+    /// Generate new API keys for a tenant (DEPRECATED: use generate_api_credentials)
+    #[deprecated(note = "Use generate_api_credentials instead")]
+    pub async fn generate_api_keys(&self, tenant_id: &TenantId) -> Result<ApiKeyPair> {
+        let credentials = self.generate_api_credentials(tenant_id).await?;
+        Ok(ApiKeyPair {
+            public_key: credentials.api_key,
+            secret_key: credentials.api_secret,
+        })
     }
 
     /// Configure webhook URL
@@ -118,6 +157,34 @@ impl OnboardingService {
     }
 
     // --- Helper functions ---
+
+    /// Generate API credentials for SDK authentication
+    /// Returns: (ApiCredentials, api_key_hash, api_secret_encrypted)
+    fn generate_api_credentials_internal(&self) -> (ApiCredentials, String, Vec<u8>) {
+        // api_key: Used in Bearer token for authentication
+        let api_key = format!("ramp_{}", Uuid::new_v4().simple());
+        // api_secret: Used for HMAC signing
+        let api_secret = format!("ramp_secret_{}", Uuid::new_v4().simple());
+
+        // Hash the api_key for storage/lookup
+        let mut hasher = Sha256::new();
+        hasher.update(api_key.as_bytes());
+        let api_key_hash = hex::encode(hasher.finalize());
+
+        // In production, this should use proper encryption (AES-GCM, etc.)
+        // For now, we store it as bytes (simulating encryption)
+        // TODO: Implement proper encryption using application-level encryption key
+        let api_secret_encrypted = api_secret.as_bytes().to_vec();
+
+        (
+            ApiCredentials {
+                api_key,
+                api_secret,
+            },
+            api_key_hash,
+            api_secret_encrypted,
+        )
+    }
 
     fn generate_api_key_internal(&self) -> (ApiKeyPair, String) {
         let public_key = format!("pk_{}", Uuid::new_v4().simple());

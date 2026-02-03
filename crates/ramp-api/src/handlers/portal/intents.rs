@@ -11,10 +11,11 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chrono::{Duration, Utc};
+use chrono::Utc;
+use ramp_common::types::{IntentId, RailsProvider, ReferenceCode, TenantId, UserId, VndAmount};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use tracing::info;
-use uuid::Uuid;
+use tracing::{info, warn};
 use validator::Validate;
 
 use crate::error::ApiError;
@@ -105,7 +106,7 @@ pub fn router() -> Router<AppState> {
 
 /// POST /v1/portal/intents/deposit - Create deposit intent
 pub async fn create_deposit(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     Json(req): Json<DepositRequest>,
 ) -> Result<Json<Intent>, ApiError> {
     // Validate request
@@ -121,12 +122,12 @@ pub async fn create_deposit(
     }
 
     // Validate amount (basic check)
-    let amount: f64 = req
+    let amount: Decimal = req
         .amount
         .parse()
         .map_err(|_| ApiError::Validation("Amount must be a valid number".to_string()))?;
 
-    if amount <= 0.0 {
+    if amount <= Decimal::ZERO {
         return Err(ApiError::Validation("Amount must be positive".to_string()));
     }
 
@@ -146,36 +147,66 @@ pub async fn create_deposit(
         "Create deposit intent requested"
     );
 
-    // In production, this would:
-    // 1. Extract user from auth middleware
-    // 2. Check user's KYC tier and limits
-    // 3. Create intent in database
-    // 4. Generate virtual account or deposit address
-    // 5. Return intent with payment details
+    // TODO: Extract user from PortalUser middleware extractor
+    // For now, use placeholder values - in production this comes from JWT claims
+    let tenant_id = TenantId::new(&get_default_tenant_id());
+    let user_id = UserId::new("placeholder-user-id"); // TODO: Get from auth middleware
 
-    let now = Utc::now();
-    let expires_at = now + Duration::hours(24);
-    let intent_id = Uuid::new_v4().to_string();
+    // Determine rails provider based on method
+    let rails_provider = if method == "VND_BANK" {
+        RailsProvider::new("Vietqr")
+    } else {
+        RailsProvider::new("OnChain")
+    };
+
+    // Create payin request for the service
+    let payin_request = ramp_core::service::payin::CreatePayinRequest {
+        tenant_id: tenant_id.clone(),
+        user_id: user_id.clone(),
+        amount_vnd: VndAmount(amount),
+        rails_provider,
+        idempotency_key: None, // TODO: Accept idempotency key from request
+        metadata: serde_json::json!({
+            "method": method,
+            "currency": req.currency.to_uppercase(),
+        }),
+    };
+
+    // Call the real PayinService
+    let response = app_state
+        .payin_service
+        .create_payin(payin_request)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to create deposit intent");
+            ApiError::Internal(format!("Failed to create deposit: {}", e))
+        })?;
 
     let intent = Intent {
-        id: intent_id.clone(),
+        id: response.intent_id.0.clone(),
         intent_type: "PAY_IN".to_string(),
-        status: "CREATED".to_string(),
+        status: format!("{:?}", response.status),
         amount: req.amount,
         currency: req.currency.to_uppercase(),
-        reference: Some(format!("DEP{}", &intent_id[..8].to_uppercase())),
-        bank_account: None,
-        created_at: now.to_rfc3339(),
-        updated_at: now.to_rfc3339(),
-        expires_at: Some(expires_at.to_rfc3339()),
+        reference: Some(response.reference_code.0.clone()),
+        bank_account: response.virtual_account.map(|va| va.account_number),
+        created_at: Utc::now().to_rfc3339(),
+        updated_at: Utc::now().to_rfc3339(),
+        expires_at: Some(response.expires_at.0.to_rfc3339()),
     };
 
     Ok(Json(intent))
 }
 
+/// Get the default tenant ID from environment
+fn get_default_tenant_id() -> String {
+    std::env::var("DEFAULT_TENANT_ID")
+        .unwrap_or_else(|_| "00000000-0000-0000-0000-000000000001".to_string())
+}
+
 /// POST /v1/portal/intents/withdraw - Create withdrawal intent
 pub async fn create_withdraw(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     Json(req): Json<WithdrawRequest>,
 ) -> Result<Json<Intent>, ApiError> {
     // Validate request
@@ -191,12 +222,12 @@ pub async fn create_withdraw(
     }
 
     // Validate amount
-    let amount: f64 = req
+    let amount: Decimal = req
         .amount
         .parse()
         .map_err(|_| ApiError::Validation("Amount must be a valid number".to_string()))?;
 
-    if amount <= 0.0 {
+    if amount <= Decimal::ZERO {
         return Err(ApiError::Validation("Amount must be positive".to_string()));
     }
 
@@ -232,27 +263,60 @@ pub async fn create_withdraw(
         "Create withdrawal intent requested"
     );
 
-    // In production, this would:
-    // 1. Extract user from auth middleware
-    // 2. Check user's KYC tier and limits
-    // 3. Check user's balance
-    // 4. Verify OTP if required
-    // 5. Create intent and lock funds
-    // 6. Initiate withdrawal process
+    // TODO: Extract user from PortalUser middleware extractor
+    // For now, use placeholder values - in production this comes from JWT claims
+    let tenant_id = TenantId::new(&get_default_tenant_id());
+    let user_id = UserId::new("placeholder-user-id"); // TODO: Get from auth middleware
 
-    let now = Utc::now();
-    let intent_id = Uuid::new_v4().to_string();
+    // Determine rails provider based on method
+    let rails_provider = if method == "VND_BANK" {
+        RailsProvider::new(req.bank_name.as_deref().unwrap_or("UNKNOWN"))
+    } else {
+        RailsProvider::new("OnChain")
+    };
+
+    // Create bank account from request
+    let bank_account = ramp_common::types::BankAccount {
+        bank_code: req.bank_name.clone().unwrap_or_default(),
+        account_number: req.account_number.clone().or(req.wallet_address.clone()).unwrap_or_default(),
+        account_name: req.account_name.clone().unwrap_or_default(),
+    };
+
+    // Create payout request for the service
+    let payout_request = ramp_core::service::payout::CreatePayoutRequest {
+        tenant_id: tenant_id.clone(),
+        user_id: user_id.clone(),
+        amount_vnd: VndAmount(amount),
+        rails_provider,
+        bank_account,
+        idempotency_key: None, // TODO: Accept idempotency key from request
+        metadata: serde_json::json!({
+            "method": method,
+            "currency": req.currency.to_uppercase(),
+            "network": req.network,
+        }),
+    };
+
+    // Call the real PayoutService
+    let response = app_state
+        .payout_service
+        .create_payout(payout_request)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to create withdrawal intent");
+            ApiError::Internal(format!("Failed to create withdrawal: {}", e))
+        })?;
 
     let intent = Intent {
-        id: intent_id.clone(),
+        id: response.intent_id.0.clone(),
         intent_type: "PAY_OUT".to_string(),
-        status: "PENDING".to_string(),
+        status: format!("{:?}", response.status),
         amount: req.amount,
         currency: req.currency.to_uppercase(),
-        reference: Some(format!("WTH{}", &intent_id[..8].to_uppercase())),
+        reference: Some(ReferenceCode::generate().0),
         bank_account: req.account_number.or(req.wallet_address),
-        created_at: now.to_rfc3339(),
-        updated_at: now.to_rfc3339(),
+        created_at: Utc::now().to_rfc3339(),
+        updated_at: Utc::now().to_rfc3339(),
         expires_at: None,
     };
 
@@ -261,7 +325,7 @@ pub async fn create_withdraw(
 
 /// GET /v1/portal/intents/:id - Get intent by ID
 pub async fn get_intent(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     Path(intent_id): Path<String>,
 ) -> Result<Json<Intent>, ApiError> {
     info!(intent_id = %intent_id, "Get intent requested");
@@ -271,33 +335,50 @@ pub async fn get_intent(
         return Err(ApiError::BadRequest("Intent ID is required".to_string()));
     }
 
-    // In production, this would:
-    // 1. Extract user from auth middleware
-    // 2. Query intent by ID
-    // 3. Verify intent belongs to user
-    // 4. Return intent or 404
+    // TODO: Extract user from PortalUser middleware extractor
+    // For now, use placeholder values - in production this comes from JWT claims
+    let tenant_id = TenantId::new(&get_default_tenant_id());
+    let id = IntentId::new(&intent_id);
 
-    let now = Utc::now();
+    // Query real intent from repository
+    let intent_row = app_state
+        .intent_repo
+        .get_by_id(&tenant_id, &id)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to get intent from repo");
+            ApiError::Internal("Failed to retrieve intent".to_string())
+        })?;
 
-    let intent = Intent {
-        id: intent_id,
-        intent_type: "PAY_IN".to_string(),
-        status: "PENDING".to_string(),
-        amount: "10000000".to_string(),
-        currency: "VND".to_string(),
-        reference: Some("DEP12345678".to_string()),
-        bank_account: None,
-        created_at: (now - Duration::hours(1)).to_rfc3339(),
-        updated_at: now.to_rfc3339(),
-        expires_at: Some((now + Duration::hours(23)).to_rfc3339()),
-    };
+    match intent_row {
+        Some(row) => {
+            // TODO: Verify intent belongs to user (from PortalUser extractor)
 
-    Ok(Json(intent))
+            let intent = Intent {
+                id: row.id.clone(),
+                intent_type: row.intent_type.clone(),
+                status: row.state.clone(),
+                amount: row.amount.to_string(),
+                currency: row.currency.clone(),
+                reference: row.reference_code,
+                bank_account: row.to_address.or(row.metadata.get("account_number").and_then(|v| v.as_str()).map(String::from)),
+                created_at: row.created_at.to_rfc3339(),
+                updated_at: row.updated_at.to_rfc3339(),
+                expires_at: row.expires_at.map(|dt| dt.to_rfc3339()),
+            };
+
+            Ok(Json(intent))
+        }
+        None => Err(ApiError::NotFound(format!(
+            "Intent {} not found",
+            intent_id
+        ))),
+    }
 }
 
 /// POST /v1/portal/intents/:id/confirm - Confirm user has made the transfer
 pub async fn confirm_intent(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     Path(intent_id): Path<String>,
 ) -> Result<Json<Intent>, ApiError> {
     info!(intent_id = %intent_id, "Confirm intent requested");
@@ -307,30 +388,65 @@ pub async fn confirm_intent(
         return Err(ApiError::BadRequest("Intent ID is required".to_string()));
     }
 
-    // In production, this would:
-    // 1. Extract user from auth middleware
-    // 2. Query intent by ID
-    // 3. Verify intent belongs to user
-    // 4. Verify intent is in CREATED/PENDING state
-    // 5. Update status to indicate user confirmed transfer
-    // 6. Trigger reconciliation/matching process
+    // TODO: Extract user from PortalUser middleware extractor
+    // For now, use placeholder values - in production this comes from JWT claims
+    let tenant_id = TenantId::new(&get_default_tenant_id());
+    let id = IntentId::new(&intent_id);
 
-    let now = Utc::now();
+    // Query real intent from repository
+    let intent_row = app_state
+        .intent_repo
+        .get_by_id(&tenant_id, &id)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to get intent from repo");
+            ApiError::Internal("Failed to retrieve intent".to_string())
+        })?;
 
-    let intent = Intent {
-        id: intent_id,
-        intent_type: "PAY_IN".to_string(),
-        status: "PENDING".to_string(), // Changed from CREATED to PENDING
-        amount: "10000000".to_string(),
-        currency: "VND".to_string(),
-        reference: Some("DEP12345678".to_string()),
-        bank_account: None,
-        created_at: (now - Duration::hours(1)).to_rfc3339(),
-        updated_at: now.to_rfc3339(),
-        expires_at: Some((now + Duration::hours(23)).to_rfc3339()),
-    };
+    match intent_row {
+        Some(row) => {
+            // TODO: Verify intent belongs to user (from PortalUser extractor)
 
-    Ok(Json(intent))
+            // Verify intent is in a confirmable state
+            let confirmable_states = ["CREATED", "AWAITING_DEPOSIT"];
+            if !confirmable_states.contains(&row.state.as_str()) {
+                return Err(ApiError::Validation(format!(
+                    "Intent cannot be confirmed in state: {}",
+                    row.state
+                )));
+            }
+
+            // Update intent state to PENDING (user confirmed transfer)
+            app_state
+                .intent_repo
+                .update_state(&tenant_id, &id, "PENDING")
+                .await
+                .map_err(|e| {
+                    warn!(error = %e, "Failed to update intent state");
+                    ApiError::Internal("Failed to confirm intent".to_string())
+                })?;
+
+            // Return updated intent
+            let intent = Intent {
+                id: row.id.clone(),
+                intent_type: row.intent_type.clone(),
+                status: "PENDING".to_string(), // Updated status
+                amount: row.amount.to_string(),
+                currency: row.currency.clone(),
+                reference: row.reference_code,
+                bank_account: row.to_address.or(row.metadata.get("account_number").and_then(|v| v.as_str()).map(String::from)),
+                created_at: row.created_at.to_rfc3339(),
+                updated_at: Utc::now().to_rfc3339(),
+                expires_at: row.expires_at.map(|dt| dt.to_rfc3339()),
+            };
+
+            Ok(Json(intent))
+        }
+        None => Err(ApiError::NotFound(format!(
+            "Intent {} not found",
+            intent_id
+        ))),
+    }
 }
 
 #[cfg(test)]

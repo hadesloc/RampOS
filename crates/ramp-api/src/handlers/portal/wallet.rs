@@ -12,8 +12,10 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use ramp_common::types::{TenantId, UserId};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::error::ApiError;
@@ -172,40 +174,65 @@ pub async fn get_account(
 }
 
 /// GET /v1/portal/wallet/balances - Get wallet balances
+/// Queries real balances from the ledger service
 pub async fn get_balances(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
 ) -> Result<Json<Vec<Balance>>, ApiError> {
     info!("Get balances requested");
 
-    // In production, this would:
-    // 1. Extract user from auth middleware
-    // 2. Query ledger service for user balances
-    // 3. Query on-chain balances if applicable
-    // 4. Combine and return all balances
+    // TODO: Extract user from PortalUser middleware extractor
+    // For now, use a placeholder user ID - in production this comes from JWT claims
+    let tenant_id = TenantId::new(&get_default_tenant_id());
+    let user_id = UserId::new("placeholder-user-id"); // TODO: Get from auth middleware
 
-    // Mock response with common currencies
-    let balances = vec![
-        Balance {
-            currency: "VND".to_string(),
-            available: "10000000".to_string(),
-            locked: "500000".to_string(),
-            total: "10500000".to_string(),
-        },
-        Balance {
-            currency: "USDT".to_string(),
-            available: "100.00".to_string(),
-            locked: "0.00".to_string(),
-            total: "100.00".to_string(),
-        },
-        Balance {
-            currency: "BTC".to_string(),
-            available: "0.00100000".to_string(),
-            locked: "0.00000000".to_string(),
-            total: "0.00100000".to_string(),
-        },
-    ];
+    // Query real balances from ledger service
+    let balance_rows = app_state
+        .ledger_service
+        .get_user_balances(&tenant_id, &user_id)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to get user balances from ledger");
+            ApiError::Internal("Failed to retrieve balances".to_string())
+        })?;
+
+    // Convert ledger balance rows to API response format
+    let balances: Vec<Balance> = if balance_rows.is_empty() {
+        // Return default empty balances if no records found
+        vec![
+            Balance {
+                currency: "VND".to_string(),
+                available: "0".to_string(),
+                locked: "0".to_string(),
+                total: "0".to_string(),
+            },
+        ]
+    } else {
+        balance_rows
+            .into_iter()
+            .map(|row| {
+                // The ledger stores the total balance
+                // TODO: Calculate locked amounts from pending intents
+                let available = row.balance;
+                let locked = Decimal::ZERO; // TODO: Query pending intent amounts
+                let total = available + locked;
+
+                Balance {
+                    currency: row.currency,
+                    available: available.to_string(),
+                    locked: locked.to_string(),
+                    total: total.to_string(),
+                }
+            })
+            .collect()
+    };
 
     Ok(Json(balances))
+}
+
+/// Get the default tenant ID from environment
+fn get_default_tenant_id() -> String {
+    std::env::var("DEFAULT_TENANT_ID")
+        .unwrap_or_else(|_| "00000000-0000-0000-0000-000000000001".to_string())
 }
 
 /// POST /v1/portal/wallet/session-key - Create session key for smart account

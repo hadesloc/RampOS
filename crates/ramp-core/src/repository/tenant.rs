@@ -17,6 +17,11 @@ pub struct TenantRow {
     /// SECURITY: Do not use webhook_secret_hash for signing - it's only for verification.
     #[serde(skip_serializing)]
     pub webhook_secret_encrypted: Option<Vec<u8>>,
+    /// Encrypted API secret for HMAC signature verification.
+    /// This is used to verify SDK request signatures.
+    /// SECURITY: Must be decrypted at runtime for verification.
+    #[serde(skip_serializing)]
+    pub api_secret_encrypted: Option<Vec<u8>>,
     pub webhook_url: Option<String>,
     pub config: serde_json::Value,
     pub daily_payin_limit_vnd: Option<Decimal>,
@@ -33,6 +38,13 @@ pub trait TenantRepository: Send + Sync {
     async fn update_status(&self, id: &TenantId, status: &str) -> Result<()>;
     async fn update_webhook_url(&self, id: &TenantId, url: &str) -> Result<()>;
     async fn update_api_key_hash(&self, id: &TenantId, hash: &str) -> Result<()>;
+    /// Update API credentials (api_key_hash and api_secret_encrypted)
+    async fn update_api_credentials(
+        &self,
+        id: &TenantId,
+        api_key_hash: &str,
+        api_secret_encrypted: &[u8],
+    ) -> Result<()>;
     async fn update_webhook_secret(
         &self,
         id: &TenantId,
@@ -87,17 +99,19 @@ impl TenantRepository for PgTenantRepository {
         sqlx::query(
             r#"
             INSERT INTO tenants (
-                id, name, status, api_key_hash, webhook_secret_hash,
-                webhook_url, config, daily_payin_limit_vnd, daily_payout_limit_vnd,
-                created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                id, name, status, api_key_hash, api_secret_encrypted, webhook_secret_hash,
+                webhook_secret_encrypted, webhook_url, config, daily_payin_limit_vnd,
+                daily_payout_limit_vnd, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             "#,
         )
         .bind(&tenant.id)
         .bind(&tenant.name)
         .bind(&tenant.status)
         .bind(&tenant.api_key_hash)
+        .bind(&tenant.api_secret_encrypted)
         .bind(&tenant.webhook_secret_hash)
+        .bind(&tenant.webhook_secret_encrypted)
         .bind(&tenant.webhook_url)
         .bind(&tenant.config)
         .bind(tenant.daily_payin_limit_vnd)
@@ -140,6 +154,25 @@ impl TenantRepository for PgTenantRepository {
             .execute(&self.pool)
             .await
             .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn update_api_credentials(
+        &self,
+        id: &TenantId,
+        api_key_hash: &str,
+        api_secret_encrypted: &[u8],
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE tenants SET api_key_hash = $1, api_secret_encrypted = $2, updated_at = NOW() WHERE id = $3",
+        )
+        .bind(api_key_hash)
+        .bind(api_secret_encrypted)
+        .bind(&id.0)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         Ok(())
     }

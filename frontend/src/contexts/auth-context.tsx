@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   authApi,
   walletApi,
-  setAuthToken,
-  getAuthToken,
   AuthUser,
-  AuthSession,
+  AuthResponse,
   SmartAccount,
   PortalApiError,
 } from "@/lib/portal-api";
@@ -64,29 +62,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated = !!user;
 
-  // Load user on mount
+  // Load user on mount by checking session status via API
+  // Auth tokens are now in httpOnly cookies, so we check session via API
   useEffect(() => {
     const initAuth = async () => {
-      const token = getAuthToken();
-      if (!token) {
-        setIsLoading(false);
-        return;
-      }
-
       try {
-        const userData = await authApi.getMe();
-        setUser(userData);
+        // Check session status via API (cookies are sent automatically)
+        const session = await authApi.checkSession();
 
-        // Also fetch wallet
-        try {
-          const walletData = await walletApi.getAccount();
-          setWallet(walletData);
-        } catch {
-          // Wallet might not exist yet
+        if (session.authenticated && session.user) {
+          setUser(session.user);
+
+          // Also fetch wallet
+          try {
+            const walletData = await walletApi.getAccount();
+            setWallet(walletData);
+          } catch {
+            // Wallet might not exist yet
+          }
         }
       } catch {
-        // Token is invalid, clear it
-        setAuthToken(null);
+        // Session check failed, user is not authenticated
+        // This is expected for non-authenticated users
       } finally {
         setIsLoading(false);
       }
@@ -95,15 +92,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth();
   }, []);
 
-  const handleAuthSuccess = useCallback(async (session: AuthSession) => {
-    setAuthToken(session.accessToken);
-    setUser(session.user);
-
-    // Store refresh token
-    if (typeof window !== "undefined") {
-      // TODO: Migrate to httpOnly cookies for better security
-      localStorage.setItem("refresh_token", session.refreshToken);
-    }
+  const handleAuthSuccess = useCallback(async (response: AuthResponse) => {
+    // Tokens are now set as httpOnly cookies by the server
+    // We just need to update the local state with user info
+    setUser(response.user);
 
     // Fetch wallet
     try {
@@ -145,7 +137,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = credential.response as AuthenticatorAssertionResponse;
 
       // Send credential to server
-      const session = await authApi.completeAuthentication({
+      // Server will set auth cookies and return user info
+      const authResponse = await authApi.completeAuthentication({
         id: credential.id,
         rawId: base64UrlEncode(credential.rawId),
         type: "public-key",
@@ -156,7 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       });
 
-      await handleAuthSuccess(session);
+      await handleAuthSuccess(authResponse);
     } catch (err) {
       const message =
         err instanceof PortalApiError
@@ -214,7 +207,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = credential.response as AuthenticatorAttestationResponse;
 
       // Send credential to server
-      const session = await authApi.completeRegistration(email, {
+      // Server will set auth cookies and return user info
+      const authResponse = await authApi.completeRegistration(email, {
         id: credential.id,
         rawId: base64UrlEncode(credential.rawId),
         type: "public-key",
@@ -224,7 +218,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       });
 
-      await handleAuthSuccess(session);
+      await handleAuthSuccess(authResponse);
     } catch (err) {
       const message =
         err instanceof PortalApiError
@@ -262,8 +256,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
 
     try {
-      const session = await authApi.verifyMagicLink(token);
-      await handleAuthSuccess(session);
+      // Server will set auth cookies and return user info
+      const authResponse = await authApi.verifyMagicLink(token);
+      await handleAuthSuccess(authResponse);
     } catch (err) {
       const message =
         err instanceof PortalApiError
@@ -279,14 +274,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     setIsLoading(true);
     try {
+      // Server will clear auth cookies
       await authApi.logout();
     } catch {
       // Ignore logout errors
     } finally {
-      setAuthToken(null);
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("refresh_token");
-      }
+      // Clear local state
       setUser(null);
       setWallet(null);
       setIsLoading(false);

@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { IntentService } from './services/intent.service';
 import { UserService } from './services/user.service';
 import { LedgerService } from './services/ledger.service';
@@ -8,9 +8,29 @@ import { signRequest } from './utils/crypto';
 import { withRetry } from './utils/retry';
 import { RampOSConfig } from './types';
 
+/**
+ * Type definitions for Axios HTTP methods with proper generics
+ */
+type HttpGetMethod = <T = unknown, R = AxiosResponse<T>, D = unknown>(
+  url: string,
+  config?: AxiosRequestConfig<D>
+) => Promise<R>;
+
+type HttpPostMethod = <T = unknown, R = AxiosResponse<T>, D = unknown>(
+  url: string,
+  data?: D,
+  config?: AxiosRequestConfig<D>
+) => Promise<R>;
+
+type HttpDeleteMethod = <T = unknown, R = AxiosResponse<T>, D = unknown>(
+  url: string,
+  config?: AxiosRequestConfig<D>
+) => Promise<R>;
+
+type HttpMethod = HttpGetMethod | HttpPostMethod | HttpDeleteMethod;
+
 export class RampOSClient {
   private readonly httpClient: AxiosInstance;
-  private readonly config: RampOSConfig;
 
   public readonly intents: IntentService;
   public readonly users: UserService;
@@ -19,7 +39,6 @@ export class RampOSClient {
   public readonly webhooks: WebhookVerifier;
 
   constructor(config: RampOSConfig) {
-    this.config = config;
     const baseURL = config.baseURL || 'https://api.rampos.io/v1';
 
     this.httpClient = axios.create({
@@ -70,16 +89,29 @@ export class RampOSClient {
     // Wrap HTTP client methods with retry policy
     const retryConfig = config.retry || { maxRetries: 3, baseDelay: 1000 };
     const methods = ['get', 'post', 'put', 'delete', 'patch', 'head', 'options'] as const;
+    type HttpMethodName = typeof methods[number];
 
-    methods.forEach((method) => {
-      const original = (this.httpClient as any)[method];
-      (this.httpClient as any)[method] = async (...args: any[]) => {
-        return withRetry(
-          () => original.apply(this.httpClient, args),
+    methods.forEach((method: HttpMethodName) => {
+      const original = this.httpClient[method] as HttpMethod;
+      const wrappedMethod = <T = unknown, R = AxiosResponse<T>, D = unknown>(
+        url: string,
+        dataOrConfig?: D | AxiosRequestConfig<D>,
+        config?: AxiosRequestConfig<D>
+      ): Promise<R> => {
+        return withRetry<R>(
+          () => {
+            // Handle different method signatures
+            if (method === 'get' || method === 'delete' || method === 'head' || method === 'options') {
+              return (original as HttpGetMethod)(url, dataOrConfig as AxiosRequestConfig<D>) as Promise<R>;
+            }
+            return (original as HttpPostMethod)(url, dataOrConfig, config) as Promise<R>;
+          },
           retryConfig.maxRetries,
           retryConfig.baseDelay
         );
       };
+      // Use type assertion for assignment since we're replacing methods with compatible signatures
+      (this.httpClient[method] as HttpMethod) = wrappedMethod;
     });
 
     this.intents = new IntentService(this.httpClient);
