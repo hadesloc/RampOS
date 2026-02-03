@@ -8,6 +8,8 @@
   "/(admin)/webhooks/page": "app/(admin)/webhooks/page.js",
   "/_global-error/page": "app/_global-error/page.js",
   "/_not-found/page": "app/_not-found/page.js",
+  "/admin-login/page": "app/admin-login/page.js",
+  "/api/admin-login/route": "app/api/admin-login/route.js",
   "/api/proxy/[...path]/route": "app/api/proxy/[...path]/route.js",
   "/portal/assets/page": "app/portal/assets/page.js",
   "/portal/deposit/page": "app/portal/deposit/page.js",

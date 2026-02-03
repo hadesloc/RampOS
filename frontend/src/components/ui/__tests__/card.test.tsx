@@ -7,6 +7,7 @@ import {
   CardDescription,
   CardContent,
   CardFooter,
+  CardAction,
 } from '../card'
 
 describe('Card', () => {
@@ -59,6 +60,14 @@ describe('Card', () => {
     expect(footer).toHaveClass('p-6')
   })
 
+  it('renders CardAction component', () => {
+    render(<CardAction data-testid="action">Action</CardAction>)
+    const action = screen.getByTestId('action')
+    expect(action).toBeInTheDocument()
+    expect(action).toHaveClass('ml-auto')
+    expect(action).toHaveClass('flex')
+  })
+
   it('renders full card structure', () => {
     render(
       <Card data-testid="full-card">
@@ -82,5 +91,24 @@ describe('Card', () => {
     render(<Card className="custom-card" data-testid="custom">Custom</Card>)
     const card = screen.getByTestId('custom')
     expect(card).toHaveClass('custom-card')
+  })
+
+  it('renders with elevation', () => {
+    render(<Card elevation="lg" data-testid="card-lg">Content</Card>)
+    expect(screen.getByTestId('card-lg')).toHaveClass('shadow-lg')
+  })
+
+  it('renders with hover state', () => {
+    render(<Card isHoverable data-testid="card-hover">Content</Card>)
+    const card = screen.getByTestId('card-hover')
+    expect(card).toHaveClass('hover:shadow-md')
+    expect(card).toHaveClass('cursor-pointer')
+  })
+
+  it('renders gradient variant', () => {
+    render(<Card variant="gradient" data-testid="card-gradient">Content</Card>)
+    const card = screen.getByTestId('card-gradient')
+    expect(card).toHaveClass('border-primary/20')
+    expect(card).toHaveClass('bg-gradient-to-br')
   })
 })

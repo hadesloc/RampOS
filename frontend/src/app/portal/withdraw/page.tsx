@@ -8,35 +8,9 @@ import { toast } from "sonner";
 import { ArrowRight, ShieldCheck, Loader2, AlertCircle, Wallet } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useAuth } from "@/contexts/auth-context";
-import { transactionApi, walletApi, Balance } from "@/lib/portal-api";
-import { useRouter } from "next/navigation";
+import { WithdrawCard } from "@/components/portal/withdraw-card";
+import { PageHeader } from "@/components/layout/page-header";
+import { PageContainer } from "@/components/layout/page-container";
 
 const vndWithdrawSchema = z.object({
   bankName: z.string().min(1, "Please select a bank"),
@@ -188,27 +162,21 @@ export default function WithdrawPage() {
   };
 
   // Show loading state
-  if (authLoading || isLoadingBalances) {
-    return (
-      <div className="container max-w-2xl py-8">
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </div>
-    );
-  }
+  // if (authLoading || isLoadingBalances) {
+  //   return (
+  //     <div className="container max-w-2xl py-8">
+  //       <div className="flex items-center justify-center py-20">
+  //         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   // Show wallet creation prompt if no wallet
-  if (!wallet) {
+  if (!wallet && !authLoading) {
     return (
-      <div className="container max-w-2xl py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">Withdraw</h1>
-          <p className="text-muted-foreground">
-            Create a wallet to withdraw funds.
-          </p>
-        </div>
-
+      <PageContainer>
+        <PageHeader title="Withdraw" description="Withdraw funds to your bank account or crypto wallet." />
         <Card>
           <CardContent className="flex flex-col items-center py-10 space-y-4">
             <div className="rounded-full bg-muted p-4">
@@ -225,19 +193,15 @@ export default function WithdrawPage() {
             </Button>
           </CardContent>
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="container max-w-2xl py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Withdraw</h1>
-        <p className="text-muted-foreground">
-          Withdraw funds to your bank account or crypto wallet.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader title="Withdraw" description="Withdraw funds to your bank account or crypto wallet." />
 
+      <div className="max-w-3xl mx-auto space-y-6">
       {/* Balance Display */}
       <Card className="mb-6">
         <CardContent className="pt-6">
@@ -500,6 +464,7 @@ export default function WithdrawPage() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+      </div>
+    </PageContainer>
   );
 }

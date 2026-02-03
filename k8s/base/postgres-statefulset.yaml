@@ -5,7 +5,7 @@ metadata:
   namespace: rampos
 spec:
   serviceName: rampos-postgres
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: rampos-postgres
@@ -18,11 +18,15 @@ spec:
         runAsNonRoot: true
         runAsUser: 999
         fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
         image: postgres:15-alpine
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
         env:
         - name: POSTGRES_USER
           value: rampos

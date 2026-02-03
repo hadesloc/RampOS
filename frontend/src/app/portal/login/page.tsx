@@ -24,6 +24,7 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  Shield,
 } from "lucide-react";
 
 function LoginContent() {
@@ -124,7 +125,7 @@ function LoginContent() {
         <Card className="w-full max-w-md">
           <CardHeader className="space-y-1">
             <div className="flex items-center justify-center mb-4">
-              <div className="rounded-full bg-green-100 p-3 dark:bg-green-900/30">
+              <div className="rounded-full bg-green-100 p-3 dark:bg-green-500/15">
                 <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
               </div>
             </div>
@@ -165,10 +166,15 @@ function LoginContent() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold tracking-tight">
+          <div className="flex justify-center mb-4">
+             <div className="h-12 w-12 rounded-lg bg-primary flex items-center justify-center">
+                <Shield className="h-8 w-8 text-primary-foreground" />
+             </div>
+          </div>
+          <CardTitle className="text-2xl font-bold tracking-tight text-center">
             Welcome back
           </CardTitle>
-          <CardDescription>Sign in to your RampOS account</CardDescription>
+          <CardDescription className="text-center">Sign in to your RampOS account</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && (
@@ -192,6 +198,7 @@ function LoginContent() {
                       placeholder="m@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      className="h-11"
                     />
                     <p className="text-xs text-muted-foreground">
                       Leave empty to use any registered passkey
@@ -263,6 +270,7 @@ function LoginContent() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading}
+                  className="h-11"
                 />
               </div>
               <Button

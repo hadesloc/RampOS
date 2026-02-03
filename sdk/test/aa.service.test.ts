@@ -5,7 +5,6 @@ import MockAdapter from 'axios-mock-adapter';
 import {
   SmartAccount,
   SessionKey,
-  UserOperation,
   GasEstimate,
   UserOpReceipt,
   UserOperationParams,
@@ -30,14 +29,21 @@ describe('AAService', () => {
 
   describe('createSmartAccount', () => {
     it('should create a smart account', async () => {
-      const params = { owner: 'user-123' };
-      const mockResponse: SmartAccount = {
+      const params = { userId: 'user-123', ownerAddress: '0xowner...', chainId: 1 };
+      const mockAccount: SmartAccount = {
         address: '0x123...',
-        owner: 'user-123',
+        tenantId: 'tenant-1',
+        userId: 'user-123',
+        ownerAddress: '0xowner...',
+        chainId: 1,
         factoryAddress: '0xabc...',
-        salt: '0x1',
-        deployed: false,
+        entryPoint: '0xentry...',
+        accountType: 'simple',
+        isDeployed: false,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
       };
+      const mockResponse = { account: mockAccount };
 
       mock.onPost('/aa/accounts', params).reply(200, mockResponse);
 
@@ -51,10 +57,16 @@ describe('AAService', () => {
       const address = '0x123...';
       const mockResponse: SmartAccount = {
         address: '0x123...',
-        owner: 'user-123',
+        tenantId: 'tenant-1',
+        userId: 'user-123',
+        ownerAddress: '0xowner...',
+        chainId: 1,
         factoryAddress: '0xabc...',
-        salt: '0x1',
-        deployed: true,
+        entryPoint: '0xentry...',
+        accountType: 'simple',
+        isDeployed: true,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
       };
 
       mock.onGet(`/aa/accounts/${address}`).reply(200, mockResponse);
@@ -95,18 +107,34 @@ describe('AAService', () => {
   describe('sendUserOperation', () => {
     it('should send a user operation', async () => {
       const params: UserOperationParams = {
-        target: '0xTarget...',
-        value: '0',
-        data: '0x',
-        sponsored: true,
+        sender: '0xsender...',
+        chainId: 1,
+        callData: '0xcall...',
       };
 
       const mockResponse: UserOpReceipt = {
+        userOperation: {
+          id: 'op_123',
+          sender: params.sender,
+          nonce: '0x1',
+          initCode: '0x',
+          callData: params.callData,
+          callGasLimit: '100000',
+          verificationGasLimit: '200000',
+          preVerificationGas: '30000',
+          maxFeePerGas: '100',
+          maxPriorityFeePerGas: '2',
+          paymasterAndData: '0x',
+          signature: '0xsig',
+          status: 'PENDING',
+          chainId: params.chainId,
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
         userOpHash: '0xhash...',
-        success: true
       };
 
-      mock.onPost('/aa/bundler/user-op', params).reply(200, mockResponse);
+      mock.onPost('/aa/user-operations', params).reply(200, mockResponse);
 
       const result = await aaService.sendUserOperation(params);
       expect(result).toEqual(mockResponse);
@@ -116,17 +144,19 @@ describe('AAService', () => {
   describe('estimateGas', () => {
     it('should estimate gas', async () => {
       const params: UserOperationParams = {
-        target: '0xTarget...',
-        value: '0',
-        data: '0x',
+        sender: '0xsender...',
+        chainId: 1,
+        callData: '0xcall...',
       };
       const mockResponse: GasEstimate = {
-        preVerificationGas: '1000',
-        verificationGas: '2000',
         callGasLimit: '3000',
+        verificationGasLimit: '2000',
+        preVerificationGas: '1000',
+        maxFeePerGas: '100',
+        maxPriorityFeePerGas: '2',
       };
 
-      mock.onPost('/aa/bundler/estimate-gas', params).reply(200, mockResponse);
+      mock.onPost('/aa/user-operations/estimate', params).reply(200, mockResponse);
 
       const result = await aaService.estimateGas(params);
       expect(result).toEqual(mockResponse);

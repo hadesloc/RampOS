@@ -53,3 +53,31 @@ pub async fn get_user_balances(
         balances: balance_dtos,
     }))
 }
+
+/// GET /v1/users/{tenant_id}/{user_id}/balances - Alias for balance endpoint
+pub async fn get_user_balances_for_tenant(
+    State(service): State<LedgerServiceState>,
+    Extension(tenant_ctx): Extension<TenantContext>,
+    axum::extract::Path((tenant_id, user_id)): axum::extract::Path<(String, String)>,
+) -> Result<Json<UserBalancesResponse>, ApiError> {
+    if tenant_id != tenant_ctx.tenant_id.0 {
+        return Err(ApiError::Forbidden("Tenant mismatch".to_string()));
+    }
+
+    let balances = service
+        .get_user_balances(&tenant_ctx.tenant_id, &UserId::new(&user_id))
+        .await?;
+
+    let balance_dtos: Vec<BalanceDto> = balances
+        .into_iter()
+        .map(|b| BalanceDto {
+            account_type: b.account_type,
+            currency: b.currency,
+            balance: b.balance.to_string(),
+        })
+        .collect();
+
+    Ok(Json(UserBalancesResponse {
+        balances: balance_dtos,
+    }))
+}

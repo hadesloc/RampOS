@@ -1,57 +1,123 @@
 import { z } from 'zod';
 
 export enum IntentType {
-  PAY_IN = 'PAY_IN',
-  PAY_OUT = 'PAY_OUT',
+  PAYIN = 'PAYIN',
+  PAYOUT = 'PAYOUT',
   TRADE = 'TRADE',
 }
 
-export enum IntentStatus {
-  CREATED = 'CREATED',
-  PENDING = 'PENDING',
-  COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',
-  CANCELLED = 'CANCELLED',
-}
+export const StateHistoryEntrySchema = z.object({
+  state: z.string(),
+  timestamp: z.string(),
+  reason: z.string().optional(),
+});
+
+export type StateHistoryEntry = z.infer<typeof StateHistoryEntrySchema>;
 
 export const IntentSchema = z.object({
   id: z.string(),
-  tenantId: z.string(),
-  type: z.nativeEnum(IntentType),
-  status: z.nativeEnum(IntentStatus),
+  userId: z.string().optional(),
+  intentType: z.string(),
+  state: z.string(),
   amount: z.string(),
   currency: z.string(),
-  bankAccount: z.string().optional(),
-  bankRef: z.string().optional(),
-  metadata: z.record(z.any()).optional(),
+  actualAmount: z.string().optional(),
+  referenceCode: z.string().optional(),
+  bankTxId: z.string().optional(),
+  chainId: z.string().optional(),
+  txHash: z.string().optional(),
+  stateHistory: z.array(StateHistoryEntrySchema).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  expiresAt: z.string().optional(),
+  completedAt: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
 });
 
 export type Intent = z.infer<typeof IntentSchema>;
 
-export const CreatePayInSchema = z.object({
-  amount: z.string(),
-  currency: z.string(),
+export const VirtualAccountSchema = z.object({
+  bank: z.string(),
+  accountNumber: z.string(),
+  accountName: z.string(),
+});
+
+export type VirtualAccount = z.infer<typeof VirtualAccountSchema>;
+
+export const BankAccountSchema = z.object({
+  bankCode: z.string(),
+  accountNumber: z.string(),
+  accountName: z.string(),
+});
+
+export type BankAccount = z.infer<typeof BankAccountSchema>;
+
+export const CreatePayinRequestSchema = z.object({
+  tenantId: z.string(),
+  userId: z.string(),
+  amountVnd: z.number(),
+  railsProvider: z.string(),
   metadata: z.record(z.any()).optional(),
 });
 
-export type CreatePayInDto = z.infer<typeof CreatePayInSchema>;
+export type CreatePayinRequest = z.infer<typeof CreatePayinRequestSchema>;
 
-export const CreatePayOutSchema = z.object({
-  amount: z.string(),
-  currency: z.string(),
-  bankAccount: z.string(),
+export const CreatePayinResponseSchema = z.object({
+  intentId: z.string(),
+  referenceCode: z.string(),
+  virtualAccount: VirtualAccountSchema.optional(),
+  expiresAt: z.string(),
+  status: z.string(),
+});
+
+export type CreatePayinResponse = z.infer<typeof CreatePayinResponseSchema>;
+
+export const ConfirmPayinRequestSchema = z.object({
+  tenantId: z.string(),
+  referenceCode: z.string(),
+  status: z.string(),
+  bankTxId: z.string(),
+  amountVnd: z.number(),
+  settledAt: z.string(),
+  rawPayloadHash: z.string(),
+});
+
+export type ConfirmPayinRequest = z.infer<typeof ConfirmPayinRequestSchema>;
+
+export const ConfirmPayinResponseSchema = z.object({
+  intentId: z.string(),
+  status: z.string(),
+});
+
+export type ConfirmPayinResponse = z.infer<typeof ConfirmPayinResponseSchema>;
+
+export const CreatePayoutRequestSchema = z.object({
+  tenantId: z.string(),
+  userId: z.string(),
+  amountVnd: z.number(),
+  railsProvider: z.string(),
+  bankAccount: BankAccountSchema,
   metadata: z.record(z.any()).optional(),
 });
 
-export type CreatePayOutDto = z.infer<typeof CreatePayOutSchema>;
+export type CreatePayoutRequest = z.infer<typeof CreatePayoutRequestSchema>;
+
+export const CreatePayoutResponseSchema = z.object({
+  intentId: z.string(),
+  status: z.string(),
+});
+
+export type CreatePayoutResponse = z.infer<typeof CreatePayoutResponseSchema>;
+
+export const CreatePayInSchema = CreatePayinRequestSchema;
+export type CreatePayInDto = CreatePayinRequest;
+export const CreatePayOutSchema = CreatePayoutRequestSchema;
+export type CreatePayOutDto = CreatePayoutRequest;
 
 export const IntentFilterSchema = z.object({
-  type: z.nativeEnum(IntentType).optional(),
-  status: z.nativeEnum(IntentStatus).optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  userId: z.string().optional(),
+  intentType: z.string().optional(),
+  state: z.string().optional(),
   limit: z.number().optional(),
   offset: z.number().optional(),
 });

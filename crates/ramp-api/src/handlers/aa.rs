@@ -380,6 +380,8 @@ pub async fn send_user_operation(
 
     tracing::Span::current().record("sender", format!("{:?}", user_op.sender));
 
+    ensure_account_belongs_to_tenant(&aa_state, &tenant_ctx.tenant_id, user_op.sender).await?;
+
     // Handle sponsorship if requested
     let final_user_op = if req.sponsor {
         // Check if we can sponsor this operation
@@ -474,6 +476,8 @@ pub async fn estimate_gas(
 
     tracing::Span::current().record("sender", format!("{:?}", user_op.sender));
 
+    ensure_account_belongs_to_tenant(&aa_state, &tenant_ctx.tenant_id, user_op.sender).await?;
+
     // Estimate gas via bundler
     let estimation: GasEstimation = aa_state
         .bundler_client
@@ -520,7 +524,7 @@ pub async fn estimate_gas(
 #[instrument(skip_all, fields(hash))]
 pub async fn get_user_operation(
     State(aa_state): State<AAServiceState>,
-    Extension(_tenant_ctx): Extension<TenantContext>,
+    Extension(tenant_ctx): Extension<TenantContext>,
     Path(hash): Path<String>,
 ) -> Result<Json<UserOperationDto>, ApiError> {
     tracing::Span::current().record("hash", &hash);
@@ -537,6 +541,8 @@ pub async fn get_user_operation(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or_else(|| ApiError::NotFound("UserOperation not found".to_string()))?;
+
+    ensure_account_belongs_to_tenant(&aa_state, &tenant_ctx.tenant_id, user_op.sender).await?;
 
     info!(
         hash = %op_hash,
@@ -570,7 +576,7 @@ pub async fn get_user_operation(
 #[instrument(skip_all, fields(hash))]
 pub async fn get_user_operation_receipt(
     State(aa_state): State<AAServiceState>,
-    Extension(_tenant_ctx): Extension<TenantContext>,
+    Extension(tenant_ctx): Extension<TenantContext>,
     Path(hash): Path<String>,
 ) -> Result<Json<crate::dto::UserOpReceiptDto>, ApiError> {
     tracing::Span::current().record("hash", &hash);
@@ -587,6 +593,8 @@ pub async fn get_user_operation_receipt(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or_else(|| ApiError::NotFound("UserOperation receipt not found".to_string()))?;
+
+    ensure_account_belongs_to_tenant(&aa_state, &tenant_ctx.tenant_id, receipt.sender).await?;
 
     info!(
         hash = %op_hash,
@@ -611,6 +619,20 @@ pub async fn get_user_operation_receipt(
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+async fn ensure_account_belongs_to_tenant(
+    aa_state: &AAServiceState,
+    tenant_id: &TenantId,
+    sender: Address,
+) -> Result<(), ApiError> {
+    let authorized = verify_account_ownership(aa_state, tenant_id, sender).await;
+    if !authorized {
+        return Err(ApiError::Forbidden(
+            "Account does not belong to this tenant".to_string(),
+        ));
+    }
+    Ok(())
+}
 
 /// Verify that a smart account address belongs to the given tenant.
 ///

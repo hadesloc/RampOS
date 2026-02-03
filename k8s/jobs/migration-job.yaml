@@ -12,6 +12,8 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: migration
         securityContext:
@@ -19,7 +21,7 @@ spec:
           capabilities:
             drop: ["ALL"]
           readOnlyRootFilesystem: true
-        image: ghcr.io/rampos/rampos:latest
+        image: ghcr.io/rampos/rampos:0.1.0
         command: ["/app/rampos-server", "migrate"]
         envFrom:
         - configMapRef:

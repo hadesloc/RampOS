@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { useState } from "react"
-import { cn } from "@/lib/utils"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   Wallet,
@@ -13,49 +13,77 @@ import {
   Settings,
   Menu,
   X,
-  User
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
+  User,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useAuth } from "@/contexts/auth-context";
 
-const sidebarItems = [
+const sidebarSections = [
   {
-    title: "Dashboard",
-    href: "/portal",
-    icon: LayoutDashboard,
+    title: "Overview",
+    items: [
+      {
+        title: "Dashboard",
+        href: "/portal",
+        icon: LayoutDashboard,
+      },
+    ],
   },
   {
-    title: "Assets",
-    href: "/portal/assets",
-    icon: Wallet,
+    title: "Finance",
+    items: [
+      {
+        title: "Assets",
+        href: "/portal/assets",
+        icon: Wallet,
+      },
+      {
+        title: "Deposit",
+        href: "/portal/deposit",
+        icon: ArrowDownToLine,
+      },
+      {
+        title: "Withdraw",
+        href: "/portal/withdraw",
+        icon: ArrowUpFromLine,
+      },
+      {
+        title: "Transactions",
+        href: "/portal/transactions",
+        icon: History,
+      },
+    ],
   },
   {
-    title: "Deposit",
-    href: "/portal/deposit",
-    icon: ArrowDownToLine,
+    title: "Account",
+    items: [
+      {
+        title: "Settings",
+        href: "/portal/settings",
+        icon: Settings,
+      },
+    ],
   },
-  {
-    title: "Withdraw",
-    href: "/portal/withdraw",
-    icon: ArrowUpFromLine,
-  },
-  {
-    title: "Transactions",
-    href: "/portal/transactions",
-    icon: History,
-  },
-  {
-    title: "Settings",
-    href: "/portal/settings",
-    icon: Settings,
-  },
-]
+];
 
 export function PortalSidebar() {
-  const pathname = usePathname()
-  const [isOpen, setIsOpen] = useState(false)
+  const pathname = usePathname();
+  const [isOpen, setIsOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const { user, logout } = useAuth();
 
   return (
-    <>
+    <TooltipProvider delayDuration={0}>
       {/* Mobile Toggle */}
       <div className="md:hidden fixed top-4 left-4 z-50">
         <Button variant="outline" size="icon" onClick={() => setIsOpen(!isOpen)}>
@@ -74,55 +102,152 @@ export function PortalSidebar() {
       {/* Sidebar Container */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 border-r bg-card transition-transform duration-300 ease-in-out md:static md:translate-x-0",
-          isOpen ? "translate-x-0" : "-translate-x-full"
+          "fixed inset-y-0 left-0 z-50 flex h-full flex-col border-r bg-card transition-all duration-300 ease-in-out md:static",
+          isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+          isCollapsed ? "md:w-[80px]" : "md:w-64",
+          "w-64"
         )}
       >
-        <div className="flex h-full flex-col px-3 py-4">
-          <div className="mb-8 flex items-center justify-between px-3">
-            <h1 className="text-xl font-bold tracking-tight">RampOS Portal</h1>
+        <div className={cn("flex items-center h-16 px-4", isCollapsed ? "md:justify-center justify-between" : "justify-between")}>
+           <h1 className={cn("text-xl font-bold tracking-tight text-foreground truncate transition-opacity", isCollapsed ? "md:hidden" : "block")}>
+             RampOS
+           </h1>
+           <div className="flex items-center gap-2">
             <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              onClick={() => setIsOpen(false)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <nav className="flex-1 space-y-1">
-            {sidebarItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
-                  pathname === item.href
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground"
-                )}
+                variant="ghost"
+                size="icon"
+                className="md:hidden"
                 onClick={() => setIsOpen(false)}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.title}
-              </Link>
+            >
+                <X className="h-4 w-4" />
+            </Button>
+            <Button
+                variant="ghost"
+                size="icon"
+                className={cn("hidden md:flex h-8 w-8 text-muted-foreground hover:text-foreground", isCollapsed && "h-8 w-8")}
+                onClick={() => setIsCollapsed(!isCollapsed)}
+            >
+                {isCollapsed ? (
+                <ChevronRight className="h-4 w-4" />
+                ) : (
+                <ChevronLeft className="h-4 w-4" />
+                )}
+                <span className="sr-only">Toggle Sidebar</span>
+            </Button>
+           </div>
+        </div>
+
+        <Separator />
+
+        <div className="flex-1 overflow-y-auto py-4">
+          <nav className="space-y-6 px-2">
+            {sidebarSections.map((section, index) => (
+              <div key={section.title}>
+                <h2 className={cn("mb-2 px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 transition-opacity", isCollapsed ? "md:hidden" : "block")}>
+                  {section.title}
+                </h2>
+                <div className="space-y-1">
+                  {section.items.map((item) => {
+                    const isActive = pathname === item.href;
+
+                    return (
+                        <div key={item.href}>
+                             {/* Desktop Collapsed Item */}
+                             <div className={cn("hidden md:block", !isCollapsed && "hidden")}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Link
+                                        href={item.href}
+                                        className={cn(
+                                            "flex h-10 w-full items-center justify-center rounded-md transition-colors hover:bg-primary/5 hover:text-foreground",
+                                            isActive
+                                            ? "bg-primary/10 text-primary"
+                                            : "text-muted-foreground"
+                                        )}
+                                        >
+                                        <item.icon className="h-5 w-5" />
+                                        <span className="sr-only">{item.title}</span>
+                                        </Link>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right" className="font-medium">
+                                        {item.title}
+                                    </TooltipContent>
+                                </Tooltip>
+                             </div>
+
+                             {/* Standard Item (Mobile or Desktop Expanded) */}
+                             <div className={cn("block", isCollapsed && "md:hidden")}>
+                                <Link
+                                    href={item.href}
+                                    className={cn(
+                                    "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all hover:bg-primary/5 hover:text-foreground",
+                                    isActive
+                                        ? "bg-primary/10 text-primary border-l-2 border-primary rounded-l-none shadow-sm"
+                                        : "text-muted-foreground hover:translate-x-1"
+                                    )}
+                                    onClick={() => setIsOpen(false)}
+                                >
+                                    <item.icon className={cn("h-4 w-4 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+                                    {item.title}
+                                </Link>
+                             </div>
+                        </div>
+                    );
+                  })}
+                </div>
+                {index < sidebarSections.length - 1 && (
+                  <div className={cn("mt-4 px-2", isCollapsed ? "md:hidden" : "block")}>
+                    <Separator className="bg-border/50" />
+                  </div>
+                )}
+              </div>
             ))}
           </nav>
+        </div>
 
-          <div className="border-t pt-4">
-            <div className="flex items-center gap-3 px-3 py-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted">
-                <User className="h-4 w-4" />
-              </div>
-              <div className="flex flex-col">
-                <p className="text-sm font-medium">User Account</p>
-                <p className="text-xs text-muted-foreground">user@example.com</p>
-              </div>
+        <div className="border-t p-4 bg-muted/20">
+            {/* Desktop Collapsed Footer */}
+            <div className={cn("hidden md:flex flex-col items-center gap-4", !isCollapsed && "hidden")}>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                         <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => logout()}
+                        >
+                            <LogOut className="h-4 w-4" />
+                            <span className="sr-only">Logout</span>
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                         <p>Logout {user?.email}</p>
+                    </TooltipContent>
+                </Tooltip>
             </div>
-          </div>
+
+             {/* Standard Footer */}
+             <div className={cn("flex flex-col gap-4", isCollapsed && "md:hidden")}>
+                <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary ring-2 ring-background">
+                        {user?.email?.[0].toUpperCase() || "U"}
+                    </div>
+                    <div className="flex flex-col overflow-hidden">
+                        <p className="text-sm font-medium truncate text-foreground">My Account</p>
+                        <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                    </div>
+                </div>
+                 <Button
+                    variant="outline"
+                    className="w-full justify-start gap-2 text-muted-foreground hover:text-destructive hover:border-destructive/50"
+                    onClick={() => logout()}
+                >
+                    <LogOut className="h-4 w-4" />
+                    Logout
+                </Button>
+            </div>
         </div>
       </aside>
-    </>
-  )
+    </TooltipProvider>
+  );
 }

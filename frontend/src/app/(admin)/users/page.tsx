@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +34,7 @@ import { Label } from "@/components/ui/label";
 import { MoreHorizontal, Plus, Settings2, Loader2, RefreshCw } from "lucide-react";
 import { usersApi, type User } from "@/lib/api";
 import { useToast } from "@/components/ui/use-toast";
+import { PageHeader } from "@/components/layout/page-header";
 
 function formatVnd(value?: string): string {
   if (!value) return "0 ₫";
@@ -55,28 +57,28 @@ function formatDate(dateStr: string): string {
 function getKycStatusColor(status: string): string {
   switch (status) {
     case "APPROVED":
-      return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+      return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400 hover:bg-green-100/80 border-transparent";
     case "PENDING":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-400 hover:bg-yellow-100/80 border-transparent";
     case "REJECTED":
-      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+      return "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-400 hover:bg-red-100/80 border-transparent";
     case "NOT_STARTED":
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100/80 border-transparent";
     default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100/80 border-transparent";
   }
 }
 
 function getStatusColor(status: string): string {
   switch (status) {
     case "ACTIVE":
-      return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+      return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400 hover:bg-green-100/80 border-transparent";
     case "SUSPENDED":
-      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+      return "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-400 hover:bg-red-100/80 border-transparent";
     case "INACTIVE":
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100/80 border-transparent";
     default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100/80 border-transparent";
   }
 }
 
@@ -174,67 +176,69 @@ export default function UsersPage() {
   };
 
   return (
-    <div className="space-y-6 p-4">
-      <div className="flex justify-between items-center">
-        <div>
-            <h1 className="text-3xl font-bold tracking-tight">Users</h1>
-            <p className="text-muted-foreground">
-            Manage users and their KYC status
-            </p>
-        </div>
-        <div className="flex gap-2">
-            <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading}>
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
-            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                <DialogTrigger asChild>
-                    <Button>
-                        <Plus className="mr-2 h-4 w-4" /> Create User
-                    </Button>
-                </DialogTrigger>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Create New User</DialogTitle>
-                        <DialogDescription>
-                            Add a new user to the system. They will start with Tier 0.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="externalId" className="text-right">
-                                External ID
-                            </Label>
-                            <Input
-                                id="externalId"
-                                value={newUser.externalId}
-                                onChange={(e) => setNewUser({...newUser, externalId: e.target.value})}
-                                className="col-span-3"
-                            />
+    <div className="space-y-6 p-6">
+      <PageHeader
+        title="Users"
+        description="Manage users and their KYC status"
+        breadcrumbs={[
+            { label: "Dashboard", href: "/" },
+            { label: "Users" }
+        ]}
+        actions={
+            <div className="flex gap-2">
+                <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading}>
+                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </Button>
+                <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                    <DialogTrigger asChild>
+                        <Button>
+                            <Plus className="mr-2 h-4 w-4" /> Create User
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Create New User</DialogTitle>
+                            <DialogDescription>
+                                Add a new user to the system. They will start with Tier 0.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="externalId" className="text-right">
+                                    External ID
+                                </Label>
+                                <Input
+                                    id="externalId"
+                                    value={newUser.externalId}
+                                    onChange={(e) => setNewUser({...newUser, externalId: e.target.value})}
+                                    className="col-span-3"
+                                />
+                            </div>
+                             <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="kycTier" className="text-right">
+                                    Initial Tier
+                                </Label>
+                                <select
+                                    id="kycTier"
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 col-span-3"
+                                    value={newUser.kycTier}
+                                    onChange={(e) => setNewUser({ ...newUser, kycTier: e.target.value })}
+                                >
+                                    <option value="0">Tier 0</option>
+                                    <option value="1">Tier 1</option>
+                                    <option value="2">Tier 2</option>
+                                    <option value="3">Tier 3</option>
+                                </select>
+                            </div>
                         </div>
-                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="kycTier" className="text-right">
-                                Initial Tier
-                            </Label>
-                            <select
-                                id="kycTier"
-                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 col-span-3"
-                                value={newUser.kycTier}
-                                onChange={(e) => setNewUser({ ...newUser, kycTier: e.target.value })}
-                            >
-                                <option value="0">Tier 0</option>
-                                <option value="1">Tier 1</option>
-                                <option value="2">Tier 2</option>
-                                <option value="3">Tier 3</option>
-                            </select>
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button onClick={handleCreateUser}>Create User</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </div>
-      </div>
+                        <DialogFooter>
+                            <Button onClick={handleCreateUser}>Create User</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            </div>
+        }
+      />
 
       {/* Filters */}
       <div className="flex gap-4 items-center flex-wrap">
@@ -351,24 +355,22 @@ export default function UsersPage() {
                 )}
                 {visibleColumns.kycStatus && (
                   <TableCell>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getKycStatusColor(
-                        user.kyc_status
-                      )}`}
+                    <Badge
+                      variant="outline"
+                      className={getKycStatusColor(user.kyc_status)}
                     >
                       {user.kyc_status}
-                    </span>
+                    </Badge>
                   </TableCell>
                 )}
                 {visibleColumns.status && (
                   <TableCell>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(
-                        user.status
-                      )}`}
+                    <Badge
+                      variant="outline"
+                      className={getStatusColor(user.status)}
                     >
                       {user.status}
-                    </span>
+                    </Badge>
                   </TableCell>
                 )}
                 {visibleColumns.payinLimit && (

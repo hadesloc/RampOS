@@ -1,2001 +1,1549 @@
 {
-  "project": "RampOS",
-  "version": "1.0",
-  "created_at": "2026-01-22",
-  "updated_at": "2026-01-23",
-  "total_tasks": 173,
-  "completed_tasks": 91,
-  "in_progress_tasks": 3,
-  "pending_tasks": 39,
+  "project": "RampOS UI/UX Refactor",
+  "version": "2.0",
+  "created_at": "2026-02-03",
+  "updated_at": "2026-02-03",
+  "total_tasks": 55,
+  "completed_tasks": 0,
+  "in_progress_tasks": 0,
+  "pending_tasks": 55,
   "phases": [
     {
       "id": "phase-1",
-      "name": "Core Orchestrator",
-      "days": "1-30",
-      "status": "completed",
-      "progress": "100%",
+      "name": "Foundation",
+      "description": "Design tokens, fonts, Tailwind configuration",
+      "status": "pending",
+      "progress": "0%",
+      "estimated_duration": "1 day",
       "tasks": [
         {
-          "id": "1.1.1",
-          "name": "Initialize Rust workspace",
-          "description": "Create Cargo.toml workspace with all crate definitions",
-          "priority": "critical",
-          "estimated_hours": 2,
+          "id": "T-001",
+          "title": "Fintech Color Palette CSS Variables",
+          "description": "Update globals.css with new fintech color palette. Replace default zinc theme with Navy/Gold enterprise gateway palette. Define colors in HSL format for both light and dark modes including primary (#1E40AF), accent (#10B981), warning (#F59E0B), destructive (#EF4444), and surface colors.",
+          "phase": "Foundation",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
           "dependencies": [],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "Cargo.toml workspace with 7 crates: ramp-core, ramp-api, ramp-ledger, ramp-compliance, ramp-aa, ramp-adapter, ramp-common"
-        },
-        {
-          "id": "1.1.2",
-          "name": "Configure development environment",
-          "description": "Set up Docker Compose, env files, VS Code settings",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "1.1.1"
-          ],
-          "assignee": "devops",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "docker-compose.yml with PostgreSQL, Redis, NATS, ClickHouse, API service"
-        },
-        {
-          "id": "1.1.3",
-          "name": "Set up CI/CD pipeline",
-          "description": "GitHub Actions for test, lint, build",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "1.1.1"
-          ],
-          "assignee": "devops",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": ".github/workflows/ci.yaml, cd.yaml, contracts.yaml"
-        },
-        {
-          "id": "1.1.4",
-          "name": "Configure linting and formatting",
-          "description": "Set up clippy, rustfmt, pre-commit hooks",
-          "priority": "high",
-          "estimated_hours": 2,
-          "dependencies": [
-            "1.1.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "Workspace Cargo.toml with release profile settings"
-        },
-        {
-          "id": "1.2.1",
-          "name": "Set up PostgreSQL with Docker",
-          "description": "Docker Compose with PostgreSQL, health checks",
-          "priority": "critical",
-          "estimated_hours": 2,
-          "dependencies": [
-            "1.1.2"
-          ],
-          "assignee": "devops",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "docker-compose.yml - PostgreSQL 16 with health checks"
-        },
-        {
-          "id": "1.2.2",
-          "name": "Create migration framework",
-          "description": "Set up sqlx-migrate or refinery for migrations",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "1.2.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "migrations/ directory with migration files"
-        },
-        {
-          "id": "1.2.3",
-          "name": "Implement tenant schema",
-          "description": "Create tenants table with all fields",
-          "priority": "critical",
-          "estimated_hours": 3,
-          "dependencies": [
-            "1.2.2"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "001_initial_schema.sql - tenants table with status, limits, config"
-        },
-        {
-          "id": "1.2.4",
-          "name": "Implement intent schema",
-          "description": "Create intents table with indexes",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "1.2.2"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "001_initial_schema.sql - intents table with state_history, indexes"
-        },
-        {
-          "id": "1.2.5",
-          "name": "Implement ledger schema",
-          "description": "Create ledger_accounts and ledger_entries tables",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "1.2.2"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "001_initial_schema.sql - ledger_entries, account_balances tables"
-        },
-        {
-          "id": "1.2.6",
-          "name": "Add seed data",
-          "description": "Create seed data for development/testing",
-          "priority": "medium",
-          "estimated_hours": 2,
-          "dependencies": [
-            "1.2.5"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "migrations/002_seed_data.sql with tenants, users, intents, ledger entries"
-        },
-        {
-          "id": "1.3.1",
-          "name": "Define Intent types",
-          "description": "Create Intent struct and IntentType enum",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "1.2.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-common/src/intent.rs - IntentType enum, PayinIntent, PayoutIntent, TradeIntent, DepositIntent, WithdrawIntent structs"
-        },
-        {
-          "id": "1.3.2",
-          "name": "Define Ledger account types",
-          "description": "Create AccountType enum and related structs",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "1.2.5"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-common/src/ledger.rs - AccountType, LedgerEntry, LedgerCurrency"
-        },
-        {
-          "id": "1.3.3",
-          "name": "Define State machine enums",
-          "description": "Create all state enums for each intent type",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "1.3.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-common/src/intent.rs - PayinState, PayoutState, TradeState, DepositState, WithdrawState with full state machines"
-        },
-        {
-          "id": "1.3.4",
-          "name": "Implement serialization",
-          "description": "Add serde derives and custom serialization",
-          "priority": "high",
-          "estimated_hours": 2,
-          "dependencies": [
-            "1.3.3"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "All types have Serialize/Deserialize derives with rename_all"
-        },
-        {
-          "id": "1.3.5",
-          "name": "Add validation logic",
-          "description": "Implement validation for all domain types",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "1.3.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "is_terminal(), is_error(), can_transition_to() methods on all state types"
-        },
-        {
-          "id": "1.3.6",
-          "name": "Write domain model tests",
-          "description": "Unit tests for all domain models",
-          "priority": "high",
-          "estimated_hours": 6,
-          "dependencies": [
-            "1.3.5"
-          ],
-          "assignee": "qa",
-          "status": "completed",
-          "evidence": "Tests in ramp-ledger, ramp-core, ramp-api modules",
-          "completed_at": "2026-01-23"
-        },
-        {
-          "id": "2.1.1",
-          "name": "Set up Axum framework",
-          "description": "Initialize Axum with basic routing",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "1.3.6"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-api/src/router.rs - full Axum router with middleware stack"
-        },
-        {
-          "id": "2.1.2",
-          "name": "Configure request/response types",
-          "description": "Create API request/response DTOs",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "2.1.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-api/src/dto.rs - request/response DTOs"
-        },
-        {
-          "id": "2.1.3",
-          "name": "Implement error handling",
-          "description": "Create error types and response formatting",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "2.1.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-api/src/error.rs, ramp-common/src/error.rs"
-        },
-        {
-          "id": "2.1.4",
-          "name": "Add request validation middleware",
-          "description": "Validate incoming requests with validator crate",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "2.1.2"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "validator crate in dependencies, ValidatedJson extractor implemented"
-        },
-        {
-          "id": "2.1.5",
-          "name": "Set up OpenAPI documentation",
-          "description": "Generate OpenAPI spec with utoipa",
-          "priority": "medium",
-          "estimated_hours": 4,
-          "dependencies": [
-            "2.1.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-api/src/openapi.rs - utoipa OpenAPI spec with Swagger UI"
-        },
-        {
-          "id": "2.2.1",
-          "name": "Implement HMAC signature verification",
-          "description": "Verify X-Signature header on all requests",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "2.1.3"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-api/src/middleware/auth.rs, hmac crate in workspace"
-        },
-        {
-          "id": "2.2.2",
-          "name": "Add timestamp validation",
-          "description": "Reject requests with timestamps > 5min drift",
-          "priority": "high",
-          "estimated_hours": 2,
-          "dependencies": [
-            "2.2.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-api/src/middleware/auth.rs - timestamp validation implemented"
-        },
-        {
-          "id": "2.2.3",
-          "name": "Create tenant auth middleware",
-          "description": "Validate tenant credentials and inject context",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "2.2.2"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-api/src/middleware/auth.rs - auth_middleware function"
-        },
-        {
-          "id": "2.2.4",
-          "name": "Implement rate limiting",
-          "description": "Add Redis-based rate limiting",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "2.2.3"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-api/src/middleware/rate_limit.rs - Redis sliding window rate limiting"
-        },
-        {
-          "id": "2.2.5",
-          "name": "Add idempotency key handling",
-          "description": "Store and check idempotency keys in Redis",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "2.2.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-api/src/middleware/idempotency.rs - X-Idempotency-Key handling"
-        },
-        {
-          "id": "2.3.1",
-          "name": "Implement POST /v1/intents/payin",
-          "description": "Create pay-in intent endpoint",
-          "priority": "critical",
-          "estimated_hours": 6,
-          "dependencies": [
-            "2.2.5"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-api/src/handlers/payin.rs - create_payin handler"
-        },
-        {
-          "id": "2.3.2",
-          "name": "Implement POST /v1/intents/payin/confirm",
-          "description": "Confirm pay-in from bank",
-          "priority": "critical",
-          "estimated_hours": 6,
-          "dependencies": [
-            "2.3.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-api/src/handlers/payin.rs - confirm_payin handler"
-        },
-        {
-          "id": "2.3.3",
-          "name": "Implement POST /v1/intents/payout",
-          "description": "Create pay-out intent endpoint",
-          "priority": "critical",
-          "estimated_hours": 6,
-          "dependencies": [
-            "2.3.2"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-api/src/handlers/payout.rs - create_payout handler"
-        },
-        {
-          "id": "2.3.4",
-          "name": "Implement POST /v1/events/trade-executed",
-          "description": "Record trade event endpoint",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "2.3.3"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-api/src/handlers/trade.rs - record_trade handler"
-        },
-        {
-          "id": "2.3.5",
-          "name": "Implement GET /v1/intents/{id}",
-          "description": "Get intent by ID endpoint",
-          "priority": "high",
-          "estimated_hours": 2,
-          "dependencies": [
-            "2.3.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-api/src/handlers/intent.rs - GET /v1/intents/{id} with tenant isolation"
-        },
-        {
-          "id": "2.3.6",
-          "name": "Add API integration tests",
-          "description": "Integration tests for all endpoints",
-          "priority": "high",
-          "estimated_hours": 8,
-          "dependencies": [
-            "2.3.5"
-          ],
-          "assignee": "qa",
-          "status": "completed",
-          "evidence": "crates/ramp-api/tests/ - API integration tests",
-          "completed_at": "2026-01-23"
-        },
-        {
-          "id": "3.1.1",
-          "name": "Implement state transition logic",
-          "description": "Create state machine with valid transitions",
-          "priority": "critical",
-          "estimated_hours": 6,
-          "dependencies": [
-            "2.3.6"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-common/src/intent.rs - allowed_transitions() for all state types"
-        },
-        {
-          "id": "3.1.2",
-          "name": "Add transition validation",
-          "description": "Validate state transitions are allowed",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "3.1.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "can_transition_to() method on all state types"
-        },
-        {
-          "id": "3.1.3",
-          "name": "Create state history tracking",
-          "description": "Record all state changes with timestamps",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "3.1.2"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "intents.state_history column + append_state_history() trigger"
-        },
-        {
-          "id": "3.1.4",
-          "name": "Handle error states",
-          "description": "Implement error state transitions",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "3.1.3"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "is_error() method, error states defined for all intent types"
-        },
-        {
-          "id": "3.1.5",
-          "name": "Add timeout handling",
-          "description": "Auto-expire intents after timeout",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "3.1.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-core/src/service/timeout.rs - IntentTimeoutService"
-        },
-        {
-          "id": "3.1.6",
-          "name": "Write state machine tests",
-          "description": "Comprehensive tests for all state paths",
-          "priority": "high",
-          "estimated_hours": 6,
-          "dependencies": [
-            "3.1.5"
-          ],
-          "assignee": "qa",
-          "status": "completed",
-          "completed_at": "2026-02-02",
-          "evidence": "State machine tests in ramp-core and ramp-common"
-        },
-        {
-          "id": "3.2.1",
-          "name": "Implement double-entry logic",
-          "description": "Create debit/credit entry pairs",
-          "priority": "critical",
-          "estimated_hours": 6,
-          "dependencies": [
-            "3.1.6"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-common/src/ledger.rs - LedgerTransactionBuilder with debit/credit"
-        },
-        {
-          "id": "3.2.2",
-          "name": "Create account management",
-          "description": "CRUD for ledger accounts",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "3.2.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "account_balances table, AccountType enum"
-        },
-        {
-          "id": "3.2.3",
-          "name": "Add balance calculations",
-          "description": "Calculate and cache account balances",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "3.2.2"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "account_balances table with balance_after, last_sequence"
-        },
-        {
-          "id": "3.2.4",
-          "name": "Implement entry creation",
-          "description": "Create ledger entries atomically",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "3.2.3"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-core/src/repository/ledger.rs, service/ledger.rs"
-        },
-        {
-          "id": "3.2.5",
-          "name": "Add balance verification",
-          "description": "Verify sum(debits) = sum(credits)",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "3.2.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "LedgerTransaction.is_balanced() method"
-        },
-        {
-          "id": "3.2.6",
-          "name": "Ensure atomic transactions",
-          "description": "Use database transactions for consistency",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "3.2.5"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "evidence": "sqlx transactions in repository layer",
-          "completed_at": "2026-01-23"
-        },
-        {
-          "id": "3.3.1",
-          "name": "Set up Temporal worker",
-          "description": "Configure Temporal connection and worker",
-          "priority": "critical",
-          "estimated_hours": 6,
-          "dependencies": [
-            "3.2.6"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "note": "temporal-sdk in dependencies but not implemented yet",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-core/src/workflows/worker.rs - Temporal worker setup"
-        },
-        {
-          "id": "3.3.2",
-          "name": "Implement PayinWorkflow",
-          "description": "Full pay-in workflow with Temporal",
-          "priority": "critical",
-          "estimated_hours": 8,
-          "dependencies": [
-            "3.3.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-core/src/workflows/mod.rs - PayinWorkflow with activities"
-        },
-        {
-          "id": "3.3.3",
-          "name": "Implement PayoutWorkflow",
-          "description": "Full pay-out workflow with Temporal",
-          "priority": "critical",
-          "estimated_hours": 8,
-          "dependencies": [
-            "3.3.2"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-core/src/workflows/payout.rs - PayoutWorkflow"
-        },
-        {
-          "id": "3.3.4",
-          "name": "Implement TradeWorkflow",
-          "description": "Trade recording workflow",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "3.3.3"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-core/src/workflows/trade.rs - TradeWorkflow"
-        },
-        {
-          "id": "3.3.5",
-          "name": "Add workflow signals",
-          "description": "Implement signal handlers for external events",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "3.3.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-core/src/workflows/mod.rs - BankConfirmation signal handler"
-        },
-        {
-          "id": "3.3.6",
-          "name": "Configure retry policies",
-          "description": "Set up retry and timeout policies",
-          "priority": "high",
-          "estimated_hours": 2,
-          "dependencies": [
-            "3.3.5"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-core/src/workflows/mod.rs - RetryPolicy configuration"
-        },
-        {
-          "id": "4.1.1",
-          "name": "Implement outbox pattern",
-          "description": "Store events in outbox table before dispatch",
-          "priority": "critical",
-          "estimated_hours": 6,
-          "dependencies": [
-            "3.3.6"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "webhook_events table with outbox pattern design"
-        },
-        {
-          "id": "4.1.2",
-          "name": "Create webhook dispatcher",
-          "description": "Background job to dispatch webhooks",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "4.1.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-core/src/service/webhook.rs"
-        },
-        {
-          "id": "4.1.3",
-          "name": "Add HMAC signing",
-          "description": "Sign webhook payloads with tenant secret",
-          "priority": "critical",
-          "estimated_hours": 2,
-          "dependencies": [
-            "4.1.2"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-common/src/crypto.rs, hmac crate in workspace"
-        },
-        {
-          "id": "4.1.4",
-          "name": "Implement retry logic",
-          "description": "Exponential backoff for failed deliveries",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "4.1.3"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "webhook_events.attempts, max_attempts, next_attempt_at columns"
-        },
-        {
-          "id": "4.1.5",
-          "name": "Add delivery tracking",
-          "description": "Track webhook delivery status",
-          "priority": "high",
-          "estimated_hours": 2,
-          "dependencies": [
-            "4.1.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "webhook_events.status, delivered_at, response_status columns"
-        },
-        {
-          "id": "4.1.6",
-          "name": "Create webhook tests",
-          "description": "Test webhook delivery and retry",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "4.1.5"
-          ],
-          "assignee": "qa",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-core/src/service/webhook_tests.rs"
-        },
-        {
-          "id": "4.2.1",
-          "name": "Define adapter interface",
-          "description": "Create RailsAdapter trait/interface",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "4.1.6"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-adapter/src/traits.rs - RailsAdapter trait"
-        },
-        {
-          "id": "4.2.2",
-          "name": "Create TypeScript SDK structure",
-          "description": "Initialize npm package with TypeScript",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "4.2.1"
-          ],
-          "assignee": "backend-go",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "sdk/ directory with TypeScript project"
-        },
-        {
-          "id": "4.2.3",
-          "name": "Implement mock adapter",
-          "description": "Create mock adapter for testing",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "4.2.2"
-          ],
-          "assignee": "backend-go",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-adapter/src/adapters/mock.rs"
-        },
-        {
-          "id": "4.2.4",
-          "name": "Add adapter factory pattern",
-          "description": "Factory for creating adapters by type",
-          "priority": "medium",
-          "estimated_hours": 2,
-          "dependencies": [
-            "4.2.3"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-25"
-        },
-        {
-          "id": "4.2.5",
-          "name": "Write SDK documentation",
-          "description": "Document SDK usage and examples",
-          "priority": "medium",
-          "estimated_hours": 4,
-          "dependencies": [
-            "4.2.4"
-          ],
-          "assignee": "backend-go",
-          "status": "completed",
-          "completed_at": "2026-01-25"
-        },
-        {
-          "id": "4.2.6",
-          "name": "Create example integration",
-          "description": "Example project using the SDK",
-          "priority": "medium",
-          "estimated_hours": 4,
-          "dependencies": [
-            "4.2.5"
-          ],
-          "assignee": "backend-go",
-          "status": "completed",
-          "completed_at": "2026-01-25"
-        },
-        {
-          "id": "4.3.1",
-          "name": "E2E payin flow test",
-          "description": "Full end-to-end pay-in test",
-          "priority": "critical",
-          "estimated_hours": 6,
-          "dependencies": [
-            "4.2.6"
-          ],
-          "assignee": "qa",
-          "status": "completed",
-          "completed_at": "2026-01-24"
-        },
-        {
-          "id": "4.3.2",
-          "name": "E2E payout flow test",
-          "description": "Full end-to-end pay-out test",
-          "priority": "critical",
-          "estimated_hours": 6,
-          "dependencies": [
-            "4.3.1"
-          ],
-          "assignee": "qa",
-          "status": "completed",
-          "completed_at": "2026-01-25"
-        },
-        {
-          "id": "4.3.3",
-          "name": "Load testing setup",
-          "description": "Set up k6 for load testing",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "4.3.2"
-          ],
-          "assignee": "qa",
-          "status": "completed",
-          "completed_at": "2026-01-25"
-        },
-        {
-          "id": "4.3.4",
-          "name": "Performance optimization",
-          "description": "Optimize based on load test results",
-          "priority": "high",
-          "estimated_hours": 8,
-          "dependencies": [
-            "4.3.3"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-25"
-        },
-        {
-          "id": "4.3.5",
-          "name": "Documentation update",
-          "description": "Update all Phase 1 documentation",
-          "priority": "medium",
-          "estimated_hours": 4,
-          "dependencies": [
-            "4.3.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-25"
-        },
-        {
-          "id": "4.4.1",
-          "name": "Phase 1 security review",
-          "description": "Security review of Phase 1 code",
-          "priority": "critical",
-          "estimated_hours": 8,
-          "dependencies": [
-            "4.3.5"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-25"
-        },
-        {
-          "id": "4.4.2",
-          "name": "Phase 1 code review",
-          "description": "Final code review for Phase 1",
-          "priority": "high",
-          "estimated_hours": 8,
-          "dependencies": [
-            "4.4.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-25"
-        },
-        {
-          "id": "4.4.3",
-          "name": "Phase 1 staging deployment",
-          "description": "Deploy Phase 1 to staging",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "4.4.2"
-          ],
-          "assignee": "devops",
-          "status": "completed",
-          "completed_at": "2026-01-25",
-          "evidence": "k8s/overlays/staging/ configuration ready"
+          "estimated_files": ["frontend/src/app/globals.css"],
+          "acceptance_criteria": [
+            "All fintech colors defined as CSS variables in HSL format",
+            "Light mode palette complete with proper contrast",
+            "Dark mode (OLED) palette complete",
+            "Chart colors defined for data visualization",
+            "No hardcoded color values remain"
+          ],
+          "test_cases": [
+            "Variables render correctly in browser dev tools",
+            "Dark mode toggle switches all colors properly",
+            "Text contrast meets WCAG AAA (4.5:1 minimum)"
+          ],
+          "definition_of_done": "All color variables defined, both modes working, contrast verified",
+          "expected_output": "Updated globals.css with complete fintech color system",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-002",
+          "title": "IBM Plex Font Integration",
+          "description": "Add IBM Plex Sans and IBM Plex Mono fonts via next/font/google. Configure font variables (--font-sans, --font-mono) and update Tailwind fontFamily configuration. Remove Inter font references.",
+          "phase": "Foundation",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": [],
+          "estimated_files": [
+            "frontend/src/app/layout.tsx",
+            "frontend/tailwind.config.ts"
+          ],
+          "acceptance_criteria": [
+            "IBM Plex Sans loads with weights 300-700",
+            "IBM Plex Mono loads with weights 400-600",
+            "Font CSS variables defined",
+            "Tailwind fontFamily extended",
+            "No font-loading layout shift"
+          ],
+          "test_cases": [
+            "Fonts load correctly on page load",
+            "font-sans class applies IBM Plex Sans",
+            "font-mono class applies IBM Plex Mono",
+            "Network tab shows font loading with display:swap"
+          ],
+          "definition_of_done": "Fonts load correctly, Tailwind configured, no CLS",
+          "expected_output": "Updated layout.tsx with font imports, updated tailwind.config.ts",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-003",
+          "title": "Elevation Shadow System",
+          "description": "Add custom shadow scale to Tailwind config: shadow-xs, shadow-sm, shadow-md, shadow-lg, shadow-xl, shadow-2xl. Define subtle fintech-appropriate shadows with proper opacity for dark mode.",
+          "phase": "Foundation",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": [],
+          "estimated_files": ["frontend/tailwind.config.ts"],
+          "acceptance_criteria": [
+            "6-level shadow scale defined",
+            "Shadows work in light mode",
+            "Shadows work in dark mode",
+            "Shadows create clear elevation hierarchy"
+          ],
+          "test_cases": [
+            "Each shadow level visually distinct",
+            "shadow-xs barely visible, shadow-2xl prominent",
+            "Dark mode shadows don't look washed out"
+          ],
+          "definition_of_done": "All shadow levels defined and tested in both modes",
+          "expected_output": "Updated tailwind.config.ts with boxShadow extensions",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-004",
+          "title": "Border Radius Scale",
+          "description": "Extend Tailwind border radius with fintech-appropriate values. Add radius-sm (4px), radius (8px), radius-md (12px), radius-lg (16px), radius-xl (24px), radius-full. Update CSS variable --radius.",
+          "phase": "Foundation",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": [],
+          "estimated_files": [
+            "frontend/tailwind.config.ts",
+            "frontend/src/app/globals.css"
+          ],
+          "acceptance_criteria": [
+            "Complete radius scale in Tailwind config",
+            "--radius CSS variable set to 8px (0.5rem)",
+            "Existing components still render correctly"
+          ],
+          "test_cases": [
+            "rounded-sm, rounded, rounded-lg classes work",
+            "Cards use rounded-lg (12px)",
+            "Buttons use rounded-md (8px)"
+          ],
+          "definition_of_done": "Radius scale defined, --radius variable set",
+          "expected_output": "Updated tailwind.config.ts and globals.css",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-005",
+          "title": "Animation Keyframes Library",
+          "description": "Add animation keyframes to globals.css and Tailwind config: shimmer (for skeletons), fade-in, slide-up, slide-down, pulse-subtle, scale-in. Configure animation utilities in Tailwind.",
+          "phase": "Foundation",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": [],
+          "estimated_files": [
+            "frontend/tailwind.config.ts",
+            "frontend/src/app/globals.css"
+          ],
+          "acceptance_criteria": [
+            "All keyframes defined in globals.css",
+            "Animation utilities in Tailwind config",
+            "Duration and easing consistent",
+            "Animations use appropriate timing"
+          ],
+          "test_cases": [
+            "animate-shimmer creates gradient sweep effect",
+            "animate-fade-in fades element from 0 to 1 opacity",
+            "animate-slide-up slides and fades element"
+          ],
+          "definition_of_done": "All animations defined and testable via utility classes",
+          "expected_output": "Updated globals.css with keyframes, tailwind.config.ts with animation utilities",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-006",
+          "title": "Reduced Motion Support",
+          "description": "Add prefers-reduced-motion media query to globals.css that disables all animations and transitions for users who prefer reduced motion. Ensure accessibility compliance.",
+          "phase": "Foundation",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-005"],
+          "estimated_files": ["frontend/src/app/globals.css"],
+          "acceptance_criteria": [
+            "Media query covers all animations",
+            "Transitions reduced to near-instant",
+            "Skeleton shimmer stops for reduced motion",
+            "No visual breakage when motion disabled"
+          ],
+          "test_cases": [
+            "Enable reduced motion in OS settings",
+            "Verify no animations play",
+            "Verify UI still looks correct without motion"
+          ],
+          "definition_of_done": "Reduced motion fully supported, WCAG compliant",
+          "expected_output": "Updated globals.css with reduced motion media query",
+          "owner": "worker-agent",
+          "status": "pending"
         }
       ]
     },
     {
       "id": "phase-2",
-      "name": "Compliance Pack",
-      "days": "31-60",
-      "status": "completed",
-      "progress": "100%",
-      "note": "Started early - skeleton code exists",
+      "name": "Core Components",
+      "description": "Refactor base UI primitives to match design system",
+      "status": "pending",
+      "progress": "0%",
+      "estimated_duration": "1.5 days",
       "tasks": [
         {
-          "id": "5.1.1",
-          "name": "Implement tier definitions",
-          "description": "Create KYC tier enum and config",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "4.4.3"
+          "id": "T-007",
+          "title": "Button Component Refactor",
+          "description": "Enhance Button component with: isLoading prop with spinner, success variant (green), improved focus rings with ring-offset, better disabled state styling, icon positioning improvements.",
+          "phase": "Core Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-001"],
+          "estimated_files": ["frontend/src/components/ui/button.tsx"],
+          "acceptance_criteria": [
+            "isLoading prop shows Loader2 spinner and disables button",
+            "Success variant added with accent color",
+            "Focus rings visible with offset",
+            "Disabled state has 50% opacity and no pointer events",
+            "All existing tests pass"
           ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-compliance/src/types.rs - KycTier enum"
+          "test_cases": [
+            "Button shows spinner when isLoading=true",
+            "Button is disabled when loading",
+            "Success variant renders green",
+            "Focus visible ring appears on keyboard focus"
+          ],
+          "definition_of_done": "All variants work, loading state implemented, tests pass",
+          "expected_output": "Updated button.tsx with new variants and loading state",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "5.1.2",
-          "name": "Create limit configurations",
-          "description": "Per-tier limit configuration system",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "5.1.1"
+          "id": "T-008",
+          "title": "Card Component Enhancement",
+          "description": "Add elevation prop (1-4) to Card for shadow levels, hover state variant with scale/shadow transition, optional gradient border variant. Improve CardHeader, CardContent spacing.",
+          "phase": "Core Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-001", "T-003"],
+          "estimated_files": ["frontend/src/components/ui/card.tsx"],
+          "acceptance_criteria": [
+            "Elevation prop applies corresponding shadow",
+            "Hover variant adds subtle lift effect",
+            "Gradient border variant available",
+            "Spacing consistent with design system",
+            "All existing tests pass"
           ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "users.daily_payin_limit_vnd, daily_payout_limit_vnd columns"
+          "test_cases": [
+            "elevation=1 applies shadow-sm",
+            "elevation=4 applies shadow-xl",
+            "Hover state shows smooth transition",
+            "Gradient border renders correctly"
+          ],
+          "definition_of_done": "Elevation system working, hover states smooth, tests pass",
+          "expected_output": "Updated card.tsx with elevation and hover variants",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "5.1.3",
-          "name": "Add tier upgrade logic",
-          "description": "Logic for tier upgrades/downgrades",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "5.1.2"
+          "id": "T-009",
+          "title": "Input Component Refactor",
+          "description": "Add icon slots (left and right) to Input, validation states (error border/text, success border), size variants (sm, default, lg). Improve focus ring styling.",
+          "phase": "Core Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-001"],
+          "estimated_files": ["frontend/src/components/ui/input.tsx"],
+          "acceptance_criteria": [
+            "Left icon slot with proper padding",
+            "Right icon slot with proper padding",
+            "Error state shows destructive border",
+            "Success state shows accent border",
+            "Size variants change height and text size"
           ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-24"
+          "test_cases": [
+            "Icon renders in correct position",
+            "Error prop shows red border",
+            "Focus ring appears on focus",
+            "Size variants render correct heights"
+          ],
+          "definition_of_done": "Icons, validation states, and sizes all working",
+          "expected_output": "Updated input.tsx with icon slots and validation states",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "5.1.4",
-          "name": "Implement tier checks",
-          "description": "Check tiers in intent flows",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "5.1.3"
+          "id": "T-010",
+          "title": "Badge Component Enhancement",
+          "description": "Add new variants to Badge: success (green), warning (yellow), info (blue). Add dot indicator option, pill shape option. Improve typography and padding.",
+          "phase": "Core Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-001"],
+          "estimated_files": ["frontend/src/components/ui/badge.tsx"],
+          "acceptance_criteria": [
+            "Success variant with green styling",
+            "Warning variant with yellow styling",
+            "Info variant with blue styling",
+            "Dot indicator option (small circle before text)",
+            "Pill option (fully rounded)"
           ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-25"
+          "test_cases": [
+            "Each variant renders correct colors",
+            "Dot shows small circle indicator",
+            "Pill variant is fully rounded",
+            "Text is readable in all variants"
+          ],
+          "definition_of_done": "All new variants working, dot and pill options available",
+          "expected_output": "Updated badge.tsx with new variants and options",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "5.1.5",
-          "name": "Add tier management API",
-          "description": "Admin API for tier management",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "5.1.4"
+          "id": "T-011",
+          "title": "Avatar Component Enhancement",
+          "description": "Enhance Avatar with size variants (xs, sm, md, lg, xl), online status indicator (green dot), fallback initials generation, improved border styling.",
+          "phase": "Core Components",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-001", "T-004"],
+          "estimated_files": ["frontend/src/components/ui/avatar.tsx"],
+          "acceptance_criteria": [
+            "5 size variants defined",
+            "Online indicator shows green dot",
+            "Fallback shows initials from name",
+            "Border visible for empty state",
+            "Image loading handled gracefully"
           ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-25"
+          "test_cases": [
+            "Each size renders correct dimensions",
+            "Online indicator positioned correctly",
+            "Initials show when no image",
+            "Border ring visible"
+          ],
+          "definition_of_done": "Sizes, indicator, and fallback all working",
+          "expected_output": "Updated avatar.tsx with variants and features",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "5.2.1",
-          "name": "Define eKYC provider interface",
-          "description": "Create interface for KYC providers",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "5.1.5"
+          "id": "T-012",
+          "title": "Skeleton Component Creation",
+          "description": "Create Skeleton component with shimmer animation, variants for text (multiple lines), circle (avatars), and rectangle (cards). Support custom width/height.",
+          "phase": "Core Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-005"],
+          "estimated_files": ["frontend/src/components/ui/skeleton.tsx"],
+          "acceptance_criteria": [
+            "Shimmer animation working",
+            "Text variant renders multiple lines",
+            "Circle variant for avatars",
+            "Rectangle variant with custom dimensions",
+            "Works in dark mode"
           ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-compliance/src/kyc.rs"
+          "test_cases": [
+            "Shimmer effect visible and smooth",
+            "Text skeleton shows 3 lines by default",
+            "Circle skeleton is perfectly round",
+            "Custom width/height props work"
+          ],
+          "definition_of_done": "All skeleton variants working with shimmer animation",
+          "expected_output": "New skeleton.tsx component file",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "5.2.2",
-          "name": "Implement mock KYC provider",
-          "description": "Mock provider for testing",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "5.2.1"
+          "id": "T-013",
+          "title": "Alert Component Enhancement",
+          "description": "Improve Alert with new color variants matching semantic colors, icon support in the left side, optional close button, improved typography.",
+          "phase": "Core Components",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-001"],
+          "estimated_files": ["frontend/src/components/ui/alert.tsx"],
+          "acceptance_criteria": [
+            "Success, warning, info, destructive variants",
+            "Icon slot on left side",
+            "Optional close button",
+            "Proper padding and spacing"
           ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-compliance/src/lib.rs - MockKycProvider"
+          "test_cases": [
+            "Each variant shows correct colors",
+            "Icon renders in correct position",
+            "Close button triggers onClose",
+            "Alert is accessible"
+          ],
+          "definition_of_done": "All variants, icon, and close button working",
+          "expected_output": "Updated alert.tsx with enhancements",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "5.2.3",
-          "name": "Add KYC verification workflow",
-          "description": "Temporal workflow for KYC",
-          "priority": "high",
-          "estimated_hours": 6,
-          "dependencies": [
-            "5.2.2"
+          "id": "T-014",
+          "title": "Table Component Enhancement",
+          "description": "Improve Table with hover row effect, sticky header option, loading state with skeleton rows, improved dark mode styling, zebra stripe option.",
+          "phase": "Core Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-001", "T-012"],
+          "estimated_files": ["frontend/src/components/ui/table.tsx"],
+          "acceptance_criteria": [
+            "Row hover effect subtle but visible",
+            "Sticky header works on scroll",
+            "Loading state shows skeleton rows",
+            "Dark mode styling improved",
+            "Zebra stripes optional"
           ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-24"
-        },
-        {
-          "id": "5.2.4",
-          "name": "Create KYC status tracking",
-          "description": "Track KYC status per user",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "5.2.3"
+          "test_cases": [
+            "Hover changes row background",
+            "Header stays fixed on scroll",
+            "Loading prop shows skeleton rows",
+            "Stripes alternate correctly"
           ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "kyc_records table with status tracking"
-        },
-        {
-          "id": "5.2.5",
-          "name": "Add document storage",
-          "description": "S3 storage for KYC documents",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "5.2.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-24"
-        },
-        {
-          "id": "6.1.1",
-          "name": "Design rule definition format",
-          "description": "JSON/YAML format for AML rules",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "5.2.5"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-compliance/src/rules.rs - AmlRule trait"
-        },
-        {
-          "id": "6.1.2",
-          "name": "Implement rule parser",
-          "description": "Parse rule definitions",
-          "priority": "critical",
-          "estimated_hours": 6,
-          "dependencies": [
-            "6.1.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-compliance/src/rule_parser.rs"
-        },
-        {
-          "id": "6.1.3",
-          "name": "Create rule evaluation engine",
-          "description": "Evaluate rules against transactions",
-          "priority": "critical",
-          "estimated_hours": 8,
-          "dependencies": [
-            "6.1.2"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-compliance/src/aml.rs - AmlEngine.check_transaction()"
-        },
-        {
-          "id": "6.1.4",
-          "name": "Add rule caching",
-          "description": "Cache compiled rules in Redis",
-          "priority": "medium",
-          "estimated_hours": 4,
-          "dependencies": [
-            "6.1.3"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-compliance/src/storage.rs - rule caching"
-        },
-        {
-          "id": "6.1.5",
-          "name": "Implement rule versioning",
-          "description": "Version control for rule changes",
-          "priority": "medium",
-          "estimated_hours": 4,
-          "dependencies": [
-            "6.1.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "migrations/003_rule_versions.sql - rule versioning"
-        },
-        {
-          "id": "6.2.1",
-          "name": "Implement velocity check",
-          "description": "Check transaction frequency",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "6.1.5"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-compliance/src/aml.rs - VelocityRule struct"
-        },
-        {
-          "id": "6.2.2",
-          "name": "Implement structuring detection",
-          "description": "Detect split transactions",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "6.2.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-compliance/src/aml.rs - StructuringRule struct"
-        },
-        {
-          "id": "6.2.3",
-          "name": "Implement unusual payout detection",
-          "description": "Detect immediate withdrawal after deposit",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "6.2.2"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-compliance/src/aml.rs - UnusualPayoutRule struct"
-        },
-        {
-          "id": "6.2.4",
-          "name": "Implement device/IP anomaly",
-          "description": "Detect suspicious device/location",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "6.2.3"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-24"
-        },
-        {
-          "id": "6.2.5",
-          "name": "Add sanctions screening",
-          "description": "Integrate sanctions list checking",
-          "priority": "critical",
-          "estimated_hours": 6,
-          "dependencies": [
-            "6.2.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-24"
-        },
-        {
-          "id": "6.3.1",
-          "name": "Implement risk score calculation",
-          "description": "Calculate composite risk score",
-          "priority": "critical",
-          "estimated_hours": 6,
-          "dependencies": [
-            "6.2.5"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-compliance/src/types.rs - RiskScore, ComplianceCheckResult"
-        },
-        {
-          "id": "6.3.2",
-          "name": "Add score aggregation",
-          "description": "Aggregate multiple rule scores",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "6.3.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "AmlEngine.check_transaction() aggregates scores"
-        },
-        {
-          "id": "6.3.3",
-          "name": "Create threshold configurations",
-          "description": "Configurable thresholds per tenant",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "6.3.2"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-compliance/src/types.rs - threshold config"
-        },
-        {
-          "id": "6.3.4",
-          "name": "Implement action triggers",
-          "description": "Auto-trigger actions based on score",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "6.3.3"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "crates/ramp-compliance/src/actions.rs - action triggers"
-        },
-        {
-          "id": "6.3.5",
-          "name": "Add score history tracking",
-          "description": "Track risk score over time",
-          "priority": "medium",
-          "estimated_hours": 4,
-          "dependencies": [
-            "6.3.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "migrations/004_score_history.sql, crates/ramp-compliance/src/history.rs"
-        },
-        {
-          "id": "7.1.1",
-          "name": "Implement case creation",
-          "description": "Create compliance cases",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "6.3.5"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-compliance/src/case.rs - CaseManager.create_case()"
-        },
-        {
-          "id": "7.1.2",
-          "name": "Add case assignment",
-          "description": "Assign cases to reviewers",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "7.1.1"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "aml_cases.assigned_to column"
-        },
-        {
-          "id": "7.1.3",
-          "name": "Create case status transitions",
-          "description": "Case state machine",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "7.1.2"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "aml_cases.status - OPEN, REVIEW, HOLD, RELEASED, REPORTED"
-        },
-        {
-          "id": "7.1.4",
-          "name": "Add case notes/comments",
-          "description": "Allow notes on cases",
-          "priority": "medium",
-          "estimated_hours": 2,
-          "dependencies": [
-            "7.1.3"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "migrations/005_case_notes.sql - case notes schema"
-        },
-        {
-          "id": "7.1.5",
-          "name": "Implement case resolution",
-          "description": "Resolve cases with decisions",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "7.1.4"
-          ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "aml_cases.resolution, resolved_at columns"
-        },
-        {
-          "id": "7.2.1",
-          "name": "Set up React admin app",
-          "description": "Initialize React admin dashboard",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "7.1.5"
-          ],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "frontend/ Next.js app with TailwindCSS - all pages implemented"
-        },
-        {
-          "id": "remaining",
-          "note": "Phase 2 remaining tasks (7.2.2 - 8.4.2) not started yet"
+          "definition_of_done": "All table enhancements working",
+          "expected_output": "Updated table.tsx with new features",
+          "owner": "worker-agent",
+          "status": "pending"
         }
       ]
     },
     {
       "id": "phase-3",
-      "name": "Advanced Features",
-      "days": "61-90",
-      "status": "completed",
-      "progress": "100%",
-      "note": "Smart contracts completed ahead of schedule",
+      "name": "Layout Components",
+      "description": "Refactor navigation and layout components",
+      "status": "pending",
+      "progress": "0%",
+      "estimated_duration": "1 day",
       "tasks": [
         {
-          "id": "10.1.1",
-          "name": "Set up Foundry project",
-          "description": "Initialize smart contract project",
-          "priority": "critical",
-          "estimated_hours": 4,
-          "dependencies": [
-            "9.3.5"
+          "id": "T-015",
+          "title": "Admin Sidebar Redesign",
+          "description": "Redesign admin sidebar with collapsible state (icons only when collapsed), improved hover/active states, section dividers, logo area, user avatar at bottom.",
+          "phase": "Layout Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-001", "T-002"],
+          "estimated_files": ["frontend/src/components/layout/sidebar.tsx"],
+          "acceptance_criteria": [
+            "Collapsible to 72px width (icons only)",
+            "Expand/collapse toggle button",
+            "Hover states with smooth transition",
+            "Active state clearly visible",
+            "Section dividers for grouping",
+            "Mobile drawer variant"
           ],
-          "assignee": "smart-contract",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "contracts/ Foundry project with foundry.toml"
-        },
-        {
-          "id": "10.1.2",
-          "name": "Implement Account Factory",
-          "description": "ERC-4337 account factory",
-          "priority": "critical",
-          "estimated_hours": 8,
-          "dependencies": [
-            "10.1.1"
+          "test_cases": [
+            "Collapse button shrinks sidebar",
+            "Icons remain visible when collapsed",
+            "Hover shows tooltip when collapsed",
+            "Active item highlighted"
           ],
-          "assignee": "smart-contract",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "contracts/src/RampOSAccountFactory.sol"
+          "definition_of_done": "Sidebar fully functional with collapse, tests pass",
+          "expected_output": "Updated sidebar.tsx with collapse feature",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "10.1.3",
-          "name": "Implement Smart Account",
-          "description": "Smart account contract",
-          "priority": "critical",
-          "estimated_hours": 12,
-          "dependencies": [
-            "10.1.2"
+          "id": "T-016",
+          "title": "Portal Sidebar Redesign",
+          "description": "Redesign portal sidebar to match admin styling with user-specific elements: user avatar section at bottom, wallet status indicator, simplified navigation for end users.",
+          "phase": "Layout Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-015"],
+          "estimated_files": ["frontend/src/components/layout/portal-sidebar.tsx"],
+          "acceptance_criteria": [
+            "Matches admin sidebar styling",
+            "User avatar and name at bottom",
+            "Wallet status indicator",
+            "KYC status badge",
+            "Mobile responsive"
           ],
-          "assignee": "smart-contract",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "contracts/src/RampOSAccount.sol - full ERC-4337 implementation"
-        },
-        {
-          "id": "10.1.4",
-          "name": "Create Session Key Module",
-          "description": "Session key management",
-          "priority": "high",
-          "estimated_hours": 8,
-          "dependencies": [
-            "10.1.3"
+          "test_cases": [
+            "User info displays correctly",
+            "Wallet status shows deployed/pending",
+            "Navigation links work",
+            "Responsive on mobile"
           ],
-          "assignee": "smart-contract",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "RampOSAccount.sol - SessionKey struct, addSessionKey, removeSessionKey"
+          "definition_of_done": "Portal sidebar redesigned and functional",
+          "expected_output": "Updated portal-sidebar.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "10.1.5",
-          "name": "Add comprehensive tests",
-          "description": "Full contract test suite",
-          "priority": "critical",
-          "estimated_hours": 12,
-          "dependencies": [
-            "10.1.4"
+          "id": "T-017",
+          "title": "PageHeader Component Creation",
+          "description": "Create reusable PageHeader component with breadcrumbs, title, description, and actions slot for buttons. Support for back button option.",
+          "phase": "Layout Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-001", "T-002"],
+          "estimated_files": ["frontend/src/components/layout/page-header.tsx"],
+          "acceptance_criteria": [
+            "Breadcrumbs render correctly",
+            "Title and description slots",
+            "Actions slot for buttons on right",
+            "Optional back button",
+            "Responsive layout"
           ],
-          "assignee": "smart-contract",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "contracts/test/*.t.sol - tests for all contracts"
-        },
-        {
-          "id": "10.2.1",
-          "name": "Implement bundler service",
-          "description": "ERC-4337 bundler",
-          "priority": "critical",
-          "estimated_hours": 12,
-          "dependencies": [
-            "10.1.5"
+          "test_cases": [
+            "Breadcrumbs navigate correctly",
+            "Title renders as h1",
+            "Actions align to right",
+            "Back button triggers navigation"
           ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-aa/src/bundler.rs"
+          "definition_of_done": "PageHeader component complete and reusable",
+          "expected_output": "New page-header.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "10.2.2",
-          "name": "Create paymaster contract",
-          "description": "Gas sponsorship paymaster",
-          "priority": "critical",
-          "estimated_hours": 8,
-          "dependencies": [
-            "10.2.1"
+          "id": "T-018",
+          "title": "PageContainer Component Creation",
+          "description": "Create PageContainer wrapper with max-width constraint (1400px), responsive padding, and proper margins for content below fixed headers.",
+          "phase": "Layout Components",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-001"],
+          "estimated_files": ["frontend/src/components/layout/page-container.tsx"],
+          "acceptance_criteria": [
+            "Max-width 1400px centered",
+            "Responsive padding (less on mobile)",
+            "Proper top margin for fixed headers",
+            "Optional full-width variant"
           ],
-          "assignee": "smart-contract",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "contracts/src/RampOSPaymaster.sol"
-        },
-        {
-          "id": "10.2.3",
-          "name": "Add gas estimation",
-          "description": "Accurate gas estimation",
-          "priority": "high",
-          "estimated_hours": 6,
-          "dependencies": [
-            "10.2.2"
+          "test_cases": [
+            "Content centered on wide screens",
+            "Padding adjusts on mobile",
+            "No content hidden under headers"
           ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-24"
+          "definition_of_done": "PageContainer provides consistent page layout",
+          "expected_output": "New page-container.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "10.2.4",
-          "name": "Implement UserOp validation",
-          "description": "Validate user operations",
-          "priority": "critical",
-          "estimated_hours": 6,
-          "dependencies": [
-            "10.2.3"
+          "id": "T-019",
+          "title": "Admin Layout Refinement",
+          "description": "Update admin layout to use new sidebar, add smooth transitions, improve spacing, ensure no content hidden under fixed elements.",
+          "phase": "Layout Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-015", "T-018"],
+          "estimated_files": ["frontend/src/app/(admin)/layout.tsx"],
+          "acceptance_criteria": [
+            "Uses new collapsible sidebar",
+            "Smooth content shift on collapse",
+            "Proper main content area spacing",
+            "Mobile responsive with drawer"
           ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-aa/src/user_operation.rs"
-        },
-        {
-          "id": "10.2.5",
-          "name": "Add gas sponsorship logic",
-          "description": "Tenant gas budgets",
-          "priority": "high",
-          "estimated_hours": 6,
-          "dependencies": [
-            "10.2.4"
+          "test_cases": [
+            "Layout renders without errors",
+            "Sidebar collapse shifts content",
+            "Mobile drawer opens/closes",
+            "No content overflow"
           ],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "ramp-aa/src/paymaster.rs"
+          "definition_of_done": "Admin layout using new components, responsive",
+          "expected_output": "Updated admin layout.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "10.3.1",
-          "name": "Add AA functions to SDK",
-          "description": "AA features in SDK",
-          "priority": "high",
-          "estimated_hours": 8,
-          "dependencies": [
-            "10.2.5"
+          "id": "T-020",
+          "title": "Portal Layout Refinement",
+          "description": "Update portal layout with new sidebar, mobile-first design improvements, smooth transitions, proper spacing for all viewport sizes.",
+          "phase": "Layout Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-016", "T-018"],
+          "estimated_files": ["frontend/src/app/portal/layout.tsx"],
+          "acceptance_criteria": [
+            "Uses new portal sidebar",
+            "Mobile drawer navigation",
+            "Responsive content area",
+            "Auth redirect handling"
           ],
-          "assignee": "backend-go",
-          "status": "completed",
-          "completed_at": "2026-01-24"
-        },
-        {
-          "id": "12.2.1",
-          "name": "Finalize Kubernetes manifests",
-          "description": "Production K8s configs",
-          "priority": "critical",
-          "estimated_hours": 8,
-          "dependencies": [
-            "12.1.5"
+          "test_cases": [
+            "Layout renders on all viewports",
+            "Mobile navigation works",
+            "Unauthenticated users redirected",
+            "Smooth sidebar transitions"
           ],
-          "assignee": "devops",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "k8s/base/*.yaml, k8s/overlays/dev/, k8s/overlays/prod/"
-        },
+          "definition_of_done": "Portal layout responsive and polished",
+          "expected_output": "Updated portal layout.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "Dashboard Components",
+      "description": "Create dashboard-specific composite components",
+      "status": "pending",
+      "progress": "0%",
+      "estimated_duration": "1 day",
+      "tasks": [
         {
-          "id": "12.2.2",
-          "name": "Configure ArgoCD",
-          "description": "GitOps setup",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "12.2.1"
+          "id": "T-021",
+          "title": "StatCard Component Creation",
+          "description": "Create StatCard component with icon slot, large value display, label, trend indicator (up/down percentage), optional sparkline, loading skeleton state.",
+          "phase": "Dashboard Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-008", "T-012"],
+          "estimated_files": ["frontend/src/components/dashboard/stat-card.tsx"],
+          "acceptance_criteria": [
+            "Icon renders in header",
+            "Value prominently displayed",
+            "Label below value",
+            "Trend arrow and percentage",
+            "Loading skeleton state",
+            "Hover effect optional"
           ],
-          "assignee": "devops",
-          "status": "completed",
-          "completed_at": "2026-01-23",
-          "evidence": "argocd/application.yaml"
+          "test_cases": [
+            "Card renders with all props",
+            "Trend up shows green arrow",
+            "Trend down shows red arrow",
+            "Loading shows skeleton"
+          ],
+          "definition_of_done": "StatCard complete with all features",
+          "expected_output": "New stat-card.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "9.1.1",
-          "name": "Tenant Isolation Logic",
-          "description": "Enforce RLS and tenant_id checks",
-          "priority": "critical",
-          "estimated_hours": 8,
-          "dependencies": [],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-01-25",
-          "evidence": "RLS enabled, verify_isolation.py check passed"
+          "id": "T-022",
+          "title": "ChartContainer Component Creation",
+          "description": "Create ChartContainer wrapper for Recharts with consistent theming, title/description, loading state, error state, theme-aware colors.",
+          "phase": "Dashboard Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-008"],
+          "estimated_files": ["frontend/src/components/dashboard/chart-container.tsx"],
+          "acceptance_criteria": [
+            "Card wrapper with title/description",
+            "Renders children (chart)",
+            "Loading state with skeleton",
+            "Error state with message",
+            "Exports theme colors for charts"
+          ],
+          "test_cases": [
+            "Container renders chart correctly",
+            "Loading shows skeleton",
+            "Error shows message",
+            "Colors match theme"
+          ],
+          "definition_of_done": "ChartContainer wraps charts consistently",
+          "expected_output": "New chart-container.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "11.1.1",
-          "name": "Monitoring Dashboards",
-          "description": "Grafana and Prometheus setup",
-          "priority": "high",
-          "estimated_hours": 6,
-          "dependencies": [],
-          "assignee": "devops",
-          "status": "completed",
-          "completed_at": "2026-01-25",
-          "evidence": "monitoring/ directory created"
+          "id": "T-023",
+          "title": "Enhanced DataTable Component",
+          "description": "Create enhanced DataTable component with sortable columns, filter row, pagination, row selection checkboxes, loading skeleton rows, empty state.",
+          "phase": "Dashboard Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-014", "T-012"],
+          "estimated_files": ["frontend/src/components/dashboard/data-table.tsx"],
+          "acceptance_criteria": [
+            "Sortable column headers",
+            "Filter input row",
+            "Pagination controls",
+            "Row selection with checkboxes",
+            "Loading skeleton",
+            "Empty state message"
+          ],
+          "test_cases": [
+            "Clicking header sorts column",
+            "Filter reduces visible rows",
+            "Pagination navigates pages",
+            "Select all selects visible rows"
+          ],
+          "definition_of_done": "DataTable fully featured and usable",
+          "expected_output": "New data-table.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "remaining-phase3",
-          "note": "Phase 3 remaining tasks (9.x, 11.x, 12.x) pending"
+          "id": "T-024",
+          "title": "ActivityFeed Component Creation",
+          "description": "Create ActivityFeed component with timeline layout, status icons per item, timestamps, expandable details, vertical connector line.",
+          "phase": "Dashboard Components",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-010", "T-011"],
+          "estimated_files": ["frontend/src/components/dashboard/activity-feed.tsx"],
+          "acceptance_criteria": [
+            "Timeline vertical layout",
+            "Connector line between items",
+            "Status icon per item",
+            "Relative timestamps",
+            "Optional expand for details"
+          ],
+          "test_cases": [
+            "Items render in order",
+            "Connector line visible",
+            "Icons render correctly",
+            "Timestamps show relative time"
+          ],
+          "definition_of_done": "ActivityFeed renders timeline correctly",
+          "expected_output": "New activity-feed.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-025",
+          "title": "KPICard Component Creation",
+          "description": "Create KPICard for large metric display with trend arrow, comparison text (vs last period), optional mini chart, emphasis styling.",
+          "phase": "Dashboard Components",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-008"],
+          "estimated_files": ["frontend/src/components/dashboard/kpi-card.tsx"],
+          "acceptance_criteria": [
+            "Large value display (2xl text)",
+            "Trend arrow up/down",
+            "Comparison text",
+            "Optional mini sparkline",
+            "Loading skeleton"
+          ],
+          "test_cases": [
+            "Value renders prominently",
+            "Trend shows correct direction",
+            "Comparison text readable",
+            "Sparkline renders if provided"
+          ],
+          "definition_of_done": "KPICard displays metrics effectively",
+          "expected_output": "New kpi-card.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-026",
+          "title": "StatusBadge Component Creation",
+          "description": "Create specialized StatusBadge for transaction/intent statuses (PENDING, PROCESSING, COMPLETED, FAILED, REVERSED) with semantic colors and icons.",
+          "phase": "Dashboard Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-010"],
+          "estimated_files": ["frontend/src/components/dashboard/status-badge.tsx"],
+          "acceptance_criteria": [
+            "All status types mapped to colors",
+            "Optional icon per status",
+            "Consistent sizing",
+            "Works in tables"
+          ],
+          "test_cases": [
+            "COMPLETED shows green",
+            "PENDING shows yellow",
+            "FAILED shows red",
+            "Icons render correctly"
+          ],
+          "definition_of_done": "StatusBadge covers all transaction states",
+          "expected_output": "New status-badge.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-027",
+          "title": "QuickStats Grid Component",
+          "description": "Create QuickStats component for responsive grid layout of StatCards with consistent gap spacing, responsive columns.",
+          "phase": "Dashboard Components",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-021"],
+          "estimated_files": ["frontend/src/components/dashboard/quick-stats.tsx"],
+          "acceptance_criteria": [
+            "Responsive grid (1-2-3-4 columns)",
+            "Consistent gap spacing",
+            "Renders StatCard children",
+            "Loading state for all cards"
+          ],
+          "test_cases": [
+            "1 column on mobile",
+            "4 columns on desktop",
+            "Gap consistent",
+            "Loading shows all skeletons"
+          ],
+          "definition_of_done": "QuickStats provides responsive stat layout",
+          "expected_output": "New quick-stats.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-028",
+          "title": "RecentActivity Table Component",
+          "description": "Create RecentActivity component combining DataTable styling with StatusBadge for recent transactions/intents display.",
+          "phase": "Dashboard Components",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-023", "T-026"],
+          "estimated_files": ["frontend/src/components/dashboard/recent-activity.tsx"],
+          "acceptance_criteria": [
+            "Table layout for activities",
+            "Status column with StatusBadge",
+            "Timestamp column",
+            "Amount with currency formatting",
+            "Optional view all link"
+          ],
+          "test_cases": [
+            "Activities render in table",
+            "Status badges show correctly",
+            "Amounts formatted",
+            "View all navigates"
+          ],
+          "definition_of_done": "RecentActivity displays transaction list",
+          "expected_output": "New recent-activity.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
         }
       ]
     },
     {
       "id": "phase-5",
-      "name": "Frontend Expansion",
-      "days": "91-110",
-      "status": "completed",
-      "progress": "100%",
+      "name": "Portal Components",
+      "description": "Create portal-specific components for end users",
+      "status": "pending",
+      "progress": "0%",
+      "estimated_duration": "1 day",
       "tasks": [
         {
-          "id": "F-001",
-          "name": "Setup Monorepo/Structure",
-          "description": "Reorganize frontend folder for multiple apps (admin, user-portal, landing)",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
-        },
-        {
-          "id": "F-002",
-          "name": "Extract UI Components",
-          "description": "Move Shadcn UI components to shared lib",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "F-001"
+          "id": "T-029",
+          "title": "WalletCard Component Creation",
+          "description": "Create premium WalletCard with gradient background option, wallet address with copy button, deployed status badge, network indicator.",
+          "phase": "Portal Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-008", "T-010"],
+          "estimated_files": ["frontend/src/components/portal/wallet-card.tsx"],
+          "acceptance_criteria": [
+            "Gradient background option",
+            "Address display with truncation",
+            "Copy button with success feedback",
+            "Deployed/Pending status badge",
+            "Network badge (Polygon, etc.)"
           ],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
-        },
-        {
-          "id": "F-003",
-          "name": "Setup Shared Config",
-          "description": "Tailwind, TypeScript, ESLint shared configs",
-          "priority": "medium",
-          "estimated_hours": 2,
-          "dependencies": [
-            "F-001"
+          "test_cases": [
+            "Address copies to clipboard",
+            "Copy shows success state",
+            "Status badge correct color",
+            "Network badge renders"
           ],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
+          "definition_of_done": "WalletCard displays wallet info beautifully",
+          "expected_output": "New wallet-card.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "L-001",
-          "name": "Hero Section",
-          "description": "Implement responsive hero with animations",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "F-002"
+          "id": "T-030",
+          "title": "BalanceDisplay Component Creation",
+          "description": "Create BalanceDisplay component with VND/crypto formatting, available/locked breakdown, optional refresh button, loading skeleton.",
+          "phase": "Portal Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-008"],
+          "estimated_files": ["frontend/src/components/portal/balance-display.tsx"],
+          "acceptance_criteria": [
+            "VND formatted with locale",
+            "Crypto formatted with decimals",
+            "Available/locked labels",
+            "Optional refresh button",
+            "Loading skeleton"
           ],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
-        },
-        {
-          "id": "L-002",
-          "name": "Features Section",
-          "description": "Cards grid with hover effects",
-          "priority": "medium",
-          "estimated_hours": 4,
-          "dependencies": [
-            "L-001"
+          "test_cases": [
+            "VND shows correct format",
+            "Crypto shows correct decimals",
+            "Refresh triggers callback",
+            "Loading shows skeleton"
           ],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
+          "definition_of_done": "BalanceDisplay formats currencies correctly",
+          "expected_output": "New balance-display.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "L-003",
-          "name": "How It Works",
-          "description": "Interactive step flow",
-          "priority": "medium",
-          "estimated_hours": 4,
-          "dependencies": [
-            "L-001"
+          "id": "T-031",
+          "title": "TransactionRow Component Creation",
+          "description": "Create TransactionRow component for transaction list items with type icon, amount with color coding, status badge, timestamp, optional expand.",
+          "phase": "Portal Components",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-010", "T-026"],
+          "estimated_files": ["frontend/src/components/portal/transaction-row.tsx"],
+          "acceptance_criteria": [
+            "Type icon (deposit, withdraw, trade)",
+            "Amount green for credit, red for debit",
+            "Status badge from StatusBadge",
+            "Relative timestamp",
+            "Expandable details"
           ],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
-        },
-        {
-          "id": "L-004",
-          "name": "API Section",
-          "description": "Syntax highlighted code block component",
-          "priority": "low",
-          "estimated_hours": 2,
-          "dependencies": [
-            "L-001"
+          "test_cases": [
+            "Icon matches transaction type",
+            "Credit amounts are green",
+            "Debit amounts are red",
+            "Expand shows more details"
           ],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
+          "definition_of_done": "TransactionRow displays all transaction info",
+          "expected_output": "New transaction-row.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "U-001",
-          "name": "Auth Integration",
-          "description": "WebAuthn/Passkey implementation",
-          "priority": "critical",
-          "estimated_hours": 8,
-          "dependencies": [
-            "F-002"
+          "id": "T-032",
+          "title": "KYCProgress Component Creation",
+          "description": "Create KYCProgress step indicator (1-4 steps) with current step highlight, completion checkmarks, step labels, responsive layout.",
+          "phase": "Portal Components",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-001"],
+          "estimated_files": ["frontend/src/components/portal/kyc-progress.tsx"],
+          "acceptance_criteria": [
+            "4-step indicator",
+            "Current step highlighted",
+            "Completed steps show checkmark",
+            "Step labels visible",
+            "Responsive (vertical on mobile)"
           ],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
-        },
-        {
-          "id": "U-002",
-          "name": "Dashboard Layout",
-          "description": "Shell with nav and responsive structure",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "F-002"
+          "test_cases": [
+            "Correct step highlighted",
+            "Completed steps have check",
+            "Labels render correctly",
+            "Mobile layout works"
           ],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
+          "definition_of_done": "KYCProgress shows verification status clearly",
+          "expected_output": "New kyc-progress.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "U-003",
-          "name": "KYC Flow",
-          "description": "Multi-step form for identity verification",
-          "priority": "critical",
-          "estimated_hours": 8,
-          "dependencies": [
-            "U-001",
-            "U-002"
+          "id": "T-033",
+          "title": "DepositCard Component Creation",
+          "description": "Create DepositCard for deposit flow with method selection, amount input, instructions panel, QR code slot, confirmation button.",
+          "phase": "Portal Components",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-008", "T-009"],
+          "estimated_files": ["frontend/src/components/portal/deposit-card.tsx"],
+          "acceptance_criteria": [
+            "Method selection (VND, Crypto)",
+            "Amount input with validation",
+            "Instructions panel",
+            "QR code display slot",
+            "Submit button with loading"
           ],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
-        },
-        {
-          "id": "U-004",
-          "name": "Asset Overview",
-          "description": "Balance cards and charts",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": [
-            "U-002"
+          "test_cases": [
+            "Method selection works",
+            "Amount validates correctly",
+            "Instructions render",
+            "QR code displays"
           ],
-          "assignee": "frontend",
-          "status": "completed"
+          "definition_of_done": "DepositCard guides user through deposit",
+          "expected_output": "New deposit-card.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "U-005",
-          "name": "Deposit/Withdraw",
-          "description": "Forms with validation and API integration",
-          "priority": "critical",
-          "estimated_hours": 8,
-          "dependencies": [
-            "U-002"
+          "id": "T-034",
+          "title": "WithdrawCard Component Creation",
+          "description": "Create WithdrawCard for withdraw flow with asset selection, amount input with max button, destination input, fee display, confirmation.",
+          "phase": "Portal Components",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-008", "T-009"],
+          "estimated_files": ["frontend/src/components/portal/withdraw-card.tsx"],
+          "acceptance_criteria": [
+            "Asset selection dropdown",
+            "Amount input with max button",
+            "Destination address input",
+            "Fee estimation display",
+            "Confirm button with loading"
           ],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
-        },
-        {
-          "id": "U-006",
-          "name": "Transaction History",
-          "description": "Filterable table with status badges",
-          "priority": "medium",
-          "estimated_hours": 4,
-          "dependencies": [
-            "U-002"
+          "test_cases": [
+            "Asset selection works",
+            "Max button fills available",
+            "Destination validates",
+            "Fee displays correctly"
           ],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
+          "definition_of_done": "WithdrawCard handles withdraw flow",
+          "expected_output": "New withdraw-card.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "U-007",
-          "name": "Settings Profile",
-          "description": "User profile and security settings",
-          "priority": "low",
-          "estimated_hours": 2,
-          "dependencies": [
-            "U-002"
+          "id": "T-035",
+          "title": "AssetRow Component Creation",
+          "description": "Create AssetRow for asset list with asset icon, name, balance display, optional sparkline, action buttons (Deposit, Withdraw).",
+          "phase": "Portal Components",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-030"],
+          "estimated_files": ["frontend/src/components/portal/asset-row.tsx"],
+          "acceptance_criteria": [
+            "Asset icon (or fallback)",
+            "Asset name and symbol",
+            "Balance with BalanceDisplay",
+            "Optional price sparkline",
+            "Action buttons"
           ],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
+          "test_cases": [
+            "Icon renders or fallback",
+            "Balance formats correctly",
+            "Buttons navigate correctly",
+            "Sparkline renders if data"
+          ],
+          "definition_of_done": "AssetRow displays asset info in list",
+          "expected_output": "New asset-row.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "A-001",
-          "name": "Dark Mode Fixes",
-          "description": "Ensure all components support dark mode",
-          "priority": "medium",
-          "estimated_hours": 2,
-          "dependencies": [],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
-        },
-        {
-          "id": "A-002",
-          "name": "Chart Upgrade",
-          "description": "Improve Recharts visualizations",
-          "priority": "low",
-          "estimated_hours": 2,
-          "dependencies": [],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
-        },
-        {
-          "id": "A-003",
-          "name": "Table Enhancements",
-          "description": "Add density toggle, column visibility",
-          "priority": "low",
-          "estimated_hours": 2,
-          "dependencies": [],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02"
+          "id": "T-036",
+          "title": "QuickActions Component Creation",
+          "description": "Create QuickActions button grid for common actions (Deposit, Withdraw, Trade, etc.) with icons and labels, responsive layout.",
+          "phase": "Portal Components",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-007"],
+          "estimated_files": ["frontend/src/components/portal/quick-actions.tsx"],
+          "acceptance_criteria": [
+            "Grid of action buttons",
+            "Icon and label per button",
+            "Responsive (2-3-4 columns)",
+            "Hover effects"
+          ],
+          "test_cases": [
+            "All actions render",
+            "Icons visible",
+            "Navigation works",
+            "Mobile responsive"
+          ],
+          "definition_of_done": "QuickActions provides fast navigation",
+          "expected_output": "New quick-actions.tsx component",
+          "owner": "worker-agent",
+          "status": "pending"
         }
       ]
     },
     {
       "id": "phase-6",
-      "name": "Advanced Integration",
-      "days": "111-120",
-      "status": "completed",
-      "progress": "100%",
+      "name": "Page Refactors",
+      "description": "Refactor all pages to use new components",
+      "status": "pending",
+      "progress": "0%",
+      "estimated_duration": "2 days",
       "tasks": [
         {
-          "id": "T-6.1",
-          "name": "AA API Routes",
-          "description": "Implement ERC-4337 Account Abstraction API endpoints for smart wallet management",
-          "priority": "critical",
-          "estimated_hours": 8,
-          "dependencies": [],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-02-02",
-          "evidence": "crates/ramp-api/src/handlers/aa.rs - 6 endpoints implemented"
+          "id": "T-037",
+          "title": "Admin Dashboard Page Refactor",
+          "description": "Refactor admin dashboard to use QuickStats, StatCard, ChartContainer, RecentActivity components. Replace inline styles with component-based design.",
+          "phase": "Page Refactors",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-021", "T-022", "T-028"],
+          "estimated_files": ["frontend/src/app/(admin)/page.tsx"],
+          "acceptance_criteria": [
+            "Uses QuickStats for stats grid",
+            "Uses StatCard for each metric",
+            "Uses ChartContainer for volume chart",
+            "Uses RecentActivity for activity table",
+            "PageHeader with title"
+          ],
+          "test_cases": [
+            "Page renders without errors",
+            "Stats display correctly",
+            "Chart renders",
+            "Activity table populated"
+          ],
+          "definition_of_done": "Dashboard uses all new components",
+          "expected_output": "Updated admin dashboard page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "T-6.2",
-          "name": "On-chain Services",
-          "description": "Implement DepositService and WithdrawService for crypto deposit/withdraw flows",
-          "priority": "critical",
-          "estimated_hours": 12,
-          "dependencies": ["T-6.1"],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-02-02",
-          "evidence": "crates/ramp-core/src/service/deposit.rs, withdraw.rs"
+          "id": "T-038",
+          "title": "Intents Page Refactor",
+          "description": "Refactor intents page with DataTable, StatusBadge, PageHeader. Add filtering and sorting capabilities.",
+          "phase": "Page Refactors",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-023", "T-026", "T-017"],
+          "estimated_files": ["frontend/src/app/(admin)/intents/page.tsx"],
+          "acceptance_criteria": [
+            "Uses PageHeader",
+            "Uses DataTable with columns",
+            "Status column uses StatusBadge",
+            "Filtering works",
+            "Pagination works"
+          ],
+          "test_cases": [
+            "Intents load in table",
+            "Status badges render",
+            "Filter reduces rows",
+            "Sort works on columns"
+          ],
+          "definition_of_done": "Intents page fully refactored",
+          "expected_output": "Updated intents page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "T-6.3",
-          "name": "Temporal Workflows",
-          "description": "Complete Temporal workflow logic with saga/compensation patterns",
-          "priority": "critical",
-          "estimated_hours": 10,
-          "dependencies": ["T-6.2"],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-02-02",
-          "evidence": "crates/ramp-core/src/workflows/activities.rs, compensation.rs"
+          "id": "T-039",
+          "title": "Users Page Refactor",
+          "description": "Refactor users page with DataTable, Avatar, Badge, PageHeader. Add user detail expandable rows.",
+          "phase": "Page Refactors",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-023", "T-011", "T-017"],
+          "estimated_files": ["frontend/src/app/(admin)/users/page.tsx"],
+          "acceptance_criteria": [
+            "Uses PageHeader",
+            "Uses DataTable",
+            "Avatar column for user",
+            "KYC tier badge",
+            "Expandable row details"
+          ],
+          "test_cases": [
+            "Users display in table",
+            "Avatars render",
+            "KYC badges show tier",
+            "Expand shows details"
+          ],
+          "definition_of_done": "Users page fully refactored",
+          "expected_output": "Updated users page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "T-6.4",
-          "name": "Frontend Integration",
-          "description": "Complete portal API client with auth context and WebAuthn support",
-          "priority": "critical",
-          "estimated_hours": 8,
-          "dependencies": [],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02",
-          "evidence": "frontend/src/lib/portal-api.ts, contexts/auth-context.tsx"
+          "id": "T-040",
+          "title": "Compliance Page Refactor",
+          "description": "Refactor compliance page with DataTable, ActivityFeed, KPICard. Add case management UI improvements.",
+          "phase": "Page Refactors",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-023", "T-024", "T-025"],
+          "estimated_files": ["frontend/src/app/(admin)/compliance/page.tsx"],
+          "acceptance_criteria": [
+            "KPICards for case metrics",
+            "DataTable for cases",
+            "ActivityFeed for case activity",
+            "Case status filtering"
+          ],
+          "test_cases": [
+            "KPIs display correctly",
+            "Cases in table",
+            "Activity feed renders",
+            "Filters work"
+          ],
+          "definition_of_done": "Compliance page refactored with new components",
+          "expected_output": "Updated compliance page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "T-6.5",
-          "name": "Request Validation",
-          "description": "Enhanced ValidatedJson middleware with structured error responses",
-          "priority": "high",
-          "estimated_hours": 6,
-          "dependencies": [],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-02-02",
-          "evidence": "crates/ramp-api/src/extract.rs, dto.rs - custom validators"
+          "id": "T-041",
+          "title": "Ledger Page Refactor",
+          "description": "Refactor ledger page with enhanced DataTable styling, balance columns, entry type badges.",
+          "phase": "Page Refactors",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-023", "T-017"],
+          "estimated_files": ["frontend/src/app/(admin)/ledger/page.tsx"],
+          "acceptance_criteria": [
+            "PageHeader with title",
+            "DataTable for entries",
+            "Debit/credit color coding",
+            "Balance columns formatted"
+          ],
+          "test_cases": [
+            "Entries display",
+            "Debits show negative",
+            "Credits show positive",
+            "Balances formatted"
+          ],
+          "definition_of_done": "Ledger page uses new table styling",
+          "expected_output": "Updated ledger page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "T-6.6",
-          "name": "Payout Reversal",
-          "description": "Bank rejection handling with proper fund return logic",
-          "priority": "critical",
-          "estimated_hours": 6,
-          "dependencies": ["T-6.3"],
-          "assignee": "backend-rust",
-          "status": "completed",
-          "completed_at": "2026-02-02",
-          "evidence": "PayoutState::Reversed, payout_vnd_reversed pattern"
+          "id": "T-042",
+          "title": "Webhooks Page Refactor",
+          "description": "Refactor webhooks page with DataTable, StatusBadge for delivery status.",
+          "phase": "Page Refactors",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-023", "T-026"],
+          "estimated_files": ["frontend/src/app/(admin)/webhooks/page.tsx"],
+          "acceptance_criteria": [
+            "PageHeader",
+            "DataTable for webhooks",
+            "Delivery status badge",
+            "Retry button if failed"
+          ],
+          "test_cases": [
+            "Webhooks display",
+            "Status badges correct",
+            "Retry triggers action"
+          ],
+          "definition_of_done": "Webhooks page refactored",
+          "expected_output": "Updated webhooks page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "T-6.7",
-          "name": "Frontend Tests",
-          "description": "Vitest setup with comprehensive unit tests for UI components",
-          "priority": "high",
-          "estimated_hours": 4,
-          "dependencies": ["T-6.4"],
-          "assignee": "frontend",
-          "status": "completed",
-          "completed_at": "2026-02-02",
-          "evidence": "86 tests passing in frontend/src/**/__tests__/"
+          "id": "T-043",
+          "title": "Admin Settings Page Refactor",
+          "description": "Refactor settings page with improved form styling, section cards, save buttons.",
+          "phase": "Page Refactors",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-009", "T-017"],
+          "estimated_files": ["frontend/src/app/(admin)/settings/page.tsx"],
+          "acceptance_criteria": [
+            "Section cards for settings groups",
+            "Improved input styling",
+            "Save button per section",
+            "Success/error feedback"
+          ],
+          "test_cases": [
+            "Settings load",
+            "Save updates settings",
+            "Feedback shows"
+          ],
+          "definition_of_done": "Settings page uses new form styling",
+          "expected_output": "Updated settings page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
         },
         {
-          "id": "T-6.8",
-          "name": "Documentation Update",
-          "description": "Update all documentation to reflect Phase 6 changes",
-          "priority": "medium",
-          "estimated_hours": 2,
-          "dependencies": ["T-6.7"],
-          "assignee": "documentation",
-          "status": "completed",
-          "completed_at": "2026-02-03",
-          "evidence": "dashboard.md, current-state.md, state.json, phase6-summary.md"
+          "id": "T-044",
+          "title": "Portal Dashboard Page Refactor",
+          "description": "Refactor portal dashboard with WalletCard, BalanceDisplay, QuickActions. Premium landing experience for users.",
+          "phase": "Page Refactors",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-029", "T-030", "T-036"],
+          "estimated_files": ["frontend/src/app/portal/page.tsx"],
+          "acceptance_criteria": [
+            "WalletCard prominent",
+            "BalanceDisplay for each currency",
+            "QuickActions grid",
+            "KYC status banner if needed"
+          ],
+          "test_cases": [
+            "Wallet displays",
+            "Balances show",
+            "Actions navigate",
+            "KYC banner shows if unverified"
+          ],
+          "definition_of_done": "Portal dashboard uses all new components",
+          "expected_output": "Updated portal page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-045",
+          "title": "Portal Assets Page Refactor",
+          "description": "Refactor assets page with AssetRow list, BalanceDisplay totals.",
+          "phase": "Page Refactors",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-035", "T-030"],
+          "estimated_files": ["frontend/src/app/portal/assets/page.tsx"],
+          "acceptance_criteria": [
+            "Total balance at top",
+            "AssetRow for each asset",
+            "Action buttons per asset"
+          ],
+          "test_cases": [
+            "Assets list renders",
+            "Balances correct",
+            "Actions navigate"
+          ],
+          "definition_of_done": "Assets page shows all user assets",
+          "expected_output": "Updated assets page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-046",
+          "title": "Portal Deposit Page Refactor",
+          "description": "Refactor deposit page with DepositCard component, improved instructions.",
+          "phase": "Page Refactors",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-033"],
+          "estimated_files": ["frontend/src/app/portal/deposit/page.tsx"],
+          "acceptance_criteria": [
+            "DepositCard as main UI",
+            "Method selection works",
+            "Instructions clear",
+            "QR code displays"
+          ],
+          "test_cases": [
+            "Deposit flow works",
+            "QR renders",
+            "Copy address works"
+          ],
+          "definition_of_done": "Deposit page provides clear flow",
+          "expected_output": "Updated deposit page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-047",
+          "title": "Portal Withdraw Page Refactor",
+          "description": "Refactor withdraw page with WithdrawCard component, validation feedback.",
+          "phase": "Page Refactors",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-034"],
+          "estimated_files": ["frontend/src/app/portal/withdraw/page.tsx"],
+          "acceptance_criteria": [
+            "WithdrawCard as main UI",
+            "Asset selection",
+            "Amount with max",
+            "Fee display",
+            "Confirmation flow"
+          ],
+          "test_cases": [
+            "Withdraw flow works",
+            "Validation shows errors",
+            "Fee calculates"
+          ],
+          "definition_of_done": "Withdraw page handles full flow",
+          "expected_output": "Updated withdraw page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-048",
+          "title": "Portal Transactions Page Refactor",
+          "description": "Refactor transactions page with TransactionRow list, filters, date range.",
+          "phase": "Page Refactors",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-031"],
+          "estimated_files": ["frontend/src/app/portal/transactions/page.tsx"],
+          "acceptance_criteria": [
+            "TransactionRow for each transaction",
+            "Type filter",
+            "Status filter",
+            "Date range filter",
+            "Pagination"
+          ],
+          "test_cases": [
+            "Transactions display",
+            "Filters work",
+            "Pagination works"
+          ],
+          "definition_of_done": "Transactions page shows full history",
+          "expected_output": "Updated transactions page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-049",
+          "title": "Portal KYC Page Refactor",
+          "description": "Refactor KYC page with KYCProgress, improved form sections, document upload.",
+          "phase": "Page Refactors",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-032", "T-009"],
+          "estimated_files": ["frontend/src/app/portal/kyc/page.tsx"],
+          "acceptance_criteria": [
+            "KYCProgress at top",
+            "Form sections per step",
+            "Document upload UI",
+            "Submit with loading"
+          ],
+          "test_cases": [
+            "Progress shows current step",
+            "Forms validate",
+            "Upload works",
+            "Submit triggers API"
+          ],
+          "definition_of_done": "KYC page guides user through verification",
+          "expected_output": "Updated kyc page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-050",
+          "title": "Portal Settings Page Refactor",
+          "description": "Refactor portal settings with profile section, security section, notification preferences.",
+          "phase": "Page Refactors",
+          "priority": 2,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-009", "T-017"],
+          "estimated_files": ["frontend/src/app/portal/settings/page.tsx"],
+          "acceptance_criteria": [
+            "Profile section with avatar",
+            "Security section (2FA, passkey)",
+            "Notification preferences",
+            "Save buttons"
+          ],
+          "test_cases": [
+            "Profile loads",
+            "Save updates",
+            "Preferences toggle"
+          ],
+          "definition_of_done": "Settings page organized and functional",
+          "expected_output": "Updated portal settings page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-051",
+          "title": "Portal Login Page Refactor",
+          "description": "Refactor login page with premium card design, brand styling, WebAuthn option, smooth transitions.",
+          "phase": "Page Refactors",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-007", "T-009", "T-008"],
+          "estimated_files": ["frontend/src/app/portal/login/page.tsx"],
+          "acceptance_criteria": [
+            "Centered card design",
+            "Brand logo/name",
+            "Email input",
+            "WebAuthn/Passkey option",
+            "Link to register"
+          ],
+          "test_cases": [
+            "Form submits",
+            "WebAuthn triggers",
+            "Link navigates to register"
+          ],
+          "definition_of_done": "Login page looks premium and works",
+          "expected_output": "Updated login page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-052",
+          "title": "Portal Register Page Refactor",
+          "description": "Refactor register page matching login styling, terms checkbox, confirmation.",
+          "phase": "Page Refactors",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-051"],
+          "estimated_files": ["frontend/src/app/portal/register/page.tsx"],
+          "acceptance_criteria": [
+            "Matches login card style",
+            "Email input",
+            "Terms checkbox",
+            "Register button",
+            "Link to login"
+          ],
+          "test_cases": [
+            "Form validates",
+            "Terms required",
+            "Register triggers API"
+          ],
+          "definition_of_done": "Register page matches login quality",
+          "expected_output": "Updated register page.tsx",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-053",
+          "title": "Dark Mode Audit and Fixes",
+          "description": "Audit all pages and components for dark mode issues. Fix any contrast, visibility, or styling problems.",
+          "phase": "Page Refactors",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-037", "T-044", "T-051"],
+          "estimated_files": ["Multiple files"],
+          "acceptance_criteria": [
+            "All pages audited",
+            "Contrast issues fixed",
+            "Borders visible in dark mode",
+            "Charts themed correctly"
+          ],
+          "test_cases": [
+            "Toggle dark mode on all pages",
+            "Check contrast ratios",
+            "Verify no invisible elements"
+          ],
+          "definition_of_done": "Dark mode looks premium on all pages",
+          "expected_output": "Bug fixes across multiple files",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-054",
+          "title": "Accessibility Audit and Fixes",
+          "description": "Run accessibility audit, fix focus states, ARIA labels, keyboard navigation, contrast issues.",
+          "phase": "Page Refactors",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-053"],
+          "estimated_files": ["Multiple files"],
+          "acceptance_criteria": [
+            "All focus states visible",
+            "All icon buttons have aria-label",
+            "All inputs have labels",
+            "Keyboard navigation works",
+            "WCAG AAA contrast"
+          ],
+          "test_cases": [
+            "Tab through all pages",
+            "Screen reader testing",
+            "Contrast checker passes"
+          ],
+          "definition_of_done": "WCAG AAA compliance verified",
+          "expected_output": "Accessibility fixes across files",
+          "owner": "worker-agent",
+          "status": "pending"
+        },
+        {
+          "id": "T-055",
+          "title": "Performance Optimization",
+          "description": "Optimize bundle size, add lazy loading for heavy components, run Lighthouse audit, fix performance issues.",
+          "phase": "Page Refactors",
+          "priority": 1,
+          "tier": { "model": "sonnet" },
+          "dependencies": ["T-054"],
+          "estimated_files": ["Multiple files"],
+          "acceptance_criteria": [
+            "Lighthouse Performance > 90",
+            "Heavy components lazy loaded",
+            "No CLS issues",
+            "FCP < 1.5s"
+          ],
+          "test_cases": [
+            "Run Lighthouse audit",
+            "Check bundle size",
+            "Verify lazy loading works"
+          ],
+          "definition_of_done": "All performance targets met",
+          "expected_output": "Performance optimizations applied",
+          "owner": "worker-agent",
+          "status": "pending"
         }
       ]
     }
   ],
   "summary": {
-    "total_estimated_hours": 880,
-    "hours_completed": 880,
-    "hours_remaining": 0,
-    "critical_path_tasks": 70,
-    "completed_critical": 70,
-    "assignee_distribution": {
-      "backend-rust": "48%",
-      "backend-go": "14%",
-      "frontend": "18%",
-      "smart-contract": "10%",
-      "devops": "7%",
-      "qa": "3%"
+    "total_estimated_hours": 55,
+    "hours_per_phase": {
+      "foundation": 2.5,
+      "core_components": 6,
+      "layout_components": 5,
+      "dashboard_components": 6,
+      "portal_components": 6,
+      "page_refactors": 16
     },
-    "actual_progress": {
-      "phase_1": "100%",
-      "phase_2": "100%",
-      "phase_3": "100%",
-      "phase_5": "100%",
-      "phase_6": "100%",
-      "overall": "100%"
-    },
-    "completed_tasks": 171,
-    "pending_tasks": 0
+    "model_assignment": "sonnet",
+    "critical_path": [
+      "T-001 -> T-007 -> T-008 -> T-021 -> T-037",
+      "T-001 -> T-009 -> T-033 -> T-046",
+      "T-001 -> T-015 -> T-019 -> T-037"
+    ],
+    "parallel_opportunities": [
+      "T-002, T-003, T-004, T-005 can run in parallel",
+      "Phase 2 and Phase 3 can run in parallel after Phase 1",
+      "Phase 4 and Phase 5 can run in parallel after Phases 2-3"
+    ]
   }
 }

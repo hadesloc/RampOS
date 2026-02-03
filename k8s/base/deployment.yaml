@@ -19,9 +19,11 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 2000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: rampos-server
-        image: ghcr.io/rampos/rampos:latest
+        image: ghcr.io/rampos/rampos:0.1.0
         imagePullPolicy: IfNotPresent
         securityContext:
           allowPrivilegeEscalation: false

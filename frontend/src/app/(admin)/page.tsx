@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { api, type DashboardStats, type Intent } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { StatCard } from "@/components/dashboard/stat-card";
+import { ChartContainer } from "@/components/dashboard/chart-container";
+import { RecentActivity } from "@/components/dashboard/recent-activity";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   LineChart,
   Line,
@@ -13,38 +15,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-
-function StatCard({
-  title,
-  value,
-  subtitle,
-}: {
-  title: string;
-  value: string | number;
-  subtitle?: string;
-}) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        {subtitle && (
-          <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+import { DollarSign, ArrowUpRight, ArrowDownLeft, Activity, Users, FileText, AlertTriangle } from "lucide-react";
 
 function formatVnd(value: string): string {
   const num = parseInt(value, 10);
@@ -54,31 +25,6 @@ function formatVnd(value: string): string {
     currency: "VND",
     maximumFractionDigits: 0,
   }).format(num);
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    COMPLETED: "default", // green-ish usually or primary
-    PENDING: "secondary", // yellow-ish or secondary
-    FAILED: "destructive", // red
-    PROCESSING: "outline", // blue-ish or outline
-  };
-
-  const variant = styles[status] || "secondary";
-
-  // Custom class overrides if needed to match exact colors from original
-  const customClasses: Record<string, string> = {
-    COMPLETED: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100/80 dark:hover:bg-green-900/40 border-transparent",
-    PENDING: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 hover:bg-yellow-100/80 dark:hover:bg-yellow-900/40 border-transparent",
-    FAILED: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100/80 dark:hover:bg-red-900/40 border-transparent",
-    PROCESSING: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-100/80 dark:hover:bg-blue-900/40 border-transparent",
-  };
-
-  return (
-    <Badge variant={variant} className={customClasses[status]}>
-      {status}
-    </Badge>
-  );
 }
 
 export default function DashboardPage() {
@@ -214,14 +160,6 @@ export default function DashboardPage() {
     fetchData();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
   if (error) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -230,89 +168,89 @@ export default function DashboardPage() {
     );
   }
 
-  if (!stats) return null;
+  // Transform intents for RecentActivity component
+  const recentActivityData = recentIntents.map(intent => ({
+    id: intent.id,
+    description: `${intent.intent_type.replace('_', ' ')}`,
+    amount: parseInt(intent.amount),
+    currency: intent.currency,
+    status: intent.state,
+    timestamp: intent.created_at,
+    type: intent.intent_type,
+    user: {
+      name: intent.user_id,
+      email: intent.user_id // We don't have email in the mock data yet
+    }
+  }));
 
   return (
-    <div className="space-y-8 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-          <p className="text-muted-foreground">
-            Overview of RampOS system activity
-          </p>
-        </div>
-      </div>
+    <div className="space-y-6 p-6">
+      <PageHeader
+        title="Dashboard"
+        description="Overview of RampOS system activity"
+      />
 
-      <div className="space-y-4">
-        {/* Volume Stats */}
-        <div>
-          <h3 className="text-lg font-semibold mb-4">Volume (24h)</h3>
+      {loading ? (
+        <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <StatCard
-              title="Total Pay-in"
-              value={formatVnd(stats.volume.totalPayinVnd)}
-              subtitle="VND deposited"
-            />
-            <StatCard
-              title="Total Pay-out"
-              value={formatVnd(stats.volume.totalPayoutVnd)}
-              subtitle="VND withdrawn"
-            />
-            <StatCard
-              title="Total Trade"
-              value={formatVnd(stats.volume.totalTradeVnd)}
-              subtitle="Trading volume"
-            />
+             <StatCard title="Total Pay-in" value="" loading={true} />
+             <StatCard title="Total Pay-out" value="" loading={true} />
+             <StatCard title="Total Trade" value="" loading={true} />
           </div>
+          <ChartContainer title="System Volume" loading={true}>
+            <div />
+          </ChartContainer>
         </div>
-
-        {/* Intent Stats */}
-        <div>
-          <h3 className="text-lg font-semibold mb-4">Intents Today</h3>
-          <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-            <StatCard title="Total" value={stats.intents.totalToday} />
-            <StatCard title="Pay-in" value={stats.intents.payinCount} />
-            <StatCard title="Pay-out" value={stats.intents.payoutCount} />
-            <StatCard title="Pending" value={stats.intents.pendingCount} />
-            <StatCard title="Completed" value={stats.intents.completedCount} />
-            <StatCard title="Failed" value={stats.intents.failedCount} />
+      ) : stats && (
+        <div className="space-y-6">
+          {/* Volume Stats */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">Volume (24h)</h3>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <StatCard
+                title="Total Pay-in"
+                value={formatVnd(stats.volume.totalPayinVnd)}
+                subtitle="VND deposited"
+                icon={<ArrowDownLeft className="h-4 w-4 text-muted-foreground" />}
+                trend={{ value: 12, isPositive: true }}
+              />
+              <StatCard
+                title="Total Pay-out"
+                value={formatVnd(stats.volume.totalPayoutVnd)}
+                subtitle="VND withdrawn"
+                icon={<ArrowUpRight className="h-4 w-4 text-muted-foreground" />}
+                trend={{ value: 8, isPositive: true }}
+              />
+              <StatCard
+                title="Total Trade"
+                value={formatVnd(stats.volume.totalTradeVnd)}
+                subtitle="Trading volume"
+                icon={<Activity className="h-4 w-4 text-muted-foreground" />}
+                trend={{ value: 24, isPositive: true }}
+              />
+            </div>
           </div>
-        </div>
 
-        {/* Cases Stats */}
-        <div>
-          <h3 className="text-lg font-semibold mb-4">Compliance Cases</h3>
-          <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-            <StatCard title="Total Cases" value={stats.cases.total} />
-            <StatCard title="Open" value={stats.cases.open} />
-            <StatCard title="In Review" value={stats.cases.inReview} />
-            <StatCard title="On Hold" value={stats.cases.onHold} />
-            <StatCard
-              title="Avg Resolution"
-              value={`${stats.cases.avgResolutionHours}h`}
-            />
+          {/* Intent Stats */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">Intents Today</h3>
+            <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+              <StatCard title="Total" value={stats.intents.totalToday} icon={<FileText className="h-4 w-4" />} />
+              <StatCard title="Pay-in" value={stats.intents.payinCount} />
+              <StatCard title="Pay-out" value={stats.intents.payoutCount} />
+              <StatCard title="Pending" value={stats.intents.pendingCount} />
+              <StatCard title="Completed" value={stats.intents.completedCount} />
+              <StatCard title="Failed" value={stats.intents.failedCount} className="border-red-200 dark:border-red-900/20" />
+            </div>
           </div>
-        </div>
 
-        {/* User Stats */}
-        <div>
-          <h3 className="text-lg font-semibold mb-4">Users</h3>
-          <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-            <StatCard title="Total Users" value={stats.users.total.toLocaleString()} />
-            <StatCard title="Active Today" value={stats.users.active.toLocaleString()} />
-            <StatCard title="KYC Pending" value={stats.users.kycPending} />
-            <StatCard title="New Today" value={stats.users.newToday} />
-          </div>
-        </div>
-
-        {/* Volume Chart */}
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>System Volume (7 Days)</CardTitle>
-            <CardDescription>Mock volume data in millions VND</CardDescription>
-          </CardHeader>
-          <CardContent className="pl-2">
-            <div className="h-[200px] w-full">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+            {/* Volume Chart */}
+            <ChartContainer
+              title="System Volume (7 Days)"
+              description="Mock volume data in millions VND"
+              className="col-span-4"
+            >
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -346,50 +284,52 @@ export default function DashboardPage() {
                   />
                 </LineChart>
               </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
+            </ChartContainer>
 
-        {/* Recent Activity */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-          <Card className="col-span-full">
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Time</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentIntents.map((intent) => (
-                    <TableRow key={intent.id}>
-                      <TableCell className="font-medium">{intent.intent_type}</TableCell>
-                      <TableCell className="font-mono">
-                        {new Intl.NumberFormat("vi-VN", {
-                          style: "currency",
-                          currency: intent.currency,
-                        }).format(parseInt(intent.amount))}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={intent.state} />
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {new Date(intent.created_at).toLocaleTimeString()}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+            {/* Cases & Users Mini Stats */}
+            <div className="col-span-3 space-y-4">
+              <div className="grid gap-4">
+                <h3 className="text-sm font-medium text-muted-foreground">Compliance Cases</h3>
+                <div className="grid grid-cols-2 gap-4">
+                   <StatCard
+                    title="Open Cases"
+                    value={stats.cases.open}
+                    icon={<AlertTriangle className="h-4 w-4" />}
+                    className="bg-orange-50 dark:bg-orange-950/20"
+                   />
+                   <StatCard
+                    title="Avg Resolution"
+                    value={`${stats.cases.avgResolutionHours}h`}
+                   />
+                </div>
+              </div>
+
+              <div className="grid gap-4">
+                <h3 className="text-sm font-medium text-muted-foreground">User Growth</h3>
+                <div className="grid grid-cols-2 gap-4">
+                   <StatCard
+                    title="New Users"
+                    value={stats.users.newToday}
+                    icon={<Users className="h-4 w-4" />}
+                    trend={{ value: 5, isPositive: true }}
+                   />
+                   <StatCard
+                    title="Active Today"
+                    value={stats.users.active.toLocaleString()}
+                   />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Activity */}
+          <RecentActivity
+            data={recentActivityData}
+            title="Recent Activity"
+            viewAllLink="/intents"
+          />
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -100,9 +100,9 @@ function formatDate(dateStr: string): string {
 }
 
 function getAccountTypeColor(type: string): string {
-  if (type.startsWith("USER_")) return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
-  if (type.startsWith("PLATFORM_")) return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400";
-  if (type.startsWith("TENANT_")) return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+  if (type.startsWith("USER_")) return "bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-400";
+  if (type.startsWith("PLATFORM_")) return "bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-400";
+  if (type.startsWith("TENANT_")) return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400";
   return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
 }
 

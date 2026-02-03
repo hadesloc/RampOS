@@ -54,7 +54,9 @@ export class RampOSClient {
     this.httpClient.interceptors.request.use((reqConfig) => {
       const timestamp = Math.floor(Date.now() / 1000);
       const method = (reqConfig.method || 'GET').toUpperCase();
-      const path = reqConfig.url || '';
+      const base = reqConfig.baseURL ?? baseURL;
+      const url = new URL(reqConfig.url ?? '', base);
+      const path = url.pathname;
 
       let body = '';
       if (reqConfig.data) {

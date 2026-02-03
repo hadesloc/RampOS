@@ -8,6 +8,8 @@
   "/(admin)/webhooks/page": "/webhooks",
   "/_global-error/page": "/_global-error",
   "/_not-found/page": "/_not-found",
+  "/admin-login/page": "/admin-login",
+  "/api/admin-login/route": "/api/admin-login",
   "/api/proxy/[...path]/route": "/api/proxy/[...path]",
   "/portal/assets/page": "/portal/assets",
   "/portal/deposit/page": "/portal/deposit",

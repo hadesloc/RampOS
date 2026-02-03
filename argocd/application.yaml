@@ -9,7 +9,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/rampos/rampos.git
-    targetRevision: HEAD
+    targetRevision: v0.1.0
     path: k8s/overlays/prod
   destination:
     server: https://kubernetes.default.svc

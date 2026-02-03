@@ -2,6 +2,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { PageHeader } from "@/components/layout/page-header";
+import { StatusBadge } from "@/components/dashboard/status-badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Filter, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 interface Intent {
   id: string;
@@ -83,37 +98,22 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function getStateColor(state: string): string {
-  switch (state) {
-    case "COMPLETED":
-    case "BANK_CONFIRMED":
-      return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
-    case "PENDING_BANK":
-    case "PENDING_RAILS":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
-    case "RAILS_FAILED":
-    case "EXPIRED":
-      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
-    default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
-  }
-}
-
 function getTypeColor(type: string): string {
   switch (type) {
     case "PAYIN":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
+      return "bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-400 border-transparent hover:bg-blue-100/80";
     case "PAYOUT":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400";
+      return "bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-400 border-transparent hover:bg-purple-100/80";
     case "TRADE":
-      return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400";
+      return "bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-400 border-transparent hover:bg-orange-100/80";
     default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-transparent";
   }
 }
 
 export default function IntentsPage() {
   const [intents] = useState<Intent[]>(mockIntents);
+  const [search, setSearch] = useState("");
   const [filter, setFilter] = useState({
     type: "",
     state: "",
@@ -122,108 +122,126 @@ export default function IntentsPage() {
   const filteredIntents = intents.filter((intent) => {
     if (filter.type && intent.intentType !== filter.type) return false;
     if (filter.state && intent.state !== filter.state) return false;
+    if (search && !intent.id.toLowerCase().includes(search.toLowerCase()) && !intent.referenceCode?.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Intents</h1>
-        <p className="text-muted-foreground">
-          View and manage payment intents
-        </p>
-      </div>
+    <div className="space-y-6 p-6">
+      <PageHeader
+        title="Intents"
+        description="View and manage payment intents"
+        breadcrumbs={[
+          { label: "Dashboard", href: "/" },
+          { label: "Intents" }
+        ]}
+      />
 
-      {/* Filters */}
-      <div className="flex gap-4">
-        <select
-          className="rounded-md border bg-background px-3 py-2 text-sm"
-          value={filter.type}
-          onChange={(e) => setFilter({ ...filter, type: e.target.value })}
-        >
-          <option value="">All Types</option>
-          <option value="PAYIN">Pay-in</option>
-          <option value="PAYOUT">Pay-out</option>
-          <option value="TRADE">Trade</option>
-        </select>
+      <Card>
+        <CardContent className="p-4 space-y-4">
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-between">
+            <div className="relative w-full sm:w-96">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by ID or reference..."
+                className="pl-9"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:flex-none">
+                <select
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  value={filter.type}
+                  onChange={(e) => setFilter({ ...filter, type: e.target.value })}
+                >
+                  <option value="">All Types</option>
+                  <option value="PAYIN">Pay-in</option>
+                  <option value="PAYOUT">Pay-out</option>
+                  <option value="TRADE">Trade</option>
+                </select>
+              </div>
 
-        <select
-          className="rounded-md border bg-background px-3 py-2 text-sm"
-          value={filter.state}
-          onChange={(e) => setFilter({ ...filter, state: e.target.value })}
-        >
-          <option value="">All States</option>
-          <option value="PENDING_BANK">Pending Bank</option>
-          <option value="BANK_CONFIRMED">Bank Confirmed</option>
-          <option value="PENDING_RAILS">Pending Rails</option>
-          <option value="COMPLETED">Completed</option>
-          <option value="RAILS_FAILED">Failed</option>
-          <option value="EXPIRED">Expired</option>
-        </select>
-      </div>
+              <div className="relative flex-1 sm:flex-none">
+                <select
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  value={filter.state}
+                  onChange={(e) => setFilter({ ...filter, state: e.target.value })}
+                >
+                  <option value="">All States</option>
+                  <option value="PENDING_BANK">Pending Bank</option>
+                  <option value="BANK_CONFIRMED">Bank Confirmed</option>
+                  <option value="PENDING_RAILS">Pending Rails</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="RAILS_FAILED">Failed</option>
+                  <option value="EXPIRED">Expired</option>
+                </select>
+              </div>
+              <Button variant="outline" size="icon">
+                <Filter className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
 
-      {/* Table */}
-      <div className="rounded-md border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium">ID</th>
-              <th className="px-4 py-3 text-left font-medium">Type</th>
-              <th className="px-4 py-3 text-left font-medium">State</th>
-              <th className="px-4 py-3 text-right font-medium">Amount</th>
-              <th className="px-4 py-3 text-left font-medium">Reference</th>
-              <th className="px-4 py-3 text-left font-medium">Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredIntents.map((intent) => (
-              <tr key={intent.id} className="border-t hover:bg-muted/30">
-                <td className="px-4 py-3">
-                  <Link
-                    href={`/intents/${intent.id}`}
-                    className="font-mono text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                  >
-                    {intent.id.substring(0, 20)}...
-                  </Link>
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getTypeColor(
-                      intent.intentType
-                    )}`}
-                  >
-                    {intent.intentType}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getStateColor(
-                      intent.state
-                    )}`}
-                  >
-                    {intent.state}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right font-mono">
-                  {formatAmount(intent.amount, intent.currency)}
-                </td>
-                <td className="px-4 py-3 font-mono text-xs">
-                  {intent.referenceCode || "-"}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {formatDate(intent.createdAt)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {filteredIntents.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground">
-          No intents found matching the filters.
-        </div>
-      )}
+          {/* Table */}
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[100px]">ID</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>State</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Reference</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredIntents.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                      No intents found matching the filters.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredIntents.map((intent) => (
+                    <TableRow key={intent.id}>
+                      <TableCell>
+                        <Link
+                          href={`/intents/${intent.id}`}
+                          className="font-mono text-xs text-primary hover:underline"
+                          title={intent.id}
+                        >
+                          {intent.id.substring(0, 8)}...
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={getTypeColor(intent.intentType)}>
+                          {intent.intentType}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={intent.state} />
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatAmount(intent.amount, intent.currency)}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {intent.referenceCode || "-"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {formatDate(intent.createdAt)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

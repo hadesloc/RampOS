@@ -97,6 +97,14 @@ pub fn create_router(state: AppState) -> Router {
         .route("/:user_id", get(handlers::get_user_balances))
         .with_state(state.ledger_service.clone());
 
+    // Legacy/alias balance route for SDK compatibility
+    let user_balance_alias_routes = Router::new()
+        .route(
+            "/users/:tenant_id/:user_id/balances",
+            get(handlers::get_user_balances_for_tenant),
+        )
+        .with_state(state.ledger_service.clone());
+
     // Report routes
     let report_routes = Router::new()
         .route("/aml", get(handlers::admin::reports::generate_aml_report))
@@ -271,6 +279,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/intents", intent_routes)
         .nest("/events", event_routes)
         .nest("/balance", balance_routes)
+        .merge(user_balance_alias_routes)
         .nest("/admin", admin_routes)
         .nest("/aa", aa_routes)
         .layer(middleware::from_fn_with_state(

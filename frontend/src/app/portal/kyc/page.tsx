@@ -24,18 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAuth } from "@/contexts/auth-context";
-import { kycApi, KYCStatus } from "@/lib/portal-api";
+import { KYCProgress } from "@/components/portal/kyc-progress";
+import { PageHeader } from "@/components/layout/page-header";
+import { PageContainer } from "@/components/layout/page-container";
 import { useRouter } from "next/navigation";
-import {
-  Loader2,
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  XCircle,
-  Upload,
-  Camera,
-} from "lucide-react";
 
 const kycSchema = z.object({
   firstName: z.string().min(2, "First name must be at least 2 characters"),
@@ -179,29 +171,33 @@ export default function KYCPage() {
   };
 
   // Show loading state
-  if (authLoading || isLoadingStatus) {
-    return (
-      <div className="container max-w-2xl py-10">
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </div>
-    );
-  }
+  // if (authLoading || isLoadingStatus) {
+  //   return (
+  //     <div className="container max-w-2xl py-10">
+  //       <div className="flex items-center justify-center py-20">
+  //         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   // Show KYC status if already submitted
   if (kycStatus && kycStatus.status !== "NONE") {
     return (
-      <div className="container max-w-2xl py-10">
-        <div className="mb-8 space-y-2">
-          <h1 className="text-3xl font-bold">Identity Verification</h1>
-          <p className="text-muted-foreground">
-            Your verification status
-          </p>
-        </div>
-
+      <PageContainer>
+        <PageHeader title="Identity Verification" description="Your verification status" />
         <Card>
           <CardContent className="pt-6">
+            <KYCProgress
+                currentStep={4}
+                steps={[
+                    { label: "Personal Info", completed: true },
+                    { label: "ID Document", completed: true },
+                    { label: "Selfie", completed: true },
+                    { label: "Review", completed: true }
+                ]}
+                status={kycStatus.status}
+            />
             {kycStatus.status === "PENDING" && (
               <div className="flex flex-col items-center text-center space-y-4 py-8">
                 <div className="rounded-full bg-yellow-100 p-4 dark:bg-yellow-900/30">
@@ -274,19 +270,27 @@ export default function KYCPage() {
             )}
           </CardContent>
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
+  const steps = [
+    { label: "Personal Info", completed: step > 1 },
+    { label: "ID Document", completed: step > 2 },
+    { label: "Selfie", completed: step > 3 },
+    { label: "Review", completed: step > 4 }
+  ];
+
   return (
-    <div className="container max-w-2xl py-10">
-      <div className="mb-8 space-y-2">
-        <h1 className="text-3xl font-bold">Identity Verification</h1>
-        <p className="text-muted-foreground">
-          Complete these steps to verify your account.
-        </p>
-        <Progress value={progress} className="mt-4" />
-      </div>
+    <PageContainer>
+      <PageHeader title="Identity Verification" description="Complete these steps to verify your account." />
+
+      <div className="max-w-3xl mx-auto space-y-6">
+      <KYCProgress
+        currentStep={step}
+        steps={steps}
+        status={kycStatus?.status || 'NONE'}
+      />
 
       {error && (
         <Alert variant="destructive" className="mb-6">
@@ -623,6 +627,7 @@ export default function KYCPage() {
           </CardFooter>
         </form>
       </Card>
-    </div>
+      </div>
+    </PageContainer>
   );
 }

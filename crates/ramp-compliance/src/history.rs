@@ -1,6 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 use ramp_common::{
-    types::{IntentId, UserId},
+    types::{IntentId, TenantId, UserId},
     Result,
 };
 use rust_decimal::prelude::ToPrimitive;
@@ -12,6 +12,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoreHistory {
     pub id: Uuid,
+    pub tenant_id: TenantId,
     pub user_id: UserId,
     pub intent_id: Option<IntentId>,
     pub score: Decimal,
@@ -39,6 +40,7 @@ impl ScoreHistoryManager {
 
     pub async fn record(
         &self,
+        tenant_id: &TenantId,
         user_id: &UserId,
         intent_id: Option<&IntentId>,
         score: Decimal,
@@ -46,17 +48,21 @@ impl ScoreHistoryManager {
         action: Option<String>,
     ) -> Result<()> {
         let rules_json = serde_json::to_value(rules).unwrap_or(serde_json::json!([]));
+        let tenant_id_str = tenant_id.to_string();
         let user_id_str = user_id.to_string();
         let intent_id_str = intent_id.map(|id| id.to_string());
         let id = Uuid::now_v7();
 
         sqlx::query(
             r#"
-            INSERT INTO risk_score_history (id, user_id, intent_id, score, triggered_rules, action_taken)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO risk_score_history (
+                id, tenant_id, user_id, intent_id, score, triggered_rules, action_taken
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#
         )
         .bind(id)
+        .bind(tenant_id_str)
         .bind(user_id_str)
         .bind(intent_id_str)
         .bind(score)
@@ -71,20 +77,23 @@ impl ScoreHistoryManager {
 
     pub async fn get_user_history(
         &self,
+        tenant_id: &TenantId,
         user_id: &UserId,
         limit: i64,
     ) -> Result<Vec<ScoreHistory>> {
+        let tenant_id_str = tenant_id.to_string();
         let user_id_str = user_id.to_string();
 
         let rows = sqlx::query(
             r#"
-            SELECT id, user_id, intent_id, score, triggered_rules, action_taken, created_at
+            SELECT id, tenant_id, user_id, intent_id, score, triggered_rules, action_taken, created_at
             FROM risk_score_history
-            WHERE user_id = $1
+            WHERE tenant_id = $1 AND user_id = $2
             ORDER BY created_at DESC
-            LIMIT $2
+            LIMIT $3
             "#,
         )
+        .bind(tenant_id_str)
         .bind(user_id_str)
         .bind(limit)
         .fetch_all(&self.pool)
@@ -96,6 +105,7 @@ impl ScoreHistoryManager {
             .map(|row| {
                 Ok(ScoreHistory {
                     id: row.try_get("id")?,
+                    tenant_id: TenantId::new(row.try_get::<String, _>("tenant_id")?),
                     user_id: UserId::new(row.try_get::<String, _>("user_id")?),
                     intent_id: row
                         .try_get::<Option<String>, _>("intent_id")?
@@ -112,7 +122,13 @@ impl ScoreHistoryManager {
         Ok(history)
     }
 
-    pub async fn get_average_score(&self, user_id: &UserId, days: i64) -> Result<f64> {
+    pub async fn get_average_score(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        days: i64,
+    ) -> Result<f64> {
+        let tenant_id_str = tenant_id.to_string();
         let user_id_str = user_id.to_string();
         let since = Utc::now() - Duration::days(days);
 
@@ -120,9 +136,10 @@ impl ScoreHistoryManager {
             r#"
             SELECT AVG(score) as avg_score
             FROM risk_score_history
-            WHERE user_id = $1 AND created_at >= $2
+            WHERE tenant_id = $1 AND user_id = $2 AND created_at >= $3
             "#,
         )
+        .bind(tenant_id_str)
         .bind(user_id_str)
         .bind(since)
         .fetch_one(&self.pool)
@@ -134,9 +151,9 @@ impl ScoreHistoryManager {
         Ok(avg_score.and_then(|v| v.to_f64()).unwrap_or(0.0))
     }
 
-    pub async fn detect_trend(&self, user_id: &UserId) -> Result<ScoreTrend> {
+    pub async fn detect_trend(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<ScoreTrend> {
         // Get last 10 scores
-        let history = self.get_user_history(user_id, 10).await?;
+        let history = self.get_user_history(tenant_id, user_id, 10).await?;
         Ok(Self::calculate_trend_internal(&history))
     }
 
@@ -182,10 +199,12 @@ mod tests {
     #[test]
     fn test_trend_calculation() {
         let now = Utc::now();
+        let tenant_id = TenantId::new("tenant1");
         let user_id = UserId::new("user1");
 
         let create_record = |score: i64, hours_ago: i64| ScoreHistory {
             id: Uuid::new_v4(),
+            tenant_id: tenant_id.clone(),
             user_id: user_id.clone(),
             intent_id: None,
             score: Decimal::from(score),

@@ -8,28 +8,13 @@ import { Copy, Check, QrCode, Loader2, AlertCircle, Wallet } from "lucide-react"
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { DepositCard } from "@/components/portal/deposit-card";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { walletApi, transactionApi, DepositInfo } from "@/lib/portal-api";
-import { useRouter } from "next/navigation";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
 
 const depositSchema = z.object({
   amount: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, {
@@ -136,27 +121,21 @@ export default function DepositPage() {
   };
 
   // Show loading state
-  if (authLoading || isLoading) {
-    return (
-      <div className="container max-w-2xl py-8">
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </div>
-    );
-  }
+  // if (authLoading || isLoading) {
+  //   return (
+  //     <div className="container max-w-2xl py-8">
+  //       <div className="flex items-center justify-center py-20">
+  //         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   // Show wallet creation prompt if no wallet
-  if (!wallet) {
+  if (!wallet && !authLoading) {
     return (
-      <div className="container max-w-2xl py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">Deposit</h1>
-          <p className="text-muted-foreground">
-            Create a wallet to start depositing funds.
-          </p>
-        </div>
-
+      <PageContainer>
+        <PageHeader title="Deposit" description="Add funds to your wallet" />
         <Card>
           <CardContent className="flex flex-col items-center py-10 space-y-4">
             <div className="rounded-full bg-muted p-4">
@@ -174,19 +153,15 @@ export default function DepositPage() {
             </Button>
           </CardContent>
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="container max-w-2xl py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Deposit</h1>
-        <p className="text-muted-foreground">
-          Add funds to your RampOS wallet using VND or Crypto.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader title="Deposit" description="Add funds to your RampOS wallet using VND or Crypto." />
 
+      <div className="max-w-3xl mx-auto space-y-6">
       {error && (
         <Alert variant="destructive" className="mb-6">
           <AlertCircle className="h-4 w-4" />
@@ -194,127 +169,25 @@ export default function DepositPage() {
         </Alert>
       )}
 
-      {/* Wallet Info */}
-      <Card className="mb-6">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Your Wallet Address</p>
-              <p className="font-mono text-sm">{wallet.address}</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => copyToClipboard(wallet.address, "wallet")}
-            >
-              {copiedField === "wallet" ? (
-                <Check className="h-4 w-4" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Tabs
-        defaultValue="vnd"
-        className="w-full"
-        onValueChange={(v) => setActiveTab(v as "vnd" | "crypto")}
-      >
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="vnd">VND Transfer</TabsTrigger>
-          <TabsTrigger value="crypto">Crypto Deposit</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="vnd">
-          <Card>
-            <CardHeader>
-              <CardTitle>Bank Transfer</CardTitle>
-              <CardDescription>
-                Transfer VND to the following bank account. Your balance will be
-                updated automatically.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {vndDepositInfo ? (
-                <>
-                  <div className="grid gap-4 rounded-lg border p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">
-                          Bank
-                        </p>
-                        <p className="font-medium">{vndDepositInfo.bankName}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">
-                          Account Name
-                        </p>
-                        <p className="font-medium">{vndDepositInfo.accountName}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">
-                          Account Number
-                        </p>
-                        <p className="font-medium">{vndDepositInfo.accountNumber}</p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() =>
-                          copyToClipboard(
-                            vndDepositInfo.accountNumber || "",
-                            "accountNumber"
-                          )
-                        }
-                      >
-                        {copiedField === "accountNumber" ? (
-                          <Check className="h-4 w-4" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">
-                          Transfer Content
-                        </p>
-                        <p className="font-mono font-medium">
-                          {vndDepositInfo.transferContent}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() =>
-                          copyToClipboard(
-                            vndDepositInfo.transferContent || "",
-                            "content"
-                          )
-                        }
-                      >
-                        {copiedField === "content" ? (
-                          <Check className="h-4 w-4" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <Form {...form}>
+      <DepositCard
+        type={activeTab === 'vnd' ? 'VND' : 'CRYPTO'}
+        onTypeChange={(val) => setActiveTab(val === 'VND' ? 'vnd' : 'crypto')}
+        loading={isLoading || authLoading}
+        bankDetails={vndDepositInfo ? {
+            bankName: vndDepositInfo.bankName || "",
+            accountName: vndDepositInfo.accountName || "",
+            accountNumber: vndDepositInfo.accountNumber || "",
+            content: vndDepositInfo.transferContent || ""
+        } : undefined}
+        walletAddress={cryptoDepositInfo?.depositAddress}
+        network={cryptoDepositInfo?.network}
+        qrCode={cryptoDepositInfo?.qrCodeUrl}
+        instructions={
+             activeTab === 'vnd' ? (
+                <Form {...form}>
                     <form
                       onSubmit={form.handleSubmit(onSubmit)}
-                      className="space-y-4"
+                      className="space-y-4 mt-4 pt-4 border-t"
                     >
                       <FormField
                         control={form.control}
@@ -341,89 +214,10 @@ export default function DepositPage() {
                       </Button>
                     </form>
                   </Form>
-                </>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  Unable to load bank transfer information.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="crypto">
-          <Card>
-            <CardHeader>
-              <CardTitle>Crypto Deposit</CardTitle>
-              <CardDescription>
-                Send USDT to the address below. Only USDT on{" "}
-                {cryptoDepositInfo?.network || "TRC20"} is supported.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {cryptoDepositInfo ? (
-                <>
-                  <div className="flex flex-col items-center justify-center space-y-4 p-4">
-                    <div className="flex h-48 w-48 items-center justify-center rounded-lg bg-muted">
-                      {cryptoDepositInfo.qrCodeUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={cryptoDepositInfo.qrCodeUrl}
-                          alt="Deposit QR Code"
-                          className="h-full w-full object-contain"
-                        />
-                      ) : (
-                        <QrCode className="h-24 w-24 text-muted-foreground" />
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Scan QR to deposit
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>
-                      Deposit Address ({cryptoDepositInfo.network})
-                    </Label>
-                    <div className="flex space-x-2">
-                      <Input
-                        value={cryptoDepositInfo.depositAddress || ""}
-                        readOnly
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() =>
-                          copyToClipboard(
-                            cryptoDepositInfo.depositAddress || "",
-                            "address"
-                          )
-                        }
-                      >
-                        {copiedField === "address" ? (
-                          <Check className="h-4 w-4" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg bg-yellow-500/10 p-4 text-sm text-yellow-600 dark:text-yellow-500">
-                    <strong>Important:</strong> Send only USDT to this deposit
-                    address. Sending any other coin or token to this address may
-                    result in the loss of your deposit.
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  Unable to load crypto deposit information.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
+             ) : undefined
+        }
+      />
+      </div>
+    </PageContainer>
   );
 }

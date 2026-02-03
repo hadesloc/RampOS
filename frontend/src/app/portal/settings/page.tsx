@@ -15,7 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Shield, User, Bell, Key, Loader2, LogOut } from "lucide-react";
-import { useAuth } from "@/contexts/auth-context";
+import { PageHeader } from "@/components/layout/page-header";
+import { PageContainer } from "@/components/layout/page-container";
 import { useRouter } from "next/navigation";
 
 export default function SettingsPage() {
@@ -53,30 +54,28 @@ export default function SettingsPage() {
   };
 
   // Show loading state
-  if (authLoading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </div>
-    );
-  }
+  // if (authLoading) {
+  //   return (
+  //     <div className="space-y-6">
+  //       <div className="flex items-center justify-center py-20">
+  //         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
-          <p className="text-muted-foreground">
-            Manage your account settings and preferences.
-          </p>
-        </div>
-        <Button variant="destructive" onClick={handleLogout}>
-          <LogOut className="h-4 w-4 mr-2" />
-          Logout
-        </Button>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Settings"
+        description="Manage your account settings and preferences."
+        actions={
+            <Button variant="destructive" onClick={handleLogout}>
+              <LogOut className="h-4 w-4 mr-2" />
+              Logout
+            </Button>
+        }
+      />
 
       <Tabs defaultValue="profile" className="space-y-4">
         <TabsList>
@@ -247,6 +246,6 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+    </PageContainer>
   );
 }

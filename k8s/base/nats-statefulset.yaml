@@ -5,7 +5,7 @@ metadata:
   namespace: rampos
 spec:
   serviceName: rampos-nats
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: rampos-nats
@@ -18,6 +18,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       # TODO: Configure NATS authentication for production
       containers:
       - name: nats

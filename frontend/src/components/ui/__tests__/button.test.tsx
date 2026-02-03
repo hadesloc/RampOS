@@ -39,6 +39,13 @@ describe('Button', () => {
     expect(button).toHaveClass('bg-secondary')
   })
 
+  it('renders with success variant', () => {
+    render(<Button variant="success">Success</Button>)
+    const button = screen.getByRole('button', { name: /success/i })
+    expect(button).toBeInTheDocument()
+    expect(button).toHaveClass('bg-accent')
+  })
+
   it('renders with link variant', () => {
     render(<Button variant="link">Link</Button>)
     const button = screen.getByRole('button', { name: /link/i })
@@ -74,6 +81,21 @@ describe('Button', () => {
     expect(button).toBeInTheDocument()
     expect(button).toBeDisabled()
     expect(button).toHaveClass('disabled:pointer-events-none')
+  })
+
+  it('renders loading state', () => {
+    render(<Button isLoading>Loading</Button>)
+    const button = screen.getByRole('button')
+    expect(button).toBeDisabled()
+    expect(button.querySelector('.animate-spin')).toBeInTheDocument()
+    // Text should still be present but button disabled
+    expect(screen.getByText('Loading')).toBeInTheDocument()
+  })
+
+  it('renders with icons', () => {
+    render(<Button leftIcon={<span data-testid="left">L</span>} rightIcon={<span data-testid="right">R</span>}>Icon</Button>)
+    expect(screen.getByTestId('left')).toBeInTheDocument()
+    expect(screen.getByTestId('right')).toBeInTheDocument()
   })
 
   it('accepts custom className', () => {

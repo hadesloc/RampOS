@@ -1,47 +1,581 @@
 {
-  "phases": [
+  "version": "2.0",
+  "project": "RampOS UI/UX Refactor",
+  "created_at": "2026-02-03",
+  "journeys": [
     {
       "id": "J-001",
-      "name": "User Registration & KYC",
-      "actor": "End User",
+      "name": "User Registration & Onboarding",
+      "actor": "End User (New)",
+      "goal": "Create account and get started with RampOS",
+      "ui_components_used": [
+        "Login Card",
+        "Register Form",
+        "Button",
+        "Input",
+        "Alert",
+        "KYC Progress"
+      ],
       "steps": [
-        "User lands on landing page",
-        "User clicks 'Start Building' or 'Sign Up'",
-        "User enters email and creates WebAuthn passkey",
-        "User is redirected to onboarding flow",
-        "User completes Identity Verification (Tier 1)",
-        "User uploads documents (Tier 2)",
-        "User accesses Dashboard"
+        {
+          "step": 1,
+          "action": "User lands on portal login page",
+          "ui_element": "Login Page",
+          "expected_ui": "Centered premium card with RampOS branding, dark background, professional typography"
+        },
+        {
+          "step": 2,
+          "action": "User clicks 'Create Account' link",
+          "ui_element": "Link",
+          "expected_ui": "Smooth transition to register page with matching card design"
+        },
+        {
+          "step": 3,
+          "action": "User enters email and accepts terms",
+          "ui_element": "Input, Checkbox",
+          "expected_ui": "Input with icon, terms checkbox with label, real-time validation"
+        },
+        {
+          "step": 4,
+          "action": "User clicks 'Create Account' button",
+          "ui_element": "Button",
+          "expected_ui": "Button shows loading spinner, then success state"
+        },
+        {
+          "step": 5,
+          "action": "User sets up WebAuthn passkey",
+          "ui_element": "Dialog",
+          "expected_ui": "Browser passkey prompt appears, success toast on completion"
+        },
+        {
+          "step": 6,
+          "action": "User redirected to portal dashboard",
+          "ui_element": "Portal Dashboard",
+          "expected_ui": "Welcome message, KYC banner prompting verification, empty wallet state"
+        },
+        {
+          "step": 7,
+          "action": "User clicks 'Verify Now' on KYC banner",
+          "ui_element": "Alert, Button",
+          "expected_ui": "Alert with icon, prominent CTA button"
+        },
+        {
+          "step": 8,
+          "action": "User completes KYC form steps",
+          "ui_element": "KYC Progress, Form",
+          "expected_ui": "4-step progress indicator, form sections with validation"
+        }
+      ],
+      "success_criteria": [
+        "User can register in under 2 minutes",
+        "All form validation provides instant feedback",
+        "Progress is clearly visible throughout",
+        "No page reload during registration flow"
       ]
     },
     {
       "id": "J-002",
-      "name": "Deposit VND",
-      "actor": "End User",
+      "name": "User Login with Passkey",
+      "actor": "End User (Returning)",
+      "goal": "Securely log in to access their account",
+      "ui_components_used": [
+        "Login Card",
+        "Input",
+        "Button",
+        "Toast"
+      ],
       "steps": [
-        "User logs in to User Portal",
-        "User navigates to 'Deposit' section",
-        "User selects 'VND' and enters amount",
-        "System generates Virtual Account details",
-        "User copies details and transfers via banking app",
-        "System detects transfer and credits account",
-        "User receives notification"
+        {
+          "step": 1,
+          "action": "User navigates to /portal/login",
+          "ui_element": "Login Page",
+          "expected_ui": "Premium centered card with email input"
+        },
+        {
+          "step": 2,
+          "action": "User enters email address",
+          "ui_element": "Input",
+          "expected_ui": "Input with email icon, auto-focus on load"
+        },
+        {
+          "step": 3,
+          "action": "User clicks 'Continue with Passkey'",
+          "ui_element": "Button",
+          "expected_ui": "Primary button with key icon"
+        },
+        {
+          "step": 4,
+          "action": "Browser passkey prompt appears",
+          "ui_element": "Native Browser UI",
+          "expected_ui": "System passkey dialog"
+        },
+        {
+          "step": 5,
+          "action": "User authenticates with biometric",
+          "ui_element": "Native Browser UI",
+          "expected_ui": "Quick authentication"
+        },
+        {
+          "step": 6,
+          "action": "User redirected to dashboard",
+          "ui_element": "Portal Dashboard",
+          "expected_ui": "Welcome message with name, wallet and balances visible"
+        }
+      ],
+      "success_criteria": [
+        "Login completes in under 5 seconds",
+        "Clear feedback if passkey fails",
+        "Fallback to magic link available"
       ]
     },
     {
       "id": "J-003",
-      "name": "Withdraw Crypto",
-      "actor": "End User",
+      "name": "Deposit VND (Bank Transfer)",
+      "actor": "End User (Verified)",
+      "goal": "Add VND funds to their wallet",
+      "ui_components_used": [
+        "Sidebar",
+        "DepositCard",
+        "Input",
+        "Button",
+        "Alert",
+        "Badge"
+      ],
       "steps": [
-        "User logs in to User Portal",
-        "User navigates to 'Withdraw' section",
-        "User selects Crypto asset (e.g., USDT)",
-        "User enters destination address and amount",
-        "User confirms transaction with Passkey",
-        "System processes withdrawal (checks limits/AML)",
-        "Transaction broadcasted to blockchain",
-        "User notified of completion"
+        {
+          "step": 1,
+          "action": "User clicks 'Deposit' in sidebar or quick actions",
+          "ui_element": "Sidebar, QuickActions",
+          "expected_ui": "Active state on sidebar, button hover effect"
+        },
+        {
+          "step": 2,
+          "action": "Deposit page loads",
+          "ui_element": "Deposit Page",
+          "expected_ui": "PageHeader with title, DepositCard centered"
+        },
+        {
+          "step": 3,
+          "action": "User selects 'VND' method",
+          "ui_element": "Tabs/Select",
+          "expected_ui": "Method tabs or dropdown, VND selected by default"
+        },
+        {
+          "step": 4,
+          "action": "User enters amount",
+          "ui_element": "Input",
+          "expected_ui": "Amount input with VND formatting, min/max validation"
+        },
+        {
+          "step": 5,
+          "action": "Virtual account details displayed",
+          "ui_element": "Card, Copy Button",
+          "expected_ui": "Account number, bank name, reference code with copy buttons"
+        },
+        {
+          "step": 6,
+          "action": "User copies account number",
+          "ui_element": "Button",
+          "expected_ui": "Copy icon changes to check, toast confirms copy"
+        },
+        {
+          "step": 7,
+          "action": "User transfers via external banking app",
+          "ui_element": "Instructions",
+          "expected_ui": "Clear step-by-step instructions visible"
+        },
+        {
+          "step": 8,
+          "action": "System detects deposit",
+          "ui_element": "Alert, Badge",
+          "expected_ui": "Success alert appears, balance updates"
+        }
+      ],
+      "success_criteria": [
+        "Virtual account details easy to copy",
+        "Instructions clear and scannable",
+        "Real-time balance update on completion",
+        "Transaction appears in history immediately"
+      ]
+    },
+    {
+      "id": "J-004",
+      "name": "Withdraw Crypto (USDT)",
+      "actor": "End User (Verified, KYC Tier 2+)",
+      "goal": "Withdraw USDT to external wallet",
+      "ui_components_used": [
+        "WithdrawCard",
+        "Input",
+        "Select",
+        "Button",
+        "Badge",
+        "Alert"
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "action": "User navigates to Withdraw page",
+          "ui_element": "Sidebar",
+          "expected_ui": "Withdraw link in sidebar, active state"
+        },
+        {
+          "step": 2,
+          "action": "User selects USDT asset",
+          "ui_element": "Select",
+          "expected_ui": "Dropdown with asset icons and names"
+        },
+        {
+          "step": 3,
+          "action": "Available balance displayed",
+          "ui_element": "BalanceDisplay",
+          "expected_ui": "Available USDT shown, with VND equivalent"
+        },
+        {
+          "step": 4,
+          "action": "User enters destination address",
+          "ui_element": "Input",
+          "expected_ui": "Monospace input, address validation, network badge"
+        },
+        {
+          "step": 5,
+          "action": "User enters amount or clicks Max",
+          "ui_element": "Input, Button",
+          "expected_ui": "Amount input with Max button, fee deducted"
+        },
+        {
+          "step": 6,
+          "action": "Fee estimation displayed",
+          "ui_element": "Card",
+          "expected_ui": "Network fee, total deduction, receive amount"
+        },
+        {
+          "step": 7,
+          "action": "User clicks Withdraw button",
+          "ui_element": "Button",
+          "expected_ui": "Primary button, loading state"
+        },
+        {
+          "step": 8,
+          "action": "Confirmation dialog appears",
+          "ui_element": "Dialog",
+          "expected_ui": "Summary of transaction, confirm/cancel buttons"
+        },
+        {
+          "step": 9,
+          "action": "User confirms with passkey",
+          "ui_element": "Native Browser UI",
+          "expected_ui": "Biometric prompt"
+        },
+        {
+          "step": 10,
+          "action": "Transaction submitted",
+          "ui_element": "Alert, Toast",
+          "expected_ui": "Success message with tx hash link"
+        }
+      ],
+      "success_criteria": [
+        "Address validation catches invalid addresses",
+        "Fee displayed before confirmation",
+        "Biometric confirmation for security",
+        "Transaction hash provided for tracking"
+      ]
+    },
+    {
+      "id": "J-005",
+      "name": "View Transaction History",
+      "actor": "End User",
+      "goal": "Review past transactions",
+      "ui_components_used": [
+        "TransactionRow",
+        "Badge",
+        "Filter",
+        "Pagination"
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "action": "User clicks Transactions in sidebar",
+          "ui_element": "Sidebar",
+          "expected_ui": "Active state on Transactions link"
+        },
+        {
+          "step": 2,
+          "action": "Transaction list loads",
+          "ui_element": "TransactionRow list",
+          "expected_ui": "Skeleton loading, then rows appear with slide-in animation"
+        },
+        {
+          "step": 3,
+          "action": "Each transaction shows type, amount, status",
+          "ui_element": "TransactionRow",
+          "expected_ui": "Type icon, colored amount, StatusBadge, timestamp"
+        },
+        {
+          "step": 4,
+          "action": "User applies status filter",
+          "ui_element": "Select/Filter",
+          "expected_ui": "Dropdown with status options, instant filter"
+        },
+        {
+          "step": 5,
+          "action": "User selects date range",
+          "ui_element": "DatePicker",
+          "expected_ui": "Calendar picker, range selection"
+        },
+        {
+          "step": 6,
+          "action": "User clicks transaction to expand",
+          "ui_element": "TransactionRow",
+          "expected_ui": "Expandable details with full info"
+        },
+        {
+          "step": 7,
+          "action": "User navigates pages",
+          "ui_element": "Pagination",
+          "expected_ui": "Page numbers, prev/next buttons"
+        }
+      ],
+      "success_criteria": [
+        "Transactions load quickly",
+        "Filters work instantly",
+        "Status badges clearly indicate state",
+        "Expandable rows show full details"
+      ]
+    },
+    {
+      "id": "J-006",
+      "name": "Admin Dashboard Overview",
+      "actor": "Admin User",
+      "goal": "Get quick overview of system activity",
+      "ui_components_used": [
+        "Sidebar",
+        "StatCard",
+        "ChartContainer",
+        "RecentActivity",
+        "Badge"
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Admin logs in (separate auth)",
+          "ui_element": "Admin Auth",
+          "expected_ui": "Admin-specific login"
+        },
+        {
+          "step": 2,
+          "action": "Dashboard loads",
+          "ui_element": "Admin Dashboard",
+          "expected_ui": "Dark theme, data-dense layout"
+        },
+        {
+          "step": 3,
+          "action": "Volume stats visible",
+          "ui_element": "StatCard grid",
+          "expected_ui": "3 StatCards with VND amounts, trend indicators"
+        },
+        {
+          "step": 4,
+          "action": "Intent stats visible",
+          "ui_element": "StatCard grid",
+          "expected_ui": "6 StatCards for intent counts"
+        },
+        {
+          "step": 5,
+          "action": "Volume chart renders",
+          "ui_element": "ChartContainer",
+          "expected_ui": "Line chart with 7-day data, themed colors"
+        },
+        {
+          "step": 6,
+          "action": "Recent activity table shows",
+          "ui_element": "RecentActivity",
+          "expected_ui": "5 recent intents with status badges"
+        },
+        {
+          "step": 7,
+          "action": "Admin collapses sidebar",
+          "ui_element": "Sidebar",
+          "expected_ui": "Smooth collapse to icons only, content shifts"
+        }
+      ],
+      "success_criteria": [
+        "All metrics load within 2 seconds",
+        "Dark mode looks premium",
+        "Data refreshes on interval",
+        "Sidebar collapse is smooth"
+      ]
+    },
+    {
+      "id": "J-007",
+      "name": "Admin Manages Compliance Case",
+      "actor": "Compliance Admin",
+      "goal": "Review and resolve a flagged transaction",
+      "ui_components_used": [
+        "DataTable",
+        "Badge",
+        "ActivityFeed",
+        "Button",
+        "Dialog"
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Admin navigates to Compliance page",
+          "ui_element": "Sidebar",
+          "expected_ui": "Compliance link with badge if open cases"
+        },
+        {
+          "step": 2,
+          "action": "Case list loads in DataTable",
+          "ui_element": "DataTable",
+          "expected_ui": "Sortable columns, status badges, user info"
+        },
+        {
+          "step": 3,
+          "action": "Admin filters by Open status",
+          "ui_element": "Filter",
+          "expected_ui": "Instant filter, row count updates"
+        },
+        {
+          "step": 4,
+          "action": "Admin clicks case to view",
+          "ui_element": "TableRow",
+          "expected_ui": "Expandable or navigate to detail"
+        },
+        {
+          "step": 5,
+          "action": "Case details with activity feed",
+          "ui_element": "ActivityFeed",
+          "expected_ui": "Timeline of case events, rule triggers"
+        },
+        {
+          "step": 6,
+          "action": "Admin adds note to case",
+          "ui_element": "Input, Button",
+          "expected_ui": "Text area with submit button"
+        },
+        {
+          "step": 7,
+          "action": "Admin resolves case",
+          "ui_element": "Button, Dialog",
+          "expected_ui": "Resolve button, confirmation dialog"
+        },
+        {
+          "step": 8,
+          "action": "Case status updates",
+          "ui_element": "Badge",
+          "expected_ui": "Status badge changes to Resolved (green)"
+        }
+      ],
+      "success_criteria": [
+        "Case details comprehensive",
+        "Activity timeline clear",
+        "Resolution workflow smooth",
+        "Audit trail maintained"
+      ]
+    },
+    {
+      "id": "J-008",
+      "name": "Complete KYC Verification",
+      "actor": "End User (New)",
+      "goal": "Verify identity to access full features",
+      "ui_components_used": [
+        "KYCProgress",
+        "Input",
+        "Select",
+        "FileUpload",
+        "Button",
+        "Alert"
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "action": "User clicks KYC banner or navigates to /portal/kyc",
+          "ui_element": "Alert, Sidebar",
+          "expected_ui": "Clear CTA to verify"
+        },
+        {
+          "step": 2,
+          "action": "KYC progress indicator shows",
+          "ui_element": "KYCProgress",
+          "expected_ui": "4 steps, step 1 highlighted"
+        },
+        {
+          "step": 3,
+          "action": "Step 1: Personal Information",
+          "ui_element": "Form",
+          "expected_ui": "Name, DOB, nationality inputs with validation"
+        },
+        {
+          "step": 4,
+          "action": "User completes step 1, clicks Next",
+          "ui_element": "Button",
+          "expected_ui": "Progress indicator advances to step 2"
+        },
+        {
+          "step": 5,
+          "action": "Step 2: Address Information",
+          "ui_element": "Form",
+          "expected_ui": "Address fields, province/city select"
+        },
+        {
+          "step": 6,
+          "action": "Step 3: Document Upload",
+          "ui_element": "FileUpload",
+          "expected_ui": "Drag-drop zone, file preview, progress bar"
+        },
+        {
+          "step": 7,
+          "action": "Step 4: Review & Submit",
+          "ui_element": "Summary Card",
+          "expected_ui": "All info summarized, edit buttons per section"
+        },
+        {
+          "step": 8,
+          "action": "User submits for verification",
+          "ui_element": "Button",
+          "expected_ui": "Submit button with loading, success state"
+        },
+        {
+          "step": 9,
+          "action": "Pending verification message",
+          "ui_element": "Alert",
+          "expected_ui": "Info alert explaining review timeline"
+        }
+      ],
+      "success_criteria": [
+        "Progress clearly shown throughout",
+        "Each step validates before advancing",
+        "File upload shows progress",
+        "Can edit before final submit"
       ]
     }
-  ]
+  ],
+  "design_principles_applied": {
+    "trust_through_professionalism": [
+      "Corporate Navy/Grey color strategy",
+      "IBM Plex professional typography",
+      "Consistent visual hierarchy"
+    ],
+    "hierarchy_through_elevation": [
+      "Cards elevate important content",
+      "Shadows create depth",
+      "Focus rings guide attention"
+    ],
+    "motion_with_purpose": [
+      "Loading skeletons with shimmer",
+      "Button state transitions",
+      "Smooth sidebar collapse"
+    ],
+    "consistency_breeds_confidence": [
+      "Design tokens used everywhere",
+      "Component patterns reused",
+      "Predictable interactions"
+    ],
+    "accessibility_first": [
+      "WCAG AAA contrast",
+      "Keyboard navigable",
+      "Screen reader friendly"
+    ]
+  }
 }

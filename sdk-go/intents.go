@@ -2,6 +2,8 @@ package rampos
 
 import (
 	"context"
+	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -172,32 +174,26 @@ func (c *Client) GetIntent(ctx context.Context, intentID string) (*Intent, error
 func (c *Client) ListIntents(ctx context.Context, req ListIntentsRequest) (*ListIntentsResponse, error) {
 	// Build query string
 	path := "/v1/intents"
-	params := []string{}
+	q := url.Values{}
 
 	if req.UserID != nil {
-		params = append(params, "userId="+*req.UserID)
+		q.Set("userId", *req.UserID)
 	}
 	if req.IntentType != nil {
-		params = append(params, "intentType="+*req.IntentType)
+		q.Set("intentType", *req.IntentType)
 	}
 	if req.State != nil {
-		params = append(params, "state="+*req.State)
+		q.Set("state", *req.State)
 	}
 	if req.Limit > 0 {
-		params = append(params, "limit="+string(rune(req.Limit)))
+		q.Set("limit", strconv.Itoa(req.Limit))
 	}
 	if req.Offset > 0 {
-		params = append(params, "offset="+string(rune(req.Offset)))
+		q.Set("offset", strconv.Itoa(req.Offset))
 	}
 
-	if len(params) > 0 {
-		path += "?"
-		for i, p := range params {
-			if i > 0 {
-				path += "&"
-			}
-			path += p
-		}
+	if encoded := q.Encode(); encoded != "" {
+		path = path + "?" + encoded
 	}
 
 	var resp ListIntentsResponse

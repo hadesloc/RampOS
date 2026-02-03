@@ -19,13 +19,13 @@ function formatDate(dateStr: string): string {
 function getSeverityColor(severity: string): string {
   switch (severity) {
     case "CRITICAL":
-      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+      return "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-400";
     case "HIGH":
-      return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400";
+      return "bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-400";
     case "MEDIUM":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-400";
     case "LOW":
-      return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+      return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400";
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
   }
@@ -34,15 +34,15 @@ function getSeverityColor(severity: string): string {
 function getStatusColor(status: string): string {
   switch (status) {
     case "OPEN":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
+      return "bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-400";
     case "REVIEW":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400";
+      return "bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-400";
     case "HOLD":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-400";
     case "RELEASED":
-      return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+      return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400";
     case "REPORTED":
-      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+      return "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-400";
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
   }

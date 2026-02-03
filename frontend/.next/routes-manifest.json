@@ -83,6 +83,18 @@
       "namedRegex": "^/_not\\-found(?:/)?$"
     },
     {
+      "page": "/admin-login",
+      "regex": "^/admin\\-login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin\\-login(?:/)?$"
+    },
+    {
+      "page": "/api/admin-login",
+      "regex": "^/api/admin\\-login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin\\-login(?:/)?$"
+    },
+    {
       "page": "/compliance",
       "regex": "^/compliance(?:/)?$",
       "routeKeys": {},

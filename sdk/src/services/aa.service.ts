@@ -3,13 +3,20 @@ import {
   SmartAccount,
   SmartAccountSchema,
   CreateAccountParams,
-  AddSessionKeyParams,
-  RemoveSessionKeyParams,
-  UserOperationParams,
+  CreateAccountResponse,
+  CreateAccountResponseSchema,
+  SendUserOperationRequest,
+  SendUserOperationResponse,
+  SendUserOperationResponseSchema,
+  EstimateGasRequest,
+  UserOperation,
+  UserOperationSchema,
   GasEstimate,
   GasEstimateSchema,
   UserOpReceipt,
-  UserOpReceiptSchema
+  UserOpReceiptSchema,
+  AddSessionKeyParams,
+  RemoveSessionKeyParams,
 } from '../types/aa';
 
 export class AAService {
@@ -20,9 +27,9 @@ export class AAService {
    * @param params Create Account Params
    * @returns Smart Account Info
    */
-  async createSmartAccount(params: CreateAccountParams): Promise<SmartAccount> {
+  async createSmartAccount(params: CreateAccountParams): Promise<CreateAccountResponse> {
     const response = await this.httpClient.post(`/aa/accounts`, params);
-    return SmartAccountSchema.parse(response.data);
+    return CreateAccountResponseSchema.parse(response.data);
   }
 
   /**
@@ -41,7 +48,8 @@ export class AAService {
    * @returns Void (throws on error)
    */
   async addSessionKey(params: AddSessionKeyParams): Promise<void> {
-    await this.httpClient.post(`/aa/accounts/${params.accountAddress}/sessions`, params.sessionKey);
+    void params;
+    throw new Error('Session key management is not exposed via the API');
   }
 
   /**
@@ -50,7 +58,8 @@ export class AAService {
    * @returns Void (throws on error)
    */
   async removeSessionKey(params: RemoveSessionKeyParams): Promise<void> {
-    await this.httpClient.delete(`/aa/accounts/${params.accountAddress}/sessions/${params.keyId}`);
+    void params;
+    throw new Error('Session key management is not exposed via the API');
   }
 
   /**
@@ -58,9 +67,9 @@ export class AAService {
    * @param params User Operation Params
    * @returns User Operation Receipt
    */
-  async sendUserOperation(params: UserOperationParams): Promise<UserOpReceipt> {
-    const response = await this.httpClient.post(`/aa/bundler/user-op`, params);
-    return UserOpReceiptSchema.parse(response.data);
+  async sendUserOperation(params: SendUserOperationRequest): Promise<SendUserOperationResponse> {
+    const response = await this.httpClient.post(`/aa/user-operations`, params);
+    return SendUserOperationResponseSchema.parse(response.data);
   }
 
   /**
@@ -68,8 +77,24 @@ export class AAService {
    * @param params User Operation Params
    * @returns Gas Estimate
    */
-  async estimateGas(params: UserOperationParams): Promise<GasEstimate> {
-    const response = await this.httpClient.post(`/aa/bundler/estimate-gas`, params);
+  async estimateGas(params: EstimateGasRequest): Promise<GasEstimate> {
+    const response = await this.httpClient.post(`/aa/user-operations/estimate`, params);
     return GasEstimateSchema.parse(response.data);
+  }
+
+  /**
+   * Get a user operation by hash.
+   */
+  async getUserOperation(hash: string): Promise<UserOperation> {
+    const response = await this.httpClient.get(`/aa/user-operations/${hash}`);
+    return UserOperationSchema.parse(response.data);
+  }
+
+  /**
+   * Get a user operation receipt by hash.
+   */
+  async getUserOperationReceipt(hash: string): Promise<UserOpReceipt> {
+    const response = await this.httpClient.get(`/aa/user-operations/${hash}/receipt`);
+    return UserOpReceiptSchema.parse(response.data);
   }
 }

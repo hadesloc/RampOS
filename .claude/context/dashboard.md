@@ -17,6 +17,47 @@
 
 ---
 
+## UI/UX Refactor Initiative (NEW)
+
+**Status**: PLANNING COMPLETE - Awaiting Approval
+**Plan Validation**: PASS
+**Model Assignment**: sonnet (all tasks)
+
+### Planning Deliverables Created
+
+| Document | Location | Status |
+|----------|----------|--------|
+| Product Spec | `.claude/context/product-spec.md` | Complete |
+| Implementation Plan | `.claude/context/implementation-plan.md` | Complete |
+| Task Breakdown | `.claude/context/task-breakdown.json` | Complete (55 tasks) |
+| User Journeys | `.claude/context/user-journeys.json` | Complete (8 journeys) |
+| Architecture | `.claude/context/architecture.md` | Complete |
+| Tech Stack | `.claude/context/tech-stack.md` | Complete |
+| Conventions | `.claude/context/conventions.md` | Complete |
+
+### UI/UX Refactor Summary
+
+| Phase | Tasks | Estimated Duration |
+|-------|-------|-------------------|
+| Phase 1: Foundation | T-001 to T-006 | 1 day |
+| Phase 2: Core Components | T-007 to T-014 | 1.5 days |
+| Phase 3: Layout Components | T-015 to T-020 | 1 day |
+| Phase 4: Dashboard Components | T-021 to T-028 | 1 day |
+| Phase 5: Portal Components | T-029 to T-036 | 1 day |
+| Phase 6: Page Refactors | T-037 to T-055 | 2 days |
+
+**Total**: 55 tasks, ~8 days estimated
+
+### Design System Highlights
+
+- **Colors**: Navy/Gold Fintech Palette (Primary #1E40AF, Accent #10B981)
+- **Typography**: IBM Plex Sans/Mono
+- **Shadows**: 6-level elevation system
+- **Accessibility**: WCAG AAA (4.5:1 contrast)
+- **Target Quality**: Stripe, Revolut, Wise level polish
+
+---
+
 ## What We're Building
 
 RampOS is a complete infrastructure solution for crypto exchanges in Vietnam:

@@ -1,12 +1,21 @@
 import { z } from 'zod';
 
-export const UserBalanceSchema = z.object({
+export const BalanceSchema = z.object({
+  accountType: z.string(),
   currency: z.string(),
-  amount: z.string(),
-  locked: z.string(),
+  balance: z.string(),
 });
 
-export type UserBalance = z.infer<typeof UserBalanceSchema>;
+export type Balance = z.infer<typeof BalanceSchema>;
+
+export const UserBalancesResponseSchema = z.object({
+  balances: z.array(BalanceSchema),
+});
+
+export type UserBalancesResponse = z.infer<typeof UserBalancesResponseSchema>;
+
+export const UserBalanceSchema = BalanceSchema;
+export type UserBalance = Balance;
 
 export enum KycStatus {
   NONE = 'NONE',

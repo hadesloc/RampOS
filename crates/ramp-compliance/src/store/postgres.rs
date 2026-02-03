@@ -63,7 +63,7 @@ impl CaseStore for PostgresCaseStore {
     async fn create_case(&self, case: &AmlCase) -> Result<String> {
         sqlx::query(
             r#"
-            INSERT INTO compliance_cases (
+            INSERT INTO aml_cases (
                 id, tenant_id, user_id, intent_id, case_type, severity, status,
                 detection_data, assigned_to, resolution, created_at, updated_at, resolved_at
             )
@@ -95,7 +95,7 @@ impl CaseStore for PostgresCaseStore {
             SELECT
                 id, tenant_id, user_id, intent_id, case_type, severity, status,
                 detection_data, assigned_to, resolution, created_at, updated_at, resolved_at
-            FROM compliance_cases
+            FROM aml_cases
             WHERE id = $1
             "#,
         )
@@ -158,7 +158,7 @@ impl CaseStore for PostgresCaseStore {
         let mut builder = QueryBuilder::new(
             "SELECT id, tenant_id, user_id, intent_id, case_type, severity, status, \
              detection_data, assigned_to, resolution, created_at, updated_at, resolved_at \
-             FROM compliance_cases WHERE tenant_id = ",
+             FROM aml_cases WHERE tenant_id = ",
         );
         builder.push_bind(tenant_id.to_string());
 
@@ -206,7 +206,7 @@ impl CaseStore for PostgresCaseStore {
         user_id: Option<&UserId>,
     ) -> Result<i64> {
         let mut builder =
-            QueryBuilder::new("SELECT COUNT(*) as count FROM compliance_cases WHERE tenant_id = ");
+            QueryBuilder::new("SELECT COUNT(*) as count FROM aml_cases WHERE tenant_id = ");
         builder.push_bind(tenant_id.to_string());
 
         if let Some(status) = status {
@@ -242,7 +242,7 @@ impl CaseStore for PostgresCaseStore {
         let row = sqlx::query(
             r#"
             SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600) as avg_hours
-            FROM compliance_cases
+            FROM aml_cases
             WHERE tenant_id = $1 AND resolved_at IS NOT NULL
             "#,
         )
@@ -264,7 +264,7 @@ impl CaseStore for PostgresCaseStore {
     ) -> Result<()> {
         sqlx::query(
             r#"
-            UPDATE compliance_cases
+            UPDATE aml_cases
             SET status = $1, resolved_at = $2, resolution = $3, updated_at = NOW()
             WHERE id = $4
             "#,
@@ -282,7 +282,7 @@ impl CaseStore for PostgresCaseStore {
     async fn assign_case(&self, case_id: &str, assigned_to: &str) -> Result<()> {
         sqlx::query(
             r#"
-            UPDATE compliance_cases
+            UPDATE aml_cases
             SET assigned_to = $1, updated_at = NOW()
             WHERE id = $2
             "#,
@@ -296,12 +296,14 @@ impl CaseStore for PostgresCaseStore {
     }
 
     async fn add_note(&self, note: &CaseNote) -> Result<()> {
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             INSERT INTO case_notes (
-                id, case_id, author_id, content, note_type, is_internal, created_at
+                id, case_id, tenant_id, author_id, content, note_type, is_internal, created_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            SELECT $1, $2, tenant_id, $3, $4, $5, $6, $7
+            FROM aml_cases
+            WHERE id = $2
             "#,
         )
         .bind(note.id)
@@ -313,6 +315,12 @@ impl CaseStore for PostgresCaseStore {
         .bind(note.created_at)
         .execute(&self.pool)
         .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(ramp_common::Error::Database(
+                "Case not found for note insertion".to_string(),
+            ));
+        }
 
         Ok(())
     }
@@ -356,7 +364,7 @@ impl CaseStore for PostgresCaseStore {
             SELECT
                 id, tenant_id, user_id, intent_id, case_type, severity, status,
                 detection_data, assigned_to, resolution, created_at, updated_at, resolved_at
-            FROM compliance_cases
+            FROM aml_cases
             WHERE tenant_id = $1 AND user_id = $2
             ORDER BY created_at DESC
             "#,
@@ -379,7 +387,7 @@ impl CaseStore for PostgresCaseStore {
             SELECT
                 id, tenant_id, user_id, intent_id, case_type, severity, status,
                 detection_data, assigned_to, resolution, created_at, updated_at, resolved_at
-            FROM compliance_cases
+            FROM aml_cases
             WHERE tenant_id = $1 AND status IN ($2, $3, $4)
             ORDER BY created_at DESC
             "#,
@@ -434,3 +442,4 @@ impl PostgresCaseStore {
         Ok(cases)
     }
 }
+

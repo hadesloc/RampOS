@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { ADMIN_SESSION_COOKIE, isAdminSessionTokenValid } from '@/lib/admin-auth';
 
 const API_URL = process.env.API_URL || 'http://localhost:8080';
 const API_KEY = process.env.API_KEY || '';
+const ADMIN_KEY = process.env.RAMPOS_ADMIN_KEY || '';
 
 async function handleRequest(req: NextRequest, props: { params: Promise<{ path: string[] }> }) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
+  if (!isAdminSessionTokenValid(token, ADMIN_KEY)) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  }
+  if (!API_KEY || !ADMIN_KEY) {
+    return NextResponse.json({ message: 'Server configuration error' }, { status: 500 });
+  }
+
   const params = await props.params;
   const path = params.path.join('/');
   const searchParams = req.nextUrl.searchParams.toString();
@@ -13,6 +25,7 @@ async function handleRequest(req: NextRequest, props: { params: Promise<{ path: 
 
   const headers = new Headers(req.headers);
   headers.set('Authorization', `Bearer ${API_KEY}`);
+  headers.set('X-Admin-Key', ADMIN_KEY);
 
   // Clean up headers that might cause issues
   headers.delete('host');

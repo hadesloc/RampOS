@@ -13,7 +13,6 @@ import {
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import { UUPSUpgradeable } from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 /**
  * @title RampOSAccount
@@ -26,7 +25,6 @@ import { UUPSUpgradeable } from "@openzeppelin/contracts/proxy/utils/UUPSUpgrade
  *  - Batch transaction execution for gas efficiency
  *  - Session keys with granular permissions (target, selector, spending limits)
  *  - Gasless transactions via paymaster integration
- *  - UUPS upgradeable pattern for future improvements
  *
  * Security considerations:
  *  - Only owner or EntryPoint can execute transactions
@@ -34,7 +32,7 @@ import { UUPSUpgradeable } from "@openzeppelin/contracts/proxy/utils/UUPSUpgrade
  *  - Per-transaction and daily spending limits for session keys
  *  - Target and function selector restrictions for session keys
  */
-contract RampOSAccount is BaseAccount, Initializable, UUPSUpgradeable {
+contract RampOSAccount is BaseAccount, Initializable {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 
@@ -129,7 +127,7 @@ contract RampOSAccount is BaseAccount, Initializable, UUPSUpgradeable {
 
     /// @dev Internal function to check session key permissions
     function _checkSessionKeyPermissionsInternal(address dest, uint256 value, bytes calldata data) internal {
-        if (_pendingSessionKey != address(0)) {
+        if (_pendingSessionKey != address(0) && msg.sender == address(_ENTRY_POINT)) {
             _validateSessionKeyPermissions(_pendingSessionKey, dest, value, data);
         }
     }
@@ -177,7 +175,7 @@ contract RampOSAccount is BaseAccount, Initializable, UUPSUpgradeable {
         );
 
         // Check permissions for each call if session key is pending
-        if (_pendingSessionKey != address(0)) {
+        if (_pendingSessionKey != address(0) && msg.sender == address(_ENTRY_POINT)) {
             for (uint256 i = 0; i < dests.length; i++) {
                 _validateSessionKeyPermissions(_pendingSessionKey, dests[i], values[i], datas[i]);
             }
@@ -202,6 +200,9 @@ contract RampOSAccount is BaseAccount, Initializable, UUPSUpgradeable {
         uint48 validUntil,
         SessionKeyPermissions calldata permissions
     ) external onlyOwner {
+        require(key != address(0), "Invalid session key");
+        require(validUntil > validAfter, "Invalid time bounds");
+        require(validUntil > block.timestamp, "Session already expired");
         bytes32 permissionsHash = _computePermissionsHash(permissions);
 
         // Store metadata
@@ -246,6 +247,7 @@ contract RampOSAccount is BaseAccount, Initializable, UUPSUpgradeable {
         uint48 validUntil,
         bytes32 permissionsHash
     ) external onlyOwner {
+        require(key != address(0), "Invalid session key");
         // Require valid time bounds to prevent unlimited session keys
         require(validUntil > validAfter, "Invalid time bounds");
         require(validUntil > block.timestamp, "Session already expired");
@@ -453,6 +455,9 @@ contract RampOSAccount is BaseAccount, Initializable, UUPSUpgradeable {
         }
 
         // Check selector is allowed (only if data has a selector)
+        if (storage_.allowedSelectors.length > 0 && data.length < 4) {
+            revert SelectorNotAllowed(bytes4(0));
+        }
         if (data.length >= 4 && storage_.allowedSelectors.length > 0) {
             bytes4 selector = bytes4(data[:4]);
             bool selectorAllowed = false;
@@ -516,9 +521,6 @@ contract RampOSAccount is BaseAccount, Initializable, UUPSUpgradeable {
             }
         }
     }
-
-    /// @notice Authorize upgrade (only owner)
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner { }
 
     /// @notice Receive ETH
     receive() external payable { }

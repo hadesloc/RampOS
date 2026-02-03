@@ -1,7 +1,14 @@
 import { AxiosInstance } from 'axios';
 import {
-  CreatePayInDto,
-  CreatePayOutDto,
+  CreatePayinRequest,
+  CreatePayinResponse,
+  CreatePayinResponseSchema,
+  ConfirmPayinRequest,
+  ConfirmPayinResponse,
+  ConfirmPayinResponseSchema,
+  CreatePayoutRequest,
+  CreatePayoutResponse,
+  CreatePayoutResponseSchema,
   Intent,
   IntentFilters,
   IntentSchema,
@@ -15,20 +22,19 @@ export class IntentService {
    * @param data Pay-In data
    * @returns Created Intent
    */
-  async createPayIn(data: CreatePayInDto): Promise<Intent> {
-    const response = await this.httpClient.post('/intents/pay-in', data);
-    return IntentSchema.parse(response.data);
+  async createPayIn(data: CreatePayinRequest): Promise<CreatePayinResponse> {
+    const response = await this.httpClient.post('/intents/payin', data);
+    return CreatePayinResponseSchema.parse(response.data);
   }
 
   /**
    * Confirm a Pay-In intent.
-   * @param id Intent ID
-   * @param bankRef Bank Reference Code
-   * @returns Updated Intent
+   * @param data Confirm Pay-In data
+   * @returns Confirmation result
    */
-  async confirmPayIn(id: string, bankRef: string): Promise<Intent> {
-    const response = await this.httpClient.post(`/intents/${id}/confirm`, { bankRef });
-    return IntentSchema.parse(response.data);
+  async confirmPayIn(data: ConfirmPayinRequest): Promise<ConfirmPayinResponse> {
+    const response = await this.httpClient.post('/intents/payin/confirm', data);
+    return ConfirmPayinResponseSchema.parse(response.data);
   }
 
   /**
@@ -36,9 +42,9 @@ export class IntentService {
    * @param data Pay-Out data
    * @returns Created Intent
    */
-  async createPayOut(data: CreatePayOutDto): Promise<Intent> {
-    const response = await this.httpClient.post('/intents/pay-out', data);
-    return IntentSchema.parse(response.data);
+  async createPayOut(data: CreatePayoutRequest): Promise<CreatePayoutResponse> {
+    const response = await this.httpClient.post('/intents/payout', data);
+    return CreatePayoutResponseSchema.parse(response.data);
   }
 
   /**

@@ -1,7 +1,7 @@
 import { AxiosInstance } from 'axios';
 import {
   UserBalance,
-  UserBalanceSchema,
+  UserBalancesResponseSchema,
   UserKycStatus,
   UserKycStatusSchema,
 } from '../types/user';
@@ -11,16 +11,12 @@ export class UserService {
 
   /**
    * Get user balances.
-   * @param tenantId Tenant ID
    * @param userId User ID
    * @returns List of User Balances
    */
-  async getBalances(tenantId: string, userId: string): Promise<UserBalance[]> {
-    const response = await this.httpClient.get(`/tenants/${tenantId}/users/${userId}/balances`);
-    if (Array.isArray(response.data)) {
-        return response.data.map((item: unknown) => UserBalanceSchema.parse(item));
-    }
-    return [];
+  async getBalances(userId: string): Promise<UserBalance[]> {
+    const response = await this.httpClient.get(`/balance/${userId}`);
+    return UserBalancesResponseSchema.parse(response.data).balances;
   }
 
   /**

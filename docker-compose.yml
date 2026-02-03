@@ -111,7 +111,7 @@ services:
           memory: 128M
     environment:
       RAMPOS__DATABASE__URL: postgres://${POSTGRES_USER:-rampos}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-rampos}
-      RAMPOS__REDIS__URL: redis://redis:6379
+      RAMPOS__REDIS__URL: redis://:${REDIS_PASSWORD}@redis:6379
       RAMPOS__NATS__URL: nats://nats:4222
       RAMPOS__SERVER__HOST: 0.0.0.0
       RAMPOS__SERVER__PORT: 8080

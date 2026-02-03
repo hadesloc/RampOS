@@ -1,12 +1,12 @@
 [database]
-url = "postgres://rampos:dev_rampos_2026_secure@localhost:5432/rampos"
+url = "postgres://rampos:change_me@localhost:5432/rampos"
 max_connections = 100
 min_connections = 10
 connect_timeout_secs = 30
 idle_timeout_secs = 600
 
 [redis]
-url = "redis://localhost:6379"
+url = "redis://:change_me@localhost:6379"
 pool_size = 20
 
 [nats]

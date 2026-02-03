@@ -36,12 +36,9 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import {
-  transactionApi,
-  Transaction,
-  TransactionFilters,
-  PaginatedResponse,
-} from "@/lib/portal-api";
+import { TransactionRow } from "@/components/portal/transaction-row";
+import { PageHeader } from "@/components/layout/page-header";
+import { PageContainer } from "@/components/layout/page-container";
 import { useRouter } from "next/navigation";
 
 // Helper Functions
@@ -76,13 +73,13 @@ function formatDate(dateStr: string): string {
 function getStatusColor(status: string): string {
   switch (status) {
     case "COMPLETED":
-      return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+      return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400";
     case "PENDING":
     case "PROCESSING":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-400";
     case "FAILED":
     case "CANCELLED":
-      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+      return "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-400";
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
   }
@@ -229,24 +226,22 @@ export default function TransactionsPage() {
   };
 
   // Show loading state
-  if (authLoading || isLoading) {
-    return (
-      <div className="space-y-6 p-6">
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </div>
-    );
-  }
+  // if (authLoading) {
+  //   return (
+  //     <div className="space-y-6 p-6">
+  //       <div className="flex items-center justify-center py-20">
+  //         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Transaction History</h1>
-        <p className="text-muted-foreground">
-          View and manage your deposits, withdrawals, and trades.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Transaction History"
+        description="View and manage your deposits, withdrawals, and trades."
+      />
 
       {/* Controls & Filters */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-card p-4 rounded-lg border">
@@ -319,63 +314,50 @@ export default function TransactionsPage() {
 
       {/* Transaction Table */}
       <div className="rounded-md border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Reference</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredTransactions.length > 0 ? (
+          <div className="flex flex-col">
+            <div className="grid grid-cols-12 gap-4 p-4 border-b bg-muted/40 font-medium text-sm text-muted-foreground hidden md:grid">
+                <div className="col-span-4">Type & Date</div>
+                <div className="col-span-4 text-right">Amount</div>
+                <div className="col-span-4 text-right">Status</div>
+            </div>
+
+            {isLoading && filteredTransactions.length === 0 ? (
+                 <div className="flex flex-col gap-2 p-4">
+                    <div className="h-16 w-full animate-pulse rounded-lg bg-muted/50" />
+                    <div className="h-16 w-full animate-pulse rounded-lg bg-muted/50" />
+                    <div className="h-16 w-full animate-pulse rounded-lg bg-muted/50" />
+                 </div>
+            ) : filteredTransactions.length > 0 ? (
               filteredTransactions.map((tx) => (
-                <TableRow key={tx.id}>
-                  <TableCell className="font-medium">
-                    {formatDate(tx.createdAt)}
-                  </TableCell>
-                  <TableCell className="font-mono text-sm">
-                    {tx.reference}
-                  </TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center font-medium">
-                      {getTypeLabel(tx.type)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {formatCurrency(tx.amount, tx.currency)}
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(
-                        tx.status
-                      )}`}
-                    >
-                      {tx.status}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setSelectedTx(tx)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Transaction Details</DialogTitle>
-                          <DialogDescription>
-                            Detailed information about this transaction.
-                          </DialogDescription>
-                        </DialogHeader>
-                        {selectedTx && (
+                <TransactionRow
+                    key={tx.id}
+                    id={tx.id}
+                    type={tx.type}
+                    amount={tx.amount}
+                    currency={tx.currency}
+                    status={tx.status}
+                    createdAt={tx.createdAt}
+                    onClick={() => setSelectedTx(tx)}
+                />
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                  <p>No transactions found.</p>
+              </div>
+            )}
+          </div>
+      </div>
+
+      {/* Detail Dialog */}
+      <Dialog open={!!selectedTx} onOpenChange={(open) => !open && setSelectedTx(null)}>
+         <DialogContent>
+             <DialogHeader>
+                 <DialogTitle>Transaction Details</DialogTitle>
+                 <DialogDescription>
+                     Detailed information about this transaction.
+                 </DialogDescription>
+             </DialogHeader>
+             {selectedTx && (
                           <div className="grid gap-4 py-4">
                             <div className="grid grid-cols-4 items-center gap-4">
                               <span className="text-sm font-medium text-muted-foreground text-right">
@@ -478,22 +460,9 @@ export default function TransactionsPage() {
                               </span>
                             </div>
                           </div>
-                        )}
-                      </DialogContent>
-                    </Dialog>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
-                  No transactions found.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+             )}
+         </DialogContent>
+      </Dialog>
 
       {/* Pagination */}
       <div className="flex items-center justify-between py-4">
@@ -527,6 +496,6 @@ export default function TransactionsPage() {
           </Button>
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }
