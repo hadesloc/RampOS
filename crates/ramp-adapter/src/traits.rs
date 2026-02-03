@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use ramp_common::Result;
+use rust_decimal::Decimal;
 
 use crate::types::*;
 
@@ -11,6 +12,11 @@ pub trait RailsAdapter: Send + Sync {
 
     /// Get adapter name
     fn provider_name(&self) -> &str;
+
+    /// Check if this adapter is in simulation/test mode
+    fn is_simulation_mode(&self) -> bool {
+        false
+    }
 
     /// Create pay-in instruction (e.g., virtual account)
     async fn create_payin_instruction(
@@ -40,6 +46,31 @@ pub trait RailsAdapter: Send + Sync {
 
     /// Verify webhook signature
     fn verify_webhook_signature(&self, payload: &[u8], signature: &str) -> bool;
+
+    /// Health check - verify adapter can communicate with the bank/PSP
+    async fn health_check(&self) -> Result<bool> {
+        // Default implementation - override for real adapters
+        Ok(true)
+    }
+}
+
+/// QR code generation adapter trait
+#[async_trait]
+pub trait QrCodeAdapter: RailsAdapter {
+    /// Generate a VietQR code for payment
+    async fn generate_qr_code(
+        &self,
+        account_number: &str,
+        amount_vnd: Option<Decimal>,
+        description: &str,
+        reference_code: &str,
+    ) -> Result<QrCodeData>;
+
+    /// Get bank information for VietQR
+    async fn get_bank_info(&self, bank_code: &str) -> Result<VietQRBankInfo>;
+
+    /// List all supported banks
+    async fn list_supported_banks(&self) -> Result<Vec<VietQRBankInfo>>;
 }
 
 /// Virtual account adapter trait (for banks that support VA)

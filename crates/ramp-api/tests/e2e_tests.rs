@@ -225,6 +225,7 @@ async fn setup_test_app() -> TestContext {
         idempotency_handler: None,
         aa_service: None,
         portal_auth_config: Arc::new(PortalAuthConfig::default()),
+        bank_confirmation_repo: None,
     };
 
     let app = create_router(app_state);

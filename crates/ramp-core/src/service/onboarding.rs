@@ -186,6 +186,7 @@ impl OnboardingService {
         )
     }
 
+    #[allow(dead_code)]
     fn generate_api_key_internal(&self) -> (ApiKeyPair, String) {
         let public_key = format!("pk_{}", Uuid::new_v4().simple());
         let secret_key = format!("sk_{}", Uuid::new_v4().simple());

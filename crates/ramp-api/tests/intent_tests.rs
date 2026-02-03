@@ -141,6 +141,7 @@ async fn test_get_intent_endpoint() {
         idempotency_handler: None,
         aa_service: None,
         portal_auth_config: Arc::new(PortalAuthConfig::default()),
+        bank_confirmation_repo: None,
     };
 
     let app = create_router(app_state);
@@ -255,6 +256,7 @@ async fn test_get_intent_not_found() {
         idempotency_handler: None,
         aa_service: None,
         portal_auth_config: Arc::new(PortalAuthConfig::default()),
+        bank_confirmation_repo: None,
     };
 
     let app = create_router(app_state);
@@ -408,6 +410,7 @@ async fn test_get_intent_wrong_tenant() {
         idempotency_handler: None,
         aa_service: None,
         portal_auth_config: Arc::new(PortalAuthConfig::default()),
+        bank_confirmation_repo: None,
     };
 
     let app = create_router(app_state);

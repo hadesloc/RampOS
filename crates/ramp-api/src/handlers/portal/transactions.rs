@@ -189,8 +189,14 @@ pub async fn list_transactions(
                 amount: row.amount.to_string(),
                 currency: row.currency.clone(),
                 fee: None, // TODO: Calculate fee from metadata
-                reference: row.reference_code.unwrap_or_else(|| format!("REF{}", &row.id[..8])),
-                details: row.metadata.get("description").and_then(|v| v.as_str()).map(String::from),
+                reference: row
+                    .reference_code
+                    .unwrap_or_else(|| format!("REF{}", &row.id[..8])),
+                details: row
+                    .metadata
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
                 tx_hash: row.tx_hash,
                 created_at: row.created_at.to_rfc3339(),
                 updated_at: row.updated_at.to_rfc3339(),
@@ -279,8 +285,14 @@ pub async fn get_transaction(
                 amount: row.amount.to_string(),
                 currency: row.currency.clone(),
                 fee: None, // TODO: Calculate fee from metadata
-                reference: row.reference_code.unwrap_or_else(|| format!("REF{}", &row.id[..8])),
-                details: row.metadata.get("description").and_then(|v| v.as_str()).map(String::from),
+                reference: row
+                    .reference_code
+                    .unwrap_or_else(|| format!("REF{}", &row.id[..8])),
+                details: row
+                    .metadata
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
                 tx_hash: row.tx_hash,
                 created_at: row.created_at.to_rfc3339(),
                 updated_at: row.updated_at.to_rfc3339(),

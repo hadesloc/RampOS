@@ -24,7 +24,7 @@ pub async fn cancel_intent(
     let intent_id = IntentId::new(&id);
 
     // Verify intent exists
-    let intent = state
+    let _intent = state
         .intent_repo
         .get_by_id(&tenant_ctx.tenant_id, &intent_id)
         .await

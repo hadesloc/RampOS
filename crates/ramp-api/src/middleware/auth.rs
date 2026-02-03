@@ -41,6 +41,7 @@ enum TimestampValidationError {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 enum SignatureValidationError {
     MissingSignature,
     MissingTimestamp,
@@ -227,7 +228,9 @@ pub async fn auth_middleware(
                 "Signature verification failed"
             );
 
-            return Ok((status, Json(json!({ "error": error, "message": message }))).into_response());
+            return Ok(
+                (status, Json(json!({ "error": error, "message": message }))).into_response(),
+            );
         }
 
         debug!(tenant_id = %tenant.id, "HMAC signature verified successfully");

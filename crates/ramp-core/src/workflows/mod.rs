@@ -19,6 +19,10 @@ pub mod trade;
 // pub mod worker;
 
 pub use activities::{payin_activities, trade_activities};
+pub use activities::{
+    init_activity_context, init_activity_context_for_testing, init_activity_context_full,
+    init_activity_context_with_adapters, ActivityContext,
+};
 pub use compensation::{CompensationAction, CompensationChain};
 pub use payin::PayinWorkflow;
 pub use payout::{BankAccountInfo, PayoutWorkflowInput, PayoutWorkflowResult, SettlementResult};

@@ -198,14 +198,12 @@ pub async fn get_balances(
     // Convert ledger balance rows to API response format
     let balances: Vec<Balance> = if balance_rows.is_empty() {
         // Return default empty balances if no records found
-        vec![
-            Balance {
-                currency: "VND".to_string(),
-                available: "0".to_string(),
-                locked: "0".to_string(),
-                total: "0".to_string(),
-            },
-        ]
+        vec![Balance {
+            currency: "VND".to_string(),
+            available: "0".to_string(),
+            locked: "0".to_string(),
+            total: "0".to_string(),
+        }]
     } else {
         balance_rows
             .into_iter()

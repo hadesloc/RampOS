@@ -1,4 +1,4 @@
-use axum::http::{header, HeaderValue};
+use axum::http::{header, HeaderName, HeaderValue, Method};
 use axum::{
     middleware,
     routing::{get, patch, post, put},
@@ -7,7 +7,7 @@ use axum::{
 use std::sync::Arc;
 use tower::ServiceBuilder;
 use tower_http::{
-    cors::{Any, CorsLayer},
+    cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer},
     sensitive_headers::{SetSensitiveRequestHeadersLayer, SetSensitiveResponseHeadersLayer},
     set_header::SetResponseHeaderLayer,
     timeout::TimeoutLayer,
@@ -18,6 +18,7 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use ramp_core::repository::intent::IntentRepository;
 use ramp_core::repository::tenant::TenantRepository;
+use ramp_core::repository::BankConfirmationRepository;
 use ramp_core::service::{
     ledger::LedgerService, onboarding::OnboardingService, payin::PayinService,
     payout::PayoutService, trade::TradeService, user::UserService, webhook::WebhookService,
@@ -25,6 +26,7 @@ use ramp_core::service::{
 
 use crate::handlers;
 use crate::handlers::aa::AAServiceState;
+use crate::handlers::bank_webhooks::BankWebhookState;
 use crate::middleware::{
     auth_middleware, idempotency_middleware, portal_auth_middleware, rate_limit_middleware,
     request_id_middleware, IdempotencyHandler, PortalAuthConfig, RateLimiter,
@@ -54,6 +56,7 @@ pub struct AppState {
     pub idempotency_handler: Option<Arc<IdempotencyHandler>>,
     pub aa_service: Option<AAServiceState>,
     pub portal_auth_config: Arc<PortalAuthConfig>,
+    pub bank_confirmation_repo: Option<Arc<dyn BankConfirmationRepository>>,
 }
 
 /// Create the API router with full middleware stack
@@ -291,6 +294,20 @@ pub fn create_router(state: AppState) -> Router {
         ));
     }
 
+    // Bank webhook routes (no tenant auth required - uses provider-specific signature verification)
+    // POST /v1/webhooks/bank/:provider - receives bank confirmations for pay-ins
+    let bank_webhook_routes = if let Some(ref confirmation_repo) = state.bank_confirmation_repo {
+        let bank_webhook_state = BankWebhookState::new(confirmation_repo.clone());
+        Router::new()
+            .route(
+                "/:provider",
+                post(handlers::bank_webhooks::handle_bank_webhook),
+            )
+            .with_state(bank_webhook_state)
+    } else {
+        Router::new()
+    };
+
     // OpenAPI documentation
     let openapi = ApiDoc::openapi();
 
@@ -301,11 +318,19 @@ pub fn create_router(state: AppState) -> Router {
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
         .nest("/v1", api_v1)
         // Portal auth routes (no JWT required - these issue tokens)
-        .nest("/v1/portal/auth", handlers::portal::auth::router().with_state(state.clone()))
+        .nest(
+            "/v1/portal/auth",
+            handlers::portal::auth::router().with_state(state.clone()),
+        )
         // Portal protected routes (JWT required)
         .nest("/v1/portal", portal_protected_routes)
         // Legacy auth endpoint (same as /v1/portal/auth for backwards compatibility)
-        .nest("/v1/auth", handlers::portal::auth::router().with_state(state.clone()))
+        .nest(
+            "/v1/auth",
+            handlers::portal::auth::router().with_state(state.clone()),
+        )
+        // Bank webhook routes (no auth required - uses signature verification)
+        .nest("/v1/webhooks/bank", bank_webhook_routes)
         .layer(middleware::from_fn(request_id_middleware))
         .layer({
             let request_headers = Arc::new([
@@ -342,8 +367,11 @@ pub fn create_router(state: AppState) -> Router {
             HeaderValue::from_static("default-src 'self'"),
         ))
         .layer({
+            // CORS configuration with credentials support
+            // Note: When allow_credentials(true) is used, we CANNOT use wildcards (*) for
+            // origins, methods, or headers. We must specify explicit values.
             let cors_origins = std::env::var("CORS_ALLOWED_ORIGINS")
-                .unwrap_or_else(|_| "http://localhost:3000".to_string());
+                .unwrap_or_else(|_| "http://localhost:3000,http://localhost:3001".to_string());
 
             let origins: Vec<HeaderValue> = cors_origins
                 .split(',')
@@ -356,10 +384,38 @@ pub fn create_router(state: AppState) -> Router {
                 origins
             };
 
+            // Explicit list of allowed headers (required when credentials are enabled)
+            let allowed_headers = AllowHeaders::list([
+                header::AUTHORIZATION,
+                header::CONTENT_TYPE,
+                header::ACCEPT,
+                header::ORIGIN,
+                header::COOKIE,
+                HeaderName::from_static("x-tenant-id"),
+                HeaderName::from_static("x-signature"),
+                HeaderName::from_static("x-timestamp"),
+                HeaderName::from_static("x-request-id"),
+                HeaderName::from_static("x-idempotency-key"),
+            ]);
+
+            // Explicit list of allowed methods (required when credentials are enabled)
+            let allowed_methods = AllowMethods::list([
+                Method::GET,
+                Method::POST,
+                Method::PUT,
+                Method::PATCH,
+                Method::DELETE,
+                Method::OPTIONS,
+            ]);
+
             CorsLayer::new()
-                .allow_origin(origins)
-                .allow_methods(Any)
-                .allow_headers(Any)
+                .allow_origin(AllowOrigin::list(origins))
+                .allow_methods(allowed_methods)
+                .allow_headers(allowed_headers)
                 .allow_credentials(true)
+                .expose_headers([
+                    header::CONTENT_TYPE,
+                    HeaderName::from_static("x-request-id"),
+                ])
         })
 }

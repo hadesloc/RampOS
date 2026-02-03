@@ -278,7 +278,11 @@ pub async fn create_withdraw(
     // Create bank account from request
     let bank_account = ramp_common::types::BankAccount {
         bank_code: req.bank_name.clone().unwrap_or_default(),
-        account_number: req.account_number.clone().or(req.wallet_address.clone()).unwrap_or_default(),
+        account_number: req
+            .account_number
+            .clone()
+            .or(req.wallet_address.clone())
+            .unwrap_or_default(),
         account_name: req.account_name.clone().unwrap_or_default(),
     };
 
@@ -361,7 +365,11 @@ pub async fn get_intent(
                 amount: row.amount.to_string(),
                 currency: row.currency.clone(),
                 reference: row.reference_code,
-                bank_account: row.to_address.or(row.metadata.get("account_number").and_then(|v| v.as_str()).map(String::from)),
+                bank_account: row.to_address.or(row
+                    .metadata
+                    .get("account_number")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)),
                 created_at: row.created_at.to_rfc3339(),
                 updated_at: row.updated_at.to_rfc3339(),
                 expires_at: row.expires_at.map(|dt| dt.to_rfc3339()),
@@ -434,7 +442,11 @@ pub async fn confirm_intent(
                 amount: row.amount.to_string(),
                 currency: row.currency.clone(),
                 reference: row.reference_code,
-                bank_account: row.to_address.or(row.metadata.get("account_number").and_then(|v| v.as_str()).map(String::from)),
+                bank_account: row.to_address.or(row
+                    .metadata
+                    .get("account_number")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)),
                 created_at: row.created_at.to_rfc3339(),
                 updated_at: Utc::now().to_rfc3339(),
                 expires_at: row.expires_at.map(|dt| dt.to_rfc3339()),

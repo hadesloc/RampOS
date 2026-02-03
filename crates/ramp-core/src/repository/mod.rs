@@ -5,6 +5,7 @@ use sqlx::{PgPool, Postgres, Transaction};
 use tracing::warn;
 
 pub mod audit;
+pub mod bank_confirmation;
 pub mod intent;
 pub mod ledger;
 pub mod smart_account;
@@ -13,6 +14,10 @@ pub mod user;
 pub mod webhook;
 
 pub use audit::PgAuditRepository;
+pub use bank_confirmation::{
+    BankConfirmationRepository, BankConfirmationRow, BankConfirmationStatus,
+    CreateBankConfirmationRequest, PgBankConfirmationRepository,
+};
 pub use intent::IntentRepository;
 pub use ledger::LedgerRepository;
 pub use smart_account::{

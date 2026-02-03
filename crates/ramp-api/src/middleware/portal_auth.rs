@@ -12,7 +12,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -91,7 +91,9 @@ pub async fn portal_auth_middleware(
         Some(header) if header.starts_with("Bearer ") => &header[7..],
         _ => {
             warn!("Portal auth: Missing or invalid Authorization header");
-            return Err(unauthorized_response("Missing or invalid Authorization header"));
+            return Err(unauthorized_response(
+                "Missing or invalid Authorization header",
+            ));
         }
     };
 
@@ -144,19 +146,18 @@ fn verify_jwt_token(token: &str, config: &PortalAuthConfig) -> Result<PortalUser
     }
 
     // Parse user_id from sub claim
-    let user_id = Uuid::parse_str(&claims.sub)
-        .map_err(|_| "Invalid user ID in token".to_string())?;
+    let user_id =
+        Uuid::parse_str(&claims.sub).map_err(|_| "Invalid user ID in token".to_string())?;
 
     // Parse tenant_id (use default if not provided)
     let tenant_id = match &claims.tenant_id {
-        Some(tid) => Uuid::parse_str(tid)
-            .map_err(|_| "Invalid tenant ID in token".to_string())?,
+        Some(tid) => Uuid::parse_str(tid).map_err(|_| "Invalid tenant ID in token".to_string())?,
         None => {
             // Use a default tenant ID for single-tenant deployments
             // or derive from environment
             Uuid::parse_str(
                 &std::env::var("DEFAULT_TENANT_ID")
-                    .unwrap_or_else(|_| "00000000-0000-0000-0000-000000000000".to_string())
+                    .unwrap_or_else(|_| "00000000-0000-0000-0000-000000000000".to_string()),
             )
             .unwrap_or_else(|_| Uuid::nil())
         }
@@ -219,15 +220,17 @@ where
     type Rejection = std::convert::Infallible;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        Ok(OptionalPortalUser(parts.extensions.get::<PortalUser>().cloned()))
+        Ok(OptionalPortalUser(
+            parts.extensions.get::<PortalUser>().cloned(),
+        ))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jsonwebtoken::{encode, EncodingKey, Header};
     use chrono::Utc;
+    use jsonwebtoken::{encode, EncodingKey, Header};
 
     fn create_test_config() -> PortalAuthConfig {
         PortalAuthConfig {

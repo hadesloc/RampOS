@@ -11,7 +11,7 @@ use tracing::info;
 use crate::dto::{CreateTenantRequest, SuspendTenantRequest, UpdateTenantRequest};
 use crate::error::ApiError;
 use crate::extract::ValidatedJson;
-use ramp_core::service::onboarding::{ApiKeyPair, OnboardingService};
+use ramp_core::service::onboarding::{ApiCredentials, OnboardingService};
 
 // ============================================================================
 // Response DTOs
@@ -54,21 +54,21 @@ pub async fn create_tenant(
     }))
 }
 
-/// POST /v1/admin/tenants/:id/api-keys - Generate new API keys
+/// POST /v1/admin/tenants/:id/api-keys - Generate new API credentials
 pub async fn generate_api_keys(
     headers: HeaderMap,
     State(onboarding_service): State<Arc<OnboardingService>>,
     Path(tenant_id): Path<String>,
-) -> Result<Json<ApiKeyPair>, ApiError> {
+) -> Result<Json<ApiCredentials>, ApiError> {
     super::tier::check_admin_key(&headers)?;
-    info!(tenant_id = %tenant_id, "Generating API keys");
+    info!(tenant_id = %tenant_id, "Generating API credentials");
 
-    let keys = onboarding_service
-        .generate_api_keys(&TenantId::new(tenant_id))
+    let credentials = onboarding_service
+        .generate_api_credentials(&TenantId::new(tenant_id))
         .await
         .map_err(ApiError::from)?;
 
-    Ok(Json(keys))
+    Ok(Json(credentials))
 }
 
 /// POST /v1/admin/tenants/:id/activate - Activate tenant

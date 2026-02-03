@@ -51,7 +51,7 @@ pub fn create_document_storage(config: &DocumentStorageConfig) -> Box<dyn Docume
     match config.provider {
         DocumentStorageType::Mock => Box::new(MockDocumentStorage::new()),
         DocumentStorageType::S3 => {
-            let bucket = config.bucket.clone().expect("S3 requires bucket name");
+            let _bucket = config.bucket.clone().expect("S3 requires bucket name");
 
             // If we have AWS config loaded globally or passed in, we would use it.
             // For now, we'll rely on environment variables if not fully configured here,

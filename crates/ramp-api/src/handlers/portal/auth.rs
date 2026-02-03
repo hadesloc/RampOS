@@ -686,21 +686,20 @@ fn base64_url_encode(data: &[u8]) -> String {
 
 fn generate_mock_jwt(user_id: &str) -> String {
     // Use real JWT generation with proper signing
-    generate_real_jwt(user_id, "user@example.com", "access")
-        .unwrap_or_else(|_| {
-            // Fallback to mock JWT if signing fails
-            let header = base64_url_encode(b"{\"alg\":\"HS256\",\"typ\":\"JWT\"}");
-            let now = Utc::now().timestamp();
-            let payload = format!(
-                "{{\"sub\":\"{}\",\"iat\":{},\"exp\":{}}}",
-                user_id,
-                now,
-                now + 86400
-            );
-            let payload_b64 = base64_url_encode(payload.as_bytes());
-            let signature = base64_url_encode(b"mock_signature");
-            format!("{}.{}.{}", header, payload_b64, signature)
-        })
+    generate_real_jwt(user_id, "user@example.com", "access").unwrap_or_else(|_| {
+        // Fallback to mock JWT if signing fails
+        let header = base64_url_encode(b"{\"alg\":\"HS256\",\"typ\":\"JWT\"}");
+        let now = Utc::now().timestamp();
+        let payload = format!(
+            "{{\"sub\":\"{}\",\"iat\":{},\"exp\":{}}}",
+            user_id,
+            now,
+            now + 86400
+        );
+        let payload_b64 = base64_url_encode(payload.as_bytes());
+        let signature = base64_url_encode(b"mock_signature");
+        format!("{}.{}.{}", header, payload_b64, signature)
+    })
 }
 
 /// Get the JWT secret from environment
@@ -737,14 +736,14 @@ fn generate_real_jwt(user_id: &str, email: &str, token_type: &str) -> Result<Str
         token_type: token_type.to_string(),
     };
 
-    encode(&Header::default(), &claims, &encoding_key)
-        .map_err(|e| {
-            warn!(error = %e, "Failed to encode JWT token");
-            ApiError::Internal("Failed to generate token".to_string())
-        })
+    encode(&Header::default(), &claims, &encoding_key).map_err(|e| {
+        warn!(error = %e, "Failed to encode JWT token");
+        ApiError::Internal("Failed to generate token".to_string())
+    })
 }
 
 /// Generate both access and refresh tokens
+#[allow(dead_code)]
 fn generate_token_pair(user_id: &str, email: &str) -> Result<(String, String), ApiError> {
     let access_token = generate_real_jwt(user_id, email, "access")?;
     let refresh_token = generate_real_jwt(user_id, email, "refresh")?;

@@ -196,6 +196,7 @@ async fn main() -> anyhow::Result<()> {
         idempotency_handler: Some(idempotency_handler),
         aa_service,
         portal_auth_config,
+        bank_confirmation_repo: None,
     };
 
     // Create router

@@ -66,8 +66,8 @@ pub async fn retry_webhook(
         .retry_event(&tenant_ctx.tenant_id, &id)
         .await
         .map_err(|e| match e {
-             ramp_common::Error::NotFound(_) => ApiError::NotFound("Webhook not found".to_string()),
-             _ => ApiError::Internal(e.to_string()),
+            ramp_common::Error::NotFound(_) => ApiError::NotFound("Webhook not found".to_string()),
+            _ => ApiError::Internal(e.to_string()),
         })?;
 
     // Return the updated event
