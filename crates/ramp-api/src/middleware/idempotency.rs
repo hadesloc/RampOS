@@ -373,14 +373,16 @@ pub async fn idempotency_middleware(
         }
         Err(e) => {
             warn!(error = %e, "Idempotency lock error");
-            return Ok((
+            let mut response = (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(json!({
                     "error": "idempotency_lock_unavailable",
                     "message": "Idempotency lock error; please retry"
                 })),
             )
-                .into_response());
+                .into_response();
+            response.headers_mut().insert("Retry-After", "60".parse().unwrap());
+            return Ok(response);
         }
     }
 
