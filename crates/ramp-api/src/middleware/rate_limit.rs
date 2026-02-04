@@ -194,7 +194,10 @@ impl RateLimitStore for MemoryRateLimitStore {
             .as_secs();
         let window_start = now - window_seconds;
 
-        let mut history = self.history.lock().unwrap_or_else(|e| e.into_inner());
+        let mut history = self.history.lock().unwrap_or_else(|e| {
+            warn!("Rate limit in-memory history mutex poisoned");
+            e.into_inner()
+        });
         let entries = history.entry(full_key).or_default();
 
         // Remove old entries
