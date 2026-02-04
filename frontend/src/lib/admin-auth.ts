@@ -38,6 +38,5 @@ export function isAdminSessionTokenValid(
   }
   const payload = `${nonce}.${expiresAtStr}`;
   const expected = createHmac("sha256", secret).update(payload).digest("hex");
-  if (sig.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+  return constantTimeEqual(sig, expected);
 }

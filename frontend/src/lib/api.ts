@@ -218,7 +218,6 @@ async function apiRequest<T>(
     try {
       const csrfResponse = await fetch('/api/csrf', {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
       });
       if (csrfResponse.ok) {
         const payload: { token?: string } | null = await csrfResponse
