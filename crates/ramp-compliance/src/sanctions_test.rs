@@ -5,6 +5,24 @@ use chrono::Utc;
 use ramp_common::types::{IntentId, TenantId, UserId, VndAmount};
 use std::sync::Arc;
 
+fn device_metadata() -> serde_json::Value {
+    serde_json::json!({
+        "device": {
+            "device_id": "device-1",
+            "device_fingerprint": "fingerprint-1",
+            "ip_address": "127.0.0.1",
+            "country": "US",
+            "city": "New York",
+            "lat": 40.7128,
+            "lon": -74.0060,
+            "user_agent": "unit-test",
+            "is_vpn": false,
+            "is_proxy": false,
+            "timestamp": Utc::now(),
+        }
+    })
+}
+
 #[tokio::test]
 async fn test_sanctions_integration() {
     // Setup
@@ -30,7 +48,7 @@ async fn test_sanctions_integration() {
         amount_vnd: VndAmount::from_i64(1_000_000),
         transaction_type: TransactionType::Payin,
         timestamp: Utc::now(),
-        metadata: serde_json::json!({}),
+        metadata: device_metadata(),
         user_full_name: Some("John Doe".to_string()),
         user_country: Some("US".to_string()),
         user_address: None,
@@ -49,7 +67,7 @@ async fn test_sanctions_integration() {
         amount_vnd: VndAmount::from_i64(1_000_000),
         transaction_type: TransactionType::Payin,
         timestamp: Utc::now(),
-        metadata: serde_json::json!({}),
+        metadata: device_metadata(),
         user_full_name: Some("Osama Bin Laden".to_string()),
         user_country: Some("AF".to_string()),
         user_address: None,
@@ -70,7 +88,7 @@ async fn test_sanctions_integration() {
         amount_vnd: VndAmount::from_i64(1_000_000),
         transaction_type: TransactionType::Payin,
         timestamp: Utc::now(),
-        metadata: serde_json::json!({}),
+        metadata: device_metadata(),
         user_full_name: Some("Jane Doe".to_string()),
         user_country: Some("US".to_string()),
         user_address: Some("123 Blocked St".to_string()),
