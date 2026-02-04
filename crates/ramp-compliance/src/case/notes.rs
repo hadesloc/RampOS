@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use ramp_common::Result;
+use ramp_common::{types::TenantId, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
@@ -55,6 +55,7 @@ impl CaseNoteManager {
     /// Add a note to a case
     pub async fn add_note(
         &self,
+        tenant_id: &TenantId,
         case_id: &str,
         author_id: Option<String>,
         content: String,
@@ -71,7 +72,7 @@ impl CaseNoteManager {
             created_at: Utc::now(),
         };
 
-        self.store.add_note(&note).await?;
+        self.store.add_note(tenant_id, &note).await?;
 
         info!(
             case_id = %case_id,
@@ -84,19 +85,24 @@ impl CaseNoteManager {
     }
 
     /// Get all notes for a case
-    pub async fn get_notes(&self, case_id: &str) -> Result<Vec<CaseNote>> {
-        self.store.get_notes(case_id).await
+    pub async fn get_notes(&self, tenant_id: &TenantId, case_id: &str) -> Result<Vec<CaseNote>> {
+        self.store.get_notes(tenant_id, case_id).await
     }
 
     /// Get public notes for a case (visible to customer)
-    pub async fn get_public_notes(&self, case_id: &str) -> Result<Vec<CaseNote>> {
-        let notes = self.store.get_notes(case_id).await?;
+    pub async fn get_public_notes(
+        &self,
+        tenant_id: &TenantId,
+        case_id: &str,
+    ) -> Result<Vec<CaseNote>> {
+        let notes = self.store.get_notes(tenant_id, case_id).await?;
         Ok(notes.into_iter().filter(|n| !n.is_internal).collect())
     }
 
     /// Auto-create note on status change
     pub async fn on_status_change(
         &self,
+        tenant_id: &TenantId,
         case_id: &str,
         old_status: CaseStatus,
         new_status: CaseStatus,
@@ -104,6 +110,7 @@ impl CaseNoteManager {
     ) -> Result<CaseNote> {
         let content = format!("Status changed from {:?} to {:?}", old_status, new_status);
         self.add_note(
+            tenant_id,
             case_id,
             author_id,
             content,
@@ -116,6 +123,7 @@ impl CaseNoteManager {
     /// Auto-create note on assignment change
     pub async fn on_assignment_change(
         &self,
+        tenant_id: &TenantId,
         case_id: &str,
         assigned_to: Option<String>,
         author_id: Option<String>,
@@ -126,6 +134,7 @@ impl CaseNoteManager {
         };
 
         self.add_note(
+            tenant_id,
             case_id,
             author_id,
             content,
@@ -138,12 +147,13 @@ impl CaseNoteManager {
     /// Auto-create note on resolution
     pub async fn on_resolution(
         &self,
+        tenant_id: &TenantId,
         case_id: &str,
         resolution: &str,
         author_id: Option<String>,
     ) -> Result<CaseNote> {
         let content = format!("Case resolved: {}", resolution);
-        self.add_note(case_id, author_id, content, NoteType::Decision, true)
+        self.add_note(tenant_id, case_id, author_id, content, NoteType::Decision, true)
             .await
     }
 }

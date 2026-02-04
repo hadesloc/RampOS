@@ -14,7 +14,7 @@ use crate::{
 #[async_trait]
 pub trait CaseStore: Send + Sync {
     async fn create_case(&self, case: &AmlCase) -> Result<String>;
-    async fn get_case(&self, case_id: &str) -> Result<Option<AmlCase>>;
+    async fn get_case(&self, tenant_id: &TenantId, case_id: &str) -> Result<Option<AmlCase>>;
     async fn list_cases(
         &self,
         tenant_id: &TenantId,
@@ -42,8 +42,8 @@ pub trait CaseStore: Send + Sync {
         resolution: Option<String>,
     ) -> Result<()>;
     async fn assign_case(&self, case_id: &str, assigned_to: &str) -> Result<()>;
-    async fn add_note(&self, note: &CaseNote) -> Result<()>;
-    async fn get_notes(&self, case_id: &str) -> Result<Vec<CaseNote>>;
+    async fn add_note(&self, tenant_id: &TenantId, note: &CaseNote) -> Result<()>;
+    async fn get_notes(&self, tenant_id: &TenantId, case_id: &str) -> Result<Vec<CaseNote>>;
     async fn get_user_cases(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<Vec<AmlCase>>;
     async fn get_open_cases(&self, tenant_id: &TenantId) -> Result<Vec<AmlCase>>;
 }
@@ -89,17 +89,18 @@ impl CaseStore for PostgresCaseStore {
         Ok(case.id.clone())
     }
 
-    async fn get_case(&self, case_id: &str) -> Result<Option<AmlCase>> {
+    async fn get_case(&self, tenant_id: &TenantId, case_id: &str) -> Result<Option<AmlCase>> {
         let row = sqlx::query(
             r#"
             SELECT
                 id, tenant_id, user_id, intent_id, case_type, severity, status,
                 detection_data, assigned_to, resolution, created_at, updated_at, resolved_at
             FROM aml_cases
-            WHERE id = $1
+            WHERE id = $1 AND tenant_id = $2
             "#,
         )
         .bind(case_id)
+        .bind(tenant_id.to_string())
         .fetch_optional(&self.pool)
         .await?;
 
@@ -295,7 +296,7 @@ impl CaseStore for PostgresCaseStore {
         Ok(())
     }
 
-    async fn add_note(&self, note: &CaseNote) -> Result<()> {
+    async fn add_note(&self, tenant_id: &TenantId, note: &CaseNote) -> Result<()> {
         let result = sqlx::query(
             r#"
             INSERT INTO case_notes (
@@ -303,7 +304,7 @@ impl CaseStore for PostgresCaseStore {
             )
             SELECT $1, $2, tenant_id, $3, $4, $5, $6, $7
             FROM aml_cases
-            WHERE id = $2
+            WHERE id = $2 AND tenant_id = $8
             "#,
         )
         .bind(note.id)
@@ -313,6 +314,7 @@ impl CaseStore for PostgresCaseStore {
         .bind(serde_json::to_string(&note.note_type).unwrap_or_default())
         .bind(note.is_internal)
         .bind(note.created_at)
+        .bind(tenant_id.to_string())
         .execute(&self.pool)
         .await?;
 
@@ -325,16 +327,17 @@ impl CaseStore for PostgresCaseStore {
         Ok(())
     }
 
-    async fn get_notes(&self, case_id: &str) -> Result<Vec<CaseNote>> {
+    async fn get_notes(&self, tenant_id: &TenantId, case_id: &str) -> Result<Vec<CaseNote>> {
         let rows = sqlx::query(
             r#"
             SELECT id, case_id, author_id, content, note_type, is_internal, created_at
             FROM case_notes
-            WHERE case_id = $1
+            WHERE case_id = $1 AND tenant_id = $2
             ORDER BY created_at DESC
             "#,
         )
         .bind(case_id)
+        .bind(tenant_id.to_string())
         .fetch_all(&self.pool)
         .await?;
 
