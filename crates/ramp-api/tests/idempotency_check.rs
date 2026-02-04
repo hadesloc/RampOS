@@ -69,7 +69,7 @@ impl IdempotencyStore for StoreFailingStore {
 }
 
 #[tokio::test]
-async fn test_idempotency_store_error_returns_503() {
+async fn test_idempotency_lock_error_returns_503() {
     let config = IdempotencyConfig::default();
     let handler = Arc::new(IdempotencyHandler::new(Arc::new(FailingStore), config));
 
