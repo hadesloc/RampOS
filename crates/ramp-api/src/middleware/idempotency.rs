@@ -373,7 +373,14 @@ pub async fn idempotency_middleware(
         }
         Err(e) => {
             warn!(error = %e, "Idempotency lock error");
-            return Err(StatusCode::SERVICE_UNAVAILABLE);
+            return Ok((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({
+                    "error": "idempotency_lock_unavailable",
+                    "message": "Idempotency lock error; please retry"
+                })),
+            )
+                .into_response());
         }
     }
 
