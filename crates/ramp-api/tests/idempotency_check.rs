@@ -86,6 +86,7 @@ async fn test_idempotency_lock_error_returns_503() {
 
     let response = app.oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(response.headers().get("Retry-After").unwrap(), "60");
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await

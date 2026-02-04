@@ -5,7 +5,7 @@ use axum::{
     extract::{Request, State},
     http::StatusCode,
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -169,7 +169,7 @@ impl IdempotencyStore for MemoryIdempotencyStore {
             .as_secs();
 
         let mut responses = self.responses.lock().unwrap_or_else(|e| {
-            warn!("Idempotency in-memory responses mutex poisoned");
+            warn!(error = ?e, "Idempotency in-memory responses mutex poisoned");
             e.into_inner()
         });
         if let Some((response, expires_at)) = responses.get(&full_key) {
@@ -197,7 +197,7 @@ impl IdempotencyStore for MemoryIdempotencyStore {
             .as_secs();
 
         let mut responses = self.responses.lock().unwrap_or_else(|e| {
-            warn!("Idempotency in-memory responses mutex poisoned");
+            warn!(error = ?e, "Idempotency in-memory responses mutex poisoned");
             e.into_inner()
         });
         responses.insert(full_key, (response.clone(), now + ttl_seconds));
@@ -212,7 +212,7 @@ impl IdempotencyStore for MemoryIdempotencyStore {
             .as_secs();
 
         let mut locks = self.locks.lock().unwrap_or_else(|e| {
-            warn!("Idempotency in-memory locks mutex poisoned");
+            warn!(error = ?e, "Idempotency in-memory locks mutex poisoned");
             e.into_inner()
         });
         // Check if locked
@@ -230,7 +230,7 @@ impl IdempotencyStore for MemoryIdempotencyStore {
     async fn unlock(&self, tenant_id: &str, key: &str, key_prefix: &str) -> Result<(), String> {
         let lock_key = format!("{}:{}:{}:lock", key_prefix, tenant_id, key);
         let mut locks = self.locks.lock().unwrap_or_else(|e| {
-            warn!("Idempotency in-memory locks mutex poisoned");
+            warn!(error = ?e, "Idempotency in-memory locks mutex poisoned");
             e.into_inner()
         });
         locks.remove(&lock_key);
@@ -410,14 +410,16 @@ pub async fn idempotency_middleware(
     // Store response (best effort)
     if let Err(e) = handler.store(&tenant_id, &idempotency_key, &stored).await {
         warn!(error = %e, "Failed to store idempotent response; lock retained");
-        return Ok((
+        let mut response = (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(json!({
                 "error": "idempotency_store_unavailable",
                 "message": "Idempotency store error; request may have been processed"
             })),
         )
-            .into_response());
+            .into_response();
+        response.headers_mut().insert("Retry-After", "60".parse().unwrap());
+        return Ok(response);
     }
 
     // Release lock
