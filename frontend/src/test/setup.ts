@@ -29,6 +29,9 @@ vi.mock('next/link', () => ({
   }),
 }))
 
+// Mock server-only module used in server-side utilities
+vi.mock('server-only', () => ({}))
+
 // Mock ResizeObserver
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
   observe: vi.fn(),

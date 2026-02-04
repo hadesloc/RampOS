@@ -1,11 +1,22 @@
 import "server-only";
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 
 export const ADMIN_SESSION_COOKIE = "rampos_admin_session";
-const ADMIN_SESSION_SCOPE = "rampos-admin-session";
 
-export function buildAdminSessionToken(secret: string): string {
-  return createHmac("sha256", secret).update(ADMIN_SESSION_SCOPE).digest("hex");
+export function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
+export function createAdminSessionToken(
+  secret: string,
+  ttlSeconds = 60 * 60 * 8
+): string {
+  const nonce = randomUUID();
+  const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
+  const payload = `${nonce}.${expiresAt}`;
+  const sig = createHmac("sha256", secret).update(payload).digest("hex");
+  return `${payload}.${sig}`;
 }
 
 export function isAdminSessionTokenValid(
@@ -13,7 +24,15 @@ export function isAdminSessionTokenValid(
   secret: string
 ): boolean {
   if (!token) return false;
-  const expected = buildAdminSessionToken(secret);
-  if (token.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  const [nonce, expiresAtStr, sig] = parts;
+  const expiresAt = Number(expiresAtStr);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Math.floor(Date.now() / 1000)) {
+    return false;
+  }
+  const payload = `${nonce}.${expiresAtStr}`;
+  const expected = createHmac("sha256", secret).update(payload).digest("hex");
+  if (sig.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
 }

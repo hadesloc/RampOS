@@ -15,9 +15,24 @@ export default function AdminLoginPage() {
     setSubmitting(true);
 
     try {
+      const csrfRes = await fetch("/api/csrf");
+      const csrfPayload = await csrfRes.json();
+      const csrfToken =
+        csrfPayload && typeof csrfPayload.token === "string"
+          ? csrfPayload.token
+          : "";
+
+      if (!csrfToken) {
+        setError("Login failed");
+        return;
+      }
+
       const res = await fetch("/api/admin-login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
         body: JSON.stringify({ key }),
       });
 
