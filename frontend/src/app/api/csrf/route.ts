@@ -9,7 +9,11 @@ export async function GET() {
     value: token,
     httpOnly: false,
     sameSite: "strict",
+    secure: process.env.NODE_ENV === "production",
     path: "/",
   });
-  return NextResponse.json({ token });
+  return NextResponse.json(
+    { token },
+    { headers: { "Cache-Control": "no-store" } }
+  );
 }

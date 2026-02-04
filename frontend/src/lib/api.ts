@@ -213,7 +213,25 @@ async function apiRequest<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  const csrfToken = getCookie(CSRF_COOKIE_NAME);
+  let csrfToken = getCookie(CSRF_COOKIE_NAME);
+  if (!csrfToken && typeof window !== 'undefined') {
+    try {
+      const csrfResponse = await fetch('/api/csrf', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (csrfResponse.ok) {
+        const payload: { token?: string } | null = await csrfResponse
+          .json()
+          .catch(() => null);
+        if (payload?.token && typeof payload.token === 'string') {
+          csrfToken = payload.token;
+        }
+      }
+    } catch {
+      // Best effort; proxy will reject if CSRF cannot be obtained.
+    }
+  }
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',

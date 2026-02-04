@@ -4,8 +4,13 @@ import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 export const ADMIN_SESSION_COOKIE = "rampos_admin_session";
 
 export function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  const maxLen = Math.max(aBuf.length, bBuf.length);
+  const paddedA = Buffer.concat([aBuf, Buffer.alloc(maxLen - aBuf.length)]);
+  const paddedB = Buffer.concat([bBuf, Buffer.alloc(maxLen - bBuf.length)]);
+  const matches = timingSafeEqual(paddedA, paddedB);
+  return matches && aBuf.length === bBuf.length;
 }
 
 export function createAdminSessionToken(
