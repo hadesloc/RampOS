@@ -271,6 +271,10 @@ fn verify_webhook_signature(
     body: &[u8],
     secrets: &[ProviderSecret],
 ) -> Result<Option<String>, ApiError> {
+    if secrets.is_empty() {
+        return Ok(None);
+    }
+
     let has_signature = secrets
         .iter()
         .any(|s| headers.get(&s.header_name).is_some());
