@@ -207,6 +207,33 @@ async fn test_valid_hmac_signature_passes() {
 }
 
 #[tokio::test]
+async fn test_missing_signature_header_rejected() {
+    let app = setup_app_with_hmac().await;
+    let timestamp = Utc::now().timestamp().to_string();
+    let path = "/v1/intents/payin";
+    let body = serde_json::json!({
+        "tenant_id": "tenant_hmac",
+        "user_id": "user_hmac",
+        "amount_vnd": 100000,
+        "rails_provider": "VIETCOMBANK",
+        "metadata": {}
+    });
+    let body_str = serde_json::to_string(&body).unwrap();
+
+    let request = Request::builder()
+        .uri(path)
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", app.api_key))
+        .header("Content-Type", "application/json")
+        .header("X-Timestamp", &timestamp)
+        .body(Body::from(body_str))
+        .unwrap();
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn test_invalid_hmac_signature_rejected() {
     let app = setup_app_with_hmac().await;
 

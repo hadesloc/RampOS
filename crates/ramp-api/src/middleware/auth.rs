@@ -159,6 +159,20 @@ pub async fn auth_middleware(
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
+    let signature = match signature {
+        Some(sig) => sig,
+        None => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "error": "missing_signature",
+                    "message": "X-Signature header is required"
+                })),
+            )
+                .into_response());
+        }
+    };
+
     let timestamp_str = req
         .headers()
         .get("X-Timestamp")
@@ -169,94 +183,68 @@ pub async fn auth_middleware(
     let method = req.method().clone();
     let path = req.uri().path().to_string();
 
-    // Verify HMAC signature if present
-    // Note: If signature is not present, we allow the request (backward compatibility)
-    // In production, you may want to require signatures for all requests
-    if let Some(ref sig) = signature {
-        // Need to read the body for signature verification
-        let (parts, body) = req.into_parts();
+    // Need to read the body for signature verification
+    let (parts, body) = req.into_parts();
 
-        // Read the entire body
-        let body_bytes = match body.collect().await {
-            Ok(collected) => collected.to_bytes(),
-            Err(e) => {
-                warn!(error = %e, "Failed to read request body");
-                return Err(StatusCode::INTERNAL_SERVER_ERROR);
-            }
-        };
-
-        // Verify the signature
-        if let Err(e) = verify_hmac_signature(
-            &tenant,
-            &method,
-            &path,
-            timestamp_str.as_deref(),
-            &body_bytes,
-            sig,
-        ) {
-            let (status, error, message) = match e {
-                SignatureValidationError::MissingSignature => (
-                    StatusCode::BAD_REQUEST,
-                    "missing_signature",
-                    "X-Signature header is required",
-                ),
-                SignatureValidationError::MissingTimestamp => (
-                    StatusCode::BAD_REQUEST,
-                    "missing_timestamp",
-                    "X-Timestamp header is required for signature verification",
-                ),
-                SignatureValidationError::InvalidTimestamp => (
-                    StatusCode::BAD_REQUEST,
-                    "invalid_timestamp",
-                    "Invalid timestamp format",
-                ),
-                SignatureValidationError::NoApiSecret => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "configuration_error",
-                    "API secret not configured for tenant",
-                ),
-                SignatureValidationError::InvalidSignature => (
-                    StatusCode::UNAUTHORIZED,
-                    "invalid_signature",
-                    "HMAC signature verification failed",
-                ),
-            };
-
-            warn!(
-                tenant_id = %tenant.id,
-                error = ?e,
-                "Signature verification failed"
-            );
-
-            return Ok(
-                (status, Json(json!({ "error": error, "message": message }))).into_response(),
-            );
+    // Read the entire body
+    let body_bytes = match body.collect().await {
+        Ok(collected) => collected.to_bytes(),
+        Err(e) => {
+            warn!(error = %e, "Failed to read request body");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
+    };
 
-        debug!(tenant_id = %tenant.id, "HMAC signature verified successfully");
-
-        // Reconstruct the request with the body
-        let mut new_req = Request::from_parts(parts, Body::from(body_bytes.to_vec()));
-
-        // Add tenant context to request extensions
-        let context = TenantContext {
-            tenant_id: TenantId::new(&tenant.id),
-            name: tenant.name,
+    // Verify the signature
+    if let Err(e) = verify_hmac_signature(
+        &tenant,
+        &method,
+        &path,
+        timestamp_str.as_deref(),
+        &body_bytes,
+        &signature,
+    ) {
+        let (status, error, message) = match e {
+            SignatureValidationError::MissingSignature => (
+                StatusCode::BAD_REQUEST,
+                "missing_signature",
+                "X-Signature header is required",
+            ),
+            SignatureValidationError::MissingTimestamp => (
+                StatusCode::BAD_REQUEST,
+                "missing_timestamp",
+                "X-Timestamp header is required for signature verification",
+            ),
+            SignatureValidationError::InvalidTimestamp => (
+                StatusCode::BAD_REQUEST,
+                "invalid_timestamp",
+                "Invalid timestamp format",
+            ),
+            SignatureValidationError::NoApiSecret => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "configuration_error",
+                "API secret not configured for tenant",
+            ),
+            SignatureValidationError::InvalidSignature => (
+                StatusCode::UNAUTHORIZED,
+                "invalid_signature",
+                "HMAC signature verification failed",
+            ),
         };
-        new_req.extensions_mut().insert(context);
 
-        return Ok(next.run(new_req).await);
+        warn!(
+            tenant_id = %tenant.id,
+            error = ?e,
+            "Signature verification failed"
+        );
+
+        return Ok((status, Json(json!({ "error": error, "message": message }))).into_response());
     }
 
-    // No signature provided - add tenant context and continue
-    // Note: Consider making signature required in production
-    debug!(
-        tenant_id = %tenant.id,
-        "Request without HMAC signature (backward compatibility mode)"
-    );
+    debug!(tenant_id = %tenant.id, "HMAC signature verified successfully");
 
-    let (parts, body) = req.into_parts();
-    let mut new_req = Request::from_parts(parts, body);
+    // Reconstruct the request with the body
+    let mut new_req = Request::from_parts(parts, Body::from(body_bytes.to_vec()));
 
     let context = TenantContext {
         tenant_id: TenantId::new(&tenant.id),
