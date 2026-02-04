@@ -63,6 +63,7 @@ fn create_portal_auth_config() -> Arc<PortalAuthConfig> {
         jwt_secret: TEST_JWT_SECRET.to_string(),
         issuer: None,
         audience: None,
+        allow_missing_tenant: false,
     })
 }
 
@@ -83,7 +84,7 @@ async fn setup_portal_test_app() -> PortalTestApp {
     let api_key_hash = hex::encode(hasher.finalize());
 
     tenant_repo.add_tenant(TenantRow {
-        id: "tenant_portal".to_string(),
+        id: "660e8400-e29b-41d4-a716-446655440001".to_string(),
         name: "Portal Test Tenant".to_string(),
         status: "ACTIVE".to_string(),
         api_key_hash: api_key_hash.clone(),
@@ -100,8 +101,8 @@ async fn setup_portal_test_app() -> PortalTestApp {
 
     // Setup user
     user_repo.add_user(UserRow {
-        id: "user_portal".to_string(),
-        tenant_id: "tenant_portal".to_string(),
+        id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+        tenant_id: "660e8400-e29b-41d4-a716-446655440001".to_string(),
         status: "ACTIVE".to_string(),
         kyc_tier: 1,
         kyc_status: "VERIFIED".to_string(),
@@ -455,8 +456,8 @@ async fn test_hmac_signature_valid() {
     let path = "/v1/intents/payin";
     // Use camelCase field names as expected by the API
     let body = serde_json::json!({
-        "tenantId": "tenant_portal",
-        "userId": "user_portal",
+        "tenantId": "660e8400-e29b-41d4-a716-446655440001",
+        "userId": "550e8400-e29b-41d4-a716-446655440000",
         "amountVnd": 100000,
         "railsProvider": "VIETCOMBANK",
         "metadata": {}
@@ -487,8 +488,8 @@ async fn test_hmac_signature_invalid_rejected() {
     let timestamp = Utc::now().timestamp().to_string();
     let path = "/v1/intents/payin";
     let body = serde_json::json!({
-        "tenant_id": "tenant_portal",
-        "user_id": "user_portal",
+        "tenant_id": "660e8400-e29b-41d4-a716-446655440001",
+        "user_id": "550e8400-e29b-41d4-a716-446655440000",
         "amount_vnd": 100000,
         "rails_provider": "VIETCOMBANK",
         "metadata": {}
@@ -528,8 +529,8 @@ async fn test_hmac_tampered_body_rejected() {
     let timestamp = Utc::now().timestamp().to_string();
     let path = "/v1/intents/payin";
     let original_body = serde_json::json!({
-        "tenant_id": "tenant_portal",
-        "user_id": "user_portal",
+        "tenant_id": "660e8400-e29b-41d4-a716-446655440001",
+        "user_id": "550e8400-e29b-41d4-a716-446655440000",
         "amount_vnd": 100000,
         "rails_provider": "VIETCOMBANK",
         "metadata": {}
@@ -541,8 +542,8 @@ async fn test_hmac_tampered_body_rejected() {
 
     // But send modified body (tampered amount)
     let tampered_body = serde_json::json!({
-        "tenant_id": "tenant_portal",
-        "user_id": "user_portal",
+        "tenant_id": "660e8400-e29b-41d4-a716-446655440001",
+        "user_id": "550e8400-e29b-41d4-a716-446655440000",
         "amount_vnd": 999999999, // Modified amount
         "rails_provider": "VIETCOMBANK",
         "metadata": {}
@@ -573,8 +574,8 @@ async fn test_hmac_expired_timestamp_rejected() {
     let expired_timestamp = (Utc::now().timestamp() - 600).to_string();
     let path = "/v1/intents/payin";
     let body = serde_json::json!({
-        "tenant_id": "tenant_portal",
-        "user_id": "user_portal",
+        "tenant_id": "660e8400-e29b-41d4-a716-446655440001",
+        "user_id": "550e8400-e29b-41d4-a716-446655440000",
         "amount_vnd": 100000,
         "rails_provider": "VIETCOMBANK",
         "metadata": {}

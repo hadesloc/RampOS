@@ -27,6 +27,7 @@ fn create_test_config() -> Arc<PortalAuthConfig> {
         jwt_secret: TEST_JWT_SECRET.to_string(),
         issuer: None,
         audience: None,
+        allow_missing_tenant: false,
     })
 }
 
@@ -294,7 +295,7 @@ async fn test_empty_bearer_token() {
 }
 
 #[tokio::test]
-async fn test_token_without_tenant_id_uses_default() {
+async fn test_token_without_tenant_id_is_rejected() {
     let config = create_test_config();
     let router = create_protected_router(config);
 
@@ -319,7 +320,41 @@ async fn test_token_without_tenant_id_uses_default() {
 
     let response = router.oneshot(request).await.unwrap();
 
-    // Should succeed - uses default tenant ID
+    // Should be rejected when tenant_id is missing
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_token_without_tenant_id_allowed_when_configured() {
+    let config = Arc::new(PortalAuthConfig {
+        jwt_secret: TEST_JWT_SECRET.to_string(),
+        issuer: None,
+        audience: None,
+        allow_missing_tenant: true,
+    });
+    let router = create_protected_router(config);
+
+    let now = Utc::now().timestamp();
+    let claims = PortalClaims {
+        sub: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+        tenant_id: None,
+        email: "test@example.com".to_string(),
+        iat: now,
+        exp: now + 3600,
+        token_type: "access".to_string(),
+    };
+
+    let token = create_jwt_token(&claims, TEST_JWT_SECRET);
+
+    let request = Request::builder()
+        .uri("/protected")
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = router.oneshot(request).await.unwrap();
+
     assert_eq!(response.status(), StatusCode::OK);
 }
 

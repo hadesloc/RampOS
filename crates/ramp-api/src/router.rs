@@ -263,7 +263,7 @@ pub fn create_router(state: AppState) -> Router {
     // Portal routes (user authentication via JWT, not tenant API key)
     // These routes are for the end-user portal application
     // Auth routes are excluded from JWT middleware (login/register don't need auth)
-    let portal_protected_routes = Router::new()
+    let mut portal_protected_routes = Router::new()
         .nest("/kyc", handlers::portal::kyc::router())
         .nest("/wallet", handlers::portal::wallet::router())
         .nest("/transactions", handlers::portal::transactions::router())
@@ -273,6 +273,13 @@ pub fn create_router(state: AppState) -> Router {
             portal_auth_middleware,
         ))
         .with_state(state.clone());
+
+    if let Some(ref limiter) = state.rate_limiter {
+        portal_protected_routes = portal_protected_routes.layer(middleware::from_fn_with_state(
+            limiter.clone(),
+            rate_limit_middleware,
+        ));
+    }
 
     // API v1 routes with authentication
     let mut api_v1 = Router::new()
@@ -305,7 +312,7 @@ pub fn create_router(state: AppState) -> Router {
 
     // Bank webhook routes (no tenant auth required - uses provider-specific signature verification)
     // POST /v1/webhooks/bank/:provider - receives bank confirmations for pay-ins
-    let bank_webhook_routes = if let Some(ref confirmation_repo) = state.bank_confirmation_repo {
+    let mut bank_webhook_routes = if let Some(ref confirmation_repo) = state.bank_confirmation_repo {
         let bank_webhook_state = BankWebhookState::new(confirmation_repo.clone());
         Router::new()
             .route(
@@ -316,6 +323,13 @@ pub fn create_router(state: AppState) -> Router {
     } else {
         Router::new()
     };
+
+    if let Some(ref limiter) = state.rate_limiter {
+        bank_webhook_routes = bank_webhook_routes.layer(middleware::from_fn_with_state(
+            limiter.clone(),
+            rate_limit_middleware,
+        ));
+    }
 
     // OpenAPI documentation
     let openapi = ApiDoc::openapi();

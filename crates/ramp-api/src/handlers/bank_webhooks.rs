@@ -265,6 +265,14 @@ fn verify_webhook_signature(
     body: &[u8],
     secrets: &[ProviderSecret],
 ) -> Result<Option<String>, ApiError> {
+    let has_signature = secrets
+        .iter()
+        .any(|s| headers.get(&s.header_name).is_some());
+
+    if !has_signature {
+        return Err(ApiError::Unauthorized("Missing signature".to_string()));
+    }
+
     for secret in secrets {
         let signature = headers
             .get(&secret.header_name)
@@ -286,20 +294,10 @@ fn verify_webhook_signature(
         }
     }
 
-    // If no secrets matched, check if signature was provided
-    let has_signature = secrets
-        .iter()
-        .any(|s| headers.get(&s.header_name).is_some());
-
-    if has_signature {
-        warn!("Webhook signature verification failed");
-        return Err(ApiError::Unauthorized(
-            "Invalid webhook signature".to_string(),
-        ));
-    }
-
-    // No signature provided - might be optional for some providers
-    Ok(None)
+    warn!("Webhook signature verification failed");
+    Err(ApiError::Unauthorized(
+        "Invalid webhook signature".to_string(),
+    ))
 }
 
 fn verify_hmac_sha256(secret: &[u8], data: &[u8], signature: &str) -> bool {
@@ -382,14 +380,13 @@ async fn handle_vietqr_webhook(
     let signature_verified = verified_tenant.is_some();
 
     // Determine tenant from reference code or verified signature
-    let tenant_id = verified_tenant.unwrap_or_else(|| {
-        // Try to extract tenant from reference code format: TENANT_REF_xxx
-        extract_tenant_from_reference(&payload.reference_code)
-            .unwrap_or_else(|| "default".to_string())
-    });
+    let tenant_id = verified_tenant
+        .or_else(|| extract_tenant_from_reference(&payload.reference_code))
+        .ok_or_else(|| ApiError::BadRequest("Unknown tenant".to_string()))?;
 
     // Serialize payload before moving fields
-    let raw_payload = serde_json::to_value(&payload).unwrap_or_default();
+    let raw_payload = serde_json::to_value(&payload)
+        .map_err(|_| ApiError::Internal("Serialization failed".to_string()))?;
 
     // Store confirmation
     let req = CreateBankConfirmationRequest {
@@ -469,12 +466,13 @@ async fn handle_napas_webhook(
     let signature_verified = verified_tenant.is_some();
 
     // Determine tenant
-    let tenant_id = verified_tenant.unwrap_or_else(|| {
-        extract_tenant_from_reference(&payload.ref_no).unwrap_or_else(|| "default".to_string())
-    });
+    let tenant_id = verified_tenant
+        .or_else(|| extract_tenant_from_reference(&payload.ref_no))
+        .ok_or_else(|| ApiError::BadRequest("Unknown tenant".to_string()))?;
 
     // Serialize payload before moving fields
-    let raw_payload = serde_json::to_value(&payload).unwrap_or_default();
+    let raw_payload = serde_json::to_value(&payload)
+        .map_err(|_| ApiError::Internal("Serialization failed".to_string()))?;
 
     // Store confirmation
     let req = CreateBankConfirmationRequest {
@@ -543,13 +541,13 @@ async fn handle_generic_webhook(
     let signature_verified = verified_tenant.is_some();
 
     // Determine tenant
-    let tenant_id = verified_tenant.unwrap_or_else(|| {
-        extract_tenant_from_reference(&payload.reference_code)
-            .unwrap_or_else(|| "default".to_string())
-    });
+    let tenant_id = verified_tenant
+        .or_else(|| extract_tenant_from_reference(&payload.reference_code))
+        .ok_or_else(|| ApiError::BadRequest("Unknown tenant".to_string()))?;
 
     // Serialize payload before moving fields
-    let raw_payload = serde_json::to_value(&payload).unwrap_or_default();
+    let raw_payload = serde_json::to_value(&payload)
+        .map_err(|_| ApiError::Internal("Serialization failed".to_string()))?;
 
     // Store confirmation
     let req = CreateBankConfirmationRequest {

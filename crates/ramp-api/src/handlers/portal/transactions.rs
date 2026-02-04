@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use crate::error::ApiError;
+use crate::middleware::PortalUser;
 use crate::router::AppState;
 
 // ============================================================================
@@ -89,6 +90,7 @@ pub fn router() -> Router<AppState> {
 /// GET /v1/portal/transactions - List transactions with pagination and filters
 pub async fn list_transactions(
     State(app_state): State<AppState>,
+    portal_user: PortalUser,
     Query(filters): Query<TransactionFilters>,
 ) -> Result<Json<PaginatedResponse<Transaction>>, ApiError> {
     info!(
@@ -131,10 +133,8 @@ pub async fn list_transactions(
         }
     }
 
-    // TODO: Extract user from PortalUser middleware extractor
-    // For now, use placeholder values - in production this comes from JWT claims
-    let tenant_id = TenantId::new(&get_default_tenant_id());
-    let user_id = UserId::new("placeholder-user-id"); // TODO: Get from auth middleware
+    let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
+    let user_id = UserId::new(&portal_user.user_id.to_string());
 
     // Calculate offset for pagination
     let offset = ((filters.page - 1) * filters.per_page) as i64;
@@ -232,15 +232,10 @@ fn map_intent_state_to_status(state: &str) -> String {
     }
 }
 
-/// Get the default tenant ID from environment
-fn get_default_tenant_id() -> String {
-    std::env::var("DEFAULT_TENANT_ID")
-        .unwrap_or_else(|_| "00000000-0000-0000-0000-000000000001".to_string())
-}
-
 /// GET /v1/portal/transactions/:id - Get transaction by ID
 pub async fn get_transaction(
     State(app_state): State<AppState>,
+    portal_user: PortalUser,
     Path(tx_id): Path<String>,
 ) -> Result<Json<Transaction>, ApiError> {
     info!(tx_id = %tx_id, "Get transaction requested");
@@ -252,9 +247,7 @@ pub async fn get_transaction(
         ));
     }
 
-    // TODO: Extract user from PortalUser middleware extractor
-    // For now, use placeholder values - in production this comes from JWT claims
-    let tenant_id = TenantId::new(&get_default_tenant_id());
+    let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
     let intent_id = IntentId::new(&tx_id);
 
     // Query real intent from repository
@@ -269,7 +262,11 @@ pub async fn get_transaction(
 
     match intent_row {
         Some(row) => {
-            // TODO: Verify intent belongs to user (from PortalUser extractor)
+            if row.user_id != portal_user.user_id.to_string() {
+                return Err(ApiError::Forbidden(
+                    "Transaction does not belong to user".to_string(),
+                ));
+            }
 
             let tx_type = match row.intent_type.as_str() {
                 "PAY_IN" => "DEPOSIT".to_string(),

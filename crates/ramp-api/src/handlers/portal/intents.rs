@@ -19,6 +19,7 @@ use tracing::{info, warn};
 use validator::Validate;
 
 use crate::error::ApiError;
+use crate::middleware::PortalUser;
 use crate::router::AppState;
 
 // ============================================================================
@@ -107,6 +108,7 @@ pub fn router() -> Router<AppState> {
 /// POST /v1/portal/intents/deposit - Create deposit intent
 pub async fn create_deposit(
     State(app_state): State<AppState>,
+    portal_user: PortalUser,
     Json(req): Json<DepositRequest>,
 ) -> Result<Json<Intent>, ApiError> {
     // Validate request
@@ -147,10 +149,8 @@ pub async fn create_deposit(
         "Create deposit intent requested"
     );
 
-    // TODO: Extract user from PortalUser middleware extractor
-    // For now, use placeholder values - in production this comes from JWT claims
-    let tenant_id = TenantId::new(&get_default_tenant_id());
-    let user_id = UserId::new("placeholder-user-id"); // TODO: Get from auth middleware
+    let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
+    let user_id = UserId::new(&portal_user.user_id.to_string());
 
     // Determine rails provider based on method
     let rails_provider = if method == "VND_BANK" {
@@ -198,15 +198,10 @@ pub async fn create_deposit(
     Ok(Json(intent))
 }
 
-/// Get the default tenant ID from environment
-fn get_default_tenant_id() -> String {
-    std::env::var("DEFAULT_TENANT_ID")
-        .unwrap_or_else(|_| "00000000-0000-0000-0000-000000000001".to_string())
-}
-
 /// POST /v1/portal/intents/withdraw - Create withdrawal intent
 pub async fn create_withdraw(
     State(app_state): State<AppState>,
+    portal_user: PortalUser,
     Json(req): Json<WithdrawRequest>,
 ) -> Result<Json<Intent>, ApiError> {
     // Validate request
@@ -263,10 +258,8 @@ pub async fn create_withdraw(
         "Create withdrawal intent requested"
     );
 
-    // TODO: Extract user from PortalUser middleware extractor
-    // For now, use placeholder values - in production this comes from JWT claims
-    let tenant_id = TenantId::new(&get_default_tenant_id());
-    let user_id = UserId::new("placeholder-user-id"); // TODO: Get from auth middleware
+    let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
+    let user_id = UserId::new(&portal_user.user_id.to_string());
 
     // Determine rails provider based on method
     let rails_provider = if method == "VND_BANK" {
@@ -330,6 +323,7 @@ pub async fn create_withdraw(
 /// GET /v1/portal/intents/:id - Get intent by ID
 pub async fn get_intent(
     State(app_state): State<AppState>,
+    portal_user: PortalUser,
     Path(intent_id): Path<String>,
 ) -> Result<Json<Intent>, ApiError> {
     info!(intent_id = %intent_id, "Get intent requested");
@@ -339,9 +333,7 @@ pub async fn get_intent(
         return Err(ApiError::BadRequest("Intent ID is required".to_string()));
     }
 
-    // TODO: Extract user from PortalUser middleware extractor
-    // For now, use placeholder values - in production this comes from JWT claims
-    let tenant_id = TenantId::new(&get_default_tenant_id());
+    let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
     let id = IntentId::new(&intent_id);
 
     // Query real intent from repository
@@ -356,7 +348,11 @@ pub async fn get_intent(
 
     match intent_row {
         Some(row) => {
-            // TODO: Verify intent belongs to user (from PortalUser extractor)
+            if row.user_id != portal_user.user_id.to_string() {
+                return Err(ApiError::Forbidden(
+                    "Intent does not belong to user".to_string(),
+                ));
+            }
 
             let intent = Intent {
                 id: row.id.clone(),
@@ -387,6 +383,7 @@ pub async fn get_intent(
 /// POST /v1/portal/intents/:id/confirm - Confirm user has made the transfer
 pub async fn confirm_intent(
     State(app_state): State<AppState>,
+    portal_user: PortalUser,
     Path(intent_id): Path<String>,
 ) -> Result<Json<Intent>, ApiError> {
     info!(intent_id = %intent_id, "Confirm intent requested");
@@ -396,9 +393,7 @@ pub async fn confirm_intent(
         return Err(ApiError::BadRequest("Intent ID is required".to_string()));
     }
 
-    // TODO: Extract user from PortalUser middleware extractor
-    // For now, use placeholder values - in production this comes from JWT claims
-    let tenant_id = TenantId::new(&get_default_tenant_id());
+    let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
     let id = IntentId::new(&intent_id);
 
     // Query real intent from repository
@@ -413,7 +408,11 @@ pub async fn confirm_intent(
 
     match intent_row {
         Some(row) => {
-            // TODO: Verify intent belongs to user (from PortalUser extractor)
+            if row.user_id != portal_user.user_id.to_string() {
+                return Err(ApiError::Forbidden(
+                    "Intent does not belong to user".to_string(),
+                ));
+            }
 
             // Verify intent is in a confirmable state
             let confirmable_states = ["CREATED", "AWAITING_DEPOSIT"];
