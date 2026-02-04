@@ -64,7 +64,6 @@ describe('AAService', () => {
         address: '0x123...',
         owner: '0xowner...',
         isDeployed: true,
-        nonce: '1',
         chainId: 1,
         entryPoint: '0xentry...',
         accountType: 'simple',
@@ -80,7 +79,6 @@ describe('AAService', () => {
         isDeployed: expect.any(Boolean),
         chainId: expect.any(Number),
         entryPoint: expect.any(String),
-        nonce: expect.any(String),
       });
     });
   });
