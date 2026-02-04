@@ -61,7 +61,48 @@ pub async fn auth_middleware(
     req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    // Check timestamp first to fail fast
+    // Extract API key from Authorization header
+    let auth_header = req
+        .headers()
+        .get("Authorization")
+        .and_then(|v| v.to_str().ok());
+
+    let api_key = match auth_header {
+        Some(header) if header.starts_with("Bearer ") => &header[7..],
+        _ => {
+            return Ok((
+                StatusCode::UNAUTHORIZED,
+                Json(json!({
+                    "error": "missing_authorization",
+                    "message": "Authorization header is missing or invalid"
+                })),
+            )
+                .into_response());
+        }
+    };
+
+    // Extract signature and require it to be present
+    let signature = req
+        .headers()
+        .get("X-Signature")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let signature = match signature {
+        Some(sig) => sig,
+        None => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "error": "missing_signature",
+                    "message": "X-Signature header is required"
+                })),
+            )
+                .into_response());
+        }
+    };
+
+    // Check timestamp after signature presence
     if let Err(e) = validate_timestamp(req.headers()) {
         let response = match e {
             TimestampValidationError::Missing => (
@@ -92,26 +133,6 @@ pub async fn auth_middleware(
         };
         return Ok(response);
     }
-
-    // Extract API key from Authorization header
-    let auth_header = req
-        .headers()
-        .get("Authorization")
-        .and_then(|v| v.to_str().ok());
-
-    let api_key = match auth_header {
-        Some(header) if header.starts_with("Bearer ") => &header[7..],
-        _ => {
-            return Ok((
-                StatusCode::UNAUTHORIZED,
-                Json(json!({
-                    "error": "missing_authorization",
-                    "message": "Authorization header is missing or invalid"
-                })),
-            )
-                .into_response());
-        }
-    };
 
     // Hash the API key for lookup
     let mut hasher = Sha256::new();
@@ -150,27 +171,7 @@ pub async fn auth_middleware(
             .into_response());
     }
 
-    // Extract signature and timestamp for HMAC verification
-    let signature = req
-        .headers()
-        .get("X-Signature")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
-
-    let signature = match signature {
-        Some(sig) => sig,
-        None => {
-            return Ok((
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "error": "missing_signature",
-                    "message": "X-Signature header is required"
-                })),
-            )
-                .into_response());
-        }
-    };
-
+    // Extract timestamp for HMAC verification
     let timestamp_str = req
         .headers()
         .get("X-Timestamp")
