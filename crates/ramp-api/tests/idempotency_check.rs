@@ -86,16 +86,6 @@ async fn test_idempotency_lock_error_returns_503() {
 
     let response = app.oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(payload["error"], "idempotency_store_unavailable");
-    assert_eq!(
-        payload["message"],
-        "Idempotency store error; request may have been processed"
-    );
 }
 
 #[tokio::test]
@@ -116,6 +106,16 @@ async fn test_idempotency_store_failure_after_lock_returns_503() {
 
     let response = app.oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(payload["error"], "idempotency_store_unavailable");
+    assert_eq!(
+        payload["message"],
+        "Idempotency store error; request may have been processed"
+    );
 }
 
 #[tokio::test]
