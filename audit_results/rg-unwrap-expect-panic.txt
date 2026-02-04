@@ -1,0 +1,1176 @@
+crates/ramp-compliance\src\actions.rs:174:            _ => panic!("Expected ApproveWithFlag"),
+crates/ramp-compliance\src\actions.rs:187:            _ => panic!("Expected HoldForReview"),
+crates/ramp-compliance\src\actions.rs:200:            _ => panic!("Expected Block"),
+crates/ramp-compliance\tests\ctr_test.rs:11:    let report_date = Utc.with_ymd_and_hms(2023, 10, 25, 12, 0, 0).unwrap();
+crates/ramp-core\src\jobs\intent_timeout.rs:86:        intent_repo.create(&expired_payin).await.unwrap();
+crates/ramp-core\src\jobs\intent_timeout.rs:89:        let count = job.process_expired().await.unwrap();
+crates/ramp-core\src\jobs\intent_timeout.rs:93:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\jobs\intent_timeout.rs:94:        let expired = intents.iter().find(|i| i.id == "payin_1").unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:335:        let map = self.history.lock().unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:340:        let mut map = self.history.lock().unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:341:        let mut device_map = self.device_users.lock().unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:417:        let map = self.device_users.lock().unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:476:        let result1 = rule.evaluate(&ctx1).await.unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:482:        let result2 = rule.evaluate(&ctx1).await.unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:488:        let result3 = rule.evaluate(&ctx2).await.unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:492:        assert!(result3.risk_score.unwrap().0 >= 10.0);
+crates/ramp-compliance\src\aml\device_anomaly.rs:506:        rule.evaluate(&ctx1).await.unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:515:        let result = rule.evaluate(&ctx2).await.unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:531:        let result = rule.evaluate(&ctx).await.unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:532:        assert!(result.risk_score.unwrap().0 >= 30.0);
+crates/ramp-compliance\src\aml\device_anomaly.rs:545:        rule.evaluate(&ctx1).await.unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:549:        let result = rule.evaluate(&ctx2).await.unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:552:        assert!(result.risk_score.unwrap().0 >= 20.0);
+crates/ramp-compliance\src\aml\device_anomaly.rs:564:        let result = rule.evaluate(&ctx).await.unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:576:        rule.evaluate(&create_context("u1", d1)).await.unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:580:        rule.evaluate(&create_context("u1", d2)).await.unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:584:        let result = rule.evaluate(&create_context("u1", d3)).await.unwrap();
+crates/ramp-compliance\src\aml\device_anomaly.rs:586:        assert!(result.risk_score.unwrap().0 >= 20.0);
+crates/ramp-api\tests\api_tests.rs:115:        .expect("Failed to create lazy pool");
+crates/ramp-api\tests\api_tests.rs:184:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:186:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:207:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\api_tests.rs:208:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:210:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:214:    let intents = app.intent_repo.intents.lock().unwrap();
+crates/ramp-api\tests\api_tests.rs:236:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\api_tests.rs:237:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:239:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:260:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\api_tests.rs:261:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:263:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:280:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:282:    let response_valid = app.router.clone().oneshot(request_valid).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:295:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:297:    let response_expired = app.router.clone().oneshot(request_expired).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:320:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\api_tests.rs:321:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:323:    let response1 = app.router.clone().oneshot(request1).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:333:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\api_tests.rs:334:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:336:    let response2 = app.router.clone().oneshot(request2).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:344:    let intents = app.intent_repo.intents.lock().unwrap();
+crates/ramp-api\tests\api_tests.rs:367:            .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\api_tests.rs:368:            .unwrap();
+crates/ramp-api\tests\api_tests.rs:370:        let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:380:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\api_tests.rs:381:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:383:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:409:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\api_tests.rs:410:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:412:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:415:    let intents = app.intent_repo.intents.lock().unwrap();
+crates/ramp-api\tests\api_tests.rs:440:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\api_tests.rs:441:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:443:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:465:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:467:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:472:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:473:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\api_tests.rs:476:    let balances = body.get("balances").unwrap().as_array().unwrap();
+crates/ramp-api\tests\api_tests.rs:479:    let vnd_balance = balances.iter().find(|b| b["currency"] == "VND").unwrap();
+crates/ramp-api\tests\api_tests.rs:515:    app.intent_repo.create(&intent).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:531:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\api_tests.rs:532:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:534:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:538:    let intents = app.intent_repo.intents.lock().unwrap();
+crates/ramp-api\tests\api_tests.rs:539:    let updated_intent = intents.iter().find(|i| i.id == intent_id).unwrap();
+crates/ramp-api\tests\api_tests.rs:562:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\api_tests.rs:563:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:565:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:598:    app.intent_repo.create(&intent).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:605:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:607:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:640:    app.intent_repo.create(&intent).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:647:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:649:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\api_tests.rs:662:        .unwrap();
+crates/ramp-api\tests\api_tests.rs:664:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-compliance\src\aml.rs:648:        let result = rule.evaluate(&ctx).await.unwrap();
+crates/ramp-compliance\src\aml.rs:670:        let result = rule.evaluate(&ctx).await.unwrap();
+crates/ramp-compliance\src\aml.rs:696:        let result = rule.evaluate(&ctx).await.unwrap();
+crates/ramp-compliance\src\aml.rs:722:        let result = rule.evaluate(&ctx).await.unwrap();
+crates/ramp-compliance\src\aml.rs:743:        let result = rule.evaluate(&ctx).await.unwrap();
+crates/ramp-compliance\src\aml.rs:764:        let result = rule.evaluate(&ctx).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:124:        .expect("Failed to create lazy pool");
+crates/ramp-api\tests\cookie_auth_tests.rs:214:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\cookie_auth_tests.rs:215:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:217:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:223:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:224:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:247:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\cookie_auth_tests.rs:248:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:250:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:276:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\cookie_auth_tests.rs:277:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:279:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:298:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:311:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:312:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:334:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\cookie_auth_tests.rs:335:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:337:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:343:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:344:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:370:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\cookie_auth_tests.rs:371:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:373:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:399:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\cookie_auth_tests.rs:400:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:402:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:408:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:409:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:427:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\cookie_auth_tests.rs:428:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:430:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:452:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\cookie_auth_tests.rs:453:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:455:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:477:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:479:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:509:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:511:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:517:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:518:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:532:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:534:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:540:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:541:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:544:    assert!(body.get("user").unwrap().is_null());
+crates/ramp-api\tests\cookie_auth_tests.rs:556:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:558:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:564:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:565:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:583:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:585:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:591:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:592:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:607:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:609:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:627:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:629:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:647:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:649:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:655:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:656:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:660:        .unwrap()
+crates/ramp-api\tests\cookie_auth_tests.rs:678:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:680:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:693:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:695:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:708:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:710:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:722:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:724:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:758:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\cookie_auth_tests.rs:759:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:761:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:801:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:803:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:819:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:821:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:836:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:838:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:858:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\cookie_auth_tests.rs:859:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:861:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:884:            .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\cookie_auth_tests.rs:885:            .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:887:        let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:907:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:909:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:915:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:916:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:942:                .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:951:        assert_eq!(result.unwrap().status(), StatusCode::OK);
+crates/ramp-api\tests\cookie_auth_tests.rs:976:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\cookie_auth_tests.rs:977:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:979:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:985:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:1008:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:1010:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:1016:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:1017:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:1042:        .unwrap();
+crates/ramp-api\tests\cookie_auth_tests.rs:1044:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-core\src\service\deposit.rs:523:        let res = service.create_deposit(req).await.unwrap();
+crates/ramp-core\src\service\deposit.rs:528:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\deposit.rs:566:        let create_res = service.create_deposit(create_req).await.unwrap();
+crates/ramp-core\src\service\deposit.rs:577:        let state = service.update_confirmations(confirm_req).await.unwrap();
+crates/ramp-core\src\service\deposit.rs:588:        let state = service.update_confirmations(confirm_req).await.unwrap();
+crates/ramp-core\src\service\deposit.rs:624:        let create_res = service.create_deposit(create_req).await.unwrap();
+crates/ramp-core\src\service\deposit.rs:631:            .unwrap();
+crates/ramp-core\src\service\deposit.rs:642:        let state = service.process_kyt_check(kyt_req).await.unwrap();
+crates/ramp-core\src\service\deposit.rs:678:        let create_res = service.create_deposit(create_req).await.unwrap();
+crates/ramp-core\src\service\deposit.rs:685:            .unwrap();
+crates/ramp-core\src\service\deposit.rs:696:        let state = service.process_kyt_check(kyt_req).await.unwrap();
+crates/ramp-core\src\service\deposit.rs:731:        let create_res = service.create_deposit(create_req).await.unwrap();
+crates/ramp-core\src\service\deposit.rs:739:            .unwrap();
+crates/ramp-core\src\service\deposit.rs:745:            .unwrap();
+crates/ramp-core\src\service\deposit.rs:748:        let txs = ledger_repo.transactions.lock().unwrap();
+crates/ramp-core\src\service\deposit.rs:753:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\deposit.rs:788:        let res1 = service.create_deposit(req.clone()).await.unwrap();
+crates/ramp-core\src\service\deposit.rs:791:        let res2 = service.create_deposit(req).await.unwrap();
+crates/ramp-core\src\service\deposit.rs:797:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-compliance\tests\integration_tests.rs:14:    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+crates/ramp-compliance\tests\integration_tests.rs:17:        .expect("Failed to connect to database");
+crates/ramp-compliance\tests\integration_tests.rs:38:        .expect("Failed to create case");
+crates/ramp-compliance\tests\integration_tests.rs:44:        .expect("Failed to get user cases");
+crates/ramp-compliance\tests\integration_tests.rs:49:        .expect("Case not found");
+crates/ramp-compliance\tests\integration_tests.rs:64:        .expect("Failed to add note");
+crates/ramp-compliance\tests\integration_tests.rs:70:        .expect("Failed to update status");
+crates/ramp-compliance\tests\integration_tests.rs:76:        .expect("Failed to get user cases");
+crates/ramp-compliance\tests\integration_tests.rs:80:        .expect("Case not found");
+crates/ramp-compliance\tests\integration_tests.rs:87:        .expect("Failed to get notes");
+crates/ramp-compliance\tests\integration_tests.rs:100:        .expect("Failed to resolve case");
+crates/ramp-compliance\tests\integration_tests.rs:106:        .expect("Failed to get user cases");
+crates/ramp-compliance\tests\integration_tests.rs:110:        .expect("Case not found");
+crates/ramp-compliance\tests\recon_test.rs:95:        .unwrap();
+crates/ramp-compliance\tests\recon_test.rs:103:        .unwrap();
+crates/ramp-compliance\tests\recon_test.rs:111:        .unwrap();
+crates/ramp-compliance\tests\recon_test.rs:122:    let txs = engine.ingest_csv(csv_data).unwrap();
+crates/ramp-core\src\service\ledger.rs:144:            .unwrap();
+crates/ramp-core\src\temporal_worker.rs:744:        let workflow_id = client.start_payin(input).await.unwrap();
+crates/ramp-core\src\temporal_worker.rs:786:        let workflow_id = client.start_payout(input).await.unwrap();
+crates/ramp-api\tests\e2e_flows.rs:199:        .expect("Failed to create lazy pool");
+crates/ramp-api\tests\e2e_flows.rs:256:        .body(Body::from(serde_json::to_string(&create_request).unwrap()))
+crates/ramp-api\tests\e2e_flows.rs:257:        .unwrap();
+crates/ramp-api\tests\e2e_flows.rs:259:    let response = ctx.app.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\e2e_flows.rs:266:        .unwrap();
+crates/ramp-api\tests\e2e_flows.rs:267:    let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_flows.rs:269:    let intent_id = intent_resp["intentId"].as_str().unwrap().to_string();
+crates/ramp-api\tests\e2e_flows.rs:270:    let reference_code = intent_resp["referenceCode"].as_str().unwrap().to_string();
+crates/ramp-api\tests\e2e_flows.rs:273:    let status = intent_resp["status"].as_str().unwrap();
+crates/ramp-api\tests\e2e_flows.rs:293:        .body(Body::from(serde_json::to_string(&confirm_request).unwrap()))
+crates/ramp-api\tests\e2e_flows.rs:294:        .unwrap();
+crates/ramp-api\tests\e2e_flows.rs:296:    let response_confirm = ctx.app.clone().oneshot(request_confirm).await.unwrap();
+crates/ramp-api\tests\e2e_flows.rs:300:    let intents = ctx.intent_repo.intents.lock().unwrap();
+crates/ramp-api\tests\e2e_flows.rs:301:    let intent = intents.iter().find(|i| i.id == intent_id).unwrap();
+crates/ramp-api\tests\e2e_flows.rs:305:    let txs = ctx.ledger_repo.transactions.lock().unwrap();
+crates/ramp-api\tests\e2e_flows.rs:312:        .expect("Transaction not found");
+crates/ramp-api\tests\e2e_flows.rs:359:        .body(Body::from(serde_json::to_string(&create_request).unwrap()))
+crates/ramp-api\tests\e2e_flows.rs:360:        .unwrap();
+crates/ramp-api\tests\e2e_flows.rs:362:    let response = ctx.app.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\e2e_flows.rs:367:        .unwrap();
+crates/ramp-api\tests\e2e_flows.rs:368:    let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_flows.rs:369:    let intent_id_str = intent_resp["intentId"].as_str().unwrap().to_string();
+crates/ramp-api\tests\e2e_flows.rs:377:    let txs = ctx.ledger_repo.transactions.lock().unwrap();
+crates/ramp-api\tests\e2e_flows.rs:393:        .expect("Failed to confirm payout");
+crates/ramp-api\tests\e2e_flows.rs:396:    let intents = ctx.intent_repo.intents.lock().unwrap();
+crates/ramp-api\tests\e2e_flows.rs:397:    let intent = intents.iter().find(|i| i.id == intent_id_str).unwrap();
+crates/ramp-api\tests\e2e_flows.rs:411:        .unwrap();
+crates/ramp-api\tests\e2e_flows.rs:435:        .body(Body::from(serde_json::to_string(&aml_request).unwrap()))
+crates/ramp-api\tests\e2e_flows.rs:436:        .unwrap();
+crates/ramp-api\tests\e2e_flows.rs:438:    let response_aml = ctx.app.clone().oneshot(request_aml).await.unwrap();
+crates/ramp-api\tests\e2e_flows.rs:443:        .unwrap();
+crates/ramp-api\tests\e2e_flows.rs:444:    let intent_resp_aml: serde_json::Value = serde_json::from_slice(&body_bytes_aml).unwrap();
+crates/ramp-api\tests\e2e_flows.rs:470:        .body(Body::from(serde_json::to_string(&trade_request).unwrap()))
+crates/ramp-api\tests\e2e_flows.rs:471:        .unwrap();
+crates/ramp-api\tests\e2e_flows.rs:473:    let response = ctx.app.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\e2e_flows.rs:477:    let txs = ctx.ledger_repo.transactions.lock().unwrap();
+crates/ramp-api\tests\e2e_flows.rs:481:    let tx = txs.iter().find(|t| !t.intent_id.0.is_empty()).unwrap();
+crates/ramp-compliance\src\case\notes_tests.rs:21:            .unwrap();
+crates/ramp-compliance\src\case\notes_tests.rs:37:            .unwrap();
+crates/ramp-compliance\src\case\notes_tests.rs:51:            .unwrap();
+crates/ramp-compliance\src\case\notes_tests.rs:60:            .unwrap();
+crates/ramp-core\src\test_utils.rs:36:        self.intents.lock().unwrap().push(intent.clone());
+crates/ramp-core\src\test_utils.rs:41:        let intents = self.intents.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:50:        let intents = self.intents.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:62:        let intents = self.intents.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:75:        let mut intents = self.intents.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:89:        let mut intents = self.intents.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:104:        let intents = self.intents.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:115:        let intents = self.intents.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:148:        let intents = self.intents.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:153:            .unwrap()
+crates/ramp-core\src\test_utils.rs:155:            .unwrap();
+crates/ramp-core\src\test_utils.rs:184:        let intents = self.intents.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:189:            .unwrap()
+crates/ramp-core\src\test_utils.rs:191:            .unwrap();
+crates/ramp-core\src\test_utils.rs:220:        let intents = self.intents.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:225:            .unwrap()
+crates/ramp-core\src\test_utils.rs:227:            .unwrap();
+crates/ramp-core\src\test_utils.rs:259:        let intents = self.intents.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:264:            .unwrap()
+crates/ramp-core\src\test_utils.rs:266:            .unwrap()
+crates/ramp-core\src\test_utils.rs:268:            .unwrap();
+crates/ramp-core\src\test_utils.rs:300:        let intents = self.intents.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:328:        let intents = self.intents.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:333:            .unwrap()
+crates/ramp-core\src\test_utils.rs:335:            .unwrap();
+crates/ramp-core\src\test_utils.rs:361:        let intents = self.intents.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:411:        let mut balances = self.balances.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:423:        self.transactions.lock().unwrap().push(tx);
+crates/ramp-core\src\test_utils.rs:433:        let txs = self.transactions.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:466:        let balances = self.balances.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:480:        Ok(self.balances.lock().unwrap().clone())
+crates/ramp-core\src\test_utils.rs:492:        let balances = self.balances.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:510:        self.transactions.lock().unwrap().push(tx);
+crates/ramp-core\src\test_utils.rs:521:        let txs = self.transactions.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:559:        let balances = self.balances.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:588:        self.users.lock().unwrap().push(user);
+crates/ramp-core\src\test_utils.rs:595:        let users = self.users.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:600:        self.users.lock().unwrap().push(user.clone());
+crates/ramp-core\src\test_utils.rs:610:        let mut users = self.users.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:623:        let mut users = self.users.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:636:        let mut users = self.users.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:650:        let mut users = self.users.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:671:        let users = self.users.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:699:        let users = self.users.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:715:        let users = self.users.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:729:        let users = self.users.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:758:        self.tenants.lock().unwrap().push(tenant);
+crates/ramp-core\src\test_utils.rs:765:        let tenants = self.tenants.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:770:        let tenants = self.tenants.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:784:        self.tenants.lock().unwrap().push(tenant.clone());
+crates/ramp-core\src\test_utils.rs:789:        let mut tenants = self.tenants.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:797:        let mut tenants = self.tenants.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:805:        let mut tenants = self.tenants.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:818:        let mut tenants = self.tenants.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:832:        let mut tenants = self.tenants.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:846:        let mut tenants = self.tenants.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:855:        let mut tenants = self.tenants.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:863:        let tenants = self.tenants.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:896:        self.events.lock().unwrap().push(event.clone());
+crates/ramp-core\src\test_utils.rs:901:        let events = self.events.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:911:        let mut events = self.events.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:926:        let mut events = self.events.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:937:        let mut events = self.events.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:950:        let events = self.events.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:966:        let events = self.events.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:981:        let events = self.events.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:989:        let mut events = self.events.lock().unwrap();
+crates/ramp-core\src\test_utils.rs:1033:        repo.create(&intent).await.unwrap();
+crates/ramp-core\src\test_utils.rs:1041:            .unwrap();
+crates/ramp-core\src\test_utils.rs:1043:        assert_eq!(found.unwrap().id, "intent-1");
+crates/ramp-core\src\test_utils.rs:1048:            .unwrap();
+crates/ramp-core\src\test_utils.rs:1057:            .unwrap();
+crates/ramp-core\src\test_utils.rs:1084:            .unwrap();
+crates/ramp-core\src\test_utils.rs:1086:        assert_eq!(found.unwrap().kyc_tier, 1);
+crates/ramp-core\src\test_utils.rs:1090:            .unwrap();
+crates/ramp-core\src\test_utils.rs:1094:            .unwrap();
+crates/ramp-core\src\test_utils.rs:1095:        assert_eq!(updated.unwrap().kyc_tier, 2);
+crates/ramp-core\src\test_utils.rs:1119:        let found = repo.get_by_id(&TenantId::new("tenant-1")).await.unwrap();
+crates/ramp-core\src\test_utils.rs:1122:        let by_hash = repo.get_by_api_key_hash("hash123").await.unwrap();
+crates/ramp-api\tests\e2e_payin.rs:54:        .expect("Failed to connect to DB");
+crates/ramp-api\tests\e2e_payin.rs:60:        .expect("Failed to run migrations");
+crates/ramp-api\tests\e2e_payin.rs:96:        .expect("Failed to create tenant");
+crates/ramp-api\tests\e2e_payin.rs:116:        .expect("Failed to create user");
+crates/ramp-api\tests\e2e_payin.rs:130:    .expect("Failed to create rails adapter");
+crates/ramp-api\tests\e2e_payin.rs:224:        .unwrap();
+crates/ramp-api\tests\e2e_payin.rs:226:    let response = app.clone().oneshot(req).await.unwrap();
+crates/ramp-api\tests\e2e_payin.rs:231:        .unwrap();
+crates/ramp-api\tests\e2e_payin.rs:232:    let resp_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_payin.rs:234:    let intent_id = resp_json["intentId"].as_str().unwrap().to_string();
+crates/ramp-api\tests\e2e_payin.rs:235:    let reference_code = resp_json["referenceCode"].as_str().unwrap().to_string();
+crates/ramp-api\tests\e2e_payin.rs:236:    let status = resp_json["status"].as_str().unwrap();
+crates/ramp-api\tests\e2e_payin.rs:259:        .unwrap();
+crates/ramp-api\tests\e2e_payin.rs:261:    let response = app.clone().oneshot(req).await.unwrap();
+crates/ramp-api\tests\e2e_payin.rs:266:        .unwrap();
+crates/ramp-api\tests\e2e_payin.rs:267:    let resp_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_payin.rs:280:            .unwrap();
+crates/ramp-api\tests\e2e_payin.rs:282:        let response = app.clone().oneshot(req).await.unwrap();
+crates/ramp-api\tests\e2e_payin.rs:286:                .unwrap();
+crates/ramp-api\tests\e2e_payin.rs:287:            let resp_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_payin.rs:288:            poll_status = resp_json["status"].as_str().unwrap().to_string();
+crates/ramp-api\tests\e2e_payin.rs:307:        .unwrap();
+crates/ramp-api\tests\e2e_payin.rs:309:    let response = app.clone().oneshot(req).await.unwrap();
+crates/ramp-api\tests\e2e_payin.rs:314:        .unwrap();
+crates/ramp-api\tests\e2e_payin.rs:315:    let balances: Vec<serde_json::Value> = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_payin.rs:324:    let balance_amount = vnd_balance.unwrap()["balance"].as_str().unwrap(); // API returns Decimal as string usually
+crates/ramp-api\tests\e2e_payin.rs:330:    let balance_decimal: Decimal = if let Some(n) = vnd_balance.unwrap()["balance"].as_f64() {
+crates/ramp-api\tests\e2e_payin.rs:332:    } else if let Some(s) = vnd_balance.unwrap()["balance"].as_str() {
+crates/ramp-api\tests\e2e_payin.rs:333:        s.parse().unwrap()
+crates/ramp-api\src\extract_test.rs:39:                .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\src\extract_test.rs:40:                .unwrap(),
+crates/ramp-api\src\extract_test.rs:43:        .unwrap();
+crates/ramp-api\src\extract_test.rs:63:                .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\src\extract_test.rs:64:                .unwrap(),
+crates/ramp-api\src\extract_test.rs:67:        .unwrap();
+crates/ramp-api\src\extract_test.rs:74:        .unwrap();
+crates/ramp-api\src\extract_test.rs:75:    let body_str = String::from_utf8(body.to_vec()).unwrap();
+crates/ramp-api\src\extract_test.rs:95:                .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\src\extract_test.rs:96:                .unwrap(),
+crates/ramp-api\src\extract_test.rs:99:        .unwrap();
+crates/ramp-api\src\extract_test.rs:105:        .unwrap();
+crates/ramp-api\src\extract_test.rs:106:    let body_str = String::from_utf8(body.to_vec()).unwrap();
+crates/ramp-api\src\extract_test.rs:122:                .unwrap(),
+crates/ramp-api\src\extract_test.rs:125:        .unwrap();
+crates/ramp-api\src\extract_test.rs:131:        .unwrap();
+crates/ramp-api\src\extract_test.rs:132:    let body_str = String::from_utf8(body.to_vec()).unwrap();
+crates/ramp-api\src\extract_test.rs:150:                .unwrap(),
+crates/ramp-api\src\extract_test.rs:153:        .unwrap();
+crates/ramp-api\src\extract_test.rs:159:        .unwrap();
+crates/ramp-api\src\extract_test.rs:160:    let body_str = String::from_utf8(body.to_vec()).unwrap();
+crates/ramp-api\src\extract_test.rs:175:                .unwrap(),
+crates/ramp-api\src\extract_test.rs:178:        .unwrap();
+crates/ramp-api\src\extract_test.rs:198:                .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\src\extract_test.rs:199:                .unwrap(),
+crates/ramp-api\src\extract_test.rs:202:        .unwrap();
+crates/ramp-api\src\extract_test.rs:208:        .unwrap();
+crates/ramp-api\src\extract_test.rs:209:    let body_str = String::from_utf8(body.to_vec()).unwrap();
+crates/ramp-compliance\src\kyc\mock.rs:79:            .unwrap()
+crates/ramp-compliance\src\kyc\mock.rs:92:        if let Some(record) = self.verifications.lock().unwrap().get_mut(reference) {
+crates/ramp-compliance\src\kyc\mock.rs:167:            .unwrap()
+crates/ramp-compliance\src\kyc\mock.rs:191:        let verifications = self.verifications.lock().unwrap();
+crates/ramp-compliance\src\kyc\mock.rs:293:        let result = provider.verify(&request).await.unwrap();
+crates/ramp-compliance\src\kyc\mock.rs:316:        let result = provider.verify(&request).await.unwrap();
+crates/ramp-core\src\service\onboarding.rs:234:            .unwrap();
+crates/ramp-core\src\service\onboarding.rs:251:            .unwrap();
+crates/ramp-core\src\service\onboarding.rs:254:        let keys = service.generate_api_keys(&tenant_id).await.unwrap();
+crates/ramp-core\src\workflows\activities.rs:1206:        assert_eq!(result.unwrap(), "REF123");
+crates/ramp-core\src\workflows\activities.rs:1232:        assert!(result.unwrap()); // Should pass for 100M VND
+crates/ramp-core\src\workflows\activities.rs:1251:        assert!(!result.unwrap()); // Should fail for 2B VND
+crates/ramp-core\src\workflows\activities.rs:1259:        assert!(result.unwrap().contains("CASE_"));
+crates/ramp-api\tests\e2e_payin_test.rs:54:        .expect("Failed to connect to DB");
+crates/ramp-api\tests\e2e_payin_test.rs:60:        .expect("Failed to run migrations");
+crates/ramp-api\tests\e2e_payin_test.rs:96:        .expect("Failed to create tenant");
+crates/ramp-api\tests\e2e_payin_test.rs:116:        .expect("Failed to create user");
+crates/ramp-api\tests\e2e_payin_test.rs:130:    .expect("Failed to create rails adapter");
+crates/ramp-api\tests\e2e_payin_test.rs:209:        .unwrap();
+crates/ramp-api\tests\e2e_payin_test.rs:211:    let response = app.clone().oneshot(req).await.unwrap();
+crates/ramp-api\tests\e2e_payin_test.rs:216:        .unwrap();
+crates/ramp-api\tests\e2e_payin_test.rs:217:    let resp_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_payin_test.rs:219:    let intent_id = resp_json["intentId"].as_str().unwrap().to_string();
+crates/ramp-api\tests\e2e_payin_test.rs:220:    let reference_code = resp_json["referenceCode"].as_str().unwrap().to_string();
+crates/ramp-api\tests\e2e_payin_test.rs:221:    let status = resp_json["status"].as_str().unwrap();
+crates/ramp-api\tests\e2e_payin_test.rs:229:        .unwrap()
+crates/ramp-api\tests\e2e_payin_test.rs:230:        .expect("Intent not found in DB");
+crates/ramp-api\tests\e2e_payin_test.rs:253:        .unwrap();
+crates/ramp-api\tests\e2e_payin_test.rs:255:    let response = app.clone().oneshot(req).await.unwrap();
+crates/ramp-api\tests\e2e_payin_test.rs:260:        .unwrap();
+crates/ramp-api\tests\e2e_payin_test.rs:261:    let resp_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_payin_test.rs:268:        .unwrap();
+crates/ramp-api\tests\e2e_payin_test.rs:287:        .unwrap();
+crates/ramp-api\tests\e2e_payin_test.rs:292:    assert_eq!(user_balance.unwrap().balance, Decimal::from(amount));
+crates/ramp-api\src\handlers\aa.rs:923:        let result = hex_to_bytes("0x1234").unwrap();
+crates/ramp-api\src\handlers\aa.rs:926:        let result = hex_to_bytes("abcd").unwrap();
+crates/ramp-api\src\handlers\aa.rs:1015:                let mut accounts = self.accounts.lock().unwrap();
+crates/ramp-api\src\handlers\aa.rs:1031:                let accounts = self.accounts.lock().unwrap();
+crates/ramp-api\src\handlers\aa.rs:1048:                let accounts = self.accounts.lock().unwrap();
+crates/ramp-api\src\handlers\aa.rs:1089:                let mut accounts = self.accounts.lock().unwrap();
+crates/ramp-api\src\handlers\aa.rs:1152:            .unwrap();
+crates/ramp-api\src\handlers\aa.rs:1184:            .unwrap();
+crates/ramp-api\src\handlers\aa.rs:1214:            .unwrap();
+crates/ramp-api\src\handlers\aa.rs:1258:            .unwrap();
+crates/ramp-api\src\handlers\aa.rs:1291:            .unwrap();
+crates/ramp-api\src\handlers\aa.rs:1328:            .unwrap();
+crates/ramp-api\src\handlers\aa.rs:1362:            .unwrap();
+crates/ramp-api\src\handlers\aa.rs:1390:            .unwrap();
+crates/ramp-compliance\src\config\thresholds.rs:75:        let configs = self.configs.read().unwrap();
+crates/ramp-compliance\src\config\thresholds.rs:83:        let mut configs = self.configs.write().unwrap();
+crates/ramp-compliance\src\config\thresholds.rs:153:        manager.update_config(tenant, new_config).unwrap();
+crates/ramp-core\src\service\onboarding_test.rs:36:        .expect("Failed to create tenant");
+crates/ramp-core\src\service\onboarding_test.rs:46:        .expect("Failed to generate API keys");
+crates/ramp-core\src\service\onboarding_test.rs:52:    let updated_tenant = tenant_repo.get_by_id(&tenant_id).await.unwrap().unwrap();
+crates/ramp-core\src\service\onboarding_test.rs:59:        .expect("Failed to configure webhook");
+crates/ramp-core\src\service\onboarding_test.rs:61:    let updated_tenant = tenant_repo.get_by_id(&tenant_id).await.unwrap().unwrap();
+crates/ramp-core\src\service\onboarding_test.rs:72:        .expect("Failed to set limits");
+crates/ramp-core\src\service\onboarding_test.rs:74:    let updated_tenant = tenant_repo.get_by_id(&tenant_id).await.unwrap().unwrap();
+crates/ramp-core\src\service\onboarding_test.rs:82:        .expect("Failed to activate tenant");
+crates/ramp-core\src\service\onboarding_test.rs:84:    let active_tenant = tenant_repo.get_by_id(&tenant_id).await.unwrap().unwrap();
+crates/ramp-core\src\service\onboarding_test.rs:91:        .expect("Failed to suspend tenant");
+crates/ramp-core\src\service\onboarding_test.rs:93:    let suspended_tenant = tenant_repo.get_by_id(&tenant_id).await.unwrap().unwrap();
+crates/ramp-core\src\workflows\compensation.rs:259:        Ok(self.result.as_ref().unwrap())
+crates/ramp-api\tests\e2e_payout_test.rs:125:        .expect("Failed to create lazy pool");
+crates/ramp-api\tests\e2e_payout_test.rs:224:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\e2e_payout_test.rs:225:        .unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:227:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:232:        .unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:233:    let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:234:    let intent_id_str = intent_resp["intentId"].as_str().unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:235:    let status = intent_resp["status"].as_str().unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:244:    let txs = app.ledger_repo.transactions.lock().unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:271:        .unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:274:    let intents = app.intent_repo.intents.lock().unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:275:    let intent = intents.iter().find(|i| i.id == intent_id_str).unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:285:    let txs = app.ledger_repo.transactions.lock().unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:308:        .unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:323:        .expect("Should have intent.created event");
+crates/ramp-api\tests\e2e_payout_test.rs:335:        .expect("Should have intent.status_changed event for COMPLETED");
+crates/ramp-api\tests\e2e_payout_test.rs:367:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\e2e_payout_test.rs:368:        .unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:370:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:407:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\e2e_payout_test.rs:408:        .unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:410:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:415:        .unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:416:    let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:417:    let status = intent_resp["status"].as_str().unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:454:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\e2e_payout_test.rs:455:        .unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:457:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:462:        .unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:463:    let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:464:    let intent_id_str = intent_resp["intentId"].as_str().unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:478:        .unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:481:    let intents = app.intent_repo.intents.lock().unwrap();
+crates/ramp-api\tests\e2e_payout_test.rs:482:    let intent = intents.iter().find(|i| i.id == intent_id_str).unwrap();
+crates/ramp-compliance\src\providers\factory.rs:16:            panic!("Onfido provider not yet implemented");
+crates/ramp-compliance\src\providers\factory.rs:20:            panic!("Jumio provider not yet implemented");
+crates/ramp-compliance\src\providers\factory.rs:29:            panic!("Chainalysis provider not yet implemented");
+crates/ramp-compliance\src\providers\factory.rs:32:            panic!("Elliptic provider not yet implemented");
+crates/ramp-compliance\src\providers\factory.rs:44:                .expect("OpenSanctions requires api_key"),
+crates/ramp-compliance\src\providers\factory.rs:54:            let _bucket = config.bucket.clone().expect("S3 requires bucket name");
+crates/ramp-compliance\src\providers\factory.rs:85:            panic!("S3 provider initialization requires async context or pre-loaded config");
+crates/ramp-compliance\src\providers\factory.rs:97:            let bucket = config.bucket.clone().expect("S3 requires bucket name");
+crates/ramp-compliance\src\providers\factory.rs:103:                Err(e) => panic!("Failed to create S3 storage: {:?}", e),
+crates/ramp-core\src\service\payin.rs:406:        let res = service.create_payin(req).await.unwrap();
+crates/ramp-core\src\service\payin.rs:411:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\payin.rs:457:        intent_repo.create(&intent_row).await.unwrap();
+crates/ramp-core\src\service\payin.rs:468:        let res = service.confirm_payin(req).await.unwrap();
+crates/ramp-core\src\service\payin.rs:472:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\payin.rs:477:        let txs = ledger_repo.transactions.lock().unwrap();
+crates/ramp-core\src\workflows\mod.rs:142:        let json = serde_json::to_string(&input).unwrap();
+crates/ramp-core\src\workflows\mod.rs:146:        let parsed: PayinWorkflowInput = serde_json::from_str(&json).unwrap();
+crates/ramp-core\src\workflows\mod.rs:165:        let json = serde_json::to_string(&input).unwrap();
+crates/ramp-api\src\openapi.rs:119:        let components = openapi.components.as_mut().unwrap();
+crates/ramp-api\src\openapi.rs:210:        let json = spec.to_json().unwrap();
+crates/ramp-compliance\src\kyc\tier_tests.rs:81:            .unwrap();
+crates/ramp-compliance\src\kyc\tier_tests.rs:106:            .unwrap();
+crates/ramp-core\src\workflows\payin.rs:294:        let result = workflow.execute(input, signal_provider).await.unwrap();
+crates/ramp-core\src\workflows\payin.rs:318:        let result = workflow.execute(input, signal_provider).await.unwrap();
+crates/ramp-core\src\workflows\payin.rs:349:        let result = workflow.execute(input, signal_provider).await.unwrap();
+crates/ramp-api\src\handlers\admin\mod.rs:726:            now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc(),
+crates/ramp-api\src\handlers\admin\mod.rs:890:        let json = serde_json::to_string(&stats).unwrap();
+crates/ramp-api\src\handlers\bank_webhooks.rs:243:            Ok(Json(serde_json::to_value(response).unwrap()))
+crates/ramp-api\src\handlers\bank_webhooks.rs:249:            Ok(Json(serde_json::to_value(response).unwrap()))
+crates/ramp-api\src\handlers\bank_webhooks.rs:257:            Ok(Json(serde_json::to_value(response).unwrap()))
+crates/ramp-api\src\handlers\bank_webhooks.rs:306:    let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC can take key of any size");
+crates/ramp-api\src\handlers\bank_webhooks.rs:329:    let mut mac = Hmac::<Sha512>::new_from_slice(secret).expect("HMAC can take key of any size");
+crates/ramp-api\src\handlers\bank_webhooks.rs:641:        let payload: VietQrWebhookPayload = serde_json::from_str(json).unwrap();
+crates/ramp-api\src\handlers\bank_webhooks.rs:660:        let payload: NapasWebhookPayload = serde_json::from_str(json).unwrap();
+crates/ramp-compliance\src\rules\sanctions.rs:187:        let result = rule.evaluate(&ctx).await.unwrap();
+crates/ramp-compliance\src\rules\sanctions.rs:211:        let result = rule.evaluate(&ctx).await.unwrap();
+crates/ramp-api\tests\e2e_tests.rs:201:        .expect("Failed to create lazy pool");
+crates/ramp-api\tests\e2e_tests.rs:267:            .body(Body::from(serde_json::to_string(&create_request).unwrap()))
+crates/ramp-api\tests\e2e_tests.rs:268:            .unwrap();
+crates/ramp-api\tests\e2e_tests.rs:270:        let response = ctx.app.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\e2e_tests.rs:275:            .unwrap();
+crates/ramp-api\tests\e2e_tests.rs:276:        let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_tests.rs:278:        let intent_id = intent_resp["intentId"].as_str().unwrap().to_string();
+crates/ramp-api\tests\e2e_tests.rs:279:        let reference_code = intent_resp["referenceCode"].as_str().unwrap().to_string();
+crates/ramp-api\tests\e2e_tests.rs:280:        let status = intent_resp["status"].as_str().unwrap();
+crates/ramp-api\tests\e2e_tests.rs:301:            .body(Body::from(serde_json::to_string(&confirm_request).unwrap()))
+crates/ramp-api\tests\e2e_tests.rs:302:            .unwrap();
+crates/ramp-api\tests\e2e_tests.rs:304:        let response_confirm = ctx.app.clone().oneshot(request_confirm).await.unwrap();
+crates/ramp-api\tests\e2e_tests.rs:308:        let intents = ctx.intent_repo.intents.lock().unwrap();
+crates/ramp-api\tests\e2e_tests.rs:309:        let intent = intents.iter().find(|i| i.id == intent_id).unwrap();
+crates/ramp-api\tests\e2e_tests.rs:313:        let txs = ctx.ledger_repo.transactions.lock().unwrap();
+crates/ramp-api\tests\e2e_tests.rs:346:            .body(Body::from(serde_json::to_string(&create_request).unwrap()))
+crates/ramp-api\tests\e2e_tests.rs:347:            .unwrap();
+crates/ramp-api\tests\e2e_tests.rs:349:        let response = ctx.app.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\e2e_tests.rs:383:            .body(Body::from(serde_json::to_string(&create_request).unwrap()))
+crates/ramp-api\tests\e2e_tests.rs:384:            .unwrap();
+crates/ramp-api\tests\e2e_tests.rs:386:        let response = ctx.app.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\e2e_tests.rs:391:            .unwrap();
+crates/ramp-api\tests\e2e_tests.rs:392:        let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_tests.rs:393:        let intent_id_str = intent_resp["intentId"].as_str().unwrap().to_string();
+crates/ramp-api\tests\e2e_tests.rs:394:        let status = intent_resp["status"].as_str().unwrap();
+crates/ramp-api\tests\e2e_tests.rs:399:        let txs = ctx.ledger_repo.transactions.lock().unwrap();
+crates/ramp-api\tests\e2e_tests.rs:415:            .expect("Failed to confirm payout");
+crates/ramp-api\tests\e2e_tests.rs:418:        let intents = ctx.intent_repo.intents.lock().unwrap();
+crates/ramp-api\tests\e2e_tests.rs:419:        let intent = intents.iter().find(|i| i.id == intent_id_str).unwrap();
+crates/ramp-api\tests\e2e_tests.rs:425:        let txs = ctx.ledger_repo.transactions.lock().unwrap();
+crates/ramp-api\tests\e2e_tests.rs:438:            .unwrap();
+crates/ramp-api\tests\e2e_tests.rs:473:            .body(Body::from(serde_json::to_string(&create_request).unwrap()))
+crates/ramp-api\tests\e2e_tests.rs:474:            .unwrap();
+crates/ramp-api\tests\e2e_tests.rs:476:        let response = ctx.app.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\e2e_tests.rs:503:            .body(Body::from(serde_json::to_string(&create_request).unwrap()))
+crates/ramp-api\tests\e2e_tests.rs:504:            .unwrap();
+crates/ramp-api\tests\e2e_tests.rs:506:        let response = ctx.app.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\e2e_tests.rs:511:            .unwrap();
+crates/ramp-api\tests\e2e_tests.rs:512:        let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_tests.rs:513:        let status = intent_resp["status"].as_str().unwrap();
+crates/ramp-api\tests\e2e_tests.rs:539:            .body(Body::from(serde_json::to_string(&create_request).unwrap()))
+crates/ramp-api\tests\e2e_tests.rs:540:            .unwrap();
+crates/ramp-api\tests\e2e_tests.rs:542:        let response = ctx.app.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\e2e_tests.rs:545:            .unwrap();
+crates/ramp-api\tests\e2e_tests.rs:546:        let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\e2e_tests.rs:547:        let intent_id_str = intent_resp["intentId"].as_str().unwrap();
+crates/ramp-api\tests\e2e_tests.rs:561:            .expect("Failed to process rejection");
+crates/ramp-api\tests\e2e_tests.rs:564:        let intents = ctx.intent_repo.intents.lock().unwrap();
+crates/ramp-api\tests\e2e_tests.rs:565:        let intent = intents.iter().find(|i| i.id == intent_id_str).unwrap();
+crates/ramp-api\tests\e2e_tests.rs:603:            .body(Body::from(serde_json::to_string(&trade_request).unwrap()))
+crates/ramp-api\tests\e2e_tests.rs:604:            .unwrap();
+crates/ramp-api\tests\e2e_tests.rs:606:        let response = ctx.app.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\e2e_tests.rs:610:        let intents = ctx.intent_repo.intents.lock().unwrap();
+crates/ramp-api\tests\e2e_tests.rs:615:        let txs = ctx.ledger_repo.transactions.lock().unwrap();
+crates/ramp-api\src\middleware\auth.rs:310:        HmacSha256::new_from_slice(api_secret_str.as_bytes()).expect("HMAC can take any size key");
+crates/ramp-api\src\middleware\auth.rs:382:        headers.insert("X-Timestamp", now.to_rfc3339().parse().unwrap());
+crates/ramp-api\src\middleware\auth.rs:387:        headers.insert("X-Timestamp", past.to_rfc3339().parse().unwrap());
+crates/ramp-api\src\middleware\auth.rs:395:        headers.insert("X-Timestamp", future.to_rfc3339().parse().unwrap());
+crates/ramp-api\src\middleware\auth.rs:408:        headers.insert("X-Timestamp", now.timestamp().to_string().parse().unwrap());
+crates/ramp-api\src\middleware\auth.rs:414:            now.timestamp_millis().to_string().parse().unwrap(),
+crates/ramp-api\src\middleware\auth.rs:430:        headers.insert("X-Timestamp", "invalid".parse().unwrap());
+crates/ramp-api\src\middleware\auth.rs:465:        let mut mac = HmacSha256::new_from_slice(b"test-secret").unwrap();
+crates/ramp-compliance\src\reports\generator.rs:44:        let start_of_day = date.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+crates/ramp-compliance\src\reports\generator.rs:45:        let end_of_day = date.date_naive().and_hms_opt(23, 59, 59).unwrap().and_utc();
+crates/ramp-compliance\src\rule_parser.rs:566:        *self.rules.write().unwrap() = rules;
+crates/ramp-compliance\src\rule_parser.rs:567:        *self.version.write().unwrap() = config.version.clone();
+crates/ramp-compliance\src\rule_parser.rs:580:        self.version.read().unwrap().clone()
+crates/ramp-compliance\src\rule_parser.rs:585:        self.rules.read().unwrap().len()
+crates/ramp-compliance\src\rule_parser.rs:642:        let rules = RuleParser::parse_json(SAMPLE_RULES_JSON).unwrap();
+crates/ramp-compliance\src\rule_parser.rs:650:        let count = store.load_from_json(SAMPLE_RULES_JSON).unwrap();
+crates/ramp-compliance\src\rule_parser.rs:676:        let rules = RuleParser::parse_json(json).unwrap();
+crates/ramp-compliance\src\rule_parser.rs:695:        let rule = RuleParser::parse(json).unwrap();
+crates/ramp-compliance\src\rule_parser.rs:712:        let rule = RuleParser::parse(json).unwrap();
+crates/ramp-compliance\src\rule_parser.rs:727:        let rt = tokio::runtime::Runtime::new().unwrap();
+crates/ramp-compliance\src\rule_parser.rs:728:        let result = rt.block_on(rule.evaluate(&context)).unwrap();
+crates/ramp-compliance\src\rule_parser.rs:735:        let result = rt.block_on(rule.evaluate(&context)).unwrap();
+crates/ramp-compliance\src\rule_parser.rs:756:        let rule = RuleParser::parse(json).unwrap();
+crates/ramp-compliance\src\rule_parser.rs:773:        let rt = tokio::runtime::Runtime::new().unwrap();
+crates/ramp-compliance\src\rule_parser.rs:774:        let result = rt.block_on(rule.evaluate(&context)).unwrap();
+crates/ramp-compliance\src\rule_parser.rs:780:        let result = rt.block_on(rule.evaluate(&context2)).unwrap();
+crates/ramp-compliance\src\rule_parser.rs:786:        let result = rt.block_on(rule.evaluate(&context3)).unwrap();
+crates/ramp-compliance\src\kyc\workflow.rs:261:            let mut signals = signals.lock().unwrap();
+crates/ramp-compliance\src\kyc\workflow.rs:269:        let result = workflow.execute(input, signal_provider).await.unwrap();
+crates/ramp-compliance\src\kyc\workflow.rs:304:            let mut signals = signals.lock().unwrap();
+crates/ramp-compliance\src\kyc\workflow.rs:312:        let result = workflow.execute(input, signal_provider).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:118:        .expect("Failed to create lazy pool");
+crates/ramp-api\tests\hmac_tests.rs:167:        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take any size key");
+crates/ramp-api\tests\hmac_tests.rs:189:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:201:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:203:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:222:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:235:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:237:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:243:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:244:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:263:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:276:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:278:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:284:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:285:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:304:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:317:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:319:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:336:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:346:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:348:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:354:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:355:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:372:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:383:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:385:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:407:    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:431:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:433:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:452:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:462:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:464:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:484:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:494:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:496:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:516:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:525:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:527:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:551:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:563:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:565:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:583:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:595:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:597:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:615:    let original_body_str = serde_json::to_string(&original_body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:634:    let modified_body_str = serde_json::to_string(&modified_body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:644:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:646:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:676:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:688:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:690:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:708:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:725:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:727:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:746:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:759:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:761:    let response1 = app.router.clone().oneshot(request1).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:775:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:777:    let response2 = app.router.oneshot(request2).await.unwrap();
+crates/ramp-api\tests\hmac_tests.rs:796:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\hmac_tests.rs:807:        .unwrap();
+crates/ramp-api\tests\hmac_tests.rs:809:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\src\middleware\idempotency.rs:166:            .unwrap()
+crates/ramp-api\src\middleware\idempotency.rs:169:        let mut responses = self.responses.lock().unwrap();
+crates/ramp-api\src\middleware\idempotency.rs:191:            .unwrap()
+crates/ramp-api\src\middleware\idempotency.rs:194:        let mut responses = self.responses.lock().unwrap();
+crates/ramp-api\src\middleware\idempotency.rs:203:            .unwrap()
+crates/ramp-api\src\middleware\idempotency.rs:206:        let mut locks = self.locks.lock().unwrap();
+crates/ramp-api\src\middleware\idempotency.rs:221:        let mut locks = self.locks.lock().unwrap();
+crates/ramp-api\src\middleware\idempotency.rs:341:            .unwrap();
+crates/ramp-api\src\middleware\idempotency.rs:421:        let json = serde_json::to_string(&stored).unwrap();
+crates/ramp-api\src\middleware\idempotency.rs:422:        let parsed: StoredResponse = serde_json::from_str(&json).unwrap();
+crates/ramp-core\src\service\payout.rs:451:        let res = service.create_payout(req).await.unwrap();
+crates/ramp-core\src\service\payout.rs:455:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\payout.rs:459:        let txs = ledger_repo.transactions.lock().unwrap();
+crates/ramp-core\src\service\payout.rs:517:        let create_res = service.create_payout(create_req).await.unwrap();
+crates/ramp-core\src\service\payout.rs:532:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\payout.rs:533:        let intent = intents.iter().find(|i| i.id == intent_id.0).unwrap();
+crates/ramp-core\src\service\payout.rs:537:        let txs = ledger_repo.transactions.lock().unwrap();
+crates/ramp-core\src\service\payout.rs:611:        let create_res = service.create_payout(create_req).await.unwrap();
+crates/ramp-core\src\service\payout.rs:626:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\payout.rs:627:        let intent = intents.iter().find(|i| i.id == intent_id.0).unwrap();
+crates/ramp-core\src\service\payout.rs:631:        let txs = ledger_repo.transactions.lock().unwrap();
+crates/ramp-core\src\service\timeout.rs:136:        intent_repo.create(&expired_payin).await.unwrap();
+crates/ramp-core\src\service\timeout.rs:139:        let count = service.process_expired_batch(10).await.unwrap();
+crates/ramp-core\src\service\timeout.rs:143:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\timeout.rs:144:        let expired = intents.iter().find(|i| i.id == "payin_1").unwrap();
+crates/ramp-core\src\workflows\payout.rs:590:        .unwrap();
+crates/ramp-core\src\workflows\payout.rs:600:            .unwrap();
+crates/ramp-core\src\workflows\payout.rs:609:            .unwrap();
+crates/ramp-core\src\workflows\payout.rs:625:        .unwrap();
+crates/ramp-core\src\workflows\payout.rs:635:            .unwrap();
+crates/ramp-core\src\workflows\payout.rs:642:            .unwrap();
+crates/ramp-core\src\workflows\payout.rs:680:        let txs = ledger_repo.transactions.lock().unwrap();
+crates/ramp-core\src\workflows\payout.rs:706:        let txs = ledger_repo.transactions.lock().unwrap();
+crates/ramp-core\src\workflows\payout.rs:733:        let txs = ledger_repo.transactions.lock().unwrap();
+crates/ramp-api\tests\idempotency_check.rs:28:        .unwrap();
+crates/ramp-api\tests\idempotency_check.rs:30:    let response1 = app.clone().oneshot(req1).await.unwrap();
+crates/ramp-api\tests\idempotency_check.rs:35:        .unwrap();
+crates/ramp-api\tests\idempotency_check.rs:44:        .unwrap();
+crates/ramp-api\tests\idempotency_check.rs:46:    let response2 = app.clone().oneshot(req2).await.unwrap();
+crates/ramp-api\tests\idempotency_check.rs:69:        .unwrap();
+crates/ramp-api\tests\idempotency_check.rs:71:    let response1 = app.clone().oneshot(req1).await.unwrap();
+crates/ramp-api\tests\idempotency_check.rs:80:        .unwrap();
+crates/ramp-api\tests\idempotency_check.rs:82:    let response2 = app.clone().oneshot(req2).await.unwrap();
+crates/ramp-compliance\src\sanctions\mock.rs:29:        let mut names = self.blocked_names.lock().unwrap();
+crates/ramp-compliance\src\sanctions\mock.rs:34:        let mut entities = self.blocked_entities.lock().unwrap();
+crates/ramp-compliance\src\sanctions\mock.rs:39:        let mut names = self.blocked_names.lock().unwrap();
+crates/ramp-compliance\src\sanctions\mock.rs:41:        let mut entities = self.blocked_entities.lock().unwrap();
+crates/ramp-compliance\src\sanctions\mock.rs:54:        let names = self.blocked_names.lock().unwrap();
+crates/ramp-compliance\src\sanctions\mock.rs:97:        let entities = self.blocked_entities.lock().unwrap();
+crates/ramp-compliance\src\sanctions_test.rs:39:    let result = engine.check_transaction(&clean_tx).await.unwrap();
+crates/ramp-compliance\src\sanctions_test.rs:58:    let result = engine.check_transaction(&sanctioned_tx).await.unwrap();
+crates/ramp-compliance\src\sanctions_test.rs:79:    let result = engine.check_transaction(&address_tx).await.unwrap();
+crates/ramp-api\src\middleware\portal_auth.rs:245:        encode(&Header::default(), claims, &encoding_key).unwrap()
+crates/ramp-api\src\middleware\portal_auth.rs:265:        let user = result.unwrap();
+crates/ramp-api\src\middleware\portal_auth.rs:373:        let user = result.unwrap();
+crates/ramp-core\src\service\trade.rs:251:        let res = service.record_trade(req).await.unwrap();
+crates/ramp-core\src\service\trade.rs:255:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\trade.rs:260:        let txs = ledger_repo.transactions.lock().unwrap();
+crates/ramp-core\src\service\trade.rs:281:        let res = service.record_trade(req).await.unwrap();
+crates/ramp-core\src\service\trade.rs:285:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\trade.rs:307:        let res1 = service.record_trade(req.clone()).await.unwrap();
+crates/ramp-core\src\service\trade.rs:314:        let res2 = service.record_trade(req2).await.unwrap();
+crates/ramp-core\src\service\trade.rs:320:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\trade.rs:342:        let res = service.record_trade(req).await.unwrap();
+crates/ramp-core\src\service\trade.rs:346:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-compliance\src\storage\mock.rs:52:        self.storage.lock().unwrap().insert(key.clone(), data);
+crates/ramp-compliance\src\storage\mock.rs:61:        let storage = self.storage.lock().unwrap();
+crates/ramp-compliance\src\storage\mock.rs:73:        let mut storage = self.storage.lock().unwrap();
+crates/ramp-core\src\workflows\trade.rs:360:        let result = workflow.execute(input).await.unwrap();
+crates/ramp-core\src\workflows\trade.rs:384:        let result = workflow.execute(input).await.unwrap();
+crates/ramp-core\src\workflows\trade.rs:408:        let result = workflow.execute(input).await.unwrap();
+crates/ramp-core\src\workflows\trade.rs:431:        let result = workflow.execute(input).await.unwrap();
+crates/ramp-core\src\workflows\trade.rs:456:        assert_eq!(result.unwrap().status, "COMPLETED");
+crates/ramp-core\src\workflows\trade.rs:481:        assert_eq!(result.unwrap().status, "COMPLETED");
+crates/ramp-api\tests\integration_tests.rs:119:        .expect("Failed to create lazy pool");
+crates/ramp-api\tests\integration_tests.rs:188:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:190:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:212:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\integration_tests.rs:213:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:215:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:220:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:221:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\integration_tests.rs:222:    let intent_id = body.get("intent_id").and_then(|v| v.as_str()).unwrap();
+crates/ramp-api\tests\integration_tests.rs:223:    let reference_code = body.get("reference_code").and_then(|v| v.as_str()).unwrap();
+crates/ramp-api\tests\integration_tests.rs:240:        .body(Body::from(serde_json::to_string(&confirm_payload).unwrap()))
+crates/ramp-api\tests\integration_tests.rs:241:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:243:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:247:    let intents = app.intent_repo.intents.lock().unwrap();
+crates/ramp-api\tests\integration_tests.rs:248:    let intent = intents.iter().find(|i| i.id == intent_id).unwrap();
+crates/ramp-api\tests\integration_tests.rs:283:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\integration_tests.rs:284:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:286:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:310:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\integration_tests.rs:311:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:313:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:346:    app.intent_repo.create(&intent).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:353:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:355:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:377:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:379:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:384:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:385:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\integration_tests.rs:387:    let balances = body.get("balances").unwrap().as_array().unwrap();
+crates/ramp-api\tests\integration_tests.rs:388:    let vnd_balance = balances.iter().find(|b| b["currency"] == "VND").unwrap();
+crates/ramp-api\tests\integration_tests.rs:405:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:407:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:417:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:419:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:431:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:433:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:458:            .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\integration_tests.rs:459:            .unwrap();
+crates/ramp-api\tests\integration_tests.rs:461:        let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:471:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\integration_tests.rs:472:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:474:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:501:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\integration_tests.rs:502:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:504:    let response1 = app.router.clone().oneshot(request1).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:514:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\integration_tests.rs:515:        .unwrap();
+crates/ramp-api\tests\integration_tests.rs:517:    let response2 = app.router.clone().oneshot(request2).await.unwrap();
+crates/ramp-api\tests\integration_tests.rs:525:    let intents = app.intent_repo.intents.lock().unwrap();
+crates/ramp-api\src\middleware\rate_limit.rs:95:            .unwrap()
+crates/ramp-api\src\middleware\rate_limit.rs:193:            .unwrap()
+crates/ramp-api\src\middleware\rate_limit.rs:197:        let mut history = self.history.lock().unwrap();
+crates/ramp-api\src\middleware\rate_limit.rs:283:                result.reset_after_seconds.to_string().parse().unwrap(),
+crates/ramp-api\src\middleware\rate_limit.rs:337:            result.reset_after_seconds.to_string().parse().unwrap(),
+crates/ramp-api\src\middleware\rate_limit.rs:341:            .insert("X-RateLimit-Limit", limit.to_string().parse().unwrap());
+crates/ramp-api\src\middleware\rate_limit.rs:344:            .insert("X-RateLimit-Remaining", "0".parse().unwrap());
+crates/ramp-api\src\middleware\rate_limit.rs:347:            result.reset_after_seconds.to_string().parse().unwrap(),
+crates/ramp-api\src\middleware\rate_limit.rs:386:                    .unwrap(),
+crates/ramp-api\src\middleware\rate_limit.rs:401:        .insert("X-RateLimit-Limit", limit.to_string().parse().unwrap());
+crates/ramp-api\src\middleware\rate_limit.rs:404:        result.remaining.to_string().parse().unwrap(),
+crates/ramp-api\src\middleware\rate_limit.rs:408:        result.reset_after_seconds.to_string().parse().unwrap(),
+crates/ramp-compliance\src\reports\tests.rs:28:            total_volume_vnd: rust_decimal::Decimal::from_i64(1000000).unwrap(),
+crates/ramp-compliance\src\sanctions\opensanctions.rs:252:            .expect("Request failed");
+crates/ramp-compliance\src\sanctions\opensanctions.rs:282:            .expect("Request failed");
+crates/ramp-api\tests\intent_tests.rs:87:        .unwrap();
+crates/ramp-api\tests\intent_tests.rs:117:        .expect("Failed to create lazy pool");
+crates/ramp-api\tests\intent_tests.rs:155:        .unwrap();
+crates/ramp-api\tests\intent_tests.rs:157:    let response = app.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\intent_tests.rs:162:        .unwrap();
+crates/ramp-api\tests\intent_tests.rs:163:    let body_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\intent_tests.rs:232:        .expect("Failed to create lazy pool");
+crates/ramp-api\tests\intent_tests.rs:270:        .unwrap();
+crates/ramp-api\tests\intent_tests.rs:272:    let response = app.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\intent_tests.rs:356:        .unwrap();
+crates/ramp-api\tests\intent_tests.rs:386:        .expect("Failed to create lazy pool");
+crates/ramp-api\tests\intent_tests.rs:424:        .unwrap();
+crates/ramp-api\tests\intent_tests.rs:426:    let response = app.clone().oneshot(request).await.unwrap();
+crates/ramp-api\src\middleware\rate_limit_test.rs:25:    let res1 = limiter.check(key, 2).await.unwrap();
+crates/ramp-api\src\middleware\rate_limit_test.rs:30:    let res2 = limiter.check(key, 2).await.unwrap();
+crates/ramp-api\src\middleware\rate_limit_test.rs:35:    let res3 = limiter.check(key, 2).await.unwrap();
+crates/ramp-api\src\middleware\rate_limit_test.rs:42:    let res4 = limiter.check(key, 2).await.unwrap();
+crates/ramp-api\src\handlers\admin\tier.rs:475:        headers.insert("X-Admin-Key", "admin-secret-key".parse().unwrap());
+crates/ramp-api\src\handlers\admin\tier.rs:483:        headers.insert("X-Admin-Key", "wrong-key".parse().unwrap());
+crates/ramp-core\src\service\webhook.rs:60:                .expect("Failed to create HTTP client"),
+crates/ramp-compliance\src\withdraw_policy.rs:780:        *self.daily_amount.lock().unwrap() = amount;
+crates/ramp-compliance\src\withdraw_policy.rs:785:        *self.monthly_amount.lock().unwrap() = amount;
+crates/ramp-compliance\src\withdraw_policy.rs:790:        *self.hourly_count.lock().unwrap() = count;
+crates/ramp-compliance\src\withdraw_policy.rs:795:        *self.daily_count.lock().unwrap() = count;
+crates/ramp-compliance\src\withdraw_policy.rs:800:        *self.last_withdraw_time.lock().unwrap() = Some(time);
+crates/ramp-compliance\src\withdraw_policy.rs:820:        Ok(*self.daily_amount.lock().unwrap())
+crates/ramp-compliance\src\withdraw_policy.rs:828:        Ok(*self.monthly_amount.lock().unwrap())
+crates/ramp-compliance\src\withdraw_policy.rs:836:        Ok(*self.hourly_count.lock().unwrap())
+crates/ramp-compliance\src\withdraw_policy.rs:844:        Ok(*self.daily_count.lock().unwrap())
+crates/ramp-compliance\src\withdraw_policy.rs:852:        Ok(*self.last_withdraw_time.lock().unwrap())
+crates/ramp-compliance\src\withdraw_policy.rs:897:        let result = engine.check_policy(&req).await.unwrap();
+crates/ramp-compliance\src\withdraw_policy.rs:907:        let result = engine.check_policy(&req).await.unwrap();
+crates/ramp-compliance\src\withdraw_policy.rs:920:        let result = engine.check_policy(&req).await.unwrap();
+crates/ramp-compliance\src\withdraw_policy.rs:933:        let result = engine.check_policy(&req).await.unwrap();
+crates/ramp-compliance\src\withdraw_policy.rs:955:        let result = engine.check_policy(&req).await.unwrap();
+crates/ramp-compliance\src\withdraw_policy.rs:980:        let result = engine.check_policy(&req).await.unwrap();
+crates/ramp-compliance\src\withdraw_policy.rs:1008:        let result = engine.check_policy(&req).await.unwrap();
+crates/ramp-compliance\src\withdraw_policy.rs:1036:        let result = engine.check_policy(&req).await.unwrap();
+crates/ramp-compliance\src\withdraw_policy.rs:1050:        let result = engine.check_policy(&req).await.unwrap();
+crates/ramp-compliance\src\withdraw_policy.rs:1062:        let result = engine.check_policy(&req).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:66:    encode(&Header::default(), &claims, &encoding_key).unwrap()
+crates/ramp-api\tests\portal_api_tests.rs:143:        .expect("Failed to create lazy pool");
+crates/ramp-api\tests\portal_api_tests.rs:197:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:199:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:205:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:206:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:230:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_api_tests.rs:231:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:233:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:239:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:240:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:264:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_api_tests.rs:265:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:267:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:281:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:283:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:289:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:290:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:310:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:312:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:318:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:319:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:334:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:336:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:342:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:343:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:358:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:360:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:366:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:367:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:383:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:385:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:391:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:392:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:408:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:410:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:428:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:430:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:436:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:437:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:454:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:456:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:470:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:472:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:487:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:489:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:513:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_api_tests.rs:514:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:516:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:522:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:523:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:544:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_api_tests.rs:545:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:547:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:567:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_api_tests.rs:568:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:570:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:593:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_api_tests.rs:594:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:596:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:602:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:603:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:624:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_api_tests.rs:625:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:627:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:649:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_api_tests.rs:650:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:652:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:674:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_api_tests.rs:675:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:677:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:711:    app.intent_repo.create(&intent).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:718:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:720:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:726:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:727:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:741:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:743:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:761:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:763:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:776:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:778:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:791:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:793:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:812:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_api_tests.rs:813:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:815:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:833:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:835:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:841:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:842:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:858:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:860:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:894:    app.intent_repo.create(&intent).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:901:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:903:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:927:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_api_tests.rs:928:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:930:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:954:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_api_tests.rs:955:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:957:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:972:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:974:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:980:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:981:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:1003:        encode(&Header::default(), &claims, &encoding_key).unwrap()
+crates/ramp-api\tests\portal_api_tests.rs:1011:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:1013:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:1033:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_api_tests.rs:1034:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:1036:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:1052:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:1054:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:1059:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:1060:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:1076:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:1078:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:1106:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_api_tests.rs:1107:        .unwrap();
+crates/ramp-api\tests\portal_api_tests.rs:1109:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:35:    encode(&Header::default(), claims, &encoding_key).unwrap()
+crates/ramp-api\tests\portal_auth_tests.rs:86:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:88:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:94:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:95:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:124:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:126:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:132:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:133:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:152:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:154:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:168:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:170:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:176:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:177:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:181:        .unwrap()
+crates/ramp-api\tests\portal_auth_tests.rs:196:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:198:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:225:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:227:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:254:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:256:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:272:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:274:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:289:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:291:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:318:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:320:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:348:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:350:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:382:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:384:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:403:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:405:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:425:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:427:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:447:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:449:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:476:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:478:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:507:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:509:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:537:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:539:    let response = router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:545:        .unwrap();
+crates/ramp-api\tests\portal_auth_tests.rs:546:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-core\src\service\withdraw.rs:866:        let res = service.create_withdraw(req).await.unwrap();
+crates/ramp-core\src\service\withdraw.rs:870:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\withdraw.rs:876:        let txs = ledger_repo.transactions.lock().unwrap();
+crates/ramp-core\src\service\withdraw.rs:916:            _ => panic!("Expected InsufficientBalance error"),
+crates/ramp-core\src\service\withdraw.rs:958:        let create_res = service.create_withdraw(create_req).await.unwrap();
+crates/ramp-core\src\service\withdraw.rs:970:        let state = service.process_kyt_check(kyt_req).await.unwrap();
+crates/ramp-core\src\service\withdraw.rs:1012:        let create_res = service.create_withdraw(create_req).await.unwrap();
+crates/ramp-core\src\service\withdraw.rs:1024:        let state = service.process_kyt_check(kyt_req).await.unwrap();
+crates/ramp-core\src\service\withdraw.rs:1067:        let create_res = service.create_withdraw(create_req).await.unwrap();
+crates/ramp-core\src\service\withdraw.rs:1078:        service.process_kyt_check(kyt_req).await.unwrap();
+crates/ramp-core\src\service\withdraw.rs:1085:            .unwrap();
+crates/ramp-core\src\service\withdraw.rs:1093:        service.execute_withdraw(exec_req).await.unwrap();
+crates/ramp-core\src\service\withdraw.rs:1103:        service.confirm_withdraw(confirm_req).await.unwrap();
+crates/ramp-core\src\service\withdraw.rs:1106:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\withdraw.rs:1110:        let txs = ledger_repo.transactions.lock().unwrap();
+crates/ramp-core\src\service\withdraw.rs:1153:        let create_res = service.create_withdraw(create_req).await.unwrap();
+crates/ramp-core\src\service\withdraw.rs:1160:            .unwrap();
+crates/ramp-core\src\service\withdraw.rs:1163:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\withdraw.rs:1167:        let txs = ledger_repo.transactions.lock().unwrap();
+crates/ramp-core\src\service\withdraw.rs:1208:        let res1 = service.create_withdraw(req.clone()).await.unwrap();
+crates/ramp-core\src\service\withdraw.rs:1211:        let res2 = service.create_withdraw(req).await.unwrap();
+crates/ramp-core\src\service\withdraw.rs:1217:        let intents = intent_repo.intents.lock().unwrap();
+crates/ramp-core\src\service\withdraw.rs:1264:            _ => panic!("Expected Validation error"),
+crates/ramp-core\src\service\withdraw.rs:1325:        let res = service.create_withdraw(req).await.unwrap();
+crates/ramp-core\src\service\withdraw.rs:1398:        let res = service.create_withdraw(req).await.unwrap();
+crates/ramp-core\src\service\withdraw.rs:1444:        let res = service.create_withdraw(req).await.unwrap();
+crates/ramp-api\src\handlers\portal\intents.rs:516:        let json = serde_json::to_string(&intent).unwrap();
+crates/ramp-api\tests\portal_tests.rs:145:        .expect("Failed to create lazy pool");
+crates/ramp-api\tests\portal_tests.rs:221:    encode(&Header::default(), claims, &encoding_key).unwrap()
+crates/ramp-api\tests\portal_tests.rs:237:        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take any size key");
+crates/ramp-api\tests\portal_tests.rs:283:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:285:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:292:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:293:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_tests.rs:312:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:314:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:321:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:322:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_tests.rs:351:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:353:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:373:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:375:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:394:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:396:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:422:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:424:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:439:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:441:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:464:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\portal_tests.rs:475:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:477:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:496:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\portal_tests.rs:509:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:511:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:518:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:519:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_tests.rs:537:    let original_body_str = serde_json::to_string(&original_body).unwrap();
+crates/ramp-api\tests\portal_tests.rs:550:    let tampered_body_str = serde_json::to_string(&tampered_body).unwrap();
+crates/ramp-api\tests\portal_tests.rs:560:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:562:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:582:    let body_str = serde_json::to_string(&body).unwrap();
+crates/ramp-api\tests\portal_tests.rs:594:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:596:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:602:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:603:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_tests.rs:634:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_tests.rs:635:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:637:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:660:        .expect("auth_token cookie should exist");
+crates/ramp-api\tests\portal_tests.rs:679:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_tests.rs:680:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:682:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:702:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:704:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:732:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:734:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:740:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:741:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_tests.rs:755:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:757:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:763:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:764:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_tests.rs:790:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_tests.rs:791:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:793:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:818:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_tests.rs:819:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:821:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:835:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:837:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:851:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:853:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:868:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:870:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:889:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:891:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:905:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:907:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:920:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:922:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:934:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:936:    let response = app.router.clone().oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:957:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:959:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:977:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:979:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:985:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:986:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-api\tests\portal_tests.rs:990:        .unwrap()
+crates/ramp-api\tests\portal_tests.rs:1018:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:1020:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:1045:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:1047:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:1061:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:1063:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:1089:        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+crates/ramp-api\tests\portal_tests.rs:1090:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:1092:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:1098:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:1132:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:1134:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:1148:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:1150:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:1165:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:1167:    let response = app.router.oneshot(request).await.unwrap();
+crates/ramp-api\tests\portal_tests.rs:1173:        .unwrap();
+crates/ramp-api\tests\portal_tests.rs:1174:    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+crates/ramp-core\src\service\withdraw_policy_provider.rs:103:            .unwrap();
+crates/ramp-core\src\service\withdraw_policy_provider.rs:137:        intent_repo.create(&intent).await.unwrap();
+crates/ramp-core\src\service\withdraw_policy_provider.rs:144:            .unwrap();
+crates/ramp-core\src\service\withdraw_policy_provider.rs:179:            intent_repo.create(&intent).await.unwrap();
+crates/ramp-core\src\service\withdraw_policy_provider.rs:187:            .unwrap();
+crates/ramp-core\src\service\withdraw_policy_provider.rs:201:            .unwrap();
+crates/ramp-core\src\service\withdraw_policy_provider.rs:230:        intent_repo.create(&intent).await.unwrap();
+crates/ramp-core\src\service\withdraw_policy_provider.rs:235:            .unwrap();
+crates/ramp-api\tests\security_tests.rs:188:                .unwrap(),
+crates/ramp-api\tests\security_tests.rs:191:        .unwrap();
+crates/ramp-api\src\handlers\portal\transactions.rs:336:        let json = serde_json::to_string(&tx).unwrap();
+crates/ramp-api\src\handlers\portal\transactions.rs:353:        let json = serde_json::to_string(&response).unwrap();
+crates/ramp-api\src\handlers\portal\wallet.rs:350:        let json = serde_json::to_string(&info).unwrap();
