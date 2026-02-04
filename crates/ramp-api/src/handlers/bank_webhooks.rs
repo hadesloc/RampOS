@@ -307,7 +307,10 @@ fn verify_webhook_signature(
 }
 
 fn verify_hmac_sha256(secret: &[u8], data: &[u8], signature: &str) -> bool {
-    let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC can take key of any size");
+    let mut mac = match Hmac::<Sha256>::new_from_slice(secret) {
+        Ok(mac) => mac,
+        Err(_) => return false,
+    };
     mac.update(data);
 
     // Try hex-encoded signature
@@ -330,7 +333,10 @@ fn verify_hmac_sha256(secret: &[u8], data: &[u8], signature: &str) -> bool {
 }
 
 fn verify_hmac_sha512(secret: &[u8], data: &[u8], signature: &str) -> bool {
-    let mut mac = Hmac::<Sha512>::new_from_slice(secret).expect("HMAC can take key of any size");
+    let mut mac = match Hmac::<Sha512>::new_from_slice(secret) {
+        Ok(mac) => mac,
+        Err(_) => return false,
+    };
     mac.update(data);
 
     // Try hex-encoded signature
