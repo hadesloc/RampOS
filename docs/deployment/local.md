@@ -30,12 +30,12 @@ Edit `.env` with your local settings. The defaults work for Docker Compose:
 
 ```bash
 # Database
-RAMPOS__DATABASE__URL=postgres://rampos:rampos_secret@localhost:5432/rampos
+RAMPOS__DATABASE__URL=postgres://rampos:rampos_secret@rampos-postgres:5432/rampos
 RAMPOS__DATABASE__MAX_CONNECTIONS=100
 RAMPOS__DATABASE__MIN_CONNECTIONS=10
 
 # Redis
-RAMPOS__REDIS__URL=redis://localhost:6379
+RAMPOS__REDIS__URL=redis://rampos-redis:6379
 RAMPOS__REDIS__POOL_SIZE=20
 
 # NATS
@@ -200,7 +200,7 @@ docker compose up -d api
 docker exec -it rampos-postgres psql -U rampos -d rampos
 
 # Using psql locally
-psql postgres://rampos:rampos_secret@localhost:5432/rampos
+psql postgres://rampos:rampos_secret@rampos-postgres:5432/rampos
 ```
 
 ### Access Redis
