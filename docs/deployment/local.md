@@ -56,7 +56,7 @@ RAMPOS__WEBHOOK__SIGNATURE_TOLERANCE_SECS=300
 RUST_LOG=info,ramp_api=debug,ramp_core=debug
 
 # Admin
-RAMPOS_ADMIN_KEY=***REMOVED***
+RAMPOS_ADMIN_KEY=change-me-in-production
 ```
 
 ### 3. Start Infrastructure Services

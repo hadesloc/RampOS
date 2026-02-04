@@ -68,8 +68,8 @@ Run: `bash scripts/rotate-secrets.sh`
 Expected: new values printed for POSTGRES_PASSWORD, RAMPOS_ADMIN_KEY, RAMPOS_ENCRYPTION_KEY. Update `.env.example` and `k8s/base/secret.example.yaml` to use placeholders (not real values):
 
 ```dotenv
-RAMPOS_ADMIN_KEY=***REMOVED***
-RAMPOS_ENCRYPTION_KEY=***REMOVED***
+RAMPOS_ADMIN_KEY=change-me
+RAMPOS_ENCRYPTION_KEY=change-me
 RAMPOS__DATABASE__URL=postgres://rampos:${DATABASE_PASSWORD}@rampos-postgres:5432/rampos
 RAMPOS__REDIS__URL=redis://:${REDIS_PASSWORD}@rampos-redis:6379
 ```

@@ -30,7 +30,7 @@ All API requests (except health checks) require:
 # Set your credentials
 export RAMPOS_API_URL="https://api.rampos.io"
 export RAMPOS_API_KEY="your_api_key_here"
-export RAMPOS_ADMIN_KEY=***REMOVED***
+export RAMPOS_ADMIN_KEY="your_admin_key_here"
 export TENANT_ID="your_tenant_id"
 export USER_ID="user_123"
 
