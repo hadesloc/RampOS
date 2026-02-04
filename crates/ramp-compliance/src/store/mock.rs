@@ -128,12 +128,16 @@ impl CaseStore for InMemoryCaseStore {
 
     async fn update_status(
         &self,
+        tenant_id: &TenantId,
         case_id: &str,
         status: CaseStatus,
         resolved_at: Option<DateTime<Utc>>,
         resolution: Option<String>,
     ) -> Result<()> {
         if let Some(case) = self.cases.lock().await.get_mut(case_id) {
+            if &case.tenant_id != tenant_id {
+                return Err(Error::NotFound("Case not found".to_string()));
+            }
             case.status = status;
             case.resolved_at = resolved_at;
             case.resolution = resolution;
@@ -142,8 +146,11 @@ impl CaseStore for InMemoryCaseStore {
         Ok(())
     }
 
-    async fn assign_case(&self, case_id: &str, assigned_to: &str) -> Result<()> {
+    async fn assign_case(&self, tenant_id: &TenantId, case_id: &str, assigned_to: &str) -> Result<()> {
         if let Some(case) = self.cases.lock().await.get_mut(case_id) {
+            if &case.tenant_id != tenant_id {
+                return Err(Error::NotFound("Case not found".to_string()));
+            }
             case.assigned_to = Some(assigned_to.to_string());
             case.updated_at = Utc::now();
         }

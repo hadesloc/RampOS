@@ -103,7 +103,7 @@ impl CaseManager {
 
         if old_status != new_status {
             self.store
-                .update_status(case_id, new_status, None, None)
+                .update_status(tenant_id, case_id, new_status, None, None)
                 .await?;
 
             info!(
@@ -173,7 +173,7 @@ impl CaseManager {
         analyst_id: &str,
         author_id: Option<String>,
     ) -> Result<()> {
-        self.store.assign_case(case_id, analyst_id).await?;
+        self.store.assign_case(tenant_id, case_id, analyst_id).await?;
 
         info!(case_id = case_id, analyst_id = analyst_id, "Case assigned");
 
@@ -201,6 +201,7 @@ impl CaseManager {
     ) -> Result<()> {
         self.store
             .update_status(
+                tenant_id,
                 case_id,
                 new_status,
                 Some(Utc::now()),

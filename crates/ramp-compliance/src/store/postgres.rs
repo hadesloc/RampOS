@@ -36,12 +36,13 @@ pub trait CaseStore: Send + Sync {
     async fn avg_resolution_hours(&self, tenant_id: &TenantId) -> Result<f64>;
     async fn update_status(
         &self,
+        tenant_id: &TenantId,
         case_id: &str,
         status: CaseStatus,
         resolved_at: Option<DateTime<Utc>>,
         resolution: Option<String>,
     ) -> Result<()>;
-    async fn assign_case(&self, case_id: &str, assigned_to: &str) -> Result<()>;
+    async fn assign_case(&self, tenant_id: &TenantId, case_id: &str, assigned_to: &str) -> Result<()>;
     async fn add_note(&self, tenant_id: &TenantId, note: &CaseNote) -> Result<()>;
     async fn get_notes(&self, tenant_id: &TenantId, case_id: &str) -> Result<Vec<CaseNote>>;
     async fn get_user_cases(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<Vec<AmlCase>>;
@@ -258,6 +259,7 @@ impl CaseStore for PostgresCaseStore {
 
     async fn update_status(
         &self,
+        tenant_id: &TenantId,
         case_id: &str,
         status: CaseStatus,
         resolved_at: Option<DateTime<Utc>>,
@@ -267,29 +269,31 @@ impl CaseStore for PostgresCaseStore {
             r#"
             UPDATE aml_cases
             SET status = $1, resolved_at = $2, resolution = $3, updated_at = NOW()
-            WHERE id = $4
+            WHERE id = $4 AND tenant_id = $5
             "#,
         )
         .bind(serde_json::to_string(&status).unwrap_or_default())
         .bind(resolved_at)
         .bind(resolution)
         .bind(case_id)
+        .bind(tenant_id.to_string())
         .execute(&self.pool)
         .await?;
 
         Ok(())
     }
 
-    async fn assign_case(&self, case_id: &str, assigned_to: &str) -> Result<()> {
+    async fn assign_case(&self, tenant_id: &TenantId, case_id: &str, assigned_to: &str) -> Result<()> {
         sqlx::query(
             r#"
             UPDATE aml_cases
             SET assigned_to = $1, updated_at = NOW()
-            WHERE id = $2
+            WHERE id = $2 AND tenant_id = $3
             "#,
         )
         .bind(assigned_to)
         .bind(case_id)
+        .bind(tenant_id.to_string())
         .execute(&self.pool)
         .await?;
 
