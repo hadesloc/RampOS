@@ -166,7 +166,7 @@ impl IdempotencyStore for MemoryIdempotencyStore {
             .unwrap()
             .as_secs();
 
-        let mut responses = self.responses.lock().unwrap();
+        let mut responses = self.responses.lock().unwrap_or_else(|e| e.into_inner());
         if let Some((response, expires_at)) = responses.get(&full_key) {
             if *expires_at > now {
                 return Some(response.clone());
@@ -191,7 +191,7 @@ impl IdempotencyStore for MemoryIdempotencyStore {
             .unwrap()
             .as_secs();
 
-        let mut responses = self.responses.lock().unwrap();
+        let mut responses = self.responses.lock().unwrap_or_else(|e| e.into_inner());
         responses.insert(full_key, (response.clone(), now + ttl_seconds));
         Ok(())
     }
@@ -203,7 +203,7 @@ impl IdempotencyStore for MemoryIdempotencyStore {
             .unwrap()
             .as_secs();
 
-        let mut locks = self.locks.lock().unwrap();
+        let mut locks = self.locks.lock().unwrap_or_else(|e| e.into_inner());
         // Check if locked
         if let Some(expires_at) = locks.get(&lock_key) {
             if *expires_at > now {
@@ -218,7 +218,7 @@ impl IdempotencyStore for MemoryIdempotencyStore {
 
     async fn unlock(&self, tenant_id: &str, key: &str, key_prefix: &str) -> Result<(), String> {
         let lock_key = format!("{}:{}:{}:lock", key_prefix, tenant_id, key);
-        let mut locks = self.locks.lock().unwrap();
+        let mut locks = self.locks.lock().unwrap_or_else(|e| e.into_inner());
         locks.remove(&lock_key);
         Ok(())
     }
@@ -358,8 +358,8 @@ pub async fn idempotency_middleware(
             return Err(StatusCode::CONFLICT);
         }
         Err(e) => {
-            warn!(error = %e, "Idempotency lock error, proceeding anyway");
-            // Fail open
+            warn!(error = %e, "Idempotency lock error");
+            return Err(StatusCode::SERVICE_UNAVAILABLE);
         }
     }
 
@@ -389,6 +389,8 @@ pub async fn idempotency_middleware(
     // Store response (best effort)
     if let Err(e) = handler.store(&tenant_id, &idempotency_key, &stored).await {
         warn!(error = %e, "Failed to store idempotent response");
+        let _ = handler.unlock(&tenant_id, &idempotency_key).await;
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
     }
 
     // Release lock

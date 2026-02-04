@@ -194,7 +194,7 @@ impl RateLimitStore for MemoryRateLimitStore {
             .as_secs();
         let window_start = now - window_seconds;
 
-        let mut history = self.history.lock().unwrap();
+        let mut history = self.history.lock().unwrap_or_else(|e| e.into_inner());
         let entries = history.entry(full_key).or_default();
 
         // Remove old entries
@@ -285,8 +285,11 @@ pub async fn rate_limit_middleware(
             return Ok(response);
         }
         Err(e) => {
-            warn!(error = ?e, "Rate limiter error (global), allowing request");
-            // Fail open
+            warn!(error = ?e, "Rate limiter error (global)");
+            return Ok(Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .body(axum::body::Body::empty())
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?);
         }
         _ => {}
     }
@@ -315,9 +318,11 @@ pub async fn rate_limit_middleware(
     let result = match limiter.check(&tenant_key, limit).await {
         Ok(res) => res,
         Err(e) => {
-            warn!(error = ?e, "Rate limiter error (tenant), allowing request");
-            // Fail open
-            return Ok(next.run(req).await);
+            warn!(error = ?e, "Rate limiter error (tenant)");
+            return Ok(Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .body(axum::body::Body::empty())
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?);
         }
     };
 
@@ -355,13 +360,11 @@ pub async fn rate_limit_middleware(
         let endpoint_result = match limiter.check(&endpoint_key, endpoint_limit).await {
             Ok(res) => res,
             Err(e) => {
-                warn!(error = ?e, "Rate limiter error (endpoint), allowing request");
-                // Fail open, but we passed tenant check
-                RateLimitResult {
-                    allowed: true,
-                    remaining: 1,
-                    reset_after_seconds: 0,
-                }
+                warn!(error = ?e, "Rate limiter error (endpoint)");
+                return Ok(Response::builder()
+                    .status(StatusCode::SERVICE_UNAVAILABLE)
+                    .body(axum::body::Body::empty())
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?);
             }
         };
 
