@@ -13,3 +13,17 @@ rules:
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rampos-server
+  namespace: rampos
+subjects:
+- kind: ServiceAccount
+  name: rampos-server
+  namespace: rampos
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: rampos-server
