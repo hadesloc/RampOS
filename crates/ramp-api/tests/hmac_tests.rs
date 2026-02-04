@@ -464,7 +464,7 @@ async fn test_signature_with_empty_body() {
 }
 
 #[tokio::test]
-async fn test_request_without_signature_backward_compatibility() {
+async fn test_request_with_signature_required() {
     let app = setup_app_with_hmac().await;
 
     let timestamp = Utc::now().to_rfc3339();
@@ -477,20 +477,21 @@ async fn test_request_without_signature_backward_compatibility() {
         "metadata": {}
     });
     let body_str = serde_json::to_string(&body).unwrap();
+    let signature = compute_hmac_signature("POST", path, &timestamp, &body_str, &app.api_secret);
 
-    // No X-Signature header (backward compatibility mode)
     let request = Request::builder()
         .uri(path)
         .method("POST")
         .header("Authorization", format!("Bearer {}", app.api_key))
         .header("Content-Type", "application/json")
         .header("X-Timestamp", &timestamp)
+        .header("X-Signature", &signature)
         .body(Body::from(body_str))
         .unwrap();
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    // Should pass in backward compatibility mode (signature optional)
+    // Should pass with signature present
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -509,14 +510,15 @@ async fn test_iso8601_timestamp_format() {
         "metadata": {}
     });
     let body_str = serde_json::to_string(&body).unwrap();
+    let signature = compute_hmac_signature("POST", path, &timestamp, &body_str, &app.api_secret);
 
-    // Request without signature for backward compatibility
     let request = Request::builder()
         .uri(path)
         .method("POST")
         .header("Authorization", format!("Bearer {}", app.api_key))
         .header("Content-Type", "application/json")
         .header("X-Timestamp", &timestamp)
+        .header("X-Signature", &signature)
         .body(Body::from(body_str))
         .unwrap();
 
@@ -541,6 +543,7 @@ async fn test_millisecond_timestamp_format() {
         "metadata": {}
     });
     let body_str = serde_json::to_string(&body).unwrap();
+    let signature = compute_hmac_signature("POST", path, &timestamp, &body_str, &app.api_secret);
 
     let request = Request::builder()
         .uri(path)
@@ -548,6 +551,7 @@ async fn test_millisecond_timestamp_format() {
         .header("Authorization", format!("Bearer {}", app.api_key))
         .header("Content-Type", "application/json")
         .header("X-Timestamp", &timestamp)
+        .header("X-Signature", &signature)
         .body(Body::from(body_str))
         .unwrap();
 
@@ -822,7 +826,7 @@ async fn test_missing_signature_header() {
     });
     let body_str = serde_json::to_string(&body).unwrap();
 
-    // No X-Signature header (backward compatibility test)
+    // No X-Signature header
     let request = Request::builder()
         .uri(path)
         .method("POST")
@@ -835,6 +839,6 @@ async fn test_missing_signature_header() {
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    // Should pass in backward compatibility mode
-    assert_eq!(response.status(), StatusCode::OK);
+    // Missing signature should be rejected
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
