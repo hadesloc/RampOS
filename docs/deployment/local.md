@@ -200,7 +200,7 @@ docker compose up -d api
 docker exec -it rampos-postgres psql -U rampos -d rampos
 
 # Using psql locally
-psql postgres://rampos:rampos_secret@rampos-postgres:5432/rampos
+psql postgres://rampos:rampos_secret@localhost:5432/rampos
 ```
 
 ### Access Redis
