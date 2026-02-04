@@ -159,11 +159,7 @@ fn verify_jwt_token(token: &str, config: &PortalAuthConfig) -> Result<PortalUser
     // Parse tenant_id (use default if not provided and allowed)
     let tenant_id = match &claims.tenant_id {
         Some(tid) => Uuid::parse_str(tid).map_err(|_| "Invalid tenant ID in token".to_string())?,
-        None => Uuid::parse_str(
-            &std::env::var("DEFAULT_TENANT_ID")
-                .unwrap_or_else(|_| "00000000-0000-0000-0000-000000000000".to_string()),
-        )
-        .unwrap_or_else(|_| Uuid::nil()),
+        None => Uuid::nil(),
     };
 
     Ok(PortalUser {

@@ -240,13 +240,17 @@ pub async fn handle_bank_webhook(
             let payload: VietQrWebhookPayload = serde_json::from_slice(&body)
                 .map_err(|e| ApiError::BadRequest(format!("Invalid VietQR payload: {}", e)))?;
             let response = handle_vietqr_webhook(state, payload, verified_tenant).await?;
-            Ok(Json(serde_json::to_value(response).unwrap()))
+            let json = serde_json::to_value(response)
+                .map_err(|_| ApiError::Internal("Serialization failed".to_string()))?;
+            Ok(Json(json))
         }
         "napas" => {
             let payload: NapasWebhookPayload = serde_json::from_slice(&body)
                 .map_err(|e| ApiError::BadRequest(format!("Invalid Napas payload: {}", e)))?;
             let response = handle_napas_webhook(state, payload, verified_tenant).await?;
-            Ok(Json(serde_json::to_value(response).unwrap()))
+            let json = serde_json::to_value(response)
+                .map_err(|_| ApiError::Internal("Serialization failed".to_string()))?;
+            Ok(Json(json))
         }
         _ => {
             // Try generic format
@@ -254,7 +258,9 @@ pub async fn handle_bank_webhook(
                 .map_err(|e| ApiError::BadRequest(format!("Invalid webhook payload: {}", e)))?;
             let response =
                 handle_generic_webhook(state, &provider, payload, verified_tenant).await?;
-            Ok(Json(serde_json::to_value(response).unwrap()))
+            let json = serde_json::to_value(response)
+                .map_err(|_| ApiError::Internal("Serialization failed".to_string()))?;
+            Ok(Json(json))
         }
     }
 }

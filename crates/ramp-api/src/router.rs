@@ -334,6 +334,14 @@ pub fn create_router(state: AppState) -> Router {
     // OpenAPI documentation
     let openapi = ApiDoc::openapi();
 
+    let mut portal_auth_routes = handlers::portal::auth::router().with_state(state.clone());
+    if let Some(ref limiter) = state.rate_limiter {
+        portal_auth_routes = portal_auth_routes.layer(middleware::from_fn_with_state(
+            limiter.clone(),
+            rate_limit_middleware,
+        ));
+    }
+
     // Combine all routes
     // Note: More specific routes should be registered first to ensure proper matching
     Router::new()
@@ -343,14 +351,14 @@ pub fn create_router(state: AppState) -> Router {
         // Portal auth routes (no JWT required - these issue tokens)
         .nest(
             "/v1/portal/auth",
-            handlers::portal::auth::router().with_state(state.clone()),
+            portal_auth_routes.clone(),
         )
         // Portal protected routes (JWT required)
         .nest("/v1/portal", portal_protected_routes)
         // Legacy auth endpoint (same as /v1/portal/auth for backwards compatibility)
         .nest(
             "/v1/auth",
-            handlers::portal::auth::router().with_state(state.clone()),
+            portal_auth_routes,
         )
         // Bank webhook routes (no auth required - uses signature verification)
         .nest("/v1/webhooks/bank", bank_webhook_routes)
