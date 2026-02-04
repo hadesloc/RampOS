@@ -6,8 +6,10 @@ use axum::{
     http::StatusCode,
     middleware::Next,
     response::Response,
+    Json,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
@@ -400,8 +402,15 @@ pub async fn idempotency_middleware(
 
     // Store response (best effort)
     if let Err(e) = handler.store(&tenant_id, &idempotency_key, &stored).await {
-        warn!(error = %e, "Failed to store idempotent response");
-        return Err(StatusCode::SERVICE_UNAVAILABLE);
+        warn!(error = %e, "Failed to store idempotent response; lock retained");
+        return Ok((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "error": "idempotency_store_unavailable",
+                "message": "Idempotency store error; request may have been processed"
+            })),
+        )
+            .into_response());
     }
 
     // Release lock
