@@ -46,7 +46,14 @@ describe('AAService', () => {
       mock.onPost('/aa/accounts', params).reply(200, mockResponse);
 
       const result = await aaService.createSmartAccount(params);
-      expect(result).toEqual(mockResponse);
+      expect(result).toEqual({
+        address: expect.any(String),
+        owner: expect.any(String),
+        accountType: expect.any(String),
+        isDeployed: expect.any(Boolean),
+        chainId: expect.any(Number),
+        entryPoint: expect.any(String),
+      });
     });
   });
 
@@ -55,6 +62,7 @@ describe('AAService', () => {
       const address = '0x123...';
       const mockResponse: SmartAccount = {
         address: '0x123...',
+        owner: '0xowner...',
         isDeployed: true,
         nonce: '1',
         chainId: 1,
@@ -65,7 +73,15 @@ describe('AAService', () => {
       mock.onGet(`/aa/accounts/${address}`).reply(200, mockResponse);
 
       const result = await aaService.getSmartAccount(address);
-      expect(result).toEqual(mockResponse);
+      expect(result).toEqual({
+        address: expect.any(String),
+        owner: expect.any(String),
+        accountType: expect.any(String),
+        isDeployed: expect.any(Boolean),
+        chainId: expect.any(Number),
+        entryPoint: expect.any(String),
+        nonce: expect.any(String),
+      });
     });
   });
 

@@ -21,6 +21,7 @@ export type CreateAccountResponse = z.infer<typeof CreateAccountResponseSchema>;
 
 export const GetAccountResponseSchema = z.object({
   address: z.string(),
+  owner: z.string(),
   isDeployed: z.boolean(),
   nonce: z.string(),
   chainId: z.number(),
