@@ -41,9 +41,7 @@ enum TimestampValidationError {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 enum SignatureValidationError {
-    MissingSignature,
     MissingTimestamp,
     InvalidTimestamp,
     NoApiSecret,
@@ -205,11 +203,6 @@ pub async fn auth_middleware(
         &signature,
     ) {
         let (status, error, message) = match e {
-            SignatureValidationError::MissingSignature => (
-                StatusCode::BAD_REQUEST,
-                "missing_signature",
-                "X-Signature header is required",
-            ),
             SignatureValidationError::MissingTimestamp => (
                 StatusCode::BAD_REQUEST,
                 "missing_timestamp",
@@ -272,10 +265,8 @@ fn verify_hmac_signature(
     // Get the timestamp
     let timestamp = timestamp_str.ok_or(SignatureValidationError::MissingTimestamp)?;
 
-    // Parse timestamp to ensure it's valid
-    let _ts_val: i64 = timestamp
-        .parse()
-        .map_err(|_| SignatureValidationError::InvalidTimestamp)?;
+    // Parse timestamp to ensure it's valid (ISO8601 or unix seconds/millis)
+    parse_timestamp(timestamp).map_err(|_| SignatureValidationError::InvalidTimestamp)?;
 
     // Get the API secret (decrypted)
     // In production, this should use proper decryption
@@ -314,6 +305,26 @@ fn verify_hmac_signature(
     }
 }
 
+fn parse_timestamp(timestamp_str: &str) -> Result<DateTime<Utc>, TimestampValidationError> {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp_str) {
+        return Ok(dt.with_timezone(&Utc));
+    }
+
+    let ts_val = timestamp_str
+        .parse::<i64>()
+        .map_err(|_| TimestampValidationError::InvalidFormat)?;
+
+    if ts_val > 100_000_000_000 {
+        Utc.timestamp_millis_opt(ts_val)
+            .single()
+            .ok_or(TimestampValidationError::InvalidFormat)
+    } else {
+        Utc.timestamp_opt(ts_val, 0)
+            .single()
+            .ok_or(TimestampValidationError::InvalidFormat)
+    }
+}
+
 fn validate_timestamp(headers: &HeaderMap) -> Result<(), TimestampValidationError> {
     let timestamp_str = headers
         .get("X-Timestamp")
@@ -321,26 +332,7 @@ fn validate_timestamp(headers: &HeaderMap) -> Result<(), TimestampValidationErro
         .to_str()
         .map_err(|_| TimestampValidationError::InvalidFormat)?;
 
-    // Try parsing as ISO8601 first
-    let timestamp = if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp_str) {
-        dt.with_timezone(&Utc)
-    } else {
-        // Try parsing as Unix timestamp (seconds or milliseconds)
-        let ts_val = timestamp_str
-            .parse::<i64>()
-            .map_err(|_| TimestampValidationError::InvalidFormat)?;
-
-        // Simple heuristic: if > 10^11, likely milliseconds (valid until year 5138)
-        if ts_val > 100_000_000_000 {
-            Utc.timestamp_millis_opt(ts_val)
-                .single()
-                .ok_or(TimestampValidationError::InvalidFormat)?
-        } else {
-            Utc.timestamp_opt(ts_val, 0)
-                .single()
-                .ok_or(TimestampValidationError::InvalidFormat)?
-        }
-    };
+    let timestamp = parse_timestamp(timestamp_str)?;
 
     let now = Utc::now();
     let drift = now.signed_duration_since(timestamp).num_seconds();

@@ -231,6 +231,11 @@ async fn test_missing_signature_header_rejected() {
 
     let response = app.router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(payload["error"], "missing_signature");
+    assert_eq!(payload["message"], "X-Signature header is required");
 }
 
 #[tokio::test]
