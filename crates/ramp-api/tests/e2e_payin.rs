@@ -5,15 +5,14 @@ use axum::{
 use chrono::Utc;
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
-use ramp_common::types::*;
 use ramp_compliance::{case::CaseManager, InMemoryCaseStore};
 use ramp_core::repository::tenant::TenantRow;
 use ramp_core::repository::user::UserRow;
 use ramp_core::{
     event::InMemoryEventPublisher,
     repository::{
-        intent::{IntentRepository, PgIntentRepository},
-        ledger::{LedgerRepository, PgLedgerRepository},
+        intent::PgIntentRepository,
+        ledger::PgLedgerRepository,
         tenant::{PgTenantRepository, TenantRepository},
         user::{PgUserRepository, UserRepository},
         webhook::PgWebhookRepository,
@@ -321,7 +320,7 @@ async fn test_e2e_payin_flow_via_api() {
     });
 
     assert!(vnd_balance.is_some(), "Should have VND balance");
-    let balance_amount = vnd_balance.unwrap()["balance"].as_str().unwrap(); // API returns Decimal as string usually
+    let _balance_amount = vnd_balance.unwrap()["balance"].as_str().unwrap(); // API returns Decimal as string usually
                                                                             // Or it might be number. Let's check implementation.
                                                                             // LedgerService returns BalanceRow, axum json serialization defaults to number for Decimal unless configured otherwise?
                                                                             // Rust Decimal usually serializes to String by default in some configs, or Number in others.

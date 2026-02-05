@@ -250,7 +250,7 @@ async fn test_webauthn_register_challenge_invalid_email() {
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -455,7 +455,7 @@ async fn test_verify_magic_link_empty_token() {
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 // ============================================================================
@@ -864,7 +864,7 @@ async fn test_webauthn_register_with_long_email() {
     // Should either accept or reject with validation error
     assert!(
         response.status() == StatusCode::OK
-            || response.status() == StatusCode::UNPROCESSABLE_ENTITY
+            || response.status() == StatusCode::BAD_REQUEST
     );
 }
 

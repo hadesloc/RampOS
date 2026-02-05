@@ -28,7 +28,9 @@ use ramp_core::{
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde_json::json;
+use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
+type HmacSha256 = Hmac<Sha256>;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tower::ServiceExt; // for oneshot
@@ -99,7 +101,7 @@ mod fixtures {
             "price": "50000000",
             "vndDelta": vnd_delta,
             "cryptoDelta": crypto_delta.to_string(),
-            "timestamp": Utc::now().to_rfc3339(),
+            "ts": Utc::now().to_rfc3339(),
             "metadata": {
                 "source": "e2e_flow_test"
             }
@@ -114,8 +116,22 @@ struct TestContext {
     event_publisher: Arc<InMemoryEventPublisher>,
     payout_service: Arc<PayoutService>,
     api_key: String,
+    api_secret: String,
     tenant_id: String,
     user_id: String,
+}
+
+fn sign_request(
+    method: &str,
+    path: &str,
+    timestamp: &str,
+    body: &str,
+    secret: &str,
+) -> String {
+    let message = format!("{}\n{}\n{}\n{}", method, path, timestamp, body);
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+    mac.update(message.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
 }
 
 async fn setup_test_app() -> TestContext {
@@ -130,6 +146,7 @@ async fn setup_test_app() -> TestContext {
     let tenant_id = fixtures::test_tenant_id();
     let user_id = fixtures::test_user_id();
     let api_key = "test_api_key_e2e";
+    let api_secret = "test_api_secret_e2e";
 
     // Setup tenant
     let mut hasher = Sha256::new();
@@ -141,7 +158,7 @@ async fn setup_test_app() -> TestContext {
         name: "E2E Flow Tenant".to_string(),
         status: "ACTIVE".to_string(),
         api_key_hash,
-        api_secret_encrypted: None,
+        api_secret_encrypted: Some(api_secret.as_bytes().to_vec()),
         webhook_secret_hash: "secret".to_string(),
         webhook_secret_encrypted: None,
         webhook_url: Some("http://localhost:3000/webhook".to_string()),
@@ -235,6 +252,7 @@ async fn setup_test_app() -> TestContext {
         event_publisher,
         payout_service,
         api_key: api_key.to_string(),
+        api_secret: api_secret.to_string(),
         tenant_id,
         user_id,
     }
@@ -248,18 +266,29 @@ async fn test_payin_e2e_flow() {
 
     // Action: POST /v1/intents/payin with valid payload
     let create_request = fixtures::test_payin_request(&ctx.tenant_id, &ctx.user_id, amount);
+    let body = serde_json::to_string(&create_request).unwrap();
+    let timestamp = Utc::now().timestamp().to_string();
+    let path = "/v1/intents/payin";
+    let signature = sign_request("POST", path, &timestamp, &body, &ctx.api_secret);
+
     let request = Request::builder()
-        .uri("/v1/intents/payin")
+        .uri(path)
         .method("POST")
         .header("Authorization", format!("Bearer {}", ctx.api_key))
+        .header("X-Timestamp", &timestamp)
+        .header("X-Signature", &signature)
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&create_request).unwrap()))
+        .body(Body::from(body))
         .unwrap();
 
     let response = ctx.app.clone().oneshot(request).await.unwrap();
 
     // Assert: Response 201 (or 200 OK)
-    assert!(response.status() == StatusCode::CREATED || response.status() == StatusCode::OK);
+    assert!(
+        response.status() == StatusCode::CREATED || response.status() == StatusCode::OK,
+        "Failed to create payin intent: {:?}",
+        response.status()
+    );
 
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
@@ -285,16 +314,33 @@ async fn test_payin_e2e_flow() {
         "rawPayloadHash": "test_hash"
     });
 
+    let internal_secret = "test_internal_secret";
+    std::env::set_var("INTERNAL_SERVICE_SECRET", internal_secret);
+
+    let body_confirm = serde_json::to_string(&confirm_request).unwrap();
+    let timestamp_confirm = Utc::now().timestamp().to_string();
+    let path_confirm = "/v1/intents/payin/confirm";
+    let signature_confirm =
+        sign_request("POST", path_confirm, &timestamp_confirm, &body_confirm, &ctx.api_secret);
+
     let request_confirm = Request::builder()
-        .uri("/v1/intents/payin/confirm")
+        .uri(path_confirm)
         .method("POST")
         .header("Authorization", format!("Bearer {}", ctx.api_key))
+        .header("X-Timestamp", &timestamp_confirm)
+        .header("X-Signature", &signature_confirm)
+        .header("X-Internal-Secret", internal_secret)
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&confirm_request).unwrap()))
+        .body(Body::from(body_confirm))
         .unwrap();
 
     let response_confirm = ctx.app.clone().oneshot(request_confirm).await.unwrap();
-    assert_eq!(response_confirm.status(), StatusCode::OK);
+    assert_eq!(
+        response_confirm.status(),
+        StatusCode::OK,
+        "Failed to confirm payin: {:?}",
+        response_confirm.status()
+    );
 
     // Assert: State transitions to Settled (COMPLETED)
     let intents = ctx.intent_repo.intents.lock().unwrap();
@@ -351,16 +397,28 @@ async fn test_payout_e2e_flow() {
 
     // Action: POST /v1/intents/payout
     let create_request = fixtures::test_payout_request(&ctx.tenant_id, &ctx.user_id, amount);
+    let body = serde_json::to_string(&create_request).unwrap();
+    let timestamp = Utc::now().timestamp().to_string();
+    let path = "/v1/intents/payout";
+    let signature = sign_request("POST", path, &timestamp, &body, &ctx.api_secret);
+
     let request = Request::builder()
-        .uri("/v1/intents/payout")
+        .uri(path)
         .method("POST")
         .header("Authorization", format!("Bearer {}", ctx.api_key))
+        .header("X-Timestamp", &timestamp)
+        .header("X-Signature", &signature)
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&create_request).unwrap()))
+        .body(Body::from(body))
         .unwrap();
 
     let response = ctx.app.clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Failed to create payout: {:?}",
+        response.status()
+    );
 
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
@@ -427,16 +485,29 @@ async fn test_payout_e2e_flow() {
     );
 
     let aml_request = fixtures::test_payout_request(&ctx.tenant_id, &ctx.user_id, large_amount);
+    let body_aml = serde_json::to_string(&aml_request).unwrap();
+    let timestamp_aml = Utc::now().timestamp().to_string();
+    let path_aml = "/v1/intents/payout";
+    let signature_aml =
+        sign_request("POST", path_aml, &timestamp_aml, &body_aml, &ctx.api_secret);
+
     let request_aml = Request::builder()
-        .uri("/v1/intents/payout")
+        .uri(path_aml)
         .method("POST")
         .header("Authorization", format!("Bearer {}", ctx.api_key))
+        .header("X-Timestamp", &timestamp_aml)
+        .header("X-Signature", &signature_aml)
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&aml_request).unwrap()))
+        .body(Body::from(body_aml))
         .unwrap();
 
     let response_aml = ctx.app.clone().oneshot(request_aml).await.unwrap();
-    assert_eq!(response_aml.status(), StatusCode::OK);
+    assert_eq!(
+        response_aml.status(),
+        StatusCode::OK,
+        "Failed to create AML payout: {:?}",
+        response_aml.status()
+    );
 
     let body_bytes_aml = axum::body::to_bytes(response_aml.into_body(), usize::MAX)
         .await
@@ -462,16 +533,28 @@ async fn test_trade_e2e_flow() {
         dec!(0.05),  // User buys 0.05 BTC
     );
 
+    let body = serde_json::to_string(&trade_request).unwrap();
+    let timestamp = Utc::now().timestamp().to_string();
+    let path = "/v1/events/trade-executed";
+    let signature = sign_request("POST", path, &timestamp, &body, &ctx.api_secret);
+
     let request = Request::builder()
-        .uri("/v1/events/trade-executed")
+        .uri(path)
         .method("POST")
         .header("Authorization", format!("Bearer {}", ctx.api_key))
+        .header("X-Timestamp", &timestamp)
+        .header("X-Signature", &signature)
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&trade_request).unwrap()))
+        .body(Body::from(body))
         .unwrap();
 
     let response = ctx.app.clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Failed to record trade: {:?}",
+        response.status()
+    );
 
     // Assert: Ledger entries balanced (sum debits = sum credits)
     let txs = ctx.ledger_repo.transactions.lock().unwrap();

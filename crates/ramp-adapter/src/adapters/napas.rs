@@ -77,6 +77,7 @@ struct NapasStatusResponse {
     #[serde(rename = "responseCode")]
     response_code: String,
     status: String,
+    #[allow(dead_code)]
     #[serde(rename = "failureReason")]
     failure_reason: Option<String>,
 }
@@ -165,6 +166,7 @@ impl NapasAdapter {
     }
 
     /// Verify response signature from Napas
+    #[allow(dead_code)]
     fn verify_response_signature(&self, _payload: &str, _signature: &str) -> bool {
         // In production, verify using Napas public key
         if self.config.napas_public_key_pem.is_some() {

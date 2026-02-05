@@ -15,7 +15,7 @@ use ramp_compliance::{
 use ramp_core::event::InMemoryEventPublisher;
 use ramp_core::repository::tenant::TenantRow;
 use ramp_core::repository::user::UserRow;
-use ramp_core::repository::{IntentRepository, LedgerRepository};
+use ramp_core::repository::IntentRepository;
 use ramp_core::service::{
     ledger::LedgerService, onboarding::OnboardingService, payin::PayinService,
     payout::PayoutService, trade::TradeService,

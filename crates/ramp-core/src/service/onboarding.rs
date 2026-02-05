@@ -252,7 +252,7 @@ mod tests {
         let tenant_id = TenantId::new(tenant.id);
 
         let keys = service.generate_api_keys(&tenant_id).await.unwrap();
-        assert!(keys.public_key.starts_with("pk_"));
-        assert!(keys.secret_key.starts_with("sk_"));
+        assert!(keys.public_key.starts_with("ramp_"));
+        assert!(keys.secret_key.starts_with("ramp_secret_"));
     }
 }

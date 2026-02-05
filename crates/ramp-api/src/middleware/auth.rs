@@ -10,7 +10,7 @@
 use crate::middleware::tenant::TenantContext;
 use axum::{
     body::Body,
-    extract::{Request, State},
+    extract::{OriginalUri, Request, State},
     http::{HeaderMap, Method, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -179,8 +179,13 @@ pub async fn auth_middleware(
         .map(|s| s.to_string());
 
     // Store method and path before consuming the request
+    // Use OriginalUri to get the full path including any nested route prefixes (e.g., /v1)
     let method = req.method().clone();
-    let path = req.uri().path().to_string();
+    let path = req
+        .extensions()
+        .get::<OriginalUri>()
+        .map(|uri| uri.path().to_string())
+        .unwrap_or_else(|| req.uri().path().to_string());
 
     // Need to read the body for signature verification
     let (parts, body) = req.into_parts();
@@ -238,7 +243,7 @@ pub async fn auth_middleware(
     debug!(tenant_id = %tenant.id, "HMAC signature verified successfully");
 
     // Reconstruct the request with the body
-    let mut new_req = Request::from_parts(parts, Body::from(body_bytes.to_vec()));
+    let mut new_req = Request::from_parts(parts, Body::from(body_bytes));
 
     let context = TenantContext {
         tenant_id: TenantId::new(&tenant.id),
@@ -285,11 +290,17 @@ fn verify_hmac_signature(
     let body_str = String::from_utf8_lossy(body);
     let message = format!("{}\n{}\n{}\n{}", method.as_str(), path, timestamp, body_str);
 
+    debug!("HMAC verification - message: {:?}", message);
+    debug!("HMAC verification - secret: {:?}", api_secret_str);
+    debug!("HMAC verification - provided signature: {}", provided_signature);
+
     // Compute HMAC-SHA256
     let mut mac =
         HmacSha256::new_from_slice(api_secret_str.as_bytes()).expect("HMAC can take any size key");
     mac.update(message.as_bytes());
     let expected_signature = hex::encode(mac.finalize().into_bytes());
+
+    debug!("HMAC verification - expected signature: {}", expected_signature);
 
     // Constant-time comparison to prevent timing attacks
     let provided_bytes = provided_signature.as_bytes();

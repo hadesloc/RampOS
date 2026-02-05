@@ -5,14 +5,12 @@ use axum::{
 use chrono::Utc;
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
-use ramp_common::types::*;
 use ramp_compliance::{
     case::CaseManager, reports::ReportGenerator, storage::MockDocumentStorage, InMemoryCaseStore,
 };
 use ramp_core::event::InMemoryEventPublisher;
 use ramp_core::repository::intent::IntentRow;
 use ramp_core::repository::tenant::TenantRow;
-use ramp_core::repository::user::UserRow;
 use ramp_core::repository::IntentRepository;
 use ramp_core::service::{
     ledger::LedgerService, payin::PayinService, payout::PayoutService, trade::TradeService,

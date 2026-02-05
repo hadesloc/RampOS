@@ -34,6 +34,7 @@ struct VietQRBankListResponse {
 
 #[derive(Debug, Deserialize)]
 struct VietQRBankData {
+    #[allow(dead_code)]
     id: i32,
     name: String,
     code: String,
@@ -45,6 +46,7 @@ struct VietQRBankData {
 }
 
 /// VietQR API response for QR generation
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct VietQRGenerateResponse {
     code: String,
@@ -52,6 +54,7 @@ struct VietQRGenerateResponse {
     data: Option<VietQRGenerateData>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct VietQRGenerateData {
     #[serde(rename = "qrCode")]
@@ -61,6 +64,7 @@ struct VietQRGenerateData {
 }
 
 /// Request body for VietQR Quick Link API
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct VietQRQuickLinkRequest {
     #[serde(rename = "accountNo")]

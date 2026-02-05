@@ -38,7 +38,9 @@ const TEST_TENANT_ID: &str = "660e8400-e29b-41d4-a716-446655440001";
 
 struct TestPortalApp {
     router: axum::Router,
+    #[allow(dead_code)]
     intent_repo: Arc<MockIntentRepository>,
+    #[allow(dead_code)]
     ledger_repo: Arc<MockLedgerRepository>,
     jwt_token: String,
 }

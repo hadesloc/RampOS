@@ -1,7 +1,7 @@
 use axum::{
     body::Body,
     http::{Request, StatusCode},
-    middleware::{self, from_fn_with_state},
+    middleware::from_fn_with_state,
     routing::post,
     Router,
 };

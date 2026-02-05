@@ -5,6 +5,24 @@ import { ApiError, intentsApi, usersApi, casesApi, healthApi } from '../api'
 const mockFetch = vi.fn()
 global.fetch = mockFetch
 
+// Helper to create a proper Response-like object
+function createMockResponse(body: unknown, options: { ok?: boolean; status?: number; statusText?: string } = {}) {
+  return {
+    ok: options.ok ?? true,
+    status: options.status ?? 200,
+    statusText: options.statusText ?? 'OK',
+    json: async () => body,
+  }
+}
+
+// Helper to set up mock for both CSRF and actual API call
+function setupMockFetch(apiResponse: unknown, apiOptions: { ok?: boolean; status?: number; statusText?: string } = {}) {
+  // First call is for CSRF token, second call is the actual API request
+  mockFetch
+    .mockResolvedValueOnce(createMockResponse({ token: 'test-csrf-token' }))
+    .mockResolvedValueOnce(createMockResponse(apiResponse, apiOptions))
+}
+
 describe('API Client', () => {
   beforeEach(() => {
     mockFetch.mockReset()
@@ -40,10 +58,7 @@ describe('API Client', () => {
         total_pages: 1,
       }
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockResponse,
-      })
+      setupMockFetch(mockResponse)
 
       const result = await intentsApi.list()
       expect(result).toEqual(mockResponse)
@@ -54,10 +69,7 @@ describe('API Client', () => {
     })
 
     it('lists intents with pagination params', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: [], total: 0, page: 2, per_page: 10, total_pages: 0 }),
-      })
+      setupMockFetch({ data: [], total: 0, page: 2, per_page: 10, total_pages: 0 })
 
       await intentsApi.list({ page: 2, per_page: 10 })
       expect(mockFetch).toHaveBeenCalledWith(
@@ -72,10 +84,7 @@ describe('API Client', () => {
 
     it('gets a single intent', async () => {
       const mockIntent = { id: '123', intent_type: 'PAYIN_VND', state: 'COMPLETED' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockIntent,
-      })
+      setupMockFetch(mockIntent)
 
       const result = await intentsApi.get('123')
       expect(result).toEqual(mockIntent)
@@ -87,10 +96,7 @@ describe('API Client', () => {
 
     it('cancels an intent', async () => {
       const mockIntent = { id: '123', state: 'CANCELLED' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockIntent,
-      })
+      setupMockFetch(mockIntent)
 
       const result = await intentsApi.cancel('123')
       expect(result).toEqual(mockIntent)
@@ -111,10 +117,7 @@ describe('API Client', () => {
         total_pages: 1,
       }
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockResponse,
-      })
+      setupMockFetch(mockResponse)
 
       const result = await usersApi.list()
       expect(result).toEqual(mockResponse)
@@ -122,10 +125,7 @@ describe('API Client', () => {
 
     it('gets a single user', async () => {
       const mockUser = { id: '123', status: 'ACTIVE' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockUser,
-      })
+      setupMockFetch(mockUser)
 
       const result = await usersApi.get('123')
       expect(result).toEqual(mockUser)
@@ -133,10 +133,7 @@ describe('API Client', () => {
 
     it('updates user status', async () => {
       const mockUser = { id: '123', status: 'SUSPENDED' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockUser,
-      })
+      setupMockFetch(mockUser)
 
       const result = await usersApi.updateStatus('123', 'SUSPENDED')
       expect(result).toEqual(mockUser)
@@ -151,10 +148,7 @@ describe('API Client', () => {
 
     it('gets user balances', async () => {
       const mockBalances = [{ account_type: 'SPOT', currency: 'VND', balance: '1000000' }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockBalances,
-      })
+      setupMockFetch(mockBalances)
 
       const result = await usersApi.getBalances('123')
       expect(result).toEqual(mockBalances)
@@ -171,20 +165,14 @@ describe('API Client', () => {
         total_pages: 1,
       }
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockResponse,
-      })
+      setupMockFetch(mockResponse)
 
       const result = await casesApi.list()
       expect(result).toEqual(mockResponse)
     })
 
     it('lists cases with filters', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: [], total: 0, page: 1, per_page: 20, total_pages: 0 }),
-      })
+      setupMockFetch({ data: [], total: 0, page: 1, per_page: 20, total_pages: 0 })
 
       await casesApi.list({ status: 'OPEN', severity: 'HIGH' })
       expect(mockFetch).toHaveBeenCalledWith(
@@ -199,10 +187,7 @@ describe('API Client', () => {
 
     it('updates case status', async () => {
       const mockCase = { id: '123', status: 'RELEASED' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockCase,
-      })
+      setupMockFetch(mockCase)
 
       const result = await casesApi.updateStatus('123', 'RELEASED', 'False positive')
       expect(result).toEqual(mockCase)
@@ -212,10 +197,7 @@ describe('API Client', () => {
   describe('healthApi', () => {
     it('checks health status', async () => {
       const mockHealth = { status: 'ok', version: '1.0.0' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockHealth,
-      })
+      setupMockFetch(mockHealth)
 
       const result = await healthApi.check()
       expect(result).toEqual(mockHealth)
@@ -223,10 +205,7 @@ describe('API Client', () => {
 
     it('checks ready status', async () => {
       const mockReady = { status: 'ok', checks: { database: true, redis: true } }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockReady,
-      })
+      setupMockFetch(mockReady)
 
       const result = await healthApi.ready()
       expect(result).toEqual(mockReady)
@@ -235,23 +214,27 @@ describe('API Client', () => {
 
   describe('Error handling', () => {
     it('throws ApiError on non-ok response', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        json: async () => ({ code: 'NOT_FOUND', message: 'Intent not found' }),
-      })
+      // First call is for CSRF token
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse({ token: 'test-csrf-token' }))
+        .mockResolvedValueOnce(createMockResponse(
+          { code: 'NOT_FOUND', message: 'Intent not found' },
+          { ok: false, status: 404, statusText: 'Not Found' }
+        ))
 
       await expect(intentsApi.get('invalid')).rejects.toThrow(ApiError)
     })
 
     it('handles JSON parse errors in error response', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-        json: async () => { throw new Error('Invalid JSON') },
-      })
+      // First call is for CSRF token
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse({ token: 'test-csrf-token' }))
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+          json: async () => { throw new Error('Invalid JSON') },
+        })
 
       await expect(intentsApi.get('123')).rejects.toThrow(ApiError)
     })
