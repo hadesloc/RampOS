@@ -9,6 +9,18 @@ const API_BASE_URL = typeof window === 'undefined'
   ? (process.env.API_URL || 'http://localhost:8080')
   : '/api/proxy';
 const API_KEY = typeof window === 'undefined' ? (process.env.API_KEY || '') : '';
+const CSRF_COOKIE_NAME = 'rampos_csrf';
+
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length !== 2) return null;
+  const tail = parts.pop();
+  if (!tail) return null;
+  const token = tail.split(';').shift();
+  return token ?? null;
+}
 
 // Types
 export interface Intent {
@@ -201,10 +213,29 @@ async function apiRequest<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
+  let csrfToken = getCookie(CSRF_COOKIE_NAME);
+  if (!csrfToken && typeof window !== 'undefined') {
+    try {
+      const csrfResponse = await fetch('/api/csrf', {
+        method: 'GET',
+      });
+      if (csrfResponse.ok) {
+        const payload: { token?: string } | null = await csrfResponse
+          .json()
+          .catch(() => null);
+        if (payload?.token && typeof payload.token === 'string') {
+          csrfToken = payload.token;
+        }
+      }
+    } catch {
+      // Best effort; proxy will reject if CSRF cannot be obtained.
+    }
+  }
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` }),
+    ...(csrfToken && { 'x-csrf-token': csrfToken }),
     ...options.headers,
   };
 

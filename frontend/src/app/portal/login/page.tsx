@@ -77,9 +77,19 @@ function LoginContent() {
   // Handle magic link verification
   useEffect(() => {
     if (magicLinkToken) {
-      verifyMagicLink(magicLinkToken).catch(() => {
-        // Error is handled by context
-      });
+      verifyMagicLink(magicLinkToken)
+        .then(() => {
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete("token");
+          window.history.replaceState(
+            null,
+            "",
+            cleanUrl.pathname + cleanUrl.search,
+          );
+        })
+        .catch(() => {
+          // Error is handled by context
+        });
     }
   }, [magicLinkToken, verifyMagicLink]);
 

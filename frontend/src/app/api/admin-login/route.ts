@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { ADMIN_SESSION_COOKIE, buildAdminSessionToken } from "@/lib/admin-auth";
+import {
+  ADMIN_SESSION_COOKIE,
+  constantTimeEqual,
+  createAdminSessionToken,
+} from "@/lib/admin-auth";
 
 export async function POST(req: Request) {
   const adminKey = process.env.RAMPOS_ADMIN_KEY;
@@ -11,15 +15,22 @@ export async function POST(req: Request) {
     );
   }
 
+  const cookieStore = await cookies();
+  const csrfCookie = cookieStore.get("rampos_csrf")?.value;
+  const csrfHeader = req.headers.get("x-csrf-token");
+  if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+    return NextResponse.json({ message: "CSRF check failed" }, { status: 403 });
+  }
+
   const body = await req.json().catch(() => ({}));
   const key = typeof body?.key === "string" ? body.key : "";
 
-  if (key !== adminKey) {
+  if (!constantTimeEqual(key, adminKey)) {
     return NextResponse.json({ message: "Invalid admin key" }, { status: 401 });
   }
 
-  const token = buildAdminSessionToken(adminKey);
-  (await cookies()).set({
+  const token = createAdminSessionToken(adminKey);
+  cookieStore.set({
     name: ADMIN_SESSION_COOKIE,
     value: token,
     httpOnly: true,

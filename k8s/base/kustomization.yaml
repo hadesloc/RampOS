@@ -4,7 +4,9 @@ kind: Kustomization
 resources:
 - namespace.yaml
 - configmap.yaml
+- nats-configmap.yaml
 - secret.example.yaml
+- rbac.yaml
 - postgres-statefulset.yaml
 - redis-statefulset.yaml
 - nats-statefulset.yaml

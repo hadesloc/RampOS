@@ -18,6 +18,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::error::ApiError;
+use crate::middleware::PortalUser;
 use crate::router::AppState;
 
 // ============================================================================
@@ -131,8 +132,13 @@ pub fn router() -> Router<AppState> {
 /// GET /v1/portal/kyc/status - Get current KYC status
 pub async fn get_kyc_status(
     State(_app_state): State<AppState>,
+    portal_user: PortalUser,
 ) -> Result<Json<KYCStatus>, ApiError> {
-    info!("Get KYC status requested");
+    info!(
+        user_id = %portal_user.user_id,
+        tenant_id = %portal_user.tenant_id,
+        "Get KYC status requested"
+    );
 
     // In production, this would:
     // 1. Extract user from auth middleware
@@ -154,6 +160,7 @@ pub async fn get_kyc_status(
 /// POST /v1/portal/kyc/submit - Submit KYC data
 pub async fn submit_kyc(
     State(_app_state): State<AppState>,
+    portal_user: PortalUser,
     Json(req): Json<KYCSubmission>,
 ) -> Result<Json<KYCStatus>, ApiError> {
     // Validate request
@@ -177,6 +184,8 @@ pub async fn submit_kyc(
     }
 
     info!(
+        user_id = %portal_user.user_id,
+        tenant_id = %portal_user.tenant_id,
         first_name = %req.first_name,
         last_name = %req.last_name,
         doc_type = %req.id_document_type,
@@ -206,6 +215,7 @@ pub async fn submit_kyc(
 /// POST /v1/portal/kyc/documents - Upload KYC document (JSON with base64 file)
 pub async fn upload_document(
     State(_app_state): State<AppState>,
+    portal_user: PortalUser,
     Json(req): Json<DocumentUploadRequest>,
 ) -> Result<Json<DocumentUploadResponse>, ApiError> {
     // Validate request
@@ -245,6 +255,8 @@ pub async fn upload_document(
     }
 
     info!(
+        user_id = %portal_user.user_id,
+        tenant_id = %portal_user.tenant_id,
         doc_type = %req.document_type,
         file_name = %req.file_name,
         file_size = file_bytes.len(),
@@ -269,8 +281,15 @@ pub async fn upload_document(
 }
 
 /// GET /v1/portal/kyc/tier - Get current tier information
-pub async fn get_tier(State(_app_state): State<AppState>) -> Result<Json<TierInfo>, ApiError> {
-    info!("Get tier info requested");
+pub async fn get_tier(
+    State(_app_state): State<AppState>,
+    portal_user: PortalUser,
+) -> Result<Json<TierInfo>, ApiError> {
+    info!(
+        user_id = %portal_user.user_id,
+        tenant_id = %portal_user.tenant_id,
+        "Get tier info requested"
+    );
 
     // In production, this would:
     // 1. Extract user from auth middleware

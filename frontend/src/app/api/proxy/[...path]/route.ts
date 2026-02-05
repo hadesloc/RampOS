@@ -8,6 +8,12 @@ const ADMIN_KEY = process.env.RAMPOS_ADMIN_KEY || '';
 
 async function handleRequest(req: NextRequest, props: { params: Promise<{ path: string[] }> }) {
   const cookieStore = await cookies();
+  const csrfCookie = cookieStore.get('rampos_csrf')?.value;
+  const csrfHeader = req.headers.get('x-csrf-token');
+  if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+    return NextResponse.json({ message: 'CSRF check failed' }, { status: 403 });
+  }
+
   const token = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
   if (!isAdminSessionTokenValid(token, ADMIN_KEY)) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });

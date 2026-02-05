@@ -59,6 +59,8 @@ pub struct PortalAuthConfig {
     pub issuer: Option<String>,
     /// Expected audience (optional)
     pub audience: Option<String>,
+    /// Allow JWTs without tenant_id (legacy single-tenant mode)
+    pub allow_missing_tenant: bool,
 }
 
 impl Default for PortalAuthConfig {
@@ -68,6 +70,7 @@ impl Default for PortalAuthConfig {
                 .unwrap_or_else(|_| "development-secret-change-in-production".to_string()),
             issuer: std::env::var("JWT_ISSUER").ok(),
             audience: std::env::var("JWT_AUDIENCE").ok(),
+            allow_missing_tenant: false,
         }
     }
 }
@@ -140,6 +143,10 @@ fn verify_jwt_token(token: &str, config: &PortalAuthConfig) -> Result<PortalUser
 
     let claims = token_data.claims;
 
+    if claims.tenant_id.is_none() && !config.allow_missing_tenant {
+        return Err("Tenant ID required".to_string());
+    }
+
     // Verify token type is access token
     if claims.token_type != "access" {
         return Err("Invalid token type".to_string());
@@ -149,18 +156,10 @@ fn verify_jwt_token(token: &str, config: &PortalAuthConfig) -> Result<PortalUser
     let user_id =
         Uuid::parse_str(&claims.sub).map_err(|_| "Invalid user ID in token".to_string())?;
 
-    // Parse tenant_id (use default if not provided)
+    // Parse tenant_id (use default if not provided and allowed)
     let tenant_id = match &claims.tenant_id {
         Some(tid) => Uuid::parse_str(tid).map_err(|_| "Invalid tenant ID in token".to_string())?,
-        None => {
-            // Use a default tenant ID for single-tenant deployments
-            // or derive from environment
-            Uuid::parse_str(
-                &std::env::var("DEFAULT_TENANT_ID")
-                    .unwrap_or_else(|_| "00000000-0000-0000-0000-000000000000".to_string()),
-            )
-            .unwrap_or_else(|_| Uuid::nil())
-        }
+        None => Uuid::nil(),
     };
 
     Ok(PortalUser {
@@ -237,6 +236,7 @@ mod tests {
             jwt_secret: "test-secret-key-for-testing".to_string(),
             issuer: None,
             audience: None,
+            allow_missing_tenant: false,
         }
     }
 
@@ -354,7 +354,7 @@ mod tests {
     }
 
     #[test]
-    fn test_default_tenant_id_when_missing() {
+    fn test_rejects_missing_tenant_id_when_not_allowed() {
         let config = create_test_config();
         let now = Utc::now().timestamp();
         let claims = PortalClaims {
@@ -369,9 +369,6 @@ mod tests {
         let token = create_test_token(&claims, &config.jwt_secret);
         let result = verify_jwt_token(&token, &config);
 
-        assert!(result.is_ok());
-        let user = result.unwrap();
-        // Should get default nil UUID when no tenant_id and no DEFAULT_TENANT_ID env
-        assert!(!user.tenant_id.is_nil() || user.tenant_id.is_nil());
+        assert!(result.is_err());
     }
 }

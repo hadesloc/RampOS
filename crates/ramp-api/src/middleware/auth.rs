@@ -41,9 +41,7 @@ enum TimestampValidationError {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 enum SignatureValidationError {
-    MissingSignature,
     MissingTimestamp,
     InvalidTimestamp,
     NoApiSecret,
@@ -63,7 +61,48 @@ pub async fn auth_middleware(
     req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    // Check timestamp first to fail fast
+    // Extract API key from Authorization header
+    let auth_header = req
+        .headers()
+        .get("Authorization")
+        .and_then(|v| v.to_str().ok());
+
+    let api_key = match auth_header {
+        Some(header) if header.starts_with("Bearer ") => &header[7..],
+        _ => {
+            return Ok((
+                StatusCode::UNAUTHORIZED,
+                Json(json!({
+                    "error": "missing_authorization",
+                    "message": "Authorization header is missing or invalid"
+                })),
+            )
+                .into_response());
+        }
+    };
+
+    // Extract signature and require it to be present
+    let signature = req
+        .headers()
+        .get("X-Signature")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let signature = match signature {
+        Some(sig) => sig,
+        None => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "error": "missing_signature",
+                    "message": "X-Signature header is required"
+                })),
+            )
+                .into_response());
+        }
+    };
+
+    // Check timestamp after signature presence
     if let Err(e) = validate_timestamp(req.headers()) {
         let response = match e {
             TimestampValidationError::Missing => (
@@ -94,26 +133,6 @@ pub async fn auth_middleware(
         };
         return Ok(response);
     }
-
-    // Extract API key from Authorization header
-    let auth_header = req
-        .headers()
-        .get("Authorization")
-        .and_then(|v| v.to_str().ok());
-
-    let api_key = match auth_header {
-        Some(header) if header.starts_with("Bearer ") => &header[7..],
-        _ => {
-            return Ok((
-                StatusCode::UNAUTHORIZED,
-                Json(json!({
-                    "error": "missing_authorization",
-                    "message": "Authorization header is missing or invalid"
-                })),
-            )
-                .into_response());
-        }
-    };
 
     // Hash the API key for lookup
     let mut hasher = Sha256::new();
@@ -152,13 +171,7 @@ pub async fn auth_middleware(
             .into_response());
     }
 
-    // Extract signature and timestamp for HMAC verification
-    let signature = req
-        .headers()
-        .get("X-Signature")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
-
+    // Extract timestamp for HMAC verification
     let timestamp_str = req
         .headers()
         .get("X-Timestamp")
@@ -169,94 +182,63 @@ pub async fn auth_middleware(
     let method = req.method().clone();
     let path = req.uri().path().to_string();
 
-    // Verify HMAC signature if present
-    // Note: If signature is not present, we allow the request (backward compatibility)
-    // In production, you may want to require signatures for all requests
-    if let Some(ref sig) = signature {
-        // Need to read the body for signature verification
-        let (parts, body) = req.into_parts();
+    // Need to read the body for signature verification
+    let (parts, body) = req.into_parts();
 
-        // Read the entire body
-        let body_bytes = match body.collect().await {
-            Ok(collected) => collected.to_bytes(),
-            Err(e) => {
-                warn!(error = %e, "Failed to read request body");
-                return Err(StatusCode::INTERNAL_SERVER_ERROR);
-            }
-        };
-
-        // Verify the signature
-        if let Err(e) = verify_hmac_signature(
-            &tenant,
-            &method,
-            &path,
-            timestamp_str.as_deref(),
-            &body_bytes,
-            sig,
-        ) {
-            let (status, error, message) = match e {
-                SignatureValidationError::MissingSignature => (
-                    StatusCode::BAD_REQUEST,
-                    "missing_signature",
-                    "X-Signature header is required",
-                ),
-                SignatureValidationError::MissingTimestamp => (
-                    StatusCode::BAD_REQUEST,
-                    "missing_timestamp",
-                    "X-Timestamp header is required for signature verification",
-                ),
-                SignatureValidationError::InvalidTimestamp => (
-                    StatusCode::BAD_REQUEST,
-                    "invalid_timestamp",
-                    "Invalid timestamp format",
-                ),
-                SignatureValidationError::NoApiSecret => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "configuration_error",
-                    "API secret not configured for tenant",
-                ),
-                SignatureValidationError::InvalidSignature => (
-                    StatusCode::UNAUTHORIZED,
-                    "invalid_signature",
-                    "HMAC signature verification failed",
-                ),
-            };
-
-            warn!(
-                tenant_id = %tenant.id,
-                error = ?e,
-                "Signature verification failed"
-            );
-
-            return Ok(
-                (status, Json(json!({ "error": error, "message": message }))).into_response(),
-            );
+    // Read the entire body
+    let body_bytes = match body.collect().await {
+        Ok(collected) => collected.to_bytes(),
+        Err(e) => {
+            warn!(error = %e, "Failed to read request body");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
+    };
 
-        debug!(tenant_id = %tenant.id, "HMAC signature verified successfully");
-
-        // Reconstruct the request with the body
-        let mut new_req = Request::from_parts(parts, Body::from(body_bytes.to_vec()));
-
-        // Add tenant context to request extensions
-        let context = TenantContext {
-            tenant_id: TenantId::new(&tenant.id),
-            name: tenant.name,
+    // Verify the signature
+    if let Err(e) = verify_hmac_signature(
+        &tenant,
+        &method,
+        &path,
+        timestamp_str.as_deref(),
+        &body_bytes,
+        &signature,
+    ) {
+        let (status, error, message) = match e {
+            SignatureValidationError::MissingTimestamp => (
+                StatusCode::BAD_REQUEST,
+                "missing_timestamp",
+                "X-Timestamp header is required for signature verification",
+            ),
+            SignatureValidationError::InvalidTimestamp => (
+                StatusCode::BAD_REQUEST,
+                "invalid_timestamp",
+                "Invalid timestamp format",
+            ),
+            SignatureValidationError::NoApiSecret => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "configuration_error",
+                "API secret not configured for tenant",
+            ),
+            SignatureValidationError::InvalidSignature => (
+                StatusCode::UNAUTHORIZED,
+                "invalid_signature",
+                "HMAC signature verification failed",
+            ),
         };
-        new_req.extensions_mut().insert(context);
 
-        return Ok(next.run(new_req).await);
+        warn!(
+            tenant_id = %tenant.id,
+            error = ?e,
+            "Signature verification failed"
+        );
+
+        return Ok((status, Json(json!({ "error": error, "message": message }))).into_response());
     }
 
-    // No signature provided - add tenant context and continue
-    // Note: Consider making signature required in production
-    debug!(
-        tenant_id = %tenant.id,
-        "Request without HMAC signature (backward compatibility mode)"
-    );
+    debug!(tenant_id = %tenant.id, "HMAC signature verified successfully");
 
-    let (parts, body) = req.into_parts();
-    let mut new_req = Request::from_parts(parts, body);
+    // Reconstruct the request with the body
+    let mut new_req = Request::from_parts(parts, Body::from(body_bytes.to_vec()));
 
     let context = TenantContext {
         tenant_id: TenantId::new(&tenant.id),
@@ -284,10 +266,8 @@ fn verify_hmac_signature(
     // Get the timestamp
     let timestamp = timestamp_str.ok_or(SignatureValidationError::MissingTimestamp)?;
 
-    // Parse timestamp to ensure it's valid
-    let _ts_val: i64 = timestamp
-        .parse()
-        .map_err(|_| SignatureValidationError::InvalidTimestamp)?;
+    // Parse timestamp to ensure it's valid (ISO8601 or unix seconds/millis)
+    parse_timestamp(timestamp).map_err(|_| SignatureValidationError::InvalidTimestamp)?;
 
     // Get the API secret (decrypted)
     // In production, this should use proper decryption
@@ -326,6 +306,26 @@ fn verify_hmac_signature(
     }
 }
 
+fn parse_timestamp(timestamp_str: &str) -> Result<DateTime<Utc>, TimestampValidationError> {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp_str) {
+        return Ok(dt.with_timezone(&Utc));
+    }
+
+    let ts_val = timestamp_str
+        .parse::<i64>()
+        .map_err(|_| TimestampValidationError::InvalidFormat)?;
+
+    if ts_val > 100_000_000_000 {
+        Utc.timestamp_millis_opt(ts_val)
+            .single()
+            .ok_or(TimestampValidationError::InvalidFormat)
+    } else {
+        Utc.timestamp_opt(ts_val, 0)
+            .single()
+            .ok_or(TimestampValidationError::InvalidFormat)
+    }
+}
+
 fn validate_timestamp(headers: &HeaderMap) -> Result<(), TimestampValidationError> {
     let timestamp_str = headers
         .get("X-Timestamp")
@@ -333,26 +333,7 @@ fn validate_timestamp(headers: &HeaderMap) -> Result<(), TimestampValidationErro
         .to_str()
         .map_err(|_| TimestampValidationError::InvalidFormat)?;
 
-    // Try parsing as ISO8601 first
-    let timestamp = if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp_str) {
-        dt.with_timezone(&Utc)
-    } else {
-        // Try parsing as Unix timestamp (seconds or milliseconds)
-        let ts_val = timestamp_str
-            .parse::<i64>()
-            .map_err(|_| TimestampValidationError::InvalidFormat)?;
-
-        // Simple heuristic: if > 10^11, likely milliseconds (valid until year 5138)
-        if ts_val > 100_000_000_000 {
-            Utc.timestamp_millis_opt(ts_val)
-                .single()
-                .ok_or(TimestampValidationError::InvalidFormat)?
-        } else {
-            Utc.timestamp_opt(ts_val, 0)
-                .single()
-                .ok_or(TimestampValidationError::InvalidFormat)?
-        }
-    };
+    let timestamp = parse_timestamp(timestamp_str)?;
 
     let now = Utc::now();
     let drift = now.signed_duration_since(timestamp).num_seconds();

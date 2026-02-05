@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rampos-nats-config
+  namespace: rampos
+data:
+  nats.conf: |
+    authorization {
+      user: "${NATS_USER}"
+      password: "${NATS_PASSWORD}"
+    }
+    jetstream: enabled

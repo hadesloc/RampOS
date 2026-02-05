@@ -19,6 +19,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::error::ApiError;
+use crate::middleware::PortalUser;
 use crate::router::AppState;
 
 // ============================================================================
@@ -114,8 +115,13 @@ pub fn router() -> Router<AppState> {
 /// POST /v1/portal/wallet/account - Create smart account
 pub async fn create_account(
     State(app_state): State<AppState>,
+    portal_user: PortalUser,
 ) -> Result<Json<SmartAccount>, ApiError> {
-    info!("Create smart account requested");
+    info!(
+        user_id = %portal_user.user_id,
+        tenant_id = %portal_user.tenant_id,
+        "Create smart account requested"
+    );
 
     // In production, this would:
     // 1. Extract user from auth middleware
@@ -152,8 +158,13 @@ pub async fn create_account(
 /// GET /v1/portal/wallet/account - Get smart account info
 pub async fn get_account(
     State(_app_state): State<AppState>,
+    portal_user: PortalUser,
 ) -> Result<Json<SmartAccount>, ApiError> {
-    info!("Get smart account requested");
+    info!(
+        user_id = %portal_user.user_id,
+        tenant_id = %portal_user.tenant_id,
+        "Get smart account requested"
+    );
 
     // In production, this would:
     // 1. Extract user from auth middleware
@@ -177,13 +188,16 @@ pub async fn get_account(
 /// Queries real balances from the ledger service
 pub async fn get_balances(
     State(app_state): State<AppState>,
+    portal_user: PortalUser,
 ) -> Result<Json<Vec<Balance>>, ApiError> {
-    info!("Get balances requested");
+    info!(
+        user_id = %portal_user.user_id,
+        tenant_id = %portal_user.tenant_id,
+        "Get balances requested"
+    );
 
-    // TODO: Extract user from PortalUser middleware extractor
-    // For now, use a placeholder user ID - in production this comes from JWT claims
-    let tenant_id = TenantId::new(&get_default_tenant_id());
-    let user_id = UserId::new("placeholder-user-id"); // TODO: Get from auth middleware
+    let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
+    let user_id = UserId::new(&portal_user.user_id.to_string());
 
     // Query real balances from ledger service
     let balance_rows = app_state
@@ -227,18 +241,15 @@ pub async fn get_balances(
     Ok(Json(balances))
 }
 
-/// Get the default tenant ID from environment
-fn get_default_tenant_id() -> String {
-    std::env::var("DEFAULT_TENANT_ID")
-        .unwrap_or_else(|_| "00000000-0000-0000-0000-000000000001".to_string())
-}
-
 /// POST /v1/portal/wallet/session-key - Create session key for smart account
 pub async fn create_session_key(
     State(_app_state): State<AppState>,
+    portal_user: PortalUser,
     Json(req): Json<CreateSessionKeyRequest>,
 ) -> Result<Json<SessionKey>, ApiError> {
     info!(
+        user_id = %portal_user.user_id,
+        tenant_id = %portal_user.tenant_id,
         permissions = ?req.permissions,
         duration_hours = req.duration_hours,
         "Create session key requested"
@@ -281,9 +292,15 @@ pub async fn create_session_key(
 /// GET /v1/portal/wallet/deposit-info - Get deposit information
 pub async fn get_deposit_info(
     State(_app_state): State<AppState>,
+    portal_user: PortalUser,
     Query(query): Query<DepositInfoQuery>,
 ) -> Result<Json<DepositInfo>, ApiError> {
-    info!(method = %query.method, "Get deposit info requested");
+    info!(
+        user_id = %portal_user.user_id,
+        tenant_id = %portal_user.tenant_id,
+        method = %query.method,
+        "Get deposit info requested"
+    );
 
     // Validate method
     let method = query.method.to_uppercase();

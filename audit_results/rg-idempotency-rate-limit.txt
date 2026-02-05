@@ -1,0 +1,11 @@
+crates/ramp-api/src/middleware\mod.rs:6:pub mod rate_limit;
+crates/ramp-api/src/middleware\mod.rs:11:mod rate_limit_test;
+crates/ramp-api/src/middleware\mod.rs:16:pub use rate_limit::*;
+crates/ramp-api/src/middleware\idempotency.rs:289:/// Expects header: Idempotency-Key: <unique-key>
+crates/ramp-api/src/middleware\idempotency.rs:309:        .get("X-Idempotency-Key")
+crates/ramp-api/src/middleware\idempotency.rs:310:        .or_else(|| req.headers().get("Idempotency-Key"))
+crates/ramp-api/src/middleware\rate_limit.rs:40:            key_prefix: "ramp:rate_limit".to_string(),
+crates/ramp-api/src/middleware\rate_limit.rs:260:pub async fn rate_limit_middleware(
+crates/ramp-api/src/middleware\rate_limit.rs:419:    fn test_rate_limit_config_default() {
+crates/ramp-api/src/middleware\rate_limit_test.rs:8:async fn test_rate_limiter_basics() {
+crates/ramp-api/src/middleware\rate_limit_test.rs:16:async fn test_memory_rate_limiter() {

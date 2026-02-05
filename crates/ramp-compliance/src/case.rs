@@ -90,11 +90,12 @@ impl CaseManager {
     /// Update case status
     pub async fn update_status(
         &self,
+        tenant_id: &TenantId,
         case_id: &str,
         new_status: CaseStatus,
         author_id: Option<String>,
     ) -> Result<()> {
-        let old_case = self.store.get_case(case_id).await?;
+        let old_case = self.store.get_case(tenant_id, case_id).await?;
         let old_status = match old_case {
             Some(c) => c.status,
             None => return Ok(()), // Or error if case not found
@@ -102,7 +103,7 @@ impl CaseManager {
 
         if old_status != new_status {
             self.store
-                .update_status(case_id, new_status, None, None)
+                .update_status(tenant_id, case_id, new_status, None, None)
                 .await?;
 
             info!(
@@ -113,15 +114,15 @@ impl CaseManager {
 
             // Auto-create note
             self.note_manager
-                .on_status_change(case_id, old_status, new_status, author_id)
+                .on_status_change(tenant_id, case_id, old_status, new_status, author_id)
                 .await?;
         }
 
         Ok(())
     }
 
-    pub async fn get_case(&self, case_id: &str) -> Result<Option<AmlCase>> {
-        self.store.get_case(case_id).await
+    pub async fn get_case(&self, tenant_id: &TenantId, case_id: &str) -> Result<Option<AmlCase>> {
+        self.store.get_case(tenant_id, case_id).await
     }
 
     pub async fn list_cases(
@@ -167,17 +168,23 @@ impl CaseManager {
     /// Assign case to analyst
     pub async fn assign_case(
         &self,
+        tenant_id: &TenantId,
         case_id: &str,
         analyst_id: &str,
         author_id: Option<String>,
     ) -> Result<()> {
-        self.store.assign_case(case_id, analyst_id).await?;
+        self.store.assign_case(tenant_id, case_id, analyst_id).await?;
 
         info!(case_id = case_id, analyst_id = analyst_id, "Case assigned");
 
         // Auto-create note
         self.note_manager
-            .on_assignment_change(case_id, Some(analyst_id.to_string()), author_id)
+            .on_assignment_change(
+                tenant_id,
+                case_id,
+                Some(analyst_id.to_string()),
+                author_id,
+            )
             .await?;
 
         Ok(())
@@ -186,6 +193,7 @@ impl CaseManager {
     /// Resolve case
     pub async fn resolve_case(
         &self,
+        tenant_id: &TenantId,
         case_id: &str,
         resolution: &str,
         new_status: CaseStatus,
@@ -193,6 +201,7 @@ impl CaseManager {
     ) -> Result<()> {
         self.store
             .update_status(
+                tenant_id,
                 case_id,
                 new_status,
                 Some(Utc::now()),
@@ -209,7 +218,7 @@ impl CaseManager {
 
         // Auto-create note
         self.note_manager
-            .on_resolution(case_id, resolution, author_id)
+            .on_resolution(tenant_id, case_id, resolution, author_id)
             .await?;
 
         Ok(())

@@ -134,6 +134,7 @@ pub async fn create_payin(
 #[instrument(skip_all, fields(tenant_id, reference_code, intent_id))]
 pub async fn confirm_payin(
     State(service): State<PayinServiceState>,
+    Extension(tenant_ctx): Extension<TenantContext>,
     headers: HeaderMap,
     ValidatedJson(req): ValidatedJson<ConfirmPayinRequest>,
 ) -> Result<Json<ConfirmPayinResponse>, ApiError> {
@@ -149,6 +150,10 @@ pub async fn confirm_payin(
         return Err(ApiError::Forbidden(
             "Missing or invalid internal secret".to_string(),
         ));
+    }
+
+    if tenant_ctx.tenant_id.0 != req.tenant_id {
+        return Err(ApiError::Forbidden("Tenant mismatch".to_string()));
     }
 
     tracing::Span::current()

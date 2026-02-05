@@ -54,6 +54,7 @@ async fn test_case_store_integration() {
     let _note = manager
         .note_manager
         .add_note(
+            &tenant_id,
             &case_id,
             Some("analyst_1".to_string()),
             "Investigating large transaction".to_string(),
@@ -65,7 +66,12 @@ async fn test_case_store_integration() {
 
     // 4. Update status
     manager
-        .update_status(&case_id, CaseStatus::Review, Some("analyst_1".to_string()))
+        .update_status(
+            &tenant_id,
+            &case_id,
+            CaseStatus::Review,
+            Some("analyst_1".to_string()),
+        )
         .await
         .expect("Failed to update status");
 
@@ -82,7 +88,7 @@ async fn test_case_store_integration() {
 
     let notes = manager
         .note_manager
-        .get_notes(&case_id)
+        .get_notes(&tenant_id, &case_id)
         .await
         .expect("Failed to get notes");
     // Should have: initial comment + status change note
@@ -91,6 +97,7 @@ async fn test_case_store_integration() {
     // 6. Resolve case
     manager
         .resolve_case(
+            &tenant_id,
             &case_id,
             "False positive, user provided documentation",
             CaseStatus::Closed,

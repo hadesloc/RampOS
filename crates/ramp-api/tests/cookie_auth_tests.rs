@@ -44,6 +44,7 @@ fn create_portal_auth_config() -> Arc<PortalAuthConfig> {
         jwt_secret: TEST_JWT_SECRET.to_string(),
         issuer: None,
         audience: None,
+        allow_missing_tenant: false,
     })
 }
 

@@ -20,7 +20,6 @@ spec:
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
-      # TODO: Configure NATS authentication for production
       containers:
       - name: nats
         image: nats:2.10-alpine
@@ -29,14 +28,28 @@ spec:
           capabilities:
             drop: ["ALL"]
         args:
-        - "-js"
+        - "-c"
+        - "/etc/nats/nats.conf"
         ports:
         - containerPort: 4222
         - containerPort: 8222 # Monitor
         - containerPort: 6222 # Cluster
+        env:
+        - name: NATS_USER
+          valueFrom:
+            secretKeyRef:
+              name: rampos-secret
+              key: NATS_USER
+        - name: NATS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rampos-secret
+              key: NATS_PASSWORD
         volumeMounts:
         - name: nats-data
           mountPath: /data
+        - name: nats-config
+          mountPath: /etc/nats
         resources:
           requests:
             memory: "128Mi"
@@ -44,6 +57,10 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "200m"
+      volumes:
+      - name: nats-config
+        configMap:
+          name: rampos-nats-config
   volumeClaimTemplates:
   - metadata:
       name: nats-data

@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ramp_common::{
     types::{TenantId, UserId},
-    Result,
+    Error, Result,
 };
 use tokio::sync::Mutex;
 
@@ -35,8 +35,12 @@ impl CaseStore for InMemoryCaseStore {
         Ok(case.id.clone())
     }
 
-    async fn get_case(&self, case_id: &str) -> Result<Option<AmlCase>> {
-        Ok(self.cases.lock().await.get(case_id).cloned())
+    async fn get_case(&self, tenant_id: &TenantId, case_id: &str) -> Result<Option<AmlCase>> {
+        let cases = self.cases.lock().await;
+        Ok(cases
+            .get(case_id)
+            .filter(|case| &case.tenant_id == tenant_id)
+            .cloned())
     }
 
     async fn list_cases(
@@ -124,12 +128,16 @@ impl CaseStore for InMemoryCaseStore {
 
     async fn update_status(
         &self,
+        tenant_id: &TenantId,
         case_id: &str,
         status: CaseStatus,
         resolved_at: Option<DateTime<Utc>>,
         resolution: Option<String>,
     ) -> Result<()> {
         if let Some(case) = self.cases.lock().await.get_mut(case_id) {
+            if &case.tenant_id != tenant_id {
+                return Err(Error::NotFound("Case not found".to_string()));
+            }
             case.status = status;
             case.resolved_at = resolved_at;
             case.resolution = resolution;
@@ -138,20 +146,45 @@ impl CaseStore for InMemoryCaseStore {
         Ok(())
     }
 
-    async fn assign_case(&self, case_id: &str, assigned_to: &str) -> Result<()> {
+    async fn assign_case(&self, tenant_id: &TenantId, case_id: &str, assigned_to: &str) -> Result<()> {
         if let Some(case) = self.cases.lock().await.get_mut(case_id) {
+            if &case.tenant_id != tenant_id {
+                return Err(Error::NotFound("Case not found".to_string()));
+            }
             case.assigned_to = Some(assigned_to.to_string());
             case.updated_at = Utc::now();
         }
         Ok(())
     }
 
-    async fn add_note(&self, note: &CaseNote) -> Result<()> {
+    async fn add_note(&self, tenant_id: &TenantId, note: &CaseNote) -> Result<()> {
+        let cases = self.cases.lock().await;
+        let case = cases
+            .get(&note.case_id)
+            .filter(|case| &case.tenant_id == tenant_id);
+
+        if case.is_none() {
+            return Err(Error::NotFound(
+                "Case not found for note insertion".to_string(),
+            ));
+        }
+
+        drop(cases);
         self.notes.lock().await.push(note.clone());
         Ok(())
     }
 
-    async fn get_notes(&self, case_id: &str) -> Result<Vec<CaseNote>> {
+    async fn get_notes(&self, tenant_id: &TenantId, case_id: &str) -> Result<Vec<CaseNote>> {
+        let cases = self.cases.lock().await;
+        let case = cases
+            .get(case_id)
+            .filter(|case| &case.tenant_id == tenant_id);
+
+        if case.is_none() {
+            return Ok(vec![]);
+        }
+
+        drop(cases);
         Ok(self
             .notes
             .lock()

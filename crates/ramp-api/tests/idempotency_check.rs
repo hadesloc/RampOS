@@ -5,9 +5,130 @@ use axum::{
     routing::post,
     Router,
 };
-use ramp_api::middleware::{idempotency_middleware, IdempotencyConfig, IdempotencyHandler};
+use ramp_api::middleware::{
+    idempotency_middleware, IdempotencyConfig, IdempotencyHandler, IdempotencyStore,
+    StoredResponse,
+};
 use std::sync::Arc;
 use tower::ServiceExt; // for oneshot
+
+struct FailingStore;
+
+#[async_trait::async_trait]
+impl IdempotencyStore for FailingStore {
+    async fn get(&self, _tenant: &str, _key: &str, _prefix: &str) -> Option<StoredResponse> {
+        None
+    }
+
+    async fn store(
+        &self,
+        _tenant: &str,
+        _key: &str,
+        _resp: &StoredResponse,
+        _ttl: u64,
+        _prefix: &str,
+    ) -> Result<(), String> {
+        Err("store error".to_string())
+    }
+
+    async fn try_lock(&self, _tenant: &str, _key: &str, _prefix: &str) -> Result<bool, String> {
+        Err("lock error".to_string())
+    }
+
+    async fn unlock(&self, _tenant: &str, _key: &str, _prefix: &str) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+struct StoreFailingStore;
+
+#[async_trait::async_trait]
+impl IdempotencyStore for StoreFailingStore {
+    async fn get(&self, _tenant: &str, _key: &str, _prefix: &str) -> Option<StoredResponse> {
+        None
+    }
+
+    async fn store(
+        &self,
+        _tenant: &str,
+        _key: &str,
+        _resp: &StoredResponse,
+        _ttl: u64,
+        _prefix: &str,
+    ) -> Result<(), String> {
+        Err("store error".to_string())
+    }
+
+    async fn try_lock(&self, _tenant: &str, _key: &str, _prefix: &str) -> Result<bool, String> {
+        Ok(true)
+    }
+
+    async fn unlock(&self, _tenant: &str, _key: &str, _prefix: &str) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn test_idempotency_lock_error_returns_503() {
+    let config = IdempotencyConfig::default();
+    let handler = Arc::new(IdempotencyHandler::new(Arc::new(FailingStore), config));
+
+    let app = Router::new()
+        .route("/", post(|| async { "Success" }))
+        .layer(from_fn_with_state(handler.clone(), idempotency_middleware));
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/")
+        .header("X-Idempotency-Key", "key-fail")
+        .body(Body::from("Request Body A"))
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(response.headers().get("Retry-After").unwrap(), "60");
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(payload["error"], "idempotency_lock_unavailable");
+    assert_eq!(
+        payload["message"],
+        "Idempotency lock error; please retry"
+    );
+}
+
+#[tokio::test]
+async fn test_idempotency_store_failure_after_lock_returns_503() {
+    let config = IdempotencyConfig::default();
+    let handler = Arc::new(IdempotencyHandler::new(Arc::new(StoreFailingStore), config));
+
+    let app = Router::new()
+        .route("/", post(|| async { "Success" }))
+        .layer(from_fn_with_state(handler.clone(), idempotency_middleware));
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/")
+        .header("X-Idempotency-Key", "key-store-fail")
+        .body(Body::from("Request Body A"))
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(response.headers().get("Retry-After").unwrap(), "60");
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(payload["error"], "idempotency_store_unavailable");
+    assert_eq!(
+        payload["message"],
+        "Idempotency store error; request may have been processed"
+    );
+}
 
 #[tokio::test]
 async fn test_idempotency_different_request_hash_conflict() {

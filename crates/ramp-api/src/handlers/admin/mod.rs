@@ -335,10 +335,9 @@ pub async fn get_case(
 
     let case = app_state
         .case_manager
-        .get_case(&case_id)
+        .get_case(&tenant_ctx.tenant_id, &case_id)
         .await
         .map_err(ApiError::from)?
-        .filter(|case| case.tenant_id == tenant_ctx.tenant_id)
         .ok_or_else(|| ApiError::NotFound(format!("Case {} not found", case_id)))?;
 
     Ok(Json(map_case_response(case)))
@@ -364,16 +363,20 @@ pub async fn update_case(
 
     let _case = app_state
         .case_manager
-        .get_case(&case_id)
+        .get_case(&tenant_ctx.tenant_id, &case_id)
         .await
         .map_err(ApiError::from)?
-        .filter(|case| case.tenant_id == tenant_ctx.tenant_id)
         .ok_or_else(|| ApiError::NotFound(format!("Case {} not found", case_id)))?;
 
     if let Some(assigned_to) = request.assigned_to.as_deref() {
         app_state
             .case_manager
-            .assign_case(&case_id, assigned_to, Some("admin".to_string()))
+            .assign_case(
+                &tenant_ctx.tenant_id,
+                &case_id,
+                assigned_to,
+                Some("admin".to_string()),
+            )
             .await
             .map_err(ApiError::from)?;
     }
@@ -382,7 +385,12 @@ pub async fn update_case(
         let parsed_status = parse_case_status(status).map_err(ApiError::Validation)?;
         app_state
             .case_manager
-            .update_status(&case_id, parsed_status, Some("admin".to_string()))
+            .update_status(
+                &tenant_ctx.tenant_id,
+                &case_id,
+                parsed_status,
+                Some("admin".to_string()),
+            )
             .await
             .map_err(ApiError::from)?;
     }
@@ -397,7 +405,13 @@ pub async fn update_case(
             .unwrap_or(CaseStatus::Closed);
         app_state
             .case_manager
-            .resolve_case(&case_id, resolution, status, Some("admin".to_string()))
+            .resolve_case(
+                &tenant_ctx.tenant_id,
+                &case_id,
+                resolution,
+                status,
+                Some("admin".to_string()),
+            )
             .await
             .map_err(ApiError::from)?;
     }
@@ -407,6 +421,7 @@ pub async fn update_case(
             .case_manager
             .note_manager
             .add_note(
+                &tenant_ctx.tenant_id,
                 &case_id,
                 Some("admin".to_string()),
                 note.to_string(),
@@ -419,10 +434,9 @@ pub async fn update_case(
 
     let updated = app_state
         .case_manager
-        .get_case(&case_id)
+        .get_case(&tenant_ctx.tenant_id, &case_id)
         .await
         .map_err(ApiError::from)?
-        .filter(|case| case.tenant_id == tenant_ctx.tenant_id)
         .ok_or_else(|| ApiError::NotFound(format!("Case {} not found", case_id)))?;
 
     Ok(Json(map_case_response(updated)))

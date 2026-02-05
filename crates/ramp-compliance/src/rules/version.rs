@@ -193,7 +193,7 @@ impl RuleVersionManager {
     }
 
     /// Get a specific version
-    pub async fn get_version(&self, version_id: Uuid) -> Result<RuleVersion> {
+    pub async fn get_version(&self, tenant_id: &TenantId, version_id: Uuid) -> Result<RuleVersion> {
         let row = sqlx::query_as::<_, RuleVersion>(
             r#"
             SELECT
@@ -206,10 +206,11 @@ impl RuleVersionManager {
                 created_by,
                 activated_at
             FROM aml_rule_versions
-            WHERE id = $1
+            WHERE id = $1 AND tenant_id = $2
             "#,
         )
         .bind(version_id)
+        .bind(tenant_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
