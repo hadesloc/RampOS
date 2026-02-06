@@ -100,7 +100,9 @@ async fn main() -> anyhow::Result<()> {
 
     // Create ReportGenerator
     // Use factory to create document storage from config
-    let document_storage = create_document_storage_async(&config.providers.document_storage).await;
+    let document_storage = create_document_storage_async(&config.providers.document_storage)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create document storage: {}", e))?;
     let report_generator = Arc::new(ReportGenerator::new(pool.clone(), document_storage.into()));
 
     let case_store = Arc::new(PostgresCaseStore::new(pool.clone()));

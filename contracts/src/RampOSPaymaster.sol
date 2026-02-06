@@ -47,6 +47,9 @@ contract RampOSPaymaster is IPaymaster, Ownable {
     mapping(address => uint256) public userLastResetDay;
     uint256 public maxOpsPerUserPerDay = 100;
 
+    /// @notice Used signatures to prevent replay attacks
+    mapping(bytes32 => bool) public usedSignatures;
+
     /// @notice Timelock configuration
     uint256 public constant WITHDRAW_DELAY = 24 hours;
 
@@ -106,6 +109,10 @@ contract RampOSPaymaster is IPaymaster, Ownable {
             userOpHash, tenantId, validUntil, validAfter,
             block.chainid, address(this)
         )).toEthSignedMessageHash();
+
+        // Prevent signature replay attacks
+        require(!usedSignatures[hash], "Signature already used");
+        usedSignatures[hash] = true;
 
         if (hash.recover(signature) != verifyingSigner) {
             revert InvalidSignature();

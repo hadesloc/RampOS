@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { ADMIN_SESSION_COOKIE, isAdminSessionTokenValid } from '@/lib/admin-auth';
+import { ADMIN_SESSION_COOKIE, constantTimeEqual, isAdminSessionTokenValid } from '@/lib/admin-auth';
 
 const API_URL = process.env.API_URL || 'http://localhost:8080';
 const API_KEY = process.env.API_KEY || '';
@@ -10,7 +10,7 @@ async function handleRequest(req: NextRequest, props: { params: Promise<{ path: 
   const cookieStore = await cookies();
   const csrfCookie = cookieStore.get('rampos_csrf')?.value;
   const csrfHeader = req.headers.get('x-csrf-token');
-  if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+  if (!csrfCookie || !csrfHeader || !constantTimeEqual(csrfCookie, csrfHeader)) {
     return NextResponse.json({ message: 'CSRF check failed' }, { status: 403 });
   }
 
