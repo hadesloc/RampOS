@@ -95,6 +95,7 @@ contract RampOSAccount is BaseAccount, Initializable {
     error SelectorNotAllowed(bytes4 selector);
     error SpendingLimitExceeded(uint256 requested, uint256 limit);
     error DailyLimitExceeded(uint256 requested, uint256 remaining);
+    error TargetNotContract(address target);
 
     /// @notice Modifier for owner-only functions
     modifier onlyOwner() {
@@ -460,6 +461,8 @@ contract RampOSAccount is BaseAccount, Initializable {
         }
 
         // Check selector is allowed (only if data has a selector)
+        /// @notice Empty calldata (ETH transfers) bypass selector restrictions
+        /// @dev This is intentional - use spendingLimit to control ETH transfers
         if (storage_.allowedSelectors.length > 0 && data.length < 4) {
             revert SelectorNotAllowed(bytes4(0));
         }
@@ -518,7 +521,12 @@ contract RampOSAccount is BaseAccount, Initializable {
     }
 
     /// @notice Internal call function
+    /// @dev Checks contract existence for calls with data to prevent silent failures
     function _call(address target, uint256 value, bytes memory data) internal {
+        // Check contract existence for calls with data
+        if (data.length > 0 && target.code.length == 0) {
+            revert TargetNotContract(target);
+        }
         (bool success, bytes memory result) = target.call{ value: value }(data);
         if (!success) {
             assembly {
