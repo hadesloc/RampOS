@@ -694,7 +694,8 @@ pub mod payin_activities {
 
             // Create webhook service and queue event
             let webhook_service =
-                WebhookService::new(ctx.webhook_repo.clone(), ctx.tenant_repo.clone());
+                WebhookService::new(ctx.webhook_repo.clone(), ctx.tenant_repo.clone())
+                    .map_err(|e| e.to_string())?;
 
             webhook_service
                 .queue_event(&tenant, webhook_type, intent_id.as_ref(), payload)

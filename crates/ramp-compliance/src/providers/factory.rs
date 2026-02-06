@@ -42,16 +42,19 @@ pub fn create_kyt_provider(config: &KytProviderConfig) -> Result<Box<dyn KytProv
     }
 }
 
-pub fn create_sanctions_provider(config: &SanctionsProviderConfig) -> Box<dyn SanctionsProvider> {
+pub fn create_sanctions_provider(config: &SanctionsProviderConfig) -> Result<Box<dyn SanctionsProvider>, ProviderFactoryError> {
     match config.provider {
-        SanctionsProviderType::Mock => Box::new(MockSanctionsProvider::new()),
-        SanctionsProviderType::OpenSanctions => Box::new(OpenSanctionsProvider::new(
-            config
+        SanctionsProviderType::Mock => Ok(Box::new(MockSanctionsProvider::new())),
+        SanctionsProviderType::OpenSanctions => {
+            let api_key = config
                 .api_key
                 .clone()
-                .expect("OpenSanctions requires api_key"),
-            config.api_url.clone(),
-        )),
+                .ok_or_else(|| ProviderFactoryError::Configuration("OpenSanctions requires api_key".into()))?;
+            Ok(Box::new(OpenSanctionsProvider::new(
+                api_key,
+                config.api_url.clone(),
+            )))
+        }
     }
 }
 

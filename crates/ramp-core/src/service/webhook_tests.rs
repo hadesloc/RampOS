@@ -102,7 +102,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(()));
 
-        let service = WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo));
+        let service = WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let tenant_id = TenantId::new("tenant_1");
         let result = service
@@ -145,7 +145,7 @@ mod tests {
             .times(1)
             .returning(move |_| Ok(vec![event_clone.clone()]));
 
-        let service = WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo));
+        let service = WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         // When http-client is disabled, this should just log and succeed
         // However, if we are running with --features http-client but it fails to compile deps,

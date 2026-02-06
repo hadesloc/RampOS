@@ -46,19 +46,23 @@ pub struct WebhookService {
 }
 
 impl WebhookService {
+    /// Create a new webhook service
+    ///
+    /// # Errors
+    /// Returns an error if HTTP client creation fails (when http-client feature is enabled)
     pub fn new(
         webhook_repo: Arc<dyn WebhookRepository>,
         tenant_repo: Arc<dyn TenantRepository>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        Ok(Self {
             webhook_repo,
             tenant_repo,
             #[cfg(feature = "http-client")]
             http_client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
                 .build()
-                .expect("Failed to create HTTP client"),
-        }
+                .map_err(|e| ramp_common::Error::Internal(format!("Failed to create webhook HTTP client: {}", e)))?,
+        })
     }
 
     /// Queue a webhook event for delivery

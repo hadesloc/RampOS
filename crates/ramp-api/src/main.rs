@@ -89,7 +89,7 @@ async fn main() -> anyhow::Result<()> {
     let webhook_service = Arc::new(WebhookService::new(
         webhook_repo.clone(),
         tenant_repo.clone(),
-    ));
+    )?);
 
     let onboarding_service = Arc::new(OnboardingService::new(
         tenant_repo.clone(),

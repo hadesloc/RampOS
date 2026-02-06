@@ -65,6 +65,7 @@ contract RampOSPaymaster is IPaymaster, Ownable {
     event WithdrawRequested(address indexed to, uint256 amount, uint256 executeAfter);
     event WithdrawExecuted(address indexed to, uint256 amount);
     event WithdrawCancelled(address indexed to, uint256 amount);
+    event AccountingAnomaly(bytes32 indexed tenantId, uint256 refund, uint256 currentSpent);
 
     /// @notice Errors
     error InvalidSignature();
@@ -158,6 +159,7 @@ contract RampOSPaymaster is IPaymaster, Ownable {
                 if (tenantDailySpent[tenantId] >= refund) {
                     tenantDailySpent[tenantId] -= refund;
                 } else {
+                    emit AccountingAnomaly(tenantId, refund, tenantDailySpent[tenantId]);
                     tenantDailySpent[tenantId] = 0; // Should not happen ideally
                 }
             }
@@ -173,6 +175,7 @@ contract RampOSPaymaster is IPaymaster, Ownable {
             if (tenantDailySpent[tenantId] >= refund) {
                 tenantDailySpent[tenantId] -= refund;
             } else {
+                emit AccountingAnomaly(tenantId, refund, tenantDailySpent[tenantId]);
                 tenantDailySpent[tenantId] = 0;
             }
         }

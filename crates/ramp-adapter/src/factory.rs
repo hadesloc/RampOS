@@ -69,13 +69,13 @@ impl AdapterFactory {
         self.register_extended("vietqr", |config_value| {
             let config: VietQRConfig = serde_json::from_value(config_value)
                 .map_err(|e| Error::Validation(format!("Invalid VietQR config: {}", e)))?;
-            Ok(Box::new(VietQRAdapter::with_config(config)) as Box<dyn RailsAdapter>)
+            Ok(Box::new(VietQRAdapter::with_config(config)?) as Box<dyn RailsAdapter>)
         });
 
         self.register_extended("napas", |config_value| {
             let config: NapasConfig = serde_json::from_value(config_value)
                 .map_err(|e| Error::Validation(format!("Invalid Napas config: {}", e)))?;
-            Ok(Box::new(NapasAdapter::with_config(config)) as Box<dyn RailsAdapter>)
+            Ok(Box::new(NapasAdapter::with_config(config)?) as Box<dyn RailsAdapter>)
         });
     }
 
@@ -240,7 +240,7 @@ pub fn create_adapters_from_env() -> Result<HashMap<String, Arc<dyn RailsAdapter
 
         adapters.insert(
             "vietqr".to_string(),
-            Arc::new(VietQRAdapter::with_config(config)),
+            Arc::new(VietQRAdapter::with_config(config)?),
         );
         info!("VietQR adapter configured from environment");
     }
@@ -270,7 +270,7 @@ pub fn create_adapters_from_env() -> Result<HashMap<String, Arc<dyn RailsAdapter
 
         adapters.insert(
             "napas".to_string(),
-            Arc::new(NapasAdapter::with_config(config)),
+            Arc::new(NapasAdapter::with_config(config)?),
         );
         info!("Napas adapter configured from environment");
     }

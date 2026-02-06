@@ -90,6 +90,9 @@ pub struct VietQRAdapter {
 
 impl VietQRAdapter {
     /// Create a new VietQR adapter with minimal config (backwards compatible)
+    ///
+    /// # Panics
+    /// Panics if HTTP client creation fails (should never happen with default config)
     pub fn new(provider_code: impl Into<String>, webhook_secret: impl Into<String>) -> Self {
         let config = VietQRConfig {
             base: AdapterConfig {
@@ -108,22 +111,25 @@ impl VietQRAdapter {
             enable_real_api: false,
         };
 
-        Self::with_config(config)
+        Self::with_config(config).expect("Failed to create VietQR adapter with default config")
     }
 
     /// Create a new VietQR adapter with full configuration
-    pub fn with_config(config: VietQRConfig) -> Self {
+    ///
+    /// # Errors
+    /// Returns an error if HTTP client creation fails
+    pub fn with_config(config: VietQRConfig) -> Result<Self> {
         let http_client = Client::builder()
             .timeout(Duration::from_secs(config.base.timeout_secs))
             .user_agent("RampOS-VietQR-Adapter/1.0")
             .build()
-            .expect("Failed to create HTTP client");
+            .map_err(|e| Error::Internal(format!("Failed to create HTTP client: {}", e)))?;
 
-        Self {
+        Ok(Self {
             config,
             http_client,
             bank_cache: Arc::new(tokio::sync::RwLock::new(None)),
-        }
+        })
     }
 
     /// Generate QR code content string according to VietQR EMVCo format
