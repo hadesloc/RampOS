@@ -137,6 +137,7 @@ contract RampOSAccount is BaseAccount, Initializable {
     /// @notice Constructor - sets immutable entry point and disables initializers
     /// @param anEntryPoint The ERC-4337 EntryPoint contract address
     constructor(IEntryPoint anEntryPoint) {
+        require(address(anEntryPoint) != address(0), "Invalid entry point");
         _ENTRY_POINT = anEntryPoint;
         _disableInitializers();
     }
@@ -166,6 +167,9 @@ contract RampOSAccount is BaseAccount, Initializable {
         _call(dest, value, data);
     }
 
+    /// @notice Maximum batch size to prevent out-of-gas issues
+    uint256 public constant MAX_BATCH_SIZE = 32;
+
     /// @notice Execute a batch of transactions
     function executeBatch(
         address[] calldata dests,
@@ -175,6 +179,7 @@ contract RampOSAccount is BaseAccount, Initializable {
         require(
             dests.length == values.length && values.length == datas.length, "Array length mismatch"
         );
+        require(dests.length <= MAX_BATCH_SIZE, "Batch size exceeds limit");
 
         // Check permissions for each call if session key is pending
         if (_pendingSessionKey != address(0) && msg.sender == address(_ENTRY_POINT)) {

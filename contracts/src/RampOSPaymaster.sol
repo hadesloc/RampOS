@@ -78,6 +78,7 @@ contract RampOSPaymaster is IPaymaster, Ownable {
     error WithdrawExpired();
 
     constructor(IEntryPoint _entryPoint, address _signer) Ownable(msg.sender) {
+        require(address(_entryPoint) != address(0), "Invalid entry point");
         require(_signer != address(0), "Invalid signer");
         ENTRY_POINT = _entryPoint;
         verifyingSigner = _signer;
