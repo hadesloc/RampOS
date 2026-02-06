@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 use ethers::abi::{encode, Token};
 use ethers::types::{Address, Bytes, H256, U256};
-use ramp_common::Result;
+use ramp_common::{Error, Result};
 use std::collections::HashMap;
 use std::sync::RwLock;
 use tracing::{info, warn};
@@ -25,33 +25,33 @@ impl AaveV3Addresses {
     pub fn ethereum_mainnet() -> Result<Self> {
         Ok(Self {
             pool: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid pool address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid pool address: {}", e)))?,
             pool_data_provider: "0x7B4EB56E7CD4b454BA8ff71E4518426369a138a3".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid data provider address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid data provider address: {}", e)))?,
             incentives_controller: "0x8164Cc65827dcFe994AB23944CBC90e0aa80bFcb".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid incentives address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid incentives address: {}", e)))?,
         })
     }
 
     pub fn polygon_mainnet() -> Result<Self> {
         Ok(Self {
             pool: "0x794a61358D6845594F94dc1DB02A252b5b4814aD".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid pool address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid pool address: {}", e)))?,
             pool_data_provider: "0x69FA688f1Dc47d4B5d8029D5a35FB7a548310654".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid data provider address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid data provider address: {}", e)))?,
             incentives_controller: "0x929EC64c34a17401F460460D4B9390518E5B473e".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid incentives address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid incentives address: {}", e)))?,
         })
     }
 
     pub fn arbitrum() -> Result<Self> {
         Ok(Self {
             pool: "0x794a61358D6845594F94dc1DB02A252b5b4814aD".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid pool address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid pool address: {}", e)))?,
             pool_data_provider: "0x69FA688f1Dc47d4B5d8029D5a35FB7a548310654".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid data provider address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid data provider address: {}", e)))?,
             incentives_controller: "0x929EC64c34a17401F460460D4B9390518E5B473e".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid incentives address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid incentives address: {}", e)))?,
         })
     }
 }
@@ -230,7 +230,7 @@ impl YieldProtocol for AaveV3Protocol {
 
     async fn current_apy(&self, token: Address) -> Result<f64> {
         if !self.supports_token(token) {
-            return Err(anyhow::anyhow!("Token not supported: {:?}", token));
+            return Err(Error::Business(format!("Token not supported: {:?}", token)));
         }
 
         // In production, would query Aave's getReserveData
@@ -255,7 +255,7 @@ impl YieldProtocol for AaveV3Protocol {
 
     async fn deposit(&self, token: Address, amount: U256) -> Result<H256> {
         if !self.supports_token(token) {
-            return Err(anyhow::anyhow!("Token not supported: {:?}", token));
+            return Err(Error::Business(format!("Token not supported: {:?}", token)));
         }
 
         info!(
@@ -270,7 +270,7 @@ impl YieldProtocol for AaveV3Protocol {
 
         // Update simulated balance
         {
-            let mut balances = self.balances.write().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+            let mut balances = self.balances.write().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
             let balance = balances.entry(token).or_insert(U256::zero());
             *balance = balance.saturating_add(amount);
         }
@@ -286,17 +286,16 @@ impl YieldProtocol for AaveV3Protocol {
 
     async fn withdraw(&self, token: Address, amount: U256) -> Result<H256> {
         if !self.supports_token(token) {
-            return Err(anyhow::anyhow!("Token not supported: {:?}", token));
+            return Err(Error::Business(format!("Token not supported: {:?}", token)));
         }
 
         // Check balance
         let current_balance = self.balance(token).await?;
         if current_balance < amount {
-            return Err(anyhow::anyhow!(
-                "Insufficient balance: {} < {}",
-                current_balance,
-                amount
-            ));
+            return Err(Error::InsufficientBalance {
+                required: amount.to_string(),
+                available: current_balance.to_string(),
+            });
         }
 
         info!(
@@ -311,7 +310,7 @@ impl YieldProtocol for AaveV3Protocol {
 
         // Update simulated balance
         {
-            let mut balances = self.balances.write().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+            let mut balances = self.balances.write().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
             if let Some(balance) = balances.get_mut(&token) {
                 *balance = balance.saturating_sub(amount);
             }
@@ -327,7 +326,7 @@ impl YieldProtocol for AaveV3Protocol {
     }
 
     async fn balance(&self, token: Address) -> Result<U256> {
-        let balances = self.balances.read().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+        let balances = self.balances.read().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
         Ok(*balances.get(&token).unwrap_or(&U256::zero()))
     }
 

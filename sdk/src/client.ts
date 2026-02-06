@@ -3,6 +3,7 @@ import { IntentService } from './services/intent.service';
 import { UserService } from './services/user.service';
 import { LedgerService } from './services/ledger.service';
 import { AAService } from './services/aa.service';
+import { MultichainProvider } from './multichain/provider';
 import { WebhookVerifier } from './utils/webhook';
 import { signRequest } from './utils/crypto';
 import { withRetry } from './utils/retry';

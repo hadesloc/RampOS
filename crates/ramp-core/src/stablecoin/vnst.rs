@@ -249,7 +249,8 @@ mod tests {
         let metadata = vnst.metadata();
 
         // VNST is specifically designed for Vietnam market
-        assert!(metadata.description.unwrap().contains("Vietnamese Dong"));
-        assert!(metadata.description.as_ref().is_none() || true); // Already consumed above
+        // Clone the description so it's not consumed
+        assert!(metadata.description.clone().unwrap().contains("Vietnamese Dong"));
+        assert!(metadata.description.is_some());
     }
 }

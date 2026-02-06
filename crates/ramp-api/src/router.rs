@@ -31,7 +31,8 @@ use crate::handlers::aa::AAServiceState;
 use crate::handlers::bank_webhooks::BankWebhookState;
 use crate::middleware::{
     auth_middleware, idempotency_middleware, portal_auth_middleware, rate_limit_middleware,
-    request_id_middleware, IdempotencyHandler, PortalAuthConfig, RateLimiter,
+    request_id_middleware, tiered_rate_limit_middleware, IdempotencyHandler, PortalAuthConfig,
+    RateLimiter, TieredRateLimitState,
 };
 use crate::openapi::ApiDoc;
 
@@ -361,9 +362,11 @@ pub fn create_router(state: AppState) -> Router {
 
     // Add rate limiting if available
     if let Some(ref limiter) = state.rate_limiter {
+        // Use tiered rate limiting for API v1
+        let tiered_state = TieredRateLimitState::new(limiter.clone());
         api_v1 = api_v1.layer(middleware::from_fn_with_state(
-            limiter.clone(),
-            rate_limit_middleware,
+            tiered_state,
+            tiered_rate_limit_middleware,
         ));
     }
 

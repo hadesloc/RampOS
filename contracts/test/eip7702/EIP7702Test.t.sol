@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import "forge-std/Test.sol";
 import "../../src/eip7702/EIP7702Delegation.sol";
 import "@account-abstraction/contracts/core/EntryPoint.sol";
+import "@account-abstraction/contracts/core/BaseAccount.sol";
 
 contract EIP7702Test is Test {
     EIP7702Delegation implementation;
@@ -52,9 +53,17 @@ contract EIP7702Test is Test {
     function test_RevertIfNotAuthorized() public {
         address target = makeAddr("target");
         vm.deal(owner, 10 ether);
+        address stranger = makeAddr("stranger");
 
-        vm.prank(makeAddr("stranger"));
-        vm.expectRevert("Not authorized");
+        vm.prank(stranger);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                BaseAccount.NotFromEntryPoint.selector,
+                stranger,
+                owner,
+                address(entryPoint)
+            )
+        );
         EIP7702Delegation(payable(owner)).execute(target, 1 ether, "");
     }
 

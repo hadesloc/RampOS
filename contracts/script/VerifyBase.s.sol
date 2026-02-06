@@ -73,7 +73,7 @@ contract VerifyBaseDeployment is Script {
         RampOSPaymaster paymaster = RampOSPaymaster(payable(paymasterAddress));
 
         // Check entry point
-        address entryPoint = address(paymaster.entryPoint());
+        address entryPoint = address(paymaster.ENTRY_POINT());
         require(entryPoint == ENTRY_POINT_V07, "Paymaster: Wrong entry point");
         console.log("    Entry Point: OK");
 
@@ -142,7 +142,7 @@ contract TestBaseUserOp is Script {
             vm.startBroadcast(testPrivateKey);
 
             // Create account
-            address created = factory.createAccount(testOwner, salt);
+            address created = address(factory.createAccount(testOwner, salt));
             console.log("    Account created at:", created);
 
             vm.stopBroadcast();

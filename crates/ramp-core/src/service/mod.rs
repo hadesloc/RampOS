@@ -1,5 +1,6 @@
 //! Service layer - Business logic
 
+pub mod bridge;
 pub mod compliance_audit;
 pub mod deposit;
 pub mod ledger;
@@ -16,6 +17,7 @@ mod webhook_tests;
 pub mod withdraw;
 pub mod withdraw_policy_provider;
 
+pub use bridge::BridgeService;
 pub use compliance_audit::{AuditContext, AuditLogExport, ComplianceAuditService, ExportFormat};
 pub use deposit::DepositService;
 pub use ledger::LedgerService;

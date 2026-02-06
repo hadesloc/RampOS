@@ -1,0 +1,47 @@
+{
+  "network": "polygon-zkevm-cardona",
+  "chainId": 2442,
+  "networkName": "Polygon zkEVM Cardona",
+  "nativeCurrency": {
+    "name": "Ether",
+    "symbol": "ETH",
+    "decimals": 18
+  },
+  "rpcUrls": {
+    "default": "https://rpc.cardona.zkevm-rpc.com",
+    "fallback": []
+  },
+  "blockExplorer": {
+    "name": "PolygonScan Cardona",
+    "url": "https://cardona-zkevm.polygonscan.com",
+    "apiUrl": "https://api-cardona-zkevm.polygonscan.com/api"
+  },
+  "erc4337": {
+    "entryPoint": {
+      "v06": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+    },
+    "bundlers": {
+      "pimlico": {
+        "url": "https://api.pimlico.io/v2/polygon-zkevm-cardona/rpc",
+        "apiKeyRequired": true
+      }
+    },
+    "paymasterProviders": {
+      "pimlico": {
+        "url": "https://api.pimlico.io/v2/polygon-zkevm-cardona/rpc",
+        "sponsorshipType": "verifying"
+      }
+    }
+  },
+  "deployment": {
+    "gasSettings": {
+      "multiplier": 1.2
+    },
+    "verification": {
+      "apiKey": "${POLYGON_ZKEVM_API_KEY}",
+      "apiUrl": "https://api-cardona-zkevm.polygonscan.com/api",
+      "verifier": "blockscout",
+      "verifierUrl": "https://cardona-zkevm.polygonscan.com/api"
+    }
+  }
+}

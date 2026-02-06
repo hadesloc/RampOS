@@ -59,5 +59,7 @@ pub use crosschain::{
     CrossChainIntent, IntentType, IntentStatus, IntentExecution,
     ExecutionStep, StepType, StepStatus, GasEstimate,
     IntentExecutor, ExecutionConfig, ExecutionResult, CrossChainExecutor,
-    CrossChainRelayer, RelayerConfig, MessageStatus, CrossChainMessage,
+    CrossChainRelayer, RelayerConfig, MessageStatus,
+    // CrossChainMessage is accessible via relayer module if needed, or re-export it from there
+    // CrossChainMessage,
 };

@@ -4410,6 +4410,7 @@ dependencies = [
  "chrono",
  "config",
  "ethers",
+ "futures",
  "hex",
  "mockall",
  "ramp-adapter",

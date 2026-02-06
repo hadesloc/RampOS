@@ -10,13 +10,13 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ethers::types::{Address, H256, U256};
-use ramp_common::Result;
+use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::RwLock;
 use tracing::{info, warn};
 
-use super::{ProtocolId, ProtocolRegistry, YieldProtocol, YieldService};
+use super::{ProtocolId, ProtocolRegistry, YieldService};
 
 /// Strategy identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -260,7 +260,24 @@ impl YieldStrategy for ConservativeStrategy {
             strategy = %self.config.name,
             "Executing conservative rebalance"
         );
-        service.rebalance(token).await
+
+        // 1. Get total balance
+        let total_balance = service.total_balance(token).await?;
+        if total_balance.is_zero() {
+            return Ok(vec![]);
+        }
+
+        // 2. Calculate target allocation
+        let current_allocations = service.get_allocations()?;
+        let targets = self.calculate_allocation(
+            service.registry(),
+            token,
+            total_balance,
+            &current_allocations
+        ).await?;
+
+        // 3. Execute reallocation
+        service.reallocate(token, targets).await
     }
 
     async fn check_emergency_exit(
@@ -433,7 +450,21 @@ impl YieldStrategy for BalancedStrategy {
             strategy = %self.config.name,
             "Executing balanced rebalance"
         );
-        service.rebalance(token).await
+
+        let total_balance = service.total_balance(token).await?;
+        if total_balance.is_zero() {
+            return Ok(vec![]);
+        }
+
+        let current_allocations = service.get_allocations()?;
+        let targets = self.calculate_allocation(
+            service.registry(),
+            token,
+            total_balance,
+            &current_allocations
+        ).await?;
+
+        service.reallocate(token, targets).await
     }
 
     async fn check_emergency_exit(
@@ -578,7 +609,21 @@ impl YieldStrategy for AggressiveStrategy {
             strategy = %self.config.name,
             "Executing aggressive rebalance"
         );
-        service.rebalance(token).await
+
+        let total_balance = service.total_balance(token).await?;
+        if total_balance.is_zero() {
+            return Ok(vec![]);
+        }
+
+        let current_allocations = service.get_allocations()?;
+        let targets = self.calculate_allocation(
+            service.registry(),
+            token,
+            total_balance,
+            &current_allocations
+        ).await?;
+
+        service.reallocate(token, targets).await
     }
 
     async fn check_emergency_exit(
@@ -638,11 +683,11 @@ impl StrategyManager {
     /// Activate a strategy
     pub fn activate_strategy(&self, id: StrategyId) -> Result<()> {
         if !self.strategies.contains_key(&id) {
-            return Err(anyhow::anyhow!("Strategy not found: {}", id));
+            return Err(Error::NotFound(format!("Strategy not found: {}", id)));
         }
 
         let mut active = self.active_strategy.write()
-            .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+            .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
         *active = Some(id);
 
         info!(strategy = %id, "Strategy activated");
@@ -652,14 +697,14 @@ impl StrategyManager {
     /// Get active strategy
     pub fn active_strategy(&self) -> Result<Option<StrategyId>> {
         let active = self.active_strategy.read()
-            .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+            .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
         Ok(*active)
     }
 
     /// Deactivate current strategy
     pub fn deactivate_strategy(&self) -> Result<()> {
         let mut active = self.active_strategy.write()
-            .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+            .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
         *active = None;
         Ok(())
     }
@@ -668,7 +713,7 @@ impl StrategyManager {
     pub fn is_rebalance_due(&self, token: Address) -> Result<bool> {
         let active_id = {
             let active = self.active_strategy.read()
-                .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+                .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
             match *active {
                 Some(id) => id,
                 None => return Ok(false),
@@ -676,10 +721,10 @@ impl StrategyManager {
         };
 
         let strategy = self.strategies.get(&active_id)
-            .ok_or_else(|| anyhow::anyhow!("Strategy not found"))?;
+            .ok_or_else(|| Error::NotFound("Strategy not found".to_string()))?;
 
         let last_rebalance = self.last_rebalance.read()
-            .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+            .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
 
         let interval = Duration::seconds(strategy.config().rebalance_interval_secs as i64);
 
@@ -692,7 +737,7 @@ impl StrategyManager {
     /// Record a rebalance
     pub fn record_rebalance(&self, token: Address) -> Result<()> {
         let mut last_rebalance = self.last_rebalance.write()
-            .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+            .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
         last_rebalance.insert(token, Utc::now());
         Ok(())
     }
@@ -712,7 +757,7 @@ impl StrategyManager {
 
         let active_id = {
             let active = self.active_strategy.read()
-                .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+                .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
             match *active {
                 Some(id) => id,
                 None => return Ok(vec![]),
@@ -720,7 +765,7 @@ impl StrategyManager {
         };
 
         let strategy = self.strategies.get(&active_id)
-            .ok_or_else(|| anyhow::anyhow!("Strategy not found"))?;
+            .ok_or_else(|| Error::NotFound("Strategy not found".to_string()))?;
 
         // Check if rebalancing is needed
         if !strategy.should_rebalance(registry, token, current_allocations).await? {
@@ -752,7 +797,7 @@ impl StrategyManager {
     ) -> Result<Vec<H256>> {
         let active_id = {
             let active = self.active_strategy.read()
-                .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+                .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
             match *active {
                 Some(id) => id,
                 None => return Ok(vec![]),
@@ -760,7 +805,7 @@ impl StrategyManager {
         };
 
         let strategy = self.strategies.get(&active_id)
-            .ok_or_else(|| anyhow::anyhow!("Strategy not found"))?;
+            .ok_or_else(|| Error::NotFound("Strategy not found".to_string()))?;
 
         let exit_protocols = strategy.check_emergency_exit(registry).await?;
 

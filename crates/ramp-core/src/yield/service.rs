@@ -8,15 +8,16 @@
 
 use chrono::{DateTime, Duration, Utc};
 use ethers::types::{Address, H256, U256};
-use ramp_common::Result;
+use crate::r#yield::YieldError;
+use ramp_common::{Error, Result};
 use std::collections::HashMap;
 use std::sync::RwLock;
 use tracing::{error, info, warn};
 
 use super::{
-    ProtocolId, ProtocolRegistry, YieldAllocationConfig, YieldError, YieldOperation,
+    ProtocolId, ProtocolRegistry, YieldAllocationConfig, YieldOperation,
     YieldPosition, YieldPositionReport, YieldProtocol, YieldReport, YieldTransaction,
-    YieldTxStatus,
+    YieldTxStatus, YieldError,
 };
 
 /// Yield service for managing stablecoin yield across protocols
@@ -47,7 +48,7 @@ impl YieldService {
 
     /// Get current allocations per protocol
     pub fn get_allocations(&self) -> Result<HashMap<ProtocolId, U256>> {
-        let allocations = self.allocations.read().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+        let allocations = self.allocations.read().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
         Ok(allocations.clone())
     }
 
@@ -62,7 +63,7 @@ impl YieldService {
             .registry
             .best_for_token(token)
             .await?
-            .ok_or_else(|| anyhow::anyhow!("No protocol supports token {:?}", token))?;
+            .ok_or_else(|| Error::NotFound(format!("No protocol supports token {:?}", token)))?;
 
         let protocol_id = best_protocol.protocol_id();
 
@@ -105,7 +106,7 @@ impl YieldService {
         let protocol = self
             .registry
             .get(protocol_id)
-            .ok_or_else(|| anyhow::anyhow!("Protocol not found: {}", protocol_id))?;
+            .ok_or_else(|| Error::NotFound(format!("Protocol not found: {}", protocol_id)))?;
 
         if !protocol.supports_token(token) {
             return Err(YieldError::TokenNotSupported { token }.into());
@@ -142,7 +143,7 @@ impl YieldService {
         let protocol = self
             .registry
             .get(protocol_id)
-            .ok_or_else(|| anyhow::anyhow!("Protocol not found: {}", protocol_id))?;
+            .ok_or_else(|| Error::NotFound(format!("Protocol not found: {}", protocol_id)))?;
 
         let balance = protocol.balance(token).await?;
         if balance < amount {
@@ -177,11 +178,11 @@ impl YieldService {
         let protocol = self
             .registry
             .get(protocol_id)
-            .ok_or_else(|| anyhow::anyhow!("Protocol not found: {}", protocol_id))?;
+            .ok_or_else(|| Error::NotFound(format!("Protocol not found: {}", protocol_id)))?;
 
         let balance = protocol.balance(token).await?;
         if balance.is_zero() {
-            return Err(anyhow::anyhow!("No balance to withdraw"));
+            return Err(Error::Business("No balance to withdraw".to_string()));
         }
 
         warn!(
@@ -266,6 +267,67 @@ impl YieldService {
         Ok(transactions)
     }
 
+    /// Reallocate funds according to target distribution
+    pub async fn reallocate(
+        &self,
+        token: Address,
+        targets: Vec<(ProtocolId, U256)>,
+    ) -> Result<Vec<H256>> {
+        let mut tx_hashes = Vec::new();
+        let mut current_balances = HashMap::new();
+
+        // 1. Get current balances
+        for protocol in self.registry.all() {
+            if protocol.supports_token(token) {
+                let bal = protocol.balance(token).await?;
+                current_balances.insert(protocol.protocol_id(), bal);
+            }
+        }
+
+        let mut target_map = HashMap::new();
+        for (pid, amt) in targets {
+            target_map.insert(pid, amt);
+        }
+
+        // 2. Execute Withdrawals (for protocols where current > target)
+        for (pid, current) in &current_balances {
+            let target = target_map.get(pid).copied().unwrap_or(U256::zero());
+
+            if *current > target {
+                let withdraw_amount = *current - target;
+                info!(
+                    protocol = %pid,
+                    token = ?token,
+                    amount = %withdraw_amount,
+                    "Reallocating: Withdrawing excess"
+                );
+
+                let tx = self.withdraw_from_protocol(*pid, token, withdraw_amount).await?;
+                tx_hashes.push(tx);
+            }
+        }
+
+        // 3. Execute Deposits (for protocols where target > current)
+        for (pid, target) in &target_map {
+            let current = current_balances.get(pid).copied().unwrap_or(U256::zero());
+
+            if *target > current {
+                let deposit_amount = *target - current;
+                info!(
+                    protocol = %pid,
+                    token = ?token,
+                    amount = %deposit_amount,
+                    "Reallocating: Depositing shortfall"
+                );
+
+                let tx = self.deposit_to_protocol(*pid, token, deposit_amount).await?;
+                tx_hashes.push(tx);
+            }
+        }
+
+        Ok(tx_hashes)
+    }
+
     /// Claim all pending rewards
     pub async fn claim_all_rewards(&self) -> Result<Vec<H256>> {
         let mut tx_hashes = Vec::new();
@@ -332,8 +394,8 @@ impl YieldService {
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> Result<YieldReport> {
-        let positions = self.positions.read().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
-        let transactions = self.transactions.read().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+        let positions = self.positions.read().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+        let transactions = self.transactions.read().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
 
         let mut total_deposited = U256::zero();
         let mut total_withdrawn = U256::zero();
@@ -395,7 +457,7 @@ impl YieldService {
 
     /// Get all positions
     pub fn get_positions(&self) -> Result<Vec<YieldPosition>> {
-        let positions = self.positions.read().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+        let positions = self.positions.read().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
         Ok(positions.clone())
     }
 
@@ -432,16 +494,15 @@ impl YieldService {
     // Private helper methods
 
     fn check_allocation_limit(&self, protocol_id: ProtocolId, amount: U256) -> Result<()> {
-        let allocations = self.allocations.read().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+        let allocations = self.allocations.read().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
         let current = allocations.get(&protocol_id).copied().unwrap_or_default();
         let new_total = current.saturating_add(amount);
 
         if new_total > self.config.max_per_protocol {
-            return Err(YieldError::AllocationLimitExceeded {
-                max: self.config.max_per_protocol,
-                requested: new_total,
-            }
-            .into());
+            return Err(Error::Business(format!(
+                "Allocation limit exceeded: max {}, requested {}",
+                self.config.max_per_protocol, new_total
+            )));
         }
 
         Ok(())
@@ -454,7 +515,7 @@ impl YieldService {
         amount: U256,
         apy: f64,
     ) -> Result<()> {
-        let mut positions = self.positions.write().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+        let mut positions = self.positions.write().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
         positions.push(YieldPosition::new(protocol, token, amount, apy));
         Ok(())
     }
@@ -467,7 +528,7 @@ impl YieldService {
         operation: YieldOperation,
         amount: U256,
     ) -> Result<()> {
-        let mut transactions = self.transactions.write().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+        let mut transactions = self.transactions.write().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
         transactions.push(YieldTransaction {
             id: uuid::Uuid::new_v4().to_string(),
             tx_hash,
@@ -482,7 +543,7 @@ impl YieldService {
     }
 
     fn update_allocation(&self, protocol: ProtocolId, amount: U256, is_deposit: bool) -> Result<()> {
-        let mut allocations = self.allocations.write().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+        let mut allocations = self.allocations.write().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
         let current = allocations.entry(protocol).or_insert(U256::zero());
 
         if is_deposit {

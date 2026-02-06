@@ -9,7 +9,7 @@ mod executor;
 mod relayer;
 
 pub use executor::{IntentExecutor, ExecutionResult, ExecutionConfig};
-pub use relayer::{CrossChainRelayer, RelayerConfig, MessageStatus};
+pub use relayer::{CrossChainRelayer, RelayerConfig, MessageStatus, CrossChainMessage};
 
 use crate::bridge::{BridgeQuote, BridgeRegistry, BridgeStatus, BridgeToken, ChainId, TxHash};
 use async_trait::async_trait;

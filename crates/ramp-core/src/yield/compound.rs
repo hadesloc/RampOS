@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 use ethers::abi::{encode, Token};
 use ethers::types::{Address, Bytes, H256, U256};
-use ramp_common::Result;
+use ramp_common::{Error, Result};
 use std::collections::HashMap;
 use std::sync::RwLock;
 use tracing::info;
@@ -28,33 +28,33 @@ impl CompoundV3Addresses {
     pub fn ethereum_mainnet() -> Result<Self> {
         Ok(Self {
             comet_usdc: "0xc3d688B66703497DAA19211EEdff47f25384cdc3".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid comet address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid comet address: {}", e)))?,
             comp_token: "0xc00e94Cb662C3520282E6f5717214004A7f26888".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid COMP address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid COMP address: {}", e)))?,
             rewards: "0x1B0e765F6224C21223AeA2af16c1C46E38885a40".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid rewards address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid rewards address: {}", e)))?,
         })
     }
 
     pub fn polygon_mainnet() -> Result<Self> {
         Ok(Self {
             comet_usdc: "0xF25212E676D1F7F89Cd72fFEe66158f541246445".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid comet address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid comet address: {}", e)))?,
             comp_token: "0x8505b9d2254A7Ae468c0E9dd10Ccea3A837aef5c".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid COMP address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid COMP address: {}", e)))?,
             rewards: "0x45939657d1CA34A8FA39A924B71D28Fe8431e581".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid rewards address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid rewards address: {}", e)))?,
         })
     }
 
     pub fn arbitrum() -> Result<Self> {
         Ok(Self {
             comet_usdc: "0xA5EDBDD9646f8dFF606d7448e414884C7d905dCA".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid comet address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid comet address: {}", e)))?,
             comp_token: "0x354A6dA3fcde098F8389cad84b0182725c6C91dE".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid COMP address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid COMP address: {}", e)))?,
             rewards: "0x88730d254A2f7e6AC8388c3198aFd694bA9f7fae".parse()
-                .map_err(|e| anyhow::anyhow!("Invalid rewards address: {}", e))?,
+                .map_err(|e| Error::Internal(format!("Invalid rewards address: {}", e)))?,
         })
     }
 }
@@ -204,7 +204,7 @@ impl YieldProtocol for CompoundV3Protocol {
 
     async fn current_apy(&self, token: Address) -> Result<f64> {
         if !self.supports_token(token) {
-            return Err(anyhow::anyhow!("Token not supported: {:?}", token));
+            return Err(Error::Business(format!("Token not supported: {:?}", token)));
         }
 
         // In production, would query getSupplyRate from Comet
@@ -225,7 +225,7 @@ impl YieldProtocol for CompoundV3Protocol {
 
     async fn deposit(&self, token: Address, amount: U256) -> Result<H256> {
         if !self.supports_token(token) {
-            return Err(anyhow::anyhow!("Token not supported: {:?}", token));
+            return Err(Error::Business(format!("Token not supported: {:?}", token)));
         }
 
         info!(
