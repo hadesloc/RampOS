@@ -40,6 +40,17 @@ impl YieldService {
         }
     }
 
+    /// Get the protocol registry
+    pub fn registry(&self) -> &ProtocolRegistry {
+        &self.registry
+    }
+
+    /// Get current allocations per protocol
+    pub fn get_allocations(&self) -> Result<HashMap<ProtocolId, U256>> {
+        let allocations = self.allocations.read().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+        Ok(allocations.clone())
+    }
+
     /// Deposit tokens to the best yield protocol
     pub async fn deposit_to_best_protocol(
         &self,

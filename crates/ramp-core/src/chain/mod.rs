@@ -22,10 +22,12 @@ use thiserror::Error;
 pub mod evm;
 pub mod solana;
 pub mod ton;
+pub mod abstraction;
 
-pub use evm::EvmChain;
-pub use solana::SolanaChain;
-pub use ton::TonChain;
+pub use evm::{EvmChain, EvmChainConfig};
+pub use solana::{SolanaChain, SolanaChainConfig};
+pub use ton::{TonChain, TonChainConfig};
+pub use abstraction::ChainAbstractionLayer;
 
 /// Chain abstraction errors
 #[derive(Debug, Error)]

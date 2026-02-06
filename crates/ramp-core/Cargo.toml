@@ -7,7 +7,7 @@ edition.workspace = true
 default = []
 nats = ["async-nats"]
 # Enable full HTTP client for webhook delivery (requires gcc on Windows for rustls)
-http-client = ["reqwest"]
+# http-client = ["reqwest"]
 
 [dependencies]
 ramp-common = { path = "../ramp-common" }
@@ -33,10 +33,11 @@ ethers = { workspace = true }
 
 sqlx = { workspace = true }
 redis = { workspace = true }
+futures = "0.3"
 
 # Optional dependencies (require additional tooling on Windows)
 async-nats = { workspace = true, optional = true }
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"], optional = true }
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 sha2.workspace = true
 rand.workspace = true
 subtle = "2.5"

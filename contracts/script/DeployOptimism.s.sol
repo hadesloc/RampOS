@@ -347,7 +347,7 @@ contract TestOptimismDeployment is Script {
         RampOSAccountFactory factory = RampOSAccountFactory(factoryAddress);
         console.log("Factory Address:", factoryAddress);
         console.log("  Implementation:", address(factory.ACCOUNT_IMPLEMENTATION()));
-        console.log("  EntryPoint:", address(factory.entryPoint()));
+        console.log("  EntryPoint:", address(factory.ENTRY_POINT()));
         console.log("");
 
         // Check Paymaster
