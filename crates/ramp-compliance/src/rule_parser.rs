@@ -563,8 +563,12 @@ impl RuleStore {
         let rules = RuleParser::parse_config(&config)?;
         let count = rules.len();
 
-        *self.rules.write().expect("Rules lock poisoned") = rules;
-        *self.version.write().expect("Version lock poisoned") = config.version.clone();
+        *self.rules.write().map_err(|e| {
+            RuleParseError::ValidationError(format!("Rules lock poisoned: {}", e))
+        })? = rules;
+        *self.version.write().map_err(|e| {
+            RuleParseError::ValidationError(format!("Version lock poisoned: {}", e))
+        })? = config.version.clone();
 
         info!(
             version = %config.version,
@@ -577,12 +581,16 @@ impl RuleStore {
 
     /// Get current version
     pub fn version(&self) -> String {
-        self.version.read().expect("Version lock poisoned").clone()
+        self.version.read()
+            .map(|v| v.clone())
+            .unwrap_or_else(|_| "unknown".to_string())
     }
 
     /// Get rule count
     pub fn count(&self) -> usize {
-        self.rules.read().expect("Rules lock poisoned").len()
+        self.rules.read()
+            .map(|r| r.len())
+            .unwrap_or(0)
     }
 }
 

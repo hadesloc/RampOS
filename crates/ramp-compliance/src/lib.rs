@@ -4,9 +4,11 @@ pub mod actions;
 pub mod aml;
 pub mod case;
 pub mod config;
+pub mod documents;
 pub mod history;
 pub mod kyc;
 pub mod kyt;
+pub mod limits;
 pub mod providers;
 pub mod reconciliation;
 pub mod reports;
@@ -31,6 +33,12 @@ pub use kyc::{KycWorkflowState, MockKycConfig, MockKycProvider};
 pub use kyt::KytService;
 pub use reconciliation::{Discrepancy, ReconBatch, ReconConfig, ReconEngine, ReconMatch};
 pub use reports::{AmlReport, DailyReport, KycReport, ReportGenerator, ReportType, SarReport};
+pub use documents::{
+    ComplianceDocumentGenerator, ComplianceReport, ComplianceReportType,
+    DocumentFormat, DocumentStatus, GeneratedDocument, GenerateDocumentRequest,
+    GenerateDocumentResponse, ListDocumentsQuery, ListDocumentsResponse,
+    TransactionSummary, KYCStatistics, AMLMetrics,
+};
 pub use rule_parser::{RuleDefinition, RuleParser, RuleStore, RulesConfig};
 pub use sanctions::{
     MockSanctionsProvider, OpenSanctionsProvider, SanctionsProvider, SanctionsResult,
@@ -46,6 +54,13 @@ pub use withdraw_policy::{
     DenialCode, PolicyResult, TierWithdrawLimits, VelocityThresholds, WithdrawPolicyConfig,
     WithdrawPolicyDataProvider, WithdrawPolicyEngine, WithdrawPolicyRequest,
 };
+pub use limits::{
+    VndLimitChecker, VndLimitConfig, VndLimitDataProvider, VndLimitResult,
+    VndTierLimits, VndUserLimitStatus,
+};
 
 #[cfg(any(test, feature = "testing"))]
 pub use withdraw_policy::MockWithdrawPolicyDataProvider;
+
+#[cfg(any(test, feature = "testing"))]
+pub use limits::MockVndLimitDataProvider;

@@ -56,6 +56,7 @@ pub enum SmartAccountType {
     SafeAccount,     // Safe (Gnosis) based
     KernelAccount,   // ZeroDev Kernel
     BiconomyAccount, // Biconomy
+    Eip7702Account,  // EIP-7702 delegated EOA
 }
 
 /// User operation status

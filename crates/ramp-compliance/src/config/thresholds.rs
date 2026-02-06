@@ -72,15 +72,19 @@ impl ThresholdManager {
     }
 
     pub fn get_config(&self, tenant_id: &str) -> ThresholdConfig {
-        let configs = self.configs.read().expect("Configs read lock poisoned");
-        configs
-            .get(tenant_id)
-            .cloned()
-            .unwrap_or_else(|| ThresholdConfig::default_for(tenant_id))
+        match self.configs.read() {
+            Ok(configs) => configs
+                .get(tenant_id)
+                .cloned()
+                .unwrap_or_else(|| ThresholdConfig::default_for(tenant_id)),
+            Err(_) => ThresholdConfig::default_for(tenant_id),
+        }
     }
 
     pub fn update_config(&self, tenant_id: &str, config: ThresholdConfig) -> Result<()> {
-        let mut configs = self.configs.write().expect("Configs write lock poisoned");
+        let mut configs = self.configs.write().map_err(|e| {
+            anyhow::anyhow!("Configs write lock poisoned: {}", e)
+        })?;
         configs.insert(tenant_id.to_string(), config);
         Ok(())
     }

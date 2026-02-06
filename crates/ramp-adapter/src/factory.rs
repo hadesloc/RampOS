@@ -175,20 +175,27 @@ impl AdapterFactory {
 
     /// List registered adapter types
     pub fn list_types(&self) -> Vec<String> {
-        let constructors = self.constructors.read().expect("Failed to acquire read lock on constructors");
-        constructors.keys().cloned().collect()
+        match self.constructors.read() {
+            Ok(constructors) => constructors.keys().cloned().collect(),
+            Err(_) => Vec::new(),
+        }
     }
 
     /// Check if an adapter type is registered
     pub fn is_registered(&self, adapter_type: &str) -> bool {
-        let constructors = self.constructors.read().expect("Failed to acquire read lock on constructors");
-        constructors.contains_key(&adapter_type.to_lowercase())
+        match self.constructors.read() {
+            Ok(constructors) => constructors.contains_key(&adapter_type.to_lowercase()),
+            Err(_) => false,
+        }
     }
 }
 
 impl Default for AdapterFactory {
     fn default() -> Self {
-        Self::new().expect("Failed to initialize AdapterFactory")
+        Self::new().unwrap_or_else(|_| Self {
+            constructors: Arc::new(RwLock::new(HashMap::new())),
+            extended_constructors: Arc::new(RwLock::new(HashMap::new())),
+        })
     }
 }
 

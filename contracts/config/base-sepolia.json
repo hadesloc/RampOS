@@ -1,0 +1,68 @@
+{
+  "network": "base-sepolia",
+  "chainId": 84532,
+  "networkName": "Base Sepolia",
+  "nativeCurrency": {
+    "name": "Ether",
+    "symbol": "ETH",
+    "decimals": 18
+  },
+  "rpcUrls": {
+    "default": "https://sepolia.base.org",
+    "fallback": [
+      "https://base-sepolia.blockpi.network/v1/rpc/public"
+    ]
+  },
+  "blockExplorer": {
+    "name": "BaseScan",
+    "url": "https://sepolia.basescan.org",
+    "apiUrl": "https://api-sepolia.basescan.org/api"
+  },
+  "erc4337": {
+    "entryPoint": {
+      "v06": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+      "v07": "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
+    },
+    "bundlers": {
+      "pimlico": {
+        "url": "https://api.pimlico.io/v2/84532/rpc",
+        "apiKeyRequired": true
+      },
+      "stackup": {
+        "url": "https://api.stackup.sh/v1/node/base-sepolia",
+        "apiKeyRequired": true
+      }
+    },
+    "paymasterProviders": {
+      "pimlico": {
+        "url": "https://api.pimlico.io/v2/84532/rpc",
+        "sponsorshipType": "verifying"
+      }
+    }
+  },
+  "contracts": {
+    "rampAccountFactory": null,
+    "rampPaymaster": null,
+    "sessionKeyValidator": null
+  },
+  "faucets": {
+    "baseFaucet": "https://www.coinbase.com/faucets/base-ethereum-goerli-faucet",
+    "note": "Get testnet ETH from Coinbase faucet"
+  },
+  "tokens": {
+    "USDC": {
+      "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "decimals": 6
+    }
+  },
+  "deployment": {
+    "gasSettings": {
+      "maxFeePerGas": "0.1 gwei",
+      "maxPriorityFeePerGas": "0.001 gwei"
+    },
+    "verification": {
+      "apiKey": "${BASESCAN_API_KEY}",
+      "apiUrl": "https://api-sepolia.basescan.org/api"
+    }
+  }
+}

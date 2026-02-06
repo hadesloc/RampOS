@@ -1,20 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
+import { ColumnDef } from "@tanstack/react-table";
+import { ArrowUpDown, Filter, Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatusBadge } from "@/components/dashboard/status-badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/dashboard/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Filter, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -111,6 +105,137 @@ function getTypeColor(type: string): string {
   }
 }
 
+const columns: ColumnDef<Intent>[] = [
+  {
+    accessorKey: "id",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="-ml-4"
+      >
+        ID
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => {
+      const id = row.getValue("id") as string;
+      return (
+        <Link
+          href={`/intents/${id}`}
+          className="font-mono text-xs text-primary hover:underline"
+          title={id}
+        >
+          {id.substring(0, 8)}...
+        </Link>
+      );
+    },
+  },
+  {
+    accessorKey: "intentType",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="-ml-4"
+      >
+        Type
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => {
+      const type = row.getValue("intentType") as string;
+      return (
+        <Badge variant="outline" className={getTypeColor(type)}>
+          {type}
+        </Badge>
+      );
+    },
+  },
+  {
+    accessorKey: "state",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="-ml-4"
+      >
+        State
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => {
+      const state = row.getValue("state") as string;
+      return <StatusBadge status={state} />;
+    },
+  },
+  {
+    accessorKey: "amount",
+    header: ({ column }) => (
+      <div className="text-right">
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="-mr-4"
+        >
+          Amount
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+    ),
+    cell: ({ row }) => {
+      const amount = row.getValue("amount") as string;
+      const currency = row.original.currency;
+      return (
+        <div className="text-right font-mono">
+          {formatAmount(amount, currency)}
+        </div>
+      );
+    },
+    sortingFn: (rowA, rowB) => {
+      const a = parseInt(rowA.getValue("amount") as string, 10);
+      const b = parseInt(rowB.getValue("amount") as string, 10);
+      return a - b;
+    },
+  },
+  {
+    accessorKey: "referenceCode",
+    header: "Reference",
+    cell: ({ row }) => {
+      const ref = row.getValue("referenceCode") as string | undefined;
+      return (
+        <span className="font-mono text-xs text-muted-foreground">
+          {ref || "-"}
+        </span>
+      );
+    },
+  },
+  {
+    accessorKey: "createdAt",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="-ml-4"
+      >
+        Created
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => {
+      const date = row.getValue("createdAt") as string;
+      return (
+        <span className="text-muted-foreground text-sm">{formatDate(date)}</span>
+      );
+    },
+    sortingFn: (rowA, rowB) => {
+      const a = new Date(rowA.getValue("createdAt") as string).getTime();
+      const b = new Date(rowB.getValue("createdAt") as string).getTime();
+      return a - b;
+    },
+  },
+];
+
 export default function IntentsPage() {
   const [intents] = useState<Intent[]>(mockIntents);
   const [search, setSearch] = useState("");
@@ -119,12 +244,14 @@ export default function IntentsPage() {
     state: "",
   });
 
-  const filteredIntents = intents.filter((intent) => {
-    if (filter.type && intent.intentType !== filter.type) return false;
-    if (filter.state && intent.state !== filter.state) return false;
-    if (search && !intent.id.toLowerCase().includes(search.toLowerCase()) && !intent.referenceCode?.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  const filteredIntents = useMemo(() => {
+    return intents.filter((intent) => {
+      if (filter.type && intent.intentType !== filter.type) return false;
+      if (filter.state && intent.state !== filter.state) return false;
+      if (search && !intent.id.toLowerCase().includes(search.toLowerCase()) && !intent.referenceCode?.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    });
+  }, [intents, search, filter]);
 
   return (
     <div className="space-y-6 p-6">
@@ -185,61 +312,12 @@ export default function IntentsPage() {
             </div>
           </div>
 
-          {/* Table */}
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[100px]">ID</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Reference</TableHead>
-                  <TableHead>Created</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredIntents.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                      No intents found matching the filters.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredIntents.map((intent) => (
-                    <TableRow key={intent.id}>
-                      <TableCell>
-                        <Link
-                          href={`/intents/${intent.id}`}
-                          className="font-mono text-xs text-primary hover:underline"
-                          title={intent.id}
-                        >
-                          {intent.id.substring(0, 8)}...
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={getTypeColor(intent.intentType)}>
-                          {intent.intentType}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={intent.state} />
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {formatAmount(intent.amount, intent.currency)}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {intent.referenceCode || "-"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {formatDate(intent.createdAt)}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          {/* DataTable */}
+          <DataTable
+            columns={columns}
+            data={filteredIntents}
+            pagination={true}
+          />
         </CardContent>
       </Card>
     </div>

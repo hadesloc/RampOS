@@ -23,21 +23,33 @@ use ramp_common::types::UserId;
 use ramp_compliance::types::{CaseSeverity, CaseStatus};
 use ramp_core::repository::user::UserRow;
 
+pub mod audit;
+pub mod bridge;
+pub mod documents;
 pub mod intent;
 pub mod ledger;
+pub mod licensing;
+pub mod limits;
 pub mod onboarding;
 pub mod reports;
 pub mod rules;
 pub mod tier;
 pub mod webhooks;
+pub mod yield_strategy;
 
+pub use audit::*;
+pub use bridge::*;
+pub use documents::*;
 pub use intent::*;
 pub use ledger::*;
+pub use licensing::*;
+pub use limits::*;
 pub use onboarding::*;
 pub use reports::*;
 pub use rules::*;
 pub use tier::*;
 pub use webhooks::*;
+pub use yield_strategy::*;
 
 // ============================================================================
 // Case Management DTOs

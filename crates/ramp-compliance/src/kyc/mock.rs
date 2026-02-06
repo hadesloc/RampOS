@@ -8,7 +8,7 @@ use tracing::info;
 
 use super::{KycProvider, KycVerificationRequest, KycVerificationResult};
 use crate::types::{KycStatus, KycTier};
-use ramp_common::Result;
+use ramp_common::{Error, Result};
 
 /// Mock verification record stored in memory
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,10 +76,8 @@ impl MockKycProvider {
     pub fn get_all_verifications(&self) -> Vec<MockVerificationRecord> {
         self.verifications
             .lock()
-            .expect("Verifications lock poisoned")
-            .values()
-            .cloned()
-            .collect()
+            .map(|v| v.values().cloned().collect())
+            .unwrap_or_else(|_| Vec::new())
     }
 
     /// Manually set verification status (for testing)
@@ -89,15 +87,12 @@ impl MockKycProvider {
         status: KycStatus,
         reason: Option<String>,
     ) {
-        if let Some(record) = self
-            .verifications
-            .lock()
-            .expect("Verifications lock poisoned")
-            .get_mut(reference)
-        {
-            record.status = status;
-            record.rejection_reason = reason;
-            record.updated_at = Utc::now();
+        if let Ok(mut verifications) = self.verifications.lock() {
+            if let Some(record) = verifications.get_mut(reference) {
+                record.status = status;
+                record.rejection_reason = reason;
+                record.updated_at = Utc::now();
+            }
         }
     }
 
@@ -169,7 +164,7 @@ impl KycProvider for MockKycProvider {
         // Store for later lookup
         self.verifications
             .lock()
-            .expect("Verifications lock poisoned")
+            .map_err(|e| Error::Internal(format!("Verifications lock poisoned: {}", e)))?
             .insert(reference.clone(), record);
 
         info!(
@@ -193,7 +188,9 @@ impl KycProvider for MockKycProvider {
     }
 
     async fn check_status(&self, reference: &str) -> Result<KycVerificationResult> {
-        let verifications = self.verifications.lock().expect("Verifications lock poisoned");
+        let verifications = self.verifications.lock().map_err(|e| {
+            Error::Internal(format!("Verifications lock poisoned: {}", e))
+        })?;
 
         if let Some(record) = verifications.get(reference) {
             Ok(KycVerificationResult {

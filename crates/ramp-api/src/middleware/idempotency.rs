@@ -356,7 +356,7 @@ pub async fn idempotency_middleware(
                 Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .body(Body::empty())
-                    .expect("failed to build error response")
+                    .unwrap_or_else(|_| Response::new(Body::empty()))
             });
 
         return Ok(response);

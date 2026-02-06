@@ -149,6 +149,294 @@ export interface WebhookEvent {
   created_at: string;
 }
 
+export interface LicenseStatus {
+  id: string;
+  tenant_id: string;
+  license_type: 'MTL' | 'EMI' | 'VASP' | 'PSP';
+  status: 'ACTIVE' | 'PENDING' | 'EXPIRED' | 'SUSPENDED';
+  jurisdiction: string;
+  issue_date?: string;
+  expiry_date?: string;
+  requirements_completed: number;
+  requirements_total: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LicenseRequirement {
+  id: string;
+  license_id: string;
+  name: string;
+  description: string;
+  category: 'DOCUMENT' | 'COMPLIANCE' | 'TECHNICAL' | 'FINANCIAL';
+  status: 'PENDING' | 'IN_PROGRESS' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  deadline?: string;
+  completed_at?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LicenseSubmission {
+  id: string;
+  requirement_id: string;
+  requirement_name: string;
+  submitted_by: string;
+  document_url?: string;
+  document_name?: string;
+  status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'REVISION_REQUESTED';
+  reviewer_notes?: string;
+  submitted_at: string;
+  reviewed_at?: string;
+}
+
+export interface LicenseDeadline {
+  id: string;
+  requirement_id: string;
+  requirement_name: string;
+  license_type: string;
+  deadline: string;
+  days_remaining: number;
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE';
+}
+
+export interface LicenseDashboardStats {
+  active_licenses: number;
+  pending_licenses: number;
+  expired_licenses: number;
+  requirements_pending: number;
+  requirements_completed: number;
+  upcoming_deadlines: number;
+  overdue_items: number;
+}
+
+// Treasury Types
+export type ChainId = 'ethereum' | 'arbitrum' | 'base' | 'optimism';
+export type StablecoinSymbol = 'USDT' | 'USDC' | 'DAI' | 'VNST';
+export type YieldProtocol = 'aave' | 'compound' | 'morpho' | 'yearn';
+
+export interface TreasuryBalance {
+  token: StablecoinSymbol;
+  chain: ChainId;
+  balance: string;
+  balance_usd: string;
+  contract_address: string;
+  last_updated: string;
+}
+
+export interface TreasuryBalanceByToken {
+  token: StablecoinSymbol;
+  total_balance: string;
+  total_balance_usd: string;
+  chains: {
+    chain: ChainId;
+    balance: string;
+    balance_usd: string;
+    percentage: number;
+  }[];
+}
+
+export interface TreasuryBalanceByChain {
+  chain: ChainId;
+  total_balance_usd: string;
+  tokens: {
+    token: StablecoinSymbol;
+    balance: string;
+    balance_usd: string;
+    percentage: number;
+  }[];
+}
+
+export interface YieldPosition {
+  id: string;
+  protocol: YieldProtocol;
+  chain: ChainId;
+  token: StablecoinSymbol;
+  deposited_amount: string;
+  deposited_amount_usd: string;
+  current_value: string;
+  current_value_usd: string;
+  apy: number;
+  earnings: string;
+  earnings_usd: string;
+  health_factor?: number;
+  liquidation_threshold?: number;
+  deposit_tx_hash: string;
+  deposited_at: string;
+  last_updated: string;
+}
+
+export interface TreasuryRiskMetrics {
+  total_value_usd: string;
+  concentration_by_token: {
+    token: StablecoinSymbol;
+    percentage: number;
+    limit: number;
+    status: 'OK' | 'WARNING' | 'EXCEEDED';
+  }[];
+  concentration_by_chain: {
+    chain: ChainId;
+    percentage: number;
+    limit: number;
+    status: 'OK' | 'WARNING' | 'EXCEEDED';
+  }[];
+  protocol_exposure: {
+    protocol: YieldProtocol;
+    value_usd: string;
+    percentage: number;
+    limit: number;
+    status: 'OK' | 'WARNING' | 'EXCEEDED';
+  }[];
+  avg_health_factor: number;
+  min_health_factor: number;
+  risk_score: number;
+  risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+}
+
+export interface TreasuryTransaction {
+  id: string;
+  type: 'DEPOSIT' | 'WITHDRAW' | 'YIELD_DEPOSIT' | 'YIELD_WITHDRAW' | 'REBALANCE' | 'BRIDGE';
+  token: StablecoinSymbol;
+  amount: string;
+  amount_usd: string;
+  from_chain?: ChainId;
+  to_chain?: ChainId;
+  protocol?: YieldProtocol;
+  tx_hash: string;
+  status: 'PENDING' | 'CONFIRMED' | 'FAILED';
+  initiated_by: string;
+  created_at: string;
+  confirmed_at?: string;
+}
+
+export interface TreasuryBalanceHistory {
+  timestamp: string;
+  total_balance_usd: string;
+  balances_by_token: {
+    token: StablecoinSymbol;
+    balance_usd: string;
+  }[];
+}
+
+export interface TreasuryYieldHistory {
+  timestamp: string;
+  total_yield_usd: string;
+  cumulative_yield_usd: string;
+  avg_apy: number;
+}
+
+export interface TreasuryDashboardStats {
+  total_balance_usd: string;
+  total_yield_deposited_usd: string;
+  total_earnings_usd: string;
+  avg_apy: number;
+  active_positions: number;
+  pending_transactions: number;
+  chains_active: number;
+  tokens_held: number;
+}
+
+// Risk Management Types
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type AlertSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
+export type AlertCategory = 'DEPEG' | 'CONCENTRATION' | 'HEALTH_FACTOR' | 'PROTOCOL' | 'LIQUIDITY';
+
+export interface RiskDashboardStats {
+  overall_risk_level: RiskLevel;
+  risk_score: number;
+  active_alerts: number;
+  critical_alerts: number;
+  tokens_monitored: number;
+  protocols_monitored: number;
+  last_updated: string;
+}
+
+export interface StablecoinPrice {
+  token: StablecoinSymbol;
+  price_usd: number;
+  peg_target: number;
+  deviation_percent: number;
+  deviation_direction: 'above' | 'below' | 'pegged';
+  is_depegged: boolean;
+  price_24h_ago: number;
+  change_24h_percent: number;
+  last_updated: string;
+}
+
+export interface DepegEvent {
+  id: string;
+  token: StablecoinSymbol;
+  price_usd: number;
+  deviation_percent: number;
+  direction: 'above' | 'below';
+  severity: AlertSeverity;
+  started_at: string;
+  resolved_at?: string;
+  duration_minutes?: number;
+  max_deviation_percent: number;
+}
+
+export interface ProtocolExposure {
+  protocol: YieldProtocol;
+  value_usd: string;
+  percentage: number;
+  limit_percent: number;
+  status: 'OK' | 'WARNING' | 'EXCEEDED';
+  positions_count: number;
+  avg_health_factor?: number;
+  min_health_factor?: number;
+}
+
+export interface ConcentrationRisk {
+  category: 'token' | 'chain' | 'protocol';
+  name: string;
+  value_usd: string;
+  percentage: number;
+  limit_percent: number;
+  status: 'OK' | 'WARNING' | 'EXCEEDED';
+  recommendation?: string;
+}
+
+export interface HealthFactorAlert {
+  id: string;
+  protocol: YieldProtocol;
+  chain: ChainId;
+  position_id: string;
+  token: StablecoinSymbol;
+  health_factor: number;
+  liquidation_threshold: number;
+  risk_level: RiskLevel;
+  deposited_usd: string;
+  at_risk_usd: string;
+  created_at: string;
+}
+
+export interface RiskAlert {
+  id: string;
+  category: AlertCategory;
+  severity: AlertSeverity;
+  title: string;
+  message: string;
+  metadata: Record<string, unknown>;
+  is_acknowledged: boolean;
+  acknowledged_by?: string;
+  acknowledged_at?: string;
+  created_at: string;
+  resolved_at?: string;
+}
+
+export interface RiskThreshold {
+  id: string;
+  name: string;
+  category: AlertCategory;
+  warning_threshold: number;
+  critical_threshold: number;
+  current_value: number;
+  status: 'OK' | 'WARNING' | 'CRITICAL';
+  enabled: boolean;
+}
+
 export interface DashboardStats {
   intents: {
     totalToday: number;
@@ -557,6 +845,296 @@ export const healthApi = {
   },
 };
 
+// Licensing API
+export const licensingApi = {
+  getStats: async (): Promise<LicenseDashboardStats> => {
+    return apiRequest<LicenseDashboardStats>('/v1/admin/licensing/stats');
+  },
+
+  listLicenses: async (params?: {
+    status?: string;
+    license_type?: string;
+  }): Promise<LicenseStatus[]> => {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.license_type) searchParams.set('license_type', params.license_type);
+
+    const query = searchParams.toString();
+    return apiRequest<LicenseStatus[]>(`/v1/admin/licensing/licenses${query ? `?${query}` : ''}`);
+  },
+
+  getLicense: async (id: string): Promise<LicenseStatus> => {
+    return apiRequest<LicenseStatus>(`/v1/admin/licensing/licenses/${id}`);
+  },
+
+  listRequirements: async (params?: {
+    license_id?: string;
+    status?: string;
+    category?: string;
+  }): Promise<LicenseRequirement[]> => {
+    const searchParams = new URLSearchParams();
+    if (params?.license_id) searchParams.set('license_id', params.license_id);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.category) searchParams.set('category', params.category);
+
+    const query = searchParams.toString();
+    return apiRequest<LicenseRequirement[]>(`/v1/admin/licensing/requirements${query ? `?${query}` : ''}`);
+  },
+
+  updateRequirement: async (id: string, data: {
+    status?: string;
+    notes?: string;
+  }): Promise<LicenseRequirement> => {
+    return apiRequest<LicenseRequirement>(`/v1/admin/licensing/requirements/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  listSubmissions: async (params?: {
+    requirement_id?: string;
+    status?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<PaginatedResponse<LicenseSubmission>> => {
+    const searchParams = new URLSearchParams();
+    if (params?.requirement_id) searchParams.set('requirement_id', params.requirement_id);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.per_page) searchParams.set('per_page', params.per_page.toString());
+
+    const query = searchParams.toString();
+    return apiRequest<PaginatedResponse<LicenseSubmission>>(`/v1/admin/licensing/submissions${query ? `?${query}` : ''}`);
+  },
+
+  createSubmission: async (data: {
+    requirement_id: string;
+    document_name: string;
+    document_url: string;
+  }): Promise<LicenseSubmission> => {
+    return apiRequest<LicenseSubmission>('/v1/admin/licensing/submissions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  listDeadlines: async (params?: {
+    days_ahead?: number;
+    include_overdue?: boolean;
+  }): Promise<LicenseDeadline[]> => {
+    const searchParams = new URLSearchParams();
+    if (params?.days_ahead) searchParams.set('days_ahead', params.days_ahead.toString());
+    if (params?.include_overdue !== undefined) searchParams.set('include_overdue', params.include_overdue.toString());
+
+    const query = searchParams.toString();
+    return apiRequest<LicenseDeadline[]>(`/v1/admin/licensing/deadlines${query ? `?${query}` : ''}`);
+  },
+
+  uploadDocument: async (file: File, requirementId: string): Promise<{ url: string; name: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('requirement_id', requirementId);
+
+    const response = await fetch(`${API_BASE_URL}/v1/admin/licensing/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new ApiError(response.status, 'UPLOAD_FAILED', 'Failed to upload document');
+    }
+
+    return response.json();
+  },
+};
+
+// Treasury API
+export const treasuryApi = {
+  getStats: async (): Promise<TreasuryDashboardStats> => {
+    return apiRequest<TreasuryDashboardStats>('/v1/admin/treasury/stats');
+  },
+
+  getBalances: async (): Promise<TreasuryBalance[]> => {
+    return apiRequest<TreasuryBalance[]>('/v1/admin/treasury/balances');
+  },
+
+  getBalancesByToken: async (): Promise<TreasuryBalanceByToken[]> => {
+    return apiRequest<TreasuryBalanceByToken[]>('/v1/admin/treasury/balances/by-token');
+  },
+
+  getBalancesByChain: async (): Promise<TreasuryBalanceByChain[]> => {
+    return apiRequest<TreasuryBalanceByChain[]>('/v1/admin/treasury/balances/by-chain');
+  },
+
+  getYieldPositions: async (params?: {
+    protocol?: YieldProtocol;
+    chain?: ChainId;
+    token?: StablecoinSymbol;
+  }): Promise<YieldPosition[]> => {
+    const searchParams = new URLSearchParams();
+    if (params?.protocol) searchParams.set('protocol', params.protocol);
+    if (params?.chain) searchParams.set('chain', params.chain);
+    if (params?.token) searchParams.set('token', params.token);
+
+    const query = searchParams.toString();
+    return apiRequest<YieldPosition[]>(`/v1/admin/treasury/yield-positions${query ? `?${query}` : ''}`);
+  },
+
+  getRiskMetrics: async (): Promise<TreasuryRiskMetrics> => {
+    return apiRequest<TreasuryRiskMetrics>('/v1/admin/treasury/risk-metrics');
+  },
+
+  getTransactions: async (params?: {
+    type?: string;
+    token?: StablecoinSymbol;
+    chain?: ChainId;
+    status?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<PaginatedResponse<TreasuryTransaction>> => {
+    const searchParams = new URLSearchParams();
+    if (params?.type) searchParams.set('type', params.type);
+    if (params?.token) searchParams.set('token', params.token);
+    if (params?.chain) searchParams.set('chain', params.chain);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.per_page) searchParams.set('per_page', params.per_page.toString());
+
+    const query = searchParams.toString();
+    return apiRequest<PaginatedResponse<TreasuryTransaction>>(`/v1/admin/treasury/transactions${query ? `?${query}` : ''}`);
+  },
+
+  getBalanceHistory: async (params?: {
+    period?: 'day' | 'week' | 'month' | 'year';
+  }): Promise<TreasuryBalanceHistory[]> => {
+    const searchParams = new URLSearchParams();
+    if (params?.period) searchParams.set('period', params.period);
+
+    const query = searchParams.toString();
+    return apiRequest<TreasuryBalanceHistory[]>(`/v1/admin/treasury/history/balances${query ? `?${query}` : ''}`);
+  },
+
+  getYieldHistory: async (params?: {
+    period?: 'day' | 'week' | 'month' | 'year';
+  }): Promise<TreasuryYieldHistory[]> => {
+    const searchParams = new URLSearchParams();
+    if (params?.period) searchParams.set('period', params.period);
+
+    const query = searchParams.toString();
+    return apiRequest<TreasuryYieldHistory[]>(`/v1/admin/treasury/history/yield${query ? `?${query}` : ''}`);
+  },
+
+  depositToYield: async (data: {
+    token: StablecoinSymbol;
+    chain: ChainId;
+    protocol: YieldProtocol;
+    amount: string;
+  }): Promise<TreasuryTransaction> => {
+    return apiRequest<TreasuryTransaction>('/v1/admin/treasury/yield/deposit', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  withdrawFromYield: async (data: {
+    position_id: string;
+    amount: string;
+  }): Promise<TreasuryTransaction> => {
+    return apiRequest<TreasuryTransaction>('/v1/admin/treasury/yield/withdraw', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  rebalance: async (data: {
+    from_chain: ChainId;
+    to_chain: ChainId;
+    token: StablecoinSymbol;
+    amount: string;
+  }): Promise<TreasuryTransaction> => {
+    return apiRequest<TreasuryTransaction>('/v1/admin/treasury/rebalance', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+// Risk Management API
+export const riskApi = {
+  getStats: async (): Promise<RiskDashboardStats> => {
+    return apiRequest<RiskDashboardStats>('/v1/admin/risk/stats');
+  },
+
+  getPrices: async (): Promise<StablecoinPrice[]> => {
+    return apiRequest<StablecoinPrice[]>('/v1/admin/risk/prices');
+  },
+
+  getDepegEvents: async (params?: {
+    token?: StablecoinSymbol;
+    active_only?: boolean;
+    limit?: number;
+  }): Promise<DepegEvent[]> => {
+    const searchParams = new URLSearchParams();
+    if (params?.token) searchParams.set('token', params.token);
+    if (params?.active_only !== undefined) searchParams.set('active_only', params.active_only.toString());
+    if (params?.limit) searchParams.set('limit', params.limit.toString());
+
+    const query = searchParams.toString();
+    return apiRequest<DepegEvent[]>(`/v1/admin/risk/depeg-events${query ? `?${query}` : ''}`);
+  },
+
+  getProtocolExposure: async (): Promise<ProtocolExposure[]> => {
+    return apiRequest<ProtocolExposure[]>('/v1/admin/risk/protocol-exposure');
+  },
+
+  getConcentrationRisks: async (): Promise<ConcentrationRisk[]> => {
+    return apiRequest<ConcentrationRisk[]>('/v1/admin/risk/concentration');
+  },
+
+  getHealthFactorAlerts: async (): Promise<HealthFactorAlert[]> => {
+    return apiRequest<HealthFactorAlert[]>('/v1/admin/risk/health-alerts');
+  },
+
+  getAlerts: async (params?: {
+    category?: AlertCategory;
+    severity?: AlertSeverity;
+    acknowledged?: boolean;
+    page?: number;
+    per_page?: number;
+  }): Promise<PaginatedResponse<RiskAlert>> => {
+    const searchParams = new URLSearchParams();
+    if (params?.category) searchParams.set('category', params.category);
+    if (params?.severity) searchParams.set('severity', params.severity);
+    if (params?.acknowledged !== undefined) searchParams.set('acknowledged', params.acknowledged.toString());
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.per_page) searchParams.set('per_page', params.per_page.toString());
+
+    const query = searchParams.toString();
+    return apiRequest<PaginatedResponse<RiskAlert>>(`/v1/admin/risk/alerts${query ? `?${query}` : ''}`);
+  },
+
+  acknowledgeAlert: async (id: string): Promise<RiskAlert> => {
+    return apiRequest<RiskAlert>(`/v1/admin/risk/alerts/${id}/acknowledge`, {
+      method: 'POST',
+    });
+  },
+
+  getThresholds: async (): Promise<RiskThreshold[]> => {
+    return apiRequest<RiskThreshold[]>('/v1/admin/risk/thresholds');
+  },
+
+  updateThreshold: async (id: string, data: {
+    warning_threshold?: number;
+    critical_threshold?: number;
+    enabled?: boolean;
+  }): Promise<RiskThreshold> => {
+    return apiRequest<RiskThreshold>(`/v1/admin/risk/thresholds/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
 // Export all APIs
 export const api = {
   dashboard: dashboardApi,
@@ -569,6 +1147,9 @@ export const api = {
   ledger: ledgerApi,
   webhooks: webhooksApi,
   health: healthApi,
+  licensing: licensingApi,
+  treasury: treasuryApi,
+  risk: riskApi,
 };
 
 export default api;

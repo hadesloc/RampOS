@@ -1,0 +1,313 @@
+//! 1inch DEX Aggregator Integration
+//!
+//! Integration with 1inch API for optimal swap routing across multiple DEXes.
+//! Supports Ethereum, Polygon, BSC, Arbitrum, Optimism, and more.
+
+use async_trait::async_trait;
+use ethers::types::{Address, Bytes, U256};
+use ramp_common::{Error, Result};
+use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use super::{
+    AggregatorConfig, DexAggregator, SwapQuote, SwapRoute, SwapTxData, Token,
+};
+
+/// 1inch API response structures
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OneInchQuoteResponse {
+    from_token: OneInchToken,
+    to_token: OneInchToken,
+    from_token_amount: String,
+    to_token_amount: String,
+    protocols: Vec<Vec<Vec<OneInchProtocol>>>,
+    estimated_gas: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OneInchSwapResponse {
+    from_token: OneInchToken,
+    to_token: OneInchToken,
+    from_token_amount: String,
+    to_token_amount: String,
+    protocols: Vec<Vec<Vec<OneInchProtocol>>>,
+    tx: OneInchTx,
+}
+
+#[derive(Debug, Deserialize)]
+struct OneInchToken {
+    symbol: String,
+    address: String,
+    decimals: u8,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OneInchProtocol {
+    name: String,
+    part: f64,
+    from_token_address: String,
+    to_token_address: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OneInchTx {
+    from: String,
+    to: String,
+    data: String,
+    value: String,
+    gas: u64,
+    gas_price: String,
+}
+
+/// 1inch DEX Aggregator
+pub struct OneInchAggregator {
+    config: AggregatorConfig,
+    http_client: reqwest::Client,
+}
+
+impl OneInchAggregator {
+    /// Create new 1inch aggregator
+    pub fn new(config: AggregatorConfig) -> Self {
+        Self {
+            config,
+            http_client: reqwest::Client::new(),
+        }
+    }
+
+    /// Get API base URL for a chain
+    fn api_url(&self, chain_id: u64) -> String {
+        if !self.config.api_url.is_empty() {
+            return self.config.api_url.clone();
+        }
+        format!("https://api.1inch.dev/swap/v6.0/{}", chain_id)
+    }
+
+    /// Build API headers
+    fn build_headers(&self) -> reqwest::header::HeaderMap {
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Some(ref api_key) = self.config.api_key {
+            headers.insert(
+                "Authorization",
+                format!("Bearer {}", api_key).parse().unwrap(),
+            );
+        }
+        headers.insert("Accept", "application/json".parse().unwrap());
+        headers
+    }
+
+    /// Parse amount string to U256
+    fn parse_amount(s: &str) -> Result<U256> {
+        U256::from_dec_str(s)
+            .map_err(|e| Error::Validation(format!("Invalid amount: {}", e)))
+    }
+
+    /// Format address for API
+    fn format_address(address: Address) -> String {
+        if address == Address::zero() {
+            "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE".to_string()
+        } else {
+            format!("{:?}", address)
+        }
+    }
+}
+
+#[async_trait]
+impl DexAggregator for OneInchAggregator {
+    fn name(&self) -> &str {
+        "1inch"
+    }
+
+    fn supported_chains(&self) -> Vec<u64> {
+        vec![
+            1,     // Ethereum
+            137,   // Polygon
+            56,    // BSC
+            42161, // Arbitrum
+            10,    // Optimism
+            43114, // Avalanche
+            8453,  // Base
+            324,   // zkSync Era
+        ]
+    }
+
+    fn supports_mev_protection(&self) -> bool {
+        true // 1inch Fusion mode
+    }
+
+    async fn quote(
+        &self,
+        from: Token,
+        to: Token,
+        amount: U256,
+        slippage_bps: u16,
+    ) -> Result<SwapQuote> {
+        if from.chain_id != to.chain_id {
+            return Err(Error::Validation("Cross-chain swaps not supported".into()));
+        }
+
+        let chain_id = from.chain_id;
+        if !self.supports_chain(chain_id) {
+            return Err(Error::Validation(format!(
+                "Chain {} not supported by 1inch",
+                chain_id
+            )));
+        }
+
+        // Build quote URL
+        let url = format!(
+            "{}/quote?src={}&dst={}&amount={}",
+            self.api_url(chain_id),
+            Self::format_address(from.address),
+            Self::format_address(to.address),
+            amount
+        );
+
+        tracing::debug!(url = %url, "Fetching 1inch quote");
+
+        // In production, make actual API call
+        // For now, return mock quote
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Mock: 0.3% fee for stablecoin swaps
+        let output_amount = amount * U256::from(997) / U256::from(1000);
+        let slippage_amount = output_amount * U256::from(slippage_bps) / U256::from(10000);
+        let min_output = output_amount - slippage_amount;
+
+        Ok(SwapQuote {
+            quote_id: format!("1inch-{}-{}", chain_id, now),
+            aggregator: "1inch".to_string(),
+            from_token: from.clone(),
+            to_token: to.clone(),
+            from_amount: amount,
+            to_amount: output_amount,
+            to_amount_min: min_output,
+            estimated_gas: U256::from(150_000),
+            gas_price: U256::from(30_000_000_000u64), // 30 gwei
+            price_impact_bps: 30, // 0.3%
+            slippage_bps,
+            route: vec![SwapRoute {
+                protocol: "Uniswap V3".to_string(),
+                pool_address: Address::zero(),
+                from_token: from.address,
+                to_token: to.address,
+                portion_bps: 10000,
+            }],
+            swap_data: Bytes::default(),
+            swap_contract: "0x1111111254EEB25477B68fb85Ed929f73A960582"
+                .parse()
+                .unwrap(), // 1inch Router v6
+            expires_at: now + 300, // 5 minutes
+            mev_protected: true,
+        })
+    }
+
+    async fn build_swap_tx(&self, quote: &SwapQuote, recipient: Address) -> Result<SwapTxData> {
+        let chain_id = quote.from_token.chain_id;
+
+        // Build swap URL
+        let url = format!(
+            "{}/swap?src={}&dst={}&amount={}&from={}&slippage={}&receiver={}",
+            self.api_url(chain_id),
+            Self::format_address(quote.from_token.address),
+            Self::format_address(quote.to_token.address),
+            quote.from_amount,
+            Self::format_address(recipient),
+            quote.slippage_bps as f64 / 100.0,
+            Self::format_address(recipient),
+        );
+
+        tracing::debug!(url = %url, "Building 1inch swap tx");
+
+        // In production, make actual API call
+        // For now, return mock tx data
+        Ok(SwapTxData {
+            to: quote.swap_contract,
+            data: quote.swap_data.clone(),
+            value: if quote.from_token.is_native() {
+                quote.from_amount
+            } else {
+                U256::zero()
+            },
+            gas_limit: quote.estimated_gas * U256::from(120) / U256::from(100), // 20% buffer
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn usdt_token() -> Token {
+        Token::new(
+            "USDT",
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7".parse().unwrap(),
+            6,
+            1,
+        )
+    }
+
+    fn usdc_token() -> Token {
+        Token::new(
+            "USDC",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse().unwrap(),
+            6,
+            1,
+        )
+    }
+
+    #[test]
+    fn test_supported_chains() {
+        let aggregator = OneInchAggregator::new(AggregatorConfig::default());
+
+        assert!(aggregator.supports_chain(1)); // Ethereum
+        assert!(aggregator.supports_chain(137)); // Polygon
+        assert!(aggregator.supports_chain(42161)); // Arbitrum
+        assert!(!aggregator.supports_chain(999)); // Unknown
+    }
+
+    #[test]
+    fn test_mev_protection() {
+        let aggregator = OneInchAggregator::new(AggregatorConfig::default());
+        assert!(aggregator.supports_mev_protection());
+    }
+
+    #[tokio::test]
+    async fn test_quote() {
+        let aggregator = OneInchAggregator::new(AggregatorConfig::default());
+
+        let quote = aggregator
+            .quote(
+                usdt_token(),
+                usdc_token(),
+                U256::from(1_000_000_000u64), // 1000 USDT
+                50,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(quote.aggregator, "1inch");
+        assert!(quote.to_amount > U256::zero());
+        assert!(quote.to_amount_min <= quote.to_amount);
+        assert!(quote.mev_protected);
+    }
+
+    #[tokio::test]
+    async fn test_cross_chain_error() {
+        let aggregator = OneInchAggregator::new(AggregatorConfig::default());
+
+        let mut from = usdt_token();
+        from.chain_id = 1;
+        let mut to = usdc_token();
+        to.chain_id = 137; // Different chain
+
+        let result = aggregator.quote(from, to, U256::from(1000), 50).await;
+        assert!(result.is_err());
+    }
+}

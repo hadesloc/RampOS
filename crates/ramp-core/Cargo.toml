@@ -28,6 +28,9 @@ tracing = { workspace = true }
 config = { workspace = true }
 hex = { workspace = true }
 
+# Ethereum/EVM support for stablecoin module
+ethers = { workspace = true }
+
 sqlx = { workspace = true }
 redis = { workspace = true }
 

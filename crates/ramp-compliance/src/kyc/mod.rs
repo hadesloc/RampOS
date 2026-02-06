@@ -1,7 +1,12 @@
+pub mod ekyc;
 pub mod mock;
 pub mod tier;
 pub mod workflow;
 
+pub use ekyc::{
+    EkycProviderType, EkycService, EkycVerificationRequest, EkycVerificationResponse,
+    TenantEkycConfig, UserProvidedData,
+};
 pub use mock::{KycWorkflowState, MockKycConfig, MockKycProvider};
 pub use tier::{TierDataProvider, TierManager, UserKycInfo};
 

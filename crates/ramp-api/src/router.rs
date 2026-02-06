@@ -17,11 +17,13 @@ use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 use ramp_core::repository::intent::IntentRepository;
+use ramp_core::repository::licensing::LicensingRepository;
 use ramp_core::repository::tenant::TenantRepository;
 use ramp_core::repository::BankConfirmationRepository;
 use ramp_core::service::{
     ledger::LedgerService, onboarding::OnboardingService, payin::PayinService,
     payout::PayoutService, trade::TradeService, user::UserService, webhook::WebhookService,
+    ComplianceAuditService,
 };
 
 use crate::handlers;
@@ -57,6 +59,8 @@ pub struct AppState {
     pub aa_service: Option<AAServiceState>,
     pub portal_auth_config: Arc<PortalAuthConfig>,
     pub bank_confirmation_repo: Option<Arc<dyn BankConfirmationRepository>>,
+    pub licensing_repo: Option<Arc<dyn LicensingRepository>>,
+    pub compliance_audit_service: Option<Arc<ComplianceAuditService>>,
 }
 
 /// Create the API router with full middleware stack
@@ -217,12 +221,72 @@ pub fn create_router(state: AppState) -> Router {
         .route("/users/:user_id/limits", get(handlers::get_user_limits))
         .with_state(state.clone());
 
+    // Licensing routes (Vietnam regulatory requirements)
+    let licensing_routes = if let Some(ref licensing_repo) = state.licensing_repo {
+        Router::new()
+            .route(
+                "/licensing/requirements",
+                get(handlers::admin::list_requirements),
+            )
+            .route(
+                "/licensing/status/:tenant_id",
+                get(handlers::admin::get_tenant_status),
+            )
+            .route(
+                "/licensing/submit",
+                post(handlers::admin::submit_license),
+            )
+            .route(
+                "/licensing/deadlines",
+                get(handlers::admin::get_deadlines),
+            )
+            .with_state(licensing_repo.clone())
+    } else {
+        Router::new()
+    };
+
+    // Compliance Audit routes
+    let audit_routes = if let Some(ref audit_service) = state.compliance_audit_service {
+        let audit_state = handlers::admin::audit::AuditState {
+            audit_service: audit_service.clone(),
+        };
+        Router::new()
+            .route(
+                "/audit/compliance",
+                get(handlers::admin::audit::list_compliance_audit),
+            )
+            .route(
+                "/audit/verify",
+                get(handlers::admin::audit::verify_audit_chain),
+            )
+            .route(
+                "/audit/export",
+                get(handlers::admin::audit::export_audit_log),
+            )
+            .with_state(audit_state)
+    } else {
+        Router::new()
+    };
+
     // Combine them
     let admin_routes = Router::new()
         .merge(admin_general_routes)
         .merge(tenant_routes)
         .merge(tier_routes)
+        .merge(licensing_routes)
+        .merge(audit_routes)
         .nest("/reports", report_routes);
+
+    // Yield Strategy routes
+    let yield_routes = Router::new()
+        .route("/strategies", get(handlers::admin::list_strategies))
+        .route("/strategies/:id", get(handlers::admin::get_strategy))
+        .route("/strategies/:id/activate", post(handlers::admin::activate_strategy))
+        .route("/strategies/:id/deactivate", post(handlers::admin::deactivate_strategy))
+        .route("/performance", get(handlers::admin::get_performance))
+        .route("/rebalance", post(handlers::admin::trigger_rebalance))
+        .route("/apys", get(handlers::admin::get_current_apys))
+        .with_state(state.clone());
 
     // Account Abstraction (AA) routes
     // SECURITY: AA routes have stricter rate limiting due to expensive on-chain operations
@@ -288,6 +352,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/balance", balance_routes)
         .merge(user_balance_alias_routes)
         .nest("/admin", admin_routes)
+        .nest("/yield", yield_routes)
         .nest("/aa", aa_routes)
         .layer(middleware::from_fn_with_state(
             state.tenant_repo.clone(),

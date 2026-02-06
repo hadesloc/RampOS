@@ -6,6 +6,7 @@ pub mod intent;
 #[cfg(test)]
 pub mod intent_test;
 pub mod ledger;
+pub mod licensing;
 pub mod telemetry;
 pub mod types;
 

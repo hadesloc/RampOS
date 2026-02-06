@@ -6,8 +6,12 @@ use tracing::warn;
 
 pub mod audit;
 pub mod bank_confirmation;
+pub mod compliance;
+pub mod compliance_audit;
 pub mod intent;
 pub mod ledger;
+pub mod license;
+pub mod licensing;
 pub mod smart_account;
 pub mod tenant;
 pub mod user;
@@ -18,8 +22,20 @@ pub use bank_confirmation::{
     BankConfirmationRepository, BankConfirmationRow, BankConfirmationStatus,
     CreateBankConfirmationRequest, PgBankConfirmationRepository,
 };
+pub use compliance::{ComplianceBreach, ComplianceRepository, SbvReportSchedule};
+pub use compliance_audit::{
+    ActorType, AuditQueryFilter, ChainVerificationResult, ComplianceAuditEntry,
+    ComplianceAuditRepository, ComplianceEventType, CreateComplianceAuditRequest,
+    PgComplianceAuditRepository,
+};
 pub use intent::IntentRepository;
 pub use ledger::LedgerRepository;
+pub use license::{
+    CreateLicenseDocumentRequest, CreateTenantLicenseRequest, DocumentStatus, LicenseRepository,
+    LicenseRequirementRow, LicenseRow, LicenseStatus, LicenseTypeRow, PgLicenseRepository,
+    TenantLicenseDocumentRow, TenantLicenseRow,
+};
+pub use licensing::{LicensingRepository, PgLicensingRepository};
 pub use smart_account::{
     CreateSmartAccountRequest, PgSmartAccountRepository, SmartAccountRepository, SmartAccountRow,
 };

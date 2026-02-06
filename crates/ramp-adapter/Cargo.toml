@@ -17,7 +17,12 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 # HTTP client for real API calls
-reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.11", features = ["json", "rustls-tls", "multipart"], default-features = false }
+
+# Cryptographic functions for signature verification
+hmac = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
 
 # Random number generation for mock adapter
 rand = "0.8"

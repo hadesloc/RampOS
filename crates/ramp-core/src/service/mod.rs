@@ -1,7 +1,9 @@
 //! Service layer - Business logic
 
+pub mod compliance_audit;
 pub mod deposit;
 pub mod ledger;
+pub mod license;
 pub mod onboarding;
 pub mod payin;
 pub mod payout;
@@ -14,8 +16,10 @@ mod webhook_tests;
 pub mod withdraw;
 pub mod withdraw_policy_provider;
 
+pub use compliance_audit::{AuditContext, AuditLogExport, ComplianceAuditService, ExportFormat};
 pub use deposit::DepositService;
 pub use ledger::LedgerService;
+pub use license::LicenseService;
 pub use onboarding::OnboardingService;
 pub use payin::PayinService;
 pub use payout::PayoutService;

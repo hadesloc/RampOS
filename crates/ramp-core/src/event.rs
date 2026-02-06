@@ -1,11 +1,62 @@
 //! Event publishing for RampOS
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use ramp_common::{
     types::{IntentId, TenantId, UserId},
     Result,
 };
 use ramp_compliance::types::KycTier;
+use serde::{Deserialize, Serialize};
+
+/// Regulatory webhook event types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "event", content = "data")]
+pub enum RegulatoryEvent {
+    /// License expiring notification (7 or 30 days before)
+    #[serde(rename = "license_expiring")]
+    LicenseExpiring {
+        license_id: String,
+        license_type: String,
+        expires_at: DateTime<Utc>,
+        days_remaining: i32,
+    },
+
+    /// New document requirement added
+    #[serde(rename = "document_required")]
+    DocumentRequired {
+        requirement_id: String,
+        document_type: String,
+        due_date: Option<DateTime<Utc>>,
+        description: String,
+    },
+
+    /// Compliance threshold breached
+    #[serde(rename = "compliance_alert")]
+    ComplianceAlert {
+        alert_type: String,
+        threshold: String,
+        current_value: String,
+        severity: AlertSeverity,
+    },
+
+    /// SBV report submission deadline approaching
+    #[serde(rename = "sbv_submission_due")]
+    SbvSubmissionDue {
+        report_type: String,
+        due_date: DateTime<Utc>,
+        days_remaining: i32,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AlertSeverity {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
 
 /// Event publisher trait
 #[async_trait]
@@ -48,6 +99,13 @@ pub trait EventPublisher: Send + Sync {
         intent_id: &IntentId,
         tenant_id: &TenantId,
         reason: &str,
+    ) -> Result<()>;
+
+    /// Publish regulatory event (license expiring, compliance alerts, etc.)
+    async fn publish_regulatory_event(
+        &self,
+        tenant_id: &TenantId,
+        event: RegulatoryEvent,
     ) -> Result<()>;
 }
 
@@ -175,6 +233,27 @@ impl EventPublisher for NatsEventPublisher {
 
         self.publish(&subject, payload.to_string().as_bytes()).await
     }
+
+    async fn publish_regulatory_event(
+        &self,
+        tenant_id: &TenantId,
+        event: RegulatoryEvent,
+    ) -> Result<()> {
+        let event_name = match &event {
+            RegulatoryEvent::LicenseExpiring { .. } => "license_expiring",
+            RegulatoryEvent::DocumentRequired { .. } => "document_required",
+            RegulatoryEvent::ComplianceAlert { .. } => "compliance_alert",
+            RegulatoryEvent::SbvSubmissionDue { .. } => "sbv_submission_due",
+        };
+        let subject = format!("{}.regulatory.{}", self.stream_prefix, event_name);
+        let payload = serde_json::json!({
+            "tenant_id": tenant_id.0,
+            "event": event,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        });
+
+        self.publish(&subject, payload.to_string().as_bytes()).await
+    }
 }
 
 /// In-memory event publisher for testing
@@ -272,6 +351,26 @@ impl EventPublisher for InMemoryEventPublisher {
             "reason": reason,
         });
         self.events.write().await.push(event);
+        Ok(())
+    }
+
+    async fn publish_regulatory_event(
+        &self,
+        tenant_id: &TenantId,
+        event: RegulatoryEvent,
+    ) -> Result<()> {
+        let event_name = match &event {
+            RegulatoryEvent::LicenseExpiring { .. } => "license_expiring",
+            RegulatoryEvent::DocumentRequired { .. } => "document_required",
+            RegulatoryEvent::ComplianceAlert { .. } => "compliance_alert",
+            RegulatoryEvent::SbvSubmissionDue { .. } => "sbv_submission_due",
+        };
+        let stored = serde_json::json!({
+            "type": format!("regulatory.{}", event_name),
+            "tenant_id": tenant_id.0,
+            "event": event,
+        });
+        self.events.write().await.push(stored);
         Ok(())
     }
 }

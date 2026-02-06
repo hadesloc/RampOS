@@ -9,6 +9,7 @@ pub mod intent;
 pub mod payin;
 pub mod payout;
 pub mod portal;
+pub mod stablecoin;
 pub mod trade;
 
 pub use aa::*;
@@ -19,4 +20,5 @@ pub use health::*;
 pub use intent::*;
 pub use payin::*;
 pub use payout::*;
+pub use stablecoin::*;
 pub use trade::*;

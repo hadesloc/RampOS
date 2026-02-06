@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ramp_common::types::UserId;
-use ramp_common::Result;
+use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
@@ -332,13 +332,19 @@ impl MockDeviceHistoryStore {
 #[async_trait]
 impl DeviceHistoryStore for MockDeviceHistoryStore {
     async fn get_history(&self, user_id: &UserId) -> Result<DeviceHistory> {
-        let map = self.history.lock().expect("History lock poisoned");
+        let map = self.history.lock().map_err(|e| {
+            Error::Internal(format!("History lock poisoned: {}", e))
+        })?;
         Ok(map.get(&user_id.to_string()).cloned().unwrap_or_default())
     }
 
     async fn update_history(&self, user_id: &UserId, context: &DeviceContext) -> Result<()> {
-        let mut map = self.history.lock().expect("History lock poisoned");
-        let mut device_map = self.device_users.lock().expect("Device users lock poisoned");
+        let mut map = self.history.lock().map_err(|e| {
+            Error::Internal(format!("History lock poisoned: {}", e))
+        })?;
+        let mut device_map = self.device_users.lock().map_err(|e| {
+            Error::Internal(format!("Device users lock poisoned: {}", e))
+        })?;
 
         let history = map.entry(user_id.to_string()).or_default();
 
@@ -414,7 +420,9 @@ impl DeviceHistoryStore for MockDeviceHistoryStore {
     }
 
     async fn get_users_on_device(&self, device_fingerprint: &str) -> Result<Vec<UserId>> {
-        let map = self.device_users.lock().expect("Device users lock poisoned");
+        let map = self.device_users.lock().map_err(|e| {
+            Error::Internal(format!("Device users lock poisoned: {}", e))
+        })?;
         if let Some(users) = map.get(device_fingerprint) {
             Ok(users.iter().map(UserId::new).collect())
         } else {

@@ -48,3 +48,11 @@ pub use types::*;
 
 // Re-export adapter implementations
 pub use adapters::{MockAdapter, NapasAdapter, VietQRAdapter};
+
+// Re-export eKYC providers and types
+pub use adapters::ekyc::{
+    AddressVerification, AddressVerificationRequest, EkycProvider, EkycProviderConfig,
+    FaceMatch, FaceMatchConfidence, FaceMatchRequest, FptAiEkycProvider, FullEkycResult,
+    IdDocumentType, IdVerification, IdVerificationRequest, LivenessCheckType, LivenessRequest,
+    LivenessResult, MockEkycProvider, SpoofingType, VnpayEkycProvider,
+};
