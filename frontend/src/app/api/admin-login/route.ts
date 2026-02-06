@@ -18,7 +18,7 @@ export async function POST(req: Request) {
   const cookieStore = await cookies();
   const csrfCookie = cookieStore.get("rampos_csrf")?.value;
   const csrfHeader = req.headers.get("x-csrf-token");
-  if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+  if (!csrfCookie || !csrfHeader || !constantTimeEqual(csrfCookie, csrfHeader)) {
     return NextResponse.json({ message: "CSRF check failed" }, { status: 403 });
   }
 
