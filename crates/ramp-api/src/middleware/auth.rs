@@ -291,7 +291,7 @@ fn verify_hmac_signature(
     let message = format!("{}\n{}\n{}\n{}", method.as_str(), path, timestamp, body_str);
 
     debug!("HMAC verification - message: {:?}", message);
-    debug!("HMAC verification - secret: {:?}", api_secret_str);
+    debug!("HMAC verification - secret: [REDACTED]");
     debug!("HMAC verification - provided signature: {}", provided_signature);
 
     // Compute HMAC-SHA256
