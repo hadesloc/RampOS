@@ -100,7 +100,7 @@ services:
       dockerfile: Dockerfile
     container_name: rampos-api
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     deploy:
       resources:
         limits:
