@@ -5,6 +5,7 @@ use axum::{
 };
 use rust_decimal::prelude::ToPrimitive;
 use serde::{Deserialize, Serialize};
+use subtle::ConstantTimeEq;
 use tracing::info;
 
 use crate::dto::TierChangeRequest;
@@ -118,8 +119,13 @@ pub(crate) fn check_admin_key_with_role(
     let parts: Vec<&str> = header_value.splitn(2, ':').collect();
     let provided_key = parts[0];
 
-    // Verify the key first
-    if provided_key != expected_key {
+    // Constant-time comparison to prevent timing attacks
+    let provided_bytes = provided_key.as_bytes();
+    let expected_bytes = expected_key.as_bytes();
+    let keys_match = provided_bytes.len() == expected_bytes.len()
+        && bool::from(provided_bytes.ct_eq(expected_bytes));
+
+    if !keys_match {
         return Err(ApiError::Forbidden("Invalid admin key".to_string()));
     }
 
