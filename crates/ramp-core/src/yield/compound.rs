@@ -240,7 +240,7 @@ impl YieldProtocol for CompoundV3Protocol {
 
         // Update simulated balance
         {
-            let mut balances = self.balances.write().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+            let mut balances = self.balances.write().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
             let balance = balances.entry(token).or_insert(U256::zero());
             *balance = balance.saturating_add(amount);
         }
@@ -256,16 +256,16 @@ impl YieldProtocol for CompoundV3Protocol {
 
     async fn withdraw(&self, token: Address, amount: U256) -> Result<H256> {
         if !self.supports_token(token) {
-            return Err(anyhow::anyhow!("Token not supported: {:?}", token));
+            return Err(Error::Business(format!("Token not supported: {:?}", token)));
         }
 
         let current_balance = self.balance(token).await?;
         if current_balance < amount {
-            return Err(anyhow::anyhow!(
+            return Err(Error::Business(format!(
                 "Insufficient balance: {} < {}",
                 current_balance,
                 amount
-            ));
+            )));
         }
 
         info!(
@@ -280,7 +280,7 @@ impl YieldProtocol for CompoundV3Protocol {
 
         // Update simulated balance
         {
-            let mut balances = self.balances.write().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+            let mut balances = self.balances.write().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
             if let Some(balance) = balances.get_mut(&token) {
                 *balance = balance.saturating_sub(amount);
             }
@@ -296,7 +296,7 @@ impl YieldProtocol for CompoundV3Protocol {
     }
 
     async fn balance(&self, token: Address) -> Result<U256> {
-        let balances = self.balances.read().map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+        let balances = self.balances.read().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
         Ok(*balances.get(&token).unwrap_or(&U256::zero()))
     }
 

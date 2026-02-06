@@ -71,9 +71,10 @@ impl ComplianceEventType {
 }
 
 /// Actor types for audit entries
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum ActorType {
+    #[default]
     System,
     User,
     Admin,

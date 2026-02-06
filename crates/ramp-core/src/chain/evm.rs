@@ -510,9 +510,9 @@ impl Chain for EvmChain {
             .map_err(|e| ChainError::RpcError(e.to_string()))?;
 
         // Calculate fee options (slow: 0.8x, standard: 1x, fast: 1.5x)
-        let slow_price = gas_price * 80 / 100;
-        let standard_price = gas_price;
-        let fast_price = gas_price * 150 / 100;
+        let slow_price: U256 = gas_price * 80 / 100;
+        let standard_price: U256 = gas_price;
+        let fast_price: U256 = gas_price * 150 / 100;
 
         let slow_total = slow_price * gas_estimate;
         let standard_total = standard_price * gas_estimate;

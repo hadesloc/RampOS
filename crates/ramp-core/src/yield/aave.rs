@@ -292,10 +292,11 @@ impl YieldProtocol for AaveV3Protocol {
         // Check balance
         let current_balance = self.balance(token).await?;
         if current_balance < amount {
-            return Err(Error::InsufficientBalance {
-                required: amount.to_string(),
-                available: current_balance.to_string(),
-            });
+            return Err(Error::Business(format!(
+                "Insufficient balance: {} < {}",
+                current_balance,
+                amount
+            )));
         }
 
         info!(

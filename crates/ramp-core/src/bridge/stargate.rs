@@ -34,7 +34,7 @@ impl StargatePoolId {
 }
 
 /// LayerZero Endpoint IDs for chains (Stargate V2)
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LayerZeroEndpointId {
     Ethereum = 30101,
     Arbitrum = 30110,

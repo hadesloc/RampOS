@@ -8,7 +8,6 @@
 
 use chrono::{DateTime, Duration, Utc};
 use ethers::types::{Address, H256, U256};
-use crate::r#yield::YieldError;
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -17,7 +16,7 @@ use tracing::{error, info, warn};
 use super::{
     ProtocolId, ProtocolRegistry, YieldAllocationConfig, YieldOperation,
     YieldPosition, YieldPositionReport, YieldProtocol, YieldReport, YieldTransaction,
-    YieldTxStatus, YieldError,
+    YieldTxStatus,
 };
 
 /// Yield service for managing stablecoin yield across protocols
@@ -109,7 +108,7 @@ impl YieldService {
             .ok_or_else(|| Error::NotFound(format!("Protocol not found: {}", protocol_id)))?;
 
         if !protocol.supports_token(token) {
-            return Err(YieldError::TokenNotSupported { token }.into());
+            return Err(Error::Business(format!("Token not supported: {:?}", token)));
         }
 
         // Check allocation limits
@@ -147,11 +146,11 @@ impl YieldService {
 
         let balance = protocol.balance(token).await?;
         if balance < amount {
-            return Err(YieldError::InsufficientBalance {
-                available: balance,
-                requested: amount,
-            }
-            .into());
+            return Err(Error::Business(format!(
+                "Insufficient balance: {} < {}",
+                balance,
+                amount
+            )));
         }
 
         info!(
