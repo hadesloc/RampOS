@@ -645,7 +645,7 @@ mod tests {
             user_address: None,
         };
 
-        let result = rule.evaluate(&ctx).await.unwrap();
+        let result = rule.evaluate(&ctx).await.expect("Failed to evaluate rule");
         assert!(!result.passed);
         assert!(result.create_case);
         assert!(result.reason.contains("Large transaction"));
@@ -667,7 +667,7 @@ mod tests {
             user_address: None,
         };
 
-        let result = rule.evaluate(&ctx).await.unwrap();
+        let result = rule.evaluate(&ctx).await.expect("Failed to evaluate rule");
         assert!(result.passed);
     }
 
@@ -693,7 +693,7 @@ mod tests {
             user_address: None,
         };
 
-        let result = rule.evaluate(&ctx).await.unwrap();
+        let result = rule.evaluate(&ctx).await.expect("Failed to evaluate rule");
         assert!(result.passed);
     }
 
@@ -719,7 +719,7 @@ mod tests {
             user_address: None,
         };
 
-        let result = rule.evaluate(&ctx).await.unwrap();
+        let result = rule.evaluate(&ctx).await.expect("Failed to evaluate rule");
         assert!(result.passed);
     }
 
@@ -740,7 +740,7 @@ mod tests {
             user_address: None,
         };
 
-        let result = rule.evaluate(&ctx).await.unwrap();
+        let result = rule.evaluate(&ctx).await.expect("Failed to evaluate rule");
         assert!(result.passed); // Should pass because it's not a payout
     }
 
@@ -761,7 +761,7 @@ mod tests {
             user_address: None,
         };
 
-        let result = rule.evaluate(&ctx).await.unwrap();
+        let result = rule.evaluate(&ctx).await.expect("Failed to evaluate rule");
         // Currently passes - in production would check deposit timing
         assert!(result.passed);
     }

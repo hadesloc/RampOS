@@ -332,13 +332,13 @@ impl MockDeviceHistoryStore {
 #[async_trait]
 impl DeviceHistoryStore for MockDeviceHistoryStore {
     async fn get_history(&self, user_id: &UserId) -> Result<DeviceHistory> {
-        let map = self.history.lock().unwrap();
+        let map = self.history.lock().expect("History lock poisoned");
         Ok(map.get(&user_id.to_string()).cloned().unwrap_or_default())
     }
 
     async fn update_history(&self, user_id: &UserId, context: &DeviceContext) -> Result<()> {
-        let mut map = self.history.lock().unwrap();
-        let mut device_map = self.device_users.lock().unwrap();
+        let mut map = self.history.lock().expect("History lock poisoned");
+        let mut device_map = self.device_users.lock().expect("Device users lock poisoned");
 
         let history = map.entry(user_id.to_string()).or_default();
 
@@ -414,7 +414,7 @@ impl DeviceHistoryStore for MockDeviceHistoryStore {
     }
 
     async fn get_users_on_device(&self, device_fingerprint: &str) -> Result<Vec<UserId>> {
-        let map = self.device_users.lock().unwrap();
+        let map = self.device_users.lock().expect("Device users lock poisoned");
         if let Some(users) = map.get(device_fingerprint) {
             Ok(users.iter().map(UserId::new).collect())
         } else {
@@ -473,23 +473,23 @@ mod tests {
         let ctx1 = create_context("u1", device1.clone());
 
         // First time - new device but no history, so maybe okay or just logged
-        let result1 = rule.evaluate(&ctx1).await.unwrap();
+        let result1 = rule.evaluate(&ctx1).await.expect("Failed to evaluate rule");
         // Since history is empty, new device check: !known && !empty -> false.
         // So passed.
         assert!(result1.passed);
 
         // Second time - same device
-        let result2 = rule.evaluate(&ctx1).await.unwrap();
+        let result2 = rule.evaluate(&ctx1).await.expect("Failed to evaluate rule");
         assert!(result2.passed);
 
         // Third time - new device
         let device2 = create_device_ctx("d2", "2.2.2.2", "VN");
         let ctx2 = create_context("u1", device2);
-        let result3 = rule.evaluate(&ctx2).await.unwrap();
+        let result3 = rule.evaluate(&ctx2).await.expect("Failed to evaluate rule");
 
         // Should flag new device (risk +10)
         // 10 < 50 so pass, but risk score > 0
-        assert!(result3.risk_score.unwrap().0 >= 10.0);
+        assert!(result3.risk_score.expect("Risk score missing").0 >= 10.0);
         assert!(result3.reason.contains("New device"));
     }
 
@@ -503,7 +503,7 @@ mod tests {
         device1.lat = Some(21.0); // Hanoi
         device1.lon = Some(105.0);
         let ctx1 = create_context("u1", device1);
-        rule.evaluate(&ctx1).await.unwrap();
+        rule.evaluate(&ctx1).await.expect("Failed to evaluate rule");
 
         // 2. Login in US 1 hour later
         let mut device2 = create_device_ctx("d2", "3.3.3.3", "US");
@@ -512,7 +512,7 @@ mod tests {
         device2.timestamp = Utc::now() + Duration::hours(1);
 
         let ctx2 = create_context("u1", device2);
-        let result = rule.evaluate(&ctx2).await.unwrap();
+        let result = rule.evaluate(&ctx2).await.expect("Failed to evaluate rule");
 
         assert!(!result.passed); // Should fail due to high risk (country change 50 + impossible travel 40 = 90)
         assert!(result.reason.contains("Impossible travel"));
@@ -528,8 +528,8 @@ mod tests {
         device.is_vpn = true;
         let ctx = create_context("u1", device);
 
-        let result = rule.evaluate(&ctx).await.unwrap();
-        assert!(result.risk_score.unwrap().0 >= 30.0);
+        let result = rule.evaluate(&ctx).await.expect("Failed to evaluate rule");
+        assert!(result.risk_score.expect("Risk score missing").0 >= 30.0);
         assert!(result.reason.contains("VPN"));
     }
 
@@ -542,14 +542,14 @@ mod tests {
 
         // User 1 uses device
         let ctx1 = create_context("u1", device.clone());
-        rule.evaluate(&ctx1).await.unwrap();
+        rule.evaluate(&ctx1).await.expect("Failed to evaluate rule");
 
         // User 2 uses same device
         let ctx2 = create_context("u2", device.clone());
-        let result = rule.evaluate(&ctx2).await.unwrap();
+        let result = rule.evaluate(&ctx2).await.expect("Failed to evaluate rule");
 
         // Should flag shared device (20 points for 1 other user)
-        assert!(result.risk_score.unwrap().0 >= 20.0);
+        assert!(result.risk_score.expect("Risk score missing").0 >= 20.0);
         assert!(result.reason.contains("Device used by 1 other user"));
     }
 
@@ -561,7 +561,7 @@ mod tests {
         let device = create_device_ctx("d1", "1.1.1.1", "NK"); // North Korea
         let ctx = create_context("u1", device);
 
-        let result = rule.evaluate(&ctx).await.unwrap();
+        let result = rule.evaluate(&ctx).await.expect("Failed to evaluate rule");
         assert!(!result.passed);
         assert!(result.reason.contains("Suspicious country"));
     }
@@ -573,17 +573,17 @@ mod tests {
 
         // Device 1
         let d1 = create_device_ctx("d1", "1.1.1.1", "VN");
-        rule.evaluate(&create_context("u1", d1)).await.unwrap();
+        rule.evaluate(&create_context("u1", d1)).await.expect("Failed to evaluate rule");
 
         // Device 2
         let d2 = create_device_ctx("d2", "1.1.1.1", "VN");
-        rule.evaluate(&create_context("u1", d2)).await.unwrap();
+        rule.evaluate(&create_context("u1", d2)).await.expect("Failed to evaluate rule");
 
         // Device 3 (should trigger)
         let d3 = create_device_ctx("d3", "1.1.1.1", "VN");
-        let result = rule.evaluate(&create_context("u1", d3)).await.unwrap();
+        let result = rule.evaluate(&create_context("u1", d3)).await.expect("Failed to evaluate rule");
 
-        assert!(result.risk_score.unwrap().0 >= 20.0);
+        assert!(result.risk_score.expect("Risk score missing").0 >= 20.0);
         assert!(result.reason.contains("Too many unique devices"));
     }
 }

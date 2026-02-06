@@ -18,7 +18,7 @@ mod tests {
                 true,
             )
             .await
-            .unwrap();
+            .expect("Failed to add note");
 
         assert_eq!(note.case_id, case_id);
         assert_eq!(note.content, "Investigation started");
@@ -34,7 +34,7 @@ mod tests {
                 Some("system".to_string()),
             )
             .await
-            .unwrap();
+            .expect("Failed to change status");
 
         assert_eq!(note.note_type, NoteType::StatusChange);
         assert!(note.content.contains("Open"));
@@ -48,7 +48,7 @@ mod tests {
                 Some("admin".to_string()),
             )
             .await
-            .unwrap();
+            .expect("Failed to change assignment");
 
         assert_eq!(note.note_type, NoteType::StatusChange); // We used StatusChange for assignment
         assert!(note.content.contains("assigned to analyst_2"));
@@ -57,7 +57,7 @@ mod tests {
         let note = manager
             .on_resolution(case_id, "False positive", Some("manager".to_string()))
             .await
-            .unwrap();
+            .expect("Failed to resolve");
 
         assert_eq!(note.note_type, NoteType::Decision);
         assert!(note.content.contains("False positive"));

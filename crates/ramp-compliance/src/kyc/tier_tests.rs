@@ -78,7 +78,7 @@ mod tier_tests {
         let can_upgrade = manager
             .can_upgrade(&tenant_id, &user_id, KycTier::Tier2)
             .await
-            .unwrap();
+            .expect("Failed to check upgrade eligibility");
         assert!(can_upgrade);
 
         let result = manager
@@ -103,7 +103,7 @@ mod tier_tests {
         let can_upgrade = manager
             .can_upgrade(&tenant_id, &user_id, KycTier::Tier2)
             .await
-            .unwrap();
+            .expect("Failed to check upgrade eligibility");
         assert!(!can_upgrade);
 
         let result = manager

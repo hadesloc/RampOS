@@ -266,7 +266,7 @@ mod tests {
             }
         };
 
-        let result = workflow.execute(input, signal_provider).await.unwrap();
+        let result = workflow.execute(input, signal_provider).await.expect("Workflow failed");
         assert_eq!(result.status, KycStatus::Approved);
         assert_eq!(result.verified_tier, Some(KycTier::Tier1));
     }
@@ -309,7 +309,7 @@ mod tests {
             }
         };
 
-        let result = workflow.execute(input, signal_provider).await.unwrap();
+        let result = workflow.execute(input, signal_provider).await.expect("Workflow failed");
         assert_eq!(result.status, KycStatus::Approved);
     }
 }

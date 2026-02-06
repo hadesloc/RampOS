@@ -25,7 +25,7 @@ mod report_tests {
             tenant_id: tenant_id.clone(),
             date,
             total_transactions: 150,
-            total_volume_vnd: rust_decimal::Decimal::from_i64(1000000).unwrap(),
+            total_volume_vnd: rust_decimal::Decimal::from_i64(1000000).expect("Invalid decimal"),
             total_flags: 5,
             cases_opened: 3,
             cases_closed: 2,

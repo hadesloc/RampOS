@@ -76,7 +76,7 @@ impl MockKycProvider {
     pub fn get_all_verifications(&self) -> Vec<MockVerificationRecord> {
         self.verifications
             .lock()
-            .unwrap()
+            .expect("Verifications lock poisoned")
             .values()
             .cloned()
             .collect()
@@ -89,7 +89,12 @@ impl MockKycProvider {
         status: KycStatus,
         reason: Option<String>,
     ) {
-        if let Some(record) = self.verifications.lock().unwrap().get_mut(reference) {
+        if let Some(record) = self
+            .verifications
+            .lock()
+            .expect("Verifications lock poisoned")
+            .get_mut(reference)
+        {
             record.status = status;
             record.rejection_reason = reason;
             record.updated_at = Utc::now();
@@ -164,7 +169,7 @@ impl KycProvider for MockKycProvider {
         // Store for later lookup
         self.verifications
             .lock()
-            .unwrap()
+            .expect("Verifications lock poisoned")
             .insert(reference.clone(), record);
 
         info!(
@@ -188,7 +193,7 @@ impl KycProvider for MockKycProvider {
     }
 
     async fn check_status(&self, reference: &str) -> Result<KycVerificationResult> {
-        let verifications = self.verifications.lock().unwrap();
+        let verifications = self.verifications.lock().expect("Verifications lock poisoned");
 
         if let Some(record) = verifications.get(reference) {
             Ok(KycVerificationResult {
@@ -290,7 +295,7 @@ mod tests {
             documents: vec![],
         };
 
-        let result = provider.verify(&request).await.unwrap();
+        let result = provider.verify(&request).await.expect("Verification failed");
         assert_eq!(result.status, KycStatus::Approved);
         assert_eq!(result.verified_tier, Some(KycTier::Tier1));
     }
@@ -313,7 +318,7 @@ mod tests {
             documents: vec![],
         };
 
-        let result = provider.verify(&request).await.unwrap();
+        let result = provider.verify(&request).await.expect("Verification failed");
         assert_eq!(result.status, KycStatus::Rejected);
         assert!(result.rejection_reason.is_some());
     }

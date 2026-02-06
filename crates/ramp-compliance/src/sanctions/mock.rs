@@ -26,19 +26,19 @@ impl MockSanctionsProvider {
     }
 
     pub fn add_blocked_individual(&self, name: &str, score: f64) {
-        let mut names = self.blocked_names.lock().unwrap();
+        let mut names = self.blocked_names.lock().expect("Blocked names lock poisoned");
         names.insert(name.to_lowercase(), score);
     }
 
     pub fn add_blocked_entity(&self, name: &str, score: f64) {
-        let mut entities = self.blocked_entities.lock().unwrap();
+        let mut entities = self.blocked_entities.lock().expect("Blocked entities lock poisoned");
         entities.insert(name.to_lowercase(), score);
     }
 
     pub fn clear(&self) {
-        let mut names = self.blocked_names.lock().unwrap();
+        let mut names = self.blocked_names.lock().expect("Blocked names lock poisoned");
         names.clear();
-        let mut entities = self.blocked_entities.lock().unwrap();
+        let mut entities = self.blocked_entities.lock().expect("Blocked entities lock poisoned");
         entities.clear();
     }
 }
@@ -51,7 +51,7 @@ impl SanctionsProvider for MockSanctionsProvider {
         _dob: Option<&str>,
         _country: Option<&str>,
     ) -> anyhow::Result<SanctionsResult> {
-        let names = self.blocked_names.lock().unwrap();
+        let names = self.blocked_names.lock().expect("Blocked names lock poisoned");
         let normalized_name = name.to_lowercase();
 
         if let Some(score) = names.get(&normalized_name) {
@@ -94,7 +94,7 @@ impl SanctionsProvider for MockSanctionsProvider {
         name: &str,
         _country: Option<&str>,
     ) -> anyhow::Result<SanctionsResult> {
-        let entities = self.blocked_entities.lock().unwrap();
+        let entities = self.blocked_entities.lock().expect("Blocked entities lock poisoned");
         let normalized_name = name.to_lowercase();
 
         if let Some(score) = entities.get(&normalized_name) {

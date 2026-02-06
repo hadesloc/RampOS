@@ -563,8 +563,8 @@ impl RuleStore {
         let rules = RuleParser::parse_config(&config)?;
         let count = rules.len();
 
-        *self.rules.write().unwrap() = rules;
-        *self.version.write().unwrap() = config.version.clone();
+        *self.rules.write().expect("Rules lock poisoned") = rules;
+        *self.version.write().expect("Version lock poisoned") = config.version.clone();
 
         info!(
             version = %config.version,
@@ -577,12 +577,12 @@ impl RuleStore {
 
     /// Get current version
     pub fn version(&self) -> String {
-        self.version.read().unwrap().clone()
+        self.version.read().expect("Version lock poisoned").clone()
     }
 
     /// Get rule count
     pub fn count(&self) -> usize {
-        self.rules.read().unwrap().len()
+        self.rules.read().expect("Rules lock poisoned").len()
     }
 }
 
@@ -639,7 +639,7 @@ mod tests {
 
     #[test]
     fn test_parse_rules() {
-        let rules = RuleParser::parse_json(SAMPLE_RULES_JSON).unwrap();
+        let rules = RuleParser::parse_json(SAMPLE_RULES_JSON).expect("Failed to parse rules");
         // Should have 2 rules (disabled one is skipped)
         assert_eq!(rules.len(), 2);
     }
@@ -647,7 +647,7 @@ mod tests {
     #[test]
     fn test_rule_store() {
         let store = RuleStore::new();
-        let count = store.load_from_json(SAMPLE_RULES_JSON).unwrap();
+        let count = store.load_from_json(SAMPLE_RULES_JSON).expect("Failed to load rules");
         assert_eq!(count, 2);
         assert_eq!(store.version(), "1.0.0");
     }
@@ -673,7 +673,7 @@ mod tests {
         }
         "#;
         // Should not fail, just skip the unknown rule
-        let rules = RuleParser::parse_json(json).unwrap();
+        let rules = RuleParser::parse_json(json).expect("Failed to parse rules");
         assert_eq!(rules.len(), 0);
     }
 
@@ -692,7 +692,7 @@ mod tests {
             "enabled": true
         }
         "#;
-        let rule = RuleParser::parse(json).unwrap();
+        let rule = RuleParser::parse(json).expect("Failed to parse rule");
         assert_eq!(rule.name(), "High Velocity Detection");
     }
 
@@ -709,7 +709,7 @@ mod tests {
             "enabled": true
         }
         "#;
-        let rule = RuleParser::parse(json).unwrap();
+        let rule = RuleParser::parse(json).expect("Failed to parse rule");
 
         let mut context = RuleContext {
             tenant_id: ramp_common::types::TenantId::new(uuid::Uuid::new_v4().to_string()),
@@ -724,15 +724,15 @@ mod tests {
         };
 
         // Should match (1500 > 1000)
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(rule.evaluate(&context)).unwrap();
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+        let result = rt.block_on(rule.evaluate(&context)).expect("Failed to evaluate rule");
         assert!(!result.passed); // Failed rule means "matched" and flagged
         assert!(result.create_case);
         assert_eq!(result.risk_score.map(|s| s.0), Some(50.0));
 
         // Should not match (500 < 1000)
         context.current_amount = Decimal::from(500);
-        let result = rt.block_on(rule.evaluate(&context)).unwrap();
+        let result = rt.block_on(rule.evaluate(&context)).expect("Failed to evaluate rule");
         assert!(result.passed);
     }
 
@@ -753,7 +753,7 @@ mod tests {
             "enabled": true
         }
         "#;
-        let rule = RuleParser::parse(json).unwrap();
+        let rule = RuleParser::parse(json).expect("Failed to parse rule");
 
         let context = RuleContext {
             tenant_id: ramp_common::types::TenantId::new(uuid::Uuid::new_v4().to_string()),
@@ -770,20 +770,20 @@ mod tests {
         };
 
         // Should match
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(rule.evaluate(&context)).unwrap();
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+        let result = rt.block_on(rule.evaluate(&context)).expect("Failed to evaluate rule");
         assert!(!result.passed);
 
         // Fail first condition
         let mut context2 = context.clone();
         context2.current_amount = Decimal::from(500);
-        let result = rt.block_on(rule.evaluate(&context2)).unwrap();
+        let result = rt.block_on(rule.evaluate(&context2)).expect("Failed to evaluate rule");
         assert!(result.passed);
 
         // Fail second condition
         let mut context3 = context.clone();
         context3.metadata = serde_json::json!({"country": "US"});
-        let result = rt.block_on(rule.evaluate(&context3)).unwrap();
+        let result = rt.block_on(rule.evaluate(&context3)).expect("Failed to evaluate rule");
         assert!(result.passed);
     }
 }

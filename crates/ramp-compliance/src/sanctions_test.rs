@@ -54,7 +54,7 @@ async fn test_sanctions_integration() {
         user_address: None,
     };
 
-    let result = engine.check_transaction(&clean_tx).await.unwrap();
+    let result = engine.check_transaction(&clean_tx).await.expect("Failed to check clean transaction");
     assert!(result.passed);
     assert!(!result.requires_review);
     assert!(result.risk_score.0 < 50.0);
@@ -73,7 +73,7 @@ async fn test_sanctions_integration() {
         user_address: None,
     };
 
-    let result = engine.check_transaction(&sanctioned_tx).await.unwrap();
+    let result = engine.check_transaction(&sanctioned_tx).await.expect("Failed to check sanctioned transaction");
     assert!(!result.passed);
     assert!(result.requires_review);
     assert_eq!(result.risk_score.0, 100.0);
@@ -94,6 +94,6 @@ async fn test_sanctions_integration() {
         user_address: Some("123 Blocked St".to_string()),
     };
 
-    let result = engine.check_transaction(&address_tx).await.unwrap();
+    let result = engine.check_transaction(&address_tx).await.expect("Failed to check address transaction");
     assert!(result.passed);
 }

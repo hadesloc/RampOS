@@ -184,7 +184,7 @@ mod tests {
             user_address: None,
         };
 
-        let result = rule.evaluate(&ctx).await.unwrap();
+        let result = rule.evaluate(&ctx).await.expect("Rule evaluation failed");
         assert!(!result.passed);
         assert_eq!(result.severity, Some(CaseSeverity::Critical));
     }
@@ -208,7 +208,7 @@ mod tests {
             user_address: None,
         };
 
-        let result = rule.evaluate(&ctx).await.unwrap();
+        let result = rule.evaluate(&ctx).await.expect("Rule evaluation failed");
         assert!(result.passed);
     }
 }

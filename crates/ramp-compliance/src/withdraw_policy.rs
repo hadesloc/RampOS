@@ -777,27 +777,27 @@ impl MockWithdrawPolicyDataProvider {
     }
 
     pub fn with_daily_amount(self, amount: Decimal) -> Self {
-        *self.daily_amount.lock().unwrap() = amount;
+        *self.daily_amount.lock().expect("Daily amount lock poisoned") = amount;
         self
     }
 
     pub fn with_monthly_amount(self, amount: Decimal) -> Self {
-        *self.monthly_amount.lock().unwrap() = amount;
+        *self.monthly_amount.lock().expect("Monthly amount lock poisoned") = amount;
         self
     }
 
     pub fn with_hourly_count(self, count: u32) -> Self {
-        *self.hourly_count.lock().unwrap() = count;
+        *self.hourly_count.lock().expect("Hourly count lock poisoned") = count;
         self
     }
 
     pub fn with_daily_count(self, count: u32) -> Self {
-        *self.daily_count.lock().unwrap() = count;
+        *self.daily_count.lock().expect("Daily count lock poisoned") = count;
         self
     }
 
     pub fn with_last_withdraw_time(self, time: chrono::DateTime<Utc>) -> Self {
-        *self.last_withdraw_time.lock().unwrap() = Some(time);
+        *self.last_withdraw_time.lock().expect("Last withdraw time lock poisoned") = Some(time);
         self
     }
 }
@@ -817,7 +817,7 @@ impl WithdrawPolicyDataProvider for MockWithdrawPolicyDataProvider {
         _tenant_id: &TenantId,
         _user_id: &UserId,
     ) -> Result<Decimal> {
-        Ok(*self.daily_amount.lock().unwrap())
+        Ok(*self.daily_amount.lock().expect("Daily amount lock poisoned"))
     }
 
     async fn get_monthly_withdraw_amount(
@@ -825,7 +825,7 @@ impl WithdrawPolicyDataProvider for MockWithdrawPolicyDataProvider {
         _tenant_id: &TenantId,
         _user_id: &UserId,
     ) -> Result<Decimal> {
-        Ok(*self.monthly_amount.lock().unwrap())
+        Ok(*self.monthly_amount.lock().expect("Monthly amount lock poisoned"))
     }
 
     async fn get_hourly_withdraw_count(
@@ -833,7 +833,7 @@ impl WithdrawPolicyDataProvider for MockWithdrawPolicyDataProvider {
         _tenant_id: &TenantId,
         _user_id: &UserId,
     ) -> Result<u32> {
-        Ok(*self.hourly_count.lock().unwrap())
+        Ok(*self.hourly_count.lock().expect("Hourly count lock poisoned"))
     }
 
     async fn get_daily_withdraw_count(
@@ -841,7 +841,7 @@ impl WithdrawPolicyDataProvider for MockWithdrawPolicyDataProvider {
         _tenant_id: &TenantId,
         _user_id: &UserId,
     ) -> Result<u32> {
-        Ok(*self.daily_count.lock().unwrap())
+        Ok(*self.daily_count.lock().expect("Daily count lock poisoned"))
     }
 
     async fn get_last_withdraw_time(
@@ -849,7 +849,7 @@ impl WithdrawPolicyDataProvider for MockWithdrawPolicyDataProvider {
         _tenant_id: &TenantId,
         _user_id: &UserId,
     ) -> Result<Option<chrono::DateTime<Utc>>> {
-        Ok(*self.last_withdraw_time.lock().unwrap())
+        Ok(*self.last_withdraw_time.lock().expect("Last withdraw time lock poisoned"))
     }
 }
 
@@ -894,7 +894,7 @@ mod tests {
         let engine = create_test_engine();
         let req = create_test_request();
 
-        let result = engine.check_policy(&req).await.unwrap();
+        let result = engine.check_policy(&req).await.expect("Failed to check policy");
         assert!(result.is_approved());
     }
 
@@ -904,7 +904,7 @@ mod tests {
         let mut req = create_test_request();
         req.kyc_status = "PENDING".to_string();
 
-        let result = engine.check_policy(&req).await.unwrap();
+        let result = engine.check_policy(&req).await.expect("Failed to check policy");
         assert!(result.is_denied());
         if let PolicyResult::Denied { code, .. } = result {
             assert_eq!(code, DenialCode::KycNotVerified);
@@ -917,7 +917,7 @@ mod tests {
         let mut req = create_test_request();
         req.kyc_tier = KycTier::Tier0;
 
-        let result = engine.check_policy(&req).await.unwrap();
+        let result = engine.check_policy(&req).await.expect("Failed to check policy");
         assert!(result.is_denied());
         if let PolicyResult::Denied { code, .. } = result {
             assert_eq!(code, DenialCode::InsufficientKycTier);
@@ -930,7 +930,7 @@ mod tests {
         let mut req = create_test_request();
         req.amount_vnd = Decimal::from(50_000_000); // 50M VND, exceeds Tier1 limit of 10M
 
-        let result = engine.check_policy(&req).await.unwrap();
+        let result = engine.check_policy(&req).await.expect("Failed to check policy");
         assert!(result.is_denied());
         if let PolicyResult::Denied { code, .. } = result {
             assert_eq!(code, DenialCode::SingleTransactionLimitExceeded);
@@ -952,7 +952,7 @@ mod tests {
         let engine = WithdrawPolicyEngine::new(config, case_manager, None, transaction_store);
 
         let req = create_test_request();
-        let result = engine.check_policy(&req).await.unwrap();
+        let result = engine.check_policy(&req).await.expect("Failed to check policy");
         assert!(result.is_denied());
         if let PolicyResult::Denied { code, .. } = result {
             assert_eq!(code, DenialCode::BlacklistedAddress);
@@ -977,7 +977,7 @@ mod tests {
         req.is_new_address = true;
         req.address_first_used = None;
 
-        let result = engine.check_policy(&req).await.unwrap();
+        let result = engine.check_policy(&req).await.expect("Failed to check policy");
         assert!(result.is_manual_review());
     }
 
@@ -1005,7 +1005,7 @@ mod tests {
         let mut req = create_test_request();
         req.amount_vnd = Decimal::from(5_000_000); // This would push over the 20M limit
 
-        let result = engine.check_policy(&req).await.unwrap();
+        let result = engine.check_policy(&req).await.expect("Failed to check policy");
         assert!(result.is_denied());
         if let PolicyResult::Denied { code, .. } = result {
             assert_eq!(code, DenialCode::DailyLimitExceeded);
@@ -1033,7 +1033,7 @@ mod tests {
         let engine = engine.with_data_provider(data_provider);
         let req = create_test_request();
 
-        let result = engine.check_policy(&req).await.unwrap();
+        let result = engine.check_policy(&req).await.expect("Failed to check policy");
         assert!(result.is_denied());
         if let PolicyResult::Denied { code, .. } = result {
             assert_eq!(code, DenialCode::VelocityCheckFailed);
@@ -1047,7 +1047,7 @@ mod tests {
         req.kyc_tier = KycTier::Tier2;
         req.amount_vnd = Decimal::from(50_000_000); // 50M VND, within Tier2 limit of 100M
 
-        let result = engine.check_policy(&req).await.unwrap();
+        let result = engine.check_policy(&req).await.expect("Failed to check policy");
         assert!(result.is_approved());
     }
 
@@ -1059,7 +1059,7 @@ mod tests {
         req.amount_vnd = Decimal::from(600_000_000); // 600M VND, exceeds Tier3 manual review threshold of 500M
         req.is_new_address = false;
 
-        let result = engine.check_policy(&req).await.unwrap();
+        let result = engine.check_policy(&req).await.expect("Failed to check policy");
         // Should be manual review due to large amount
         assert!(result.is_manual_review());
     }

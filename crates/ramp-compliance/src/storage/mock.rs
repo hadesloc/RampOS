@@ -49,7 +49,7 @@ impl DocumentStorage for MockDocumentStorage {
             tenant_id, user_id, doc_type, file_id, extension
         );
 
-        self.storage.lock().unwrap().insert(key.clone(), data);
+        self.storage.lock().expect("Storage lock poisoned").insert(key.clone(), data);
         Ok(key)
     }
 
@@ -58,7 +58,7 @@ impl DocumentStorage for MockDocumentStorage {
             sleep(self.delay).await;
         }
 
-        let storage = self.storage.lock().unwrap();
+        let storage = self.storage.lock().expect("Storage lock poisoned");
         storage
             .get(url)
             .cloned()
@@ -70,7 +70,7 @@ impl DocumentStorage for MockDocumentStorage {
             sleep(self.delay).await;
         }
 
-        let mut storage = self.storage.lock().unwrap();
+        let mut storage = self.storage.lock().expect("Storage lock poisoned");
         storage.remove(url);
         Ok(())
     }

@@ -41,8 +41,16 @@ impl ReportGenerator {
         tenant_id: TenantId,
         date: DateTime<Utc>,
     ) -> Result<DailyReport> {
-        let start_of_day = date.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
-        let end_of_day = date.date_naive().and_hms_opt(23, 59, 59).unwrap().and_utc();
+        let start_of_day = date
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .ok_or_else(|| ramp_common::Error::Validation("Invalid start time".to_string()))?
+            .and_utc();
+        let end_of_day = date
+            .date_naive()
+            .and_hms_opt(23, 59, 59)
+            .ok_or_else(|| ramp_common::Error::Validation("Invalid end time".to_string()))?
+            .and_utc();
         let tenant_id_str = tenant_id.to_string();
 
         let row = sqlx::query(
