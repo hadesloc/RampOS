@@ -155,7 +155,7 @@ async fn setup_app() -> TestApp {
         webhook_service: Arc::new(ramp_core::service::webhook::WebhookService::new(
             Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
             tenant_repo.clone(),
-        )),
+        ).unwrap()),
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
         report_generator,

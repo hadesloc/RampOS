@@ -113,6 +113,9 @@ pub struct NapasAdapter {
 
 impl NapasAdapter {
     /// Create a new Napas adapter with minimal config (backwards compatible)
+    ///
+    /// # Panics
+    /// Panics if HTTP client creation fails (should never happen with default config)
     pub fn new(provider_code: impl Into<String>, webhook_secret: impl Into<String>) -> Self {
         let config = NapasConfig {
             base: AdapterConfig {
@@ -132,18 +135,21 @@ impl NapasAdapter {
             napas_public_key_pem: None,
         };
 
-        Self::with_config(config)
+        Self::with_config(config).expect("Failed to create Napas adapter with default config")
     }
 
     /// Create a new Napas adapter with full configuration
-    pub fn with_config(config: NapasConfig) -> Self {
+    ///
+    /// # Errors
+    /// Returns an error if HTTP client creation fails
+    pub fn with_config(config: NapasConfig) -> Result<Self> {
         let http_client = Client::builder()
             .timeout(StdDuration::from_secs(config.base.timeout_secs))
             .user_agent("RampOS-Napas-Adapter/1.0")
             .build()
-            .expect("Failed to create HTTP client");
+            .map_err(|e| Error::Internal(format!("Failed to create HTTP client: {}", e)))?;
 
-        Self { config, http_client }
+        Ok(Self { config, http_client })
     }
 
     /// Generate request signature for Napas API
