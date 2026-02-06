@@ -7,7 +7,7 @@
 //! The signature format matches the SDK implementation:
 //! `{method}\n{path}\n{timestamp}\n{body}`
 
-use crate::middleware::tenant::TenantContext;
+use crate::middleware::tenant::{TenantContext, TenantTier};
 use axum::{
     body::Body,
     extract::{OriginalUri, Request, State},
@@ -245,9 +245,17 @@ pub async fn auth_middleware(
     // Reconstruct the request with the body
     let mut new_req = Request::from_parts(parts, Body::from(body_bytes));
 
+    let tier_str = tenant
+        .config
+        .get("tier")
+        .and_then(|v| v.as_str())
+        .unwrap_or("STANDARD");
+    let tier = TenantTier::from_str(tier_str);
+
     let context = TenantContext {
         tenant_id: TenantId::new(&tenant.id),
         name: tenant.name,
+        tier,
     };
     new_req.extensions_mut().insert(context);
 

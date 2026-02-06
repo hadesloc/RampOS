@@ -7,6 +7,30 @@ use tracing::warn;
 pub struct TenantContext {
     pub tenant_id: TenantId,
     pub name: String,
+    pub tier: TenantTier,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TenantTier {
+    #[default]
+    Standard,
+    Enterprise,
+}
+
+impl TenantTier {
+    pub fn from_str(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "ENTERPRISE" => Self::Enterprise,
+            _ => Self::Standard,
+        }
+    }
+
+    pub fn rate_limit(&self) -> u64 {
+        match self {
+            Self::Standard => 100,
+            Self::Enterprise => 1000,
+        }
+    }
 }
 
 /// Extract tenant context from request extensions
