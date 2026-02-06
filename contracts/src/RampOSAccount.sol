@@ -84,6 +84,7 @@ contract RampOSAccount is BaseAccount, Initializable {
     event SessionKeyRemoved(address indexed key);
     event SessionKeyPermissionsUpdated(address indexed key, bytes32 permissionsHash);
     event DailyLimitReset(address indexed key, uint256 day);
+    event LegacySessionKeyDeprecated(address indexed key);
 
     /// @notice Errors
     error NotOwner();
@@ -240,7 +241,7 @@ contract RampOSAccount is BaseAccount, Initializable {
     /// @notice Add a session key with raw permissionsHash (legacy compatibility)
     /// @dev DEPRECATED: This creates a session key with unlimited permissions.
     ///      Use addSessionKey() with explicit permissions instead.
-    ///      At least one limit must be specified to prevent unlimited access.
+    ///      Limited to 7 days max duration to mitigate risk.
     function addSessionKeyLegacy(
         address key,
         uint48 validAfter,
@@ -251,8 +252,8 @@ contract RampOSAccount is BaseAccount, Initializable {
         // Require valid time bounds to prevent unlimited session keys
         require(validUntil > validAfter, "Invalid time bounds");
         require(validUntil > block.timestamp, "Session already expired");
-        // Limit session duration to 30 days max for legacy keys
-        require(validUntil <= block.timestamp + 30 days, "Session duration too long");
+        // Limit session duration to 7 days max for legacy keys (security hardening)
+        require(validUntil - validAfter <= 7 days, "Legacy key max 7 days");
 
         sessionKeys[key] = SessionKey({
             key: key,
@@ -272,6 +273,7 @@ contract RampOSAccount is BaseAccount, Initializable {
         storage_.lastResetDay = block.timestamp / 1 days;
 
         emit SessionKeyAdded(key, validUntil);
+        emit LegacySessionKeyDeprecated(key);
     }
 
     /// @notice Remove a session key
@@ -405,6 +407,9 @@ contract RampOSAccount is BaseAccount, Initializable {
         override
         returns (uint256 validationData)
     {
+        // Clear pending session key at start to prevent state pollution
+        _pendingSessionKey = address(0);
+
         bytes32 hash = userOpHash.toEthSignedMessageHash();
         address signer = hash.recover(userOp.signature);
 
