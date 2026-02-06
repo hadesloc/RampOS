@@ -1,0 +1,579 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+      image_tag:
+        description: "Image tag to deploy (defaults to latest commit SHA)"
+        required: false
+        type: string
+      skip_build:
+        description: "Skip build and use existing image"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+# Prevent concurrent deployments to the same environment
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'auto' }}
+  cancel-in-progress: false
+
+jobs:
+  # =============================================================================
+  # BUILD: Build and push Docker images
+  # =============================================================================
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.skip_build != 'true' }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+      image_digest: ${{ steps.build.outputs.digest }}
+      full_image: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Generate build summary
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | \`${{ steps.meta.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Digest | \`${{ steps.build.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+
+  # =============================================================================
+  # DEPLOY DEV: Auto-deploy to dev on develop branch push
+  # =============================================================================
+  deploy-dev:
+    name: Deploy to Dev
+    needs: [build]
+    if: |
+      always() &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
+      (github.ref == 'refs/heads/develop' || github.event.inputs.environment == 'dev')
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+      url: https://dev-api.rampos.io
+    outputs:
+      deployment_id: ${{ steps.deploy.outputs.deployment_id }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Determine image tag
+        id: image
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=sha-${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update Kustomize image tag
+        run: |
+          cd k8s/overlays/dev
+          kustomize edit set image ghcr.io/rampos/rampos:latest=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}
+          cat kustomization.yaml
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "v1.29.0"
+
+      - name: Deploy to Dev cluster
+        id: deploy
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_DEV }}
+        run: |
+          if [ -z "$KUBECONFIG_DATA" ]; then
+            echo "::warning::KUBECONFIG_DEV secret not set - simulating deployment"
+            echo "Would deploy to dev with image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}"
+            echo "deployment_id=dev-${{ github.sha }}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
+
+          # Apply manifests
+          kustomize build k8s/overlays/dev | kubectl apply -f -
+
+          # Wait for rollout
+          kubectl rollout status deployment/rampos-server -n rampos --timeout=300s
+
+          # Get deployment info
+          DEPLOYMENT_ID=$(kubectl get deployment rampos-server -n rampos -o jsonpath='{.metadata.uid}')
+          echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+
+          # Cleanup
+          rm -f /tmp/kubeconfig
+
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests against dev environment..."
+          for i in {1..5}; do
+            if curl -sf https://dev-api.rampos.io/health > /dev/null 2>&1; then
+              echo "Health check passed!"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "::warning::Health check failed (expected if DNS not configured)"
+
+      - name: Notify deployment
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "## Dev Deployment Successful" >> $GITHUB_STEP_SUMMARY
+            echo "- Environment: dev" >> $GITHUB_STEP_SUMMARY
+            echo "- Image: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- URL: https://dev-api.rampos.io" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Dev Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # =============================================================================
+  # DEPLOY STAGING: Auto-deploy to staging on main branch push
+  # =============================================================================
+  deploy-staging:
+    name: Deploy to Staging
+    needs: [build]
+    if: |
+      always() &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
+      (github.ref == 'refs/heads/main' || github.event.inputs.environment == 'staging')
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging-api.rampos.io
+    outputs:
+      deployment_id: ${{ steps.deploy.outputs.deployment_id }}
+      previous_image: ${{ steps.rollback-info.outputs.previous_image }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Determine image tag
+        id: image
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=sha-${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "v1.29.0"
+
+      - name: Get current deployment for rollback
+        id: rollback-info
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_STAGING }}
+        run: |
+          if [ -z "$KUBECONFIG_DATA" ]; then
+            echo "previous_image=unknown" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
+
+          CURRENT_IMAGE=$(kubectl get deployment rampos-server -n rampos -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "none")
+          echo "previous_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
+          echo "Current image before deployment: $CURRENT_IMAGE"
+
+          rm -f /tmp/kubeconfig
+
+      - name: Update Kustomize image tag
+        run: |
+          cd k8s/overlays/staging
+          kustomize edit set image ghcr.io/rampos/rampos:latest=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}
+          cat kustomization.yaml
+
+      - name: Deploy to Staging cluster
+        id: deploy
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_STAGING }}
+        run: |
+          if [ -z "$KUBECONFIG_DATA" ]; then
+            echo "::warning::KUBECONFIG_STAGING secret not set - simulating deployment"
+            echo "Would deploy to staging with image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}"
+            echo "deployment_id=staging-${{ github.sha }}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
+
+          # Apply manifests
+          kustomize build k8s/overlays/staging | kubectl apply -f -
+
+          # Wait for rollout
+          kubectl rollout status deployment/rampos-server -n rampos --timeout=300s
+
+          # Get deployment info
+          DEPLOYMENT_ID=$(kubectl get deployment rampos-server -n rampos -o jsonpath='{.metadata.uid}')
+          echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+
+          rm -f /tmp/kubeconfig
+
+      - name: Run integration tests
+        run: |
+          echo "Running integration tests against staging..."
+          # Add actual integration tests here
+          for i in {1..5}; do
+            if curl -sf https://staging-api.rampos.io/health > /dev/null 2>&1; then
+              echo "Health check passed!"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "::warning::Health check failed (expected if DNS not configured)"
+
+      - name: Notify deployment
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "## Staging Deployment Successful" >> $GITHUB_STEP_SUMMARY
+            echo "- Environment: staging" >> $GITHUB_STEP_SUMMARY
+            echo "- Image: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- Previous Image: \`${{ steps.rollback-info.outputs.previous_image }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- URL: https://staging-api.rampos.io" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Staging Deployment Failed" >> $GITHUB_STEP_SUMMARY
+            echo "- Rollback available to: \`${{ steps.rollback-info.outputs.previous_image }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # =============================================================================
+  # DEPLOY PRODUCTION: Manual approval required
+  # =============================================================================
+  deploy-production:
+    name: Deploy to Production
+    needs: [build, deploy-staging]
+    if: |
+      always() &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
+      (needs.deploy-staging.result == 'success' || github.event.inputs.environment == 'production') &&
+      (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.environment == 'production')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://api.rampos.io
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Determine image tag
+        id: image
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=sha-${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "v1.29.0"
+
+      - name: Get current deployment for rollback
+        id: rollback-info
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_PROD }}
+        run: |
+          if [ -z "$KUBECONFIG_DATA" ]; then
+            echo "previous_image=unknown" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
+
+          CURRENT_IMAGE=$(kubectl get deployment rampos-server -n rampos -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "none")
+          REVISION=$(kubectl rollout history deployment/rampos-server -n rampos 2>/dev/null | tail -2 | head -1 | awk '{print $1}' || echo "0")
+
+          echo "previous_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
+          echo "previous_revision=$REVISION" >> $GITHUB_OUTPUT
+          echo "Current image before deployment: $CURRENT_IMAGE"
+          echo "Current revision: $REVISION"
+
+          rm -f /tmp/kubeconfig
+
+      - name: Update Kustomize image tag
+        run: |
+          cd k8s/overlays/prod
+          kustomize edit set image ghcr.io/rampos/rampos:latest=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}
+          cat kustomization.yaml
+
+      - name: Pre-deployment backup
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_PROD }}
+        run: |
+          echo "Creating pre-deployment snapshot..."
+          # In production, trigger backup job before deployment
+          if [ -n "$KUBECONFIG_DATA" ]; then
+            echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+            export KUBECONFIG=/tmp/kubeconfig
+
+            # Record deployment annotation
+            kubectl annotate deployment rampos-server -n rampos \
+              "rampos.io/pre-deploy-image=${{ steps.rollback-info.outputs.previous_image }}" \
+              "rampos.io/deploy-time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --overwrite 2>/dev/null || true
+
+            rm -f /tmp/kubeconfig
+          fi
+
+      - name: Deploy to Production via ArgoCD
+        id: deploy
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_PROD }}
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+          # Option 1: Direct ArgoCD sync (preferred)
+          if [ -n "$ARGOCD_SERVER" ] && [ -n "$ARGOCD_AUTH_TOKEN" ]; then
+            echo "Syncing via ArgoCD..."
+
+            # Install ArgoCD CLI
+            curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+            chmod +x argocd
+
+            # Sync application
+            ./argocd app sync rampos \
+              --server "$ARGOCD_SERVER" \
+              --auth-token "$ARGOCD_AUTH_TOKEN" \
+              --grpc-web \
+              --prune \
+              --timeout 300
+
+            # Wait for healthy status
+            ./argocd app wait rampos \
+              --server "$ARGOCD_SERVER" \
+              --auth-token "$ARGOCD_AUTH_TOKEN" \
+              --grpc-web \
+              --timeout 300 \
+              --health
+
+            echo "deployment_id=argocd-$(date +%s)" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Option 2: Direct kubectl apply (fallback)
+          if [ -n "$KUBECONFIG_DATA" ]; then
+            echo "Deploying directly via kubectl..."
+            echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+            export KUBECONFIG=/tmp/kubeconfig
+
+            # Apply manifests with rolling update strategy
+            kustomize build k8s/overlays/prod | kubectl apply -f -
+
+            # Wait for rollout with timeout
+            kubectl rollout status deployment/rampos-server -n rampos --timeout=600s
+
+            DEPLOYMENT_ID=$(kubectl get deployment rampos-server -n rampos -o jsonpath='{.metadata.uid}')
+            echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+
+            rm -f /tmp/kubeconfig
+            exit 0
+          fi
+
+          echo "::warning::No credentials configured - simulating production deployment"
+          echo "Would deploy to production with image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}"
+          echo "deployment_id=prod-${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Post-deployment verification
+        run: |
+          echo "Running production verification..."
+
+          # Health check with retries
+          for i in {1..10}; do
+            if curl -sf https://api.rampos.io/health > /dev/null 2>&1; then
+              echo "Production health check passed!"
+              break
+            fi
+            echo "Attempt $i/10 failed, retrying in 15s..."
+            sleep 15
+          done
+
+      - name: Create GitHub Release Notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          body: |
+            ## Deployment Summary
+
+            - **Version**: ${{ github.ref_name }}
+            - **Image**: `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}`
+            - **Deployed**: ${{ github.event.head_commit.timestamp }}
+            - **Commit**: ${{ github.sha }}
+
+            ### Rollback
+            To rollback this deployment, run:
+            ```bash
+            gh workflow run deploy.yaml -f environment=production -f image_tag=${{ steps.rollback-info.outputs.previous_image }}
+            ```
+          generate_release_notes: true
+
+      - name: Notify deployment
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "## Production Deployment Successful" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Environment | production |" >> $GITHUB_STEP_SUMMARY
+            echo "| Image | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| Previous Image | \`${{ steps.rollback-info.outputs.previous_image }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| URL | https://api.rampos.io |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Rollback Command" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "gh workflow run deploy.yaml -f environment=production -f image_tag=${{ steps.rollback-info.outputs.previous_image }}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Production Deployment Failed" >> $GITHUB_STEP_SUMMARY
+            echo "- Automatic rollback may be required" >> $GITHUB_STEP_SUMMARY
+            echo "- Previous image: \`${{ steps.rollback-info.outputs.previous_image }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # =============================================================================
+  # ROLLBACK: Manual rollback workflow
+  # =============================================================================
+  rollback:
+    name: Rollback Deployment
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.image_tag != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "v1.29.0"
+
+      - name: Execute rollback
+        env:
+          KUBECONFIG_DATA: ${{ secrets[format('KUBECONFIG_{0}', github.event.inputs.environment)] }}
+        run: |
+          ENV="${{ github.event.inputs.environment }}"
+          IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+
+          echo "Rolling back $ENV to image: $IMAGE_TAG"
+
+          # Update kustomization
+          cd "k8s/overlays/$ENV"
+          kustomize edit set image "ghcr.io/rampos/rampos:latest=$IMAGE_TAG"
+
+          if [ -n "$KUBECONFIG_DATA" ]; then
+            echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+            export KUBECONFIG=/tmp/kubeconfig
+
+            # Apply rollback
+            kustomize build . | kubectl apply -f -
+
+            # Wait for rollout
+            kubectl rollout status deployment/rampos-server -n rampos --timeout=300s
+
+            echo "Rollback to $IMAGE_TAG completed successfully"
+            rm -f /tmp/kubeconfig
+          else
+            echo "::warning::KUBECONFIG not set - rollback simulated"
+          fi
+
+      - name: Rollback summary
+        run: |
+          echo "## Rollback Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Rolled back to: \`${{ github.event.inputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Triggered by: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY

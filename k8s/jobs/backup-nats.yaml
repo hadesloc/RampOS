@@ -1,0 +1,355 @@
+# NATS JetStream Backup CronJob
+# RampOS Backup and Disaster Recovery Infrastructure
+#
+# Strategy:
+# - Daily stream snapshot (consumers + messages)
+# - Stream configuration backup
+# - Backups stored in S3-compatible object storage
+# - Retention: 7 daily backups
+#
+# RPO: 5 minutes (message retention in streams)
+# RTO: 15 minutes (restore streams + replay)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nats-backup-scripts
+  namespace: rampos
+data:
+  backup-nats.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    # Configuration
+    BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+    BACKUP_NAME="rampos_nats_${BACKUP_DATE}"
+    BACKUP_DIR="/backup/${BACKUP_NAME}"
+    S3_BUCKET="${BACKUP_S3_BUCKET:-rampos-backups}"
+    S3_PREFIX="${BACKUP_S3_PREFIX:-nats}"
+    RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-7}"
+    NATS_URL="${NATS_URL:-nats://rampos-nats:4222}"
+
+    echo "[$(date -Iseconds)] Starting NATS JetStream backup..."
+
+    # Create backup directory
+    mkdir -p "${BACKUP_DIR}/streams"
+    mkdir -p "${BACKUP_DIR}/consumers"
+
+    # Check NATS connection
+    echo "[$(date -Iseconds)] Connecting to NATS..."
+    nats server info --server "${NATS_URL}" || {
+      echo "[$(date -Iseconds)] ERROR: Cannot connect to NATS"
+      exit 1
+    }
+
+    # Get JetStream account info
+    echo "[$(date -Iseconds)] Getting JetStream info..."
+    nats account info --server "${NATS_URL}" > "${BACKUP_DIR}/account_info.json" 2>/dev/null || true
+
+    # List all streams
+    echo "[$(date -Iseconds)] Backing up streams..."
+    STREAMS=$(nats stream list --server "${NATS_URL}" --json 2>/dev/null | jq -r '.[]' 2>/dev/null || echo "")
+
+    if [ -z "${STREAMS}" ]; then
+      echo "[$(date -Iseconds)] No streams found, checking with names..."
+      STREAMS=$(nats stream names --server "${NATS_URL}" 2>/dev/null || echo "")
+    fi
+
+    STREAM_COUNT=0
+    for stream in ${STREAMS}; do
+      echo "[$(date -Iseconds)] Backing up stream: ${stream}"
+
+      # Get stream configuration
+      nats stream info "${stream}" --server "${NATS_URL}" --json > "${BACKUP_DIR}/streams/${stream}.config.json" 2>/dev/null || continue
+
+      # Get stream state
+      nats stream state "${stream}" --server "${NATS_URL}" > "${BACKUP_DIR}/streams/${stream}.state.txt" 2>/dev/null || true
+
+      # Backup consumers for this stream
+      CONSUMERS=$(nats consumer names "${stream}" --server "${NATS_URL}" 2>/dev/null || echo "")
+      for consumer in ${CONSUMERS}; do
+        echo "[$(date -Iseconds)]   Backing up consumer: ${stream}/${consumer}"
+        nats consumer info "${stream}" "${consumer}" --server "${NATS_URL}" --json > \
+          "${BACKUP_DIR}/consumers/${stream}_${consumer}.json" 2>/dev/null || true
+      done
+
+      STREAM_COUNT=$((STREAM_COUNT + 1))
+    done
+
+    echo "[$(date -Iseconds)] Backed up ${STREAM_COUNT} streams"
+
+    # Create archive
+    echo "[$(date -Iseconds)] Creating archive..."
+    cd /backup
+    tar -czf "${BACKUP_NAME}.tar.gz" "${BACKUP_NAME}"
+
+    BACKUP_SIZE=$(stat -c%s "${BACKUP_NAME}.tar.gz")
+    BACKUP_CHECKSUM=$(sha256sum "${BACKUP_NAME}.tar.gz" | cut -d' ' -f1)
+
+    echo "[$(date -Iseconds)] Archive size: ${BACKUP_SIZE} bytes"
+    echo "[$(date -Iseconds)] SHA256: ${BACKUP_CHECKSUM}"
+
+    # Create metadata
+    cat > "${BACKUP_NAME}.meta.json" <<EOF
+    {
+      "backup_name": "${BACKUP_NAME}",
+      "backup_type": "jetstream_snapshot",
+      "timestamp": "$(date -Iseconds)",
+      "size_bytes": ${BACKUP_SIZE},
+      "sha256": "${BACKUP_CHECKSUM}",
+      "stream_count": ${STREAM_COUNT},
+      "retention_days": ${RETENTION_DAYS}
+    }
+    EOF
+
+    # Upload to S3 (if configured)
+    if [ -n "${AWS_ACCESS_KEY_ID:-}" ] && [ -n "${BACKUP_S3_ENDPOINT:-}" ]; then
+      echo "[$(date -Iseconds)] Uploading to S3..."
+
+      aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 cp \
+        "${BACKUP_NAME}.tar.gz" \
+        "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.tar.gz"
+
+      aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 cp \
+        "${BACKUP_NAME}.meta.json" \
+        "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.meta.json"
+
+      echo "[$(date -Iseconds)] Upload complete"
+
+      # Cleanup old backups
+      echo "[$(date -Iseconds)] Cleaning up old backups (retention: ${RETENTION_DAYS} days)..."
+      CUTOFF_DATE=$(date -d "-${RETENTION_DAYS} days" +%Y%m%d)
+
+      aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 ls \
+        "s3://${S3_BUCKET}/${S3_PREFIX}/" | \
+        awk '{print $4}' | \
+        grep -E '^rampos_nats_[0-9]{8}' | \
+        while read -r file; do
+          FILE_DATE=$(echo "$file" | grep -oE '[0-9]{8}')
+          if [ "$FILE_DATE" -lt "$CUTOFF_DATE" ]; then
+            echo "[$(date -Iseconds)] Deleting old backup: $file"
+            aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 rm \
+              "s3://${S3_BUCKET}/${S3_PREFIX}/$file"
+          fi
+        done
+    fi
+
+    # Cleanup local files
+    rm -rf "${BACKUP_DIR}"
+    rm -f "${BACKUP_NAME}.tar.gz"
+    rm -f "${BACKUP_NAME}.meta.json"
+
+    echo "[$(date -Iseconds)] NATS JetStream backup completed successfully"
+
+  restore-nats.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    # Usage: restore-nats.sh <backup-name|latest>
+    BACKUP_NAME="${1:-latest}"
+    S3_BUCKET="${BACKUP_S3_BUCKET:-rampos-backups}"
+    S3_PREFIX="${BACKUP_S3_PREFIX:-nats}"
+    NATS_URL="${NATS_URL:-nats://rampos-nats:4222}"
+
+    echo "[$(date -Iseconds)] Starting NATS JetStream restore..."
+    echo "[$(date -Iseconds)] Backup: ${BACKUP_NAME}"
+
+    mkdir -p /backup
+
+    # Find latest backup if needed
+    if [ "${BACKUP_NAME}" = "latest" ]; then
+      echo "[$(date -Iseconds)] Finding latest backup..."
+      BACKUP_NAME=$(aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 ls \
+        "s3://${S3_BUCKET}/${S3_PREFIX}/" | \
+        awk '{print $4}' | \
+        grep -E '\.tar\.gz$' | \
+        sort -r | \
+        head -n1 | \
+        sed 's/\.tar\.gz$//')
+    fi
+
+    if [ -z "${BACKUP_NAME}" ]; then
+      echo "[$(date -Iseconds)] ERROR: No backup found!"
+      exit 1
+    fi
+
+    # Download backup
+    echo "[$(date -Iseconds)] Downloading: ${BACKUP_NAME}.tar.gz"
+    aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 cp \
+      "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.tar.gz" \
+      "/backup/${BACKUP_NAME}.tar.gz"
+
+    # Verify checksum
+    echo "[$(date -Iseconds)] Verifying backup integrity..."
+    aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 cp \
+      "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.meta.json" \
+      "/backup/${BACKUP_NAME}.meta.json" || true
+
+    if [ -f "/backup/${BACKUP_NAME}.meta.json" ]; then
+      EXPECTED_CHECKSUM=$(jq -r '.sha256' "/backup/${BACKUP_NAME}.meta.json")
+      ACTUAL_CHECKSUM=$(sha256sum "/backup/${BACKUP_NAME}.tar.gz" | cut -d' ' -f1)
+
+      if [ "${EXPECTED_CHECKSUM}" != "${ACTUAL_CHECKSUM}" ]; then
+        echo "[$(date -Iseconds)] ERROR: Checksum mismatch!"
+        exit 1
+      fi
+      echo "[$(date -Iseconds)] Checksum verified"
+    fi
+
+    # Extract backup
+    echo "[$(date -Iseconds)] Extracting backup..."
+    cd /backup
+    tar -xzf "${BACKUP_NAME}.tar.gz"
+
+    # Restore streams
+    echo "[$(date -Iseconds)] Restoring streams..."
+    for config_file in /backup/${BACKUP_NAME}/streams/*.config.json; do
+      if [ -f "${config_file}" ]; then
+        STREAM_NAME=$(basename "${config_file}" .config.json)
+        echo "[$(date -Iseconds)] Restoring stream: ${STREAM_NAME}"
+
+        # Delete existing stream if it exists
+        nats stream delete "${STREAM_NAME}" --server "${NATS_URL}" --force 2>/dev/null || true
+
+        # Create stream from config
+        # Extract config and create stream
+        CONFIG=$(cat "${config_file}")
+        echo "${CONFIG}" | nats stream create "${STREAM_NAME}" --server "${NATS_URL}" --config - 2>/dev/null || {
+          echo "[$(date -Iseconds)] WARNING: Could not restore stream ${STREAM_NAME}"
+        }
+      fi
+    done
+
+    # Restore consumers
+    echo "[$(date -Iseconds)] Restoring consumers..."
+    for consumer_file in /backup/${BACKUP_NAME}/consumers/*.json; do
+      if [ -f "${consumer_file}" ]; then
+        FILENAME=$(basename "${consumer_file}" .json)
+        STREAM_NAME=$(echo "${FILENAME}" | cut -d'_' -f1)
+        CONSUMER_NAME=$(echo "${FILENAME}" | cut -d'_' -f2-)
+
+        echo "[$(date -Iseconds)] Restoring consumer: ${STREAM_NAME}/${CONSUMER_NAME}"
+
+        # Create consumer from config
+        cat "${consumer_file}" | nats consumer create "${STREAM_NAME}" "${CONSUMER_NAME}" \
+          --server "${NATS_URL}" --config - 2>/dev/null || {
+          echo "[$(date -Iseconds)] WARNING: Could not restore consumer ${CONSUMER_NAME}"
+        }
+      fi
+    done
+
+    # Cleanup
+    rm -rf "/backup/${BACKUP_NAME}"
+    rm -f "/backup/${BACKUP_NAME}.tar.gz"
+    rm -f "/backup/${BACKUP_NAME}.meta.json"
+
+    echo "[$(date -Iseconds)] NATS JetStream restore completed"
+---
+# Daily NATS backup CronJob
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nats-backup-daily
+  namespace: rampos
+  labels:
+    app: rampos-backup
+    component: nats
+spec:
+  schedule: "0 3 * * *"  # Daily at 3:00 AM UTC (after Redis backup)
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800  # 30 minute timeout
+      template:
+        metadata:
+          labels:
+            app: rampos-backup
+            component: nats
+        spec:
+          serviceAccountName: rampos-backup
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: natsio/nats-box:0.14.3
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+              readOnlyRootFilesystem: false
+            command: ["/bin/sh", "-c"]
+            args:
+            - |
+              # Install additional tools
+              apk add --no-cache aws-cli jq coreutils bash
+              /scripts/backup-nats.sh
+            env:
+            - name: NATS_URL
+              value: "nats://rampos-nats:4222"
+            - name: NATS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rampos-secret
+                  key: NATS_USER
+            - name: NATS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rampos-secret
+                  key: NATS_PASSWORD
+            # S3 Configuration
+            - name: BACKUP_S3_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: backup-s3-credentials
+                  key: ENDPOINT
+                  optional: true
+            - name: BACKUP_S3_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: backup-s3-credentials
+                  key: BUCKET
+                  optional: true
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: backup-s3-credentials
+                  key: ACCESS_KEY_ID
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backup-s3-credentials
+                  key: SECRET_ACCESS_KEY
+                  optional: true
+            - name: BACKUP_RETENTION_DAYS
+              value: "7"
+            volumeMounts:
+            - name: backup-scripts
+              mountPath: /scripts
+            - name: backup-storage
+              mountPath: /backup
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "50m"
+              limits:
+                memory: "512Mi"
+                cpu: "200m"
+          volumes:
+          - name: backup-scripts
+            configMap:
+              name: nats-backup-scripts
+              defaultMode: 0755
+          - name: backup-storage
+            emptyDir:
+              sizeLimit: 2Gi

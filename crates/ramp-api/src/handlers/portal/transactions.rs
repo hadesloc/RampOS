@@ -330,7 +330,7 @@ mod tests {
             updated_at: "2024-01-01T00:00:00Z".to_string(),
         };
 
-        let json = serde_json::to_string(&tx).unwrap();
+        let json = serde_json::to_string(&tx).expect("serialization failed");
         assert!(json.contains("\"type\":\"DEPOSIT\""));
         // None fields should be skipped
         assert!(!json.contains("\"fee\""));
@@ -347,7 +347,7 @@ mod tests {
             total_pages: 5,
         };
 
-        let json = serde_json::to_string(&response).unwrap();
+        let json = serde_json::to_string(&response).expect("serialization failed");
         assert!(json.contains("\"total\":100"));
         assert!(json.contains("\"totalPages\":5"));
     }

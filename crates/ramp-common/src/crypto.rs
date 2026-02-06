@@ -3,37 +3,39 @@ use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
+use crate::Result;
+use crate::Error;
+
 /// Generate HMAC-SHA256 signature for webhook
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if the secret key is empty or invalid for HMAC-SHA256.
-#[must_use]
-pub fn hmac_sha256(secret: &[u8], message: &[u8]) -> Vec<u8> {
-    let mut mac = HmacSha256::new_from_slice(secret).expect("HMAC can take key of any size");
+/// Returns `Error::Internal` if the secret key is invalid for HMAC-SHA256.
+pub fn hmac_sha256(secret: &[u8], message: &[u8]) -> Result<Vec<u8>> {
+    let mut mac = HmacSha256::new_from_slice(secret)
+        .map_err(|_| Error::Internal("Invalid HMAC key length".to_string()))?;
     mac.update(message);
-    mac.finalize().into_bytes().to_vec()
+    Ok(mac.finalize().into_bytes().to_vec())
 }
 
 /// Verify HMAC-SHA256 signature
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if the secret key is empty or invalid for HMAC-SHA256.
-#[must_use]
-pub fn verify_hmac_sha256(secret: &[u8], message: &[u8], signature: &[u8]) -> bool {
-    let mut mac = HmacSha256::new_from_slice(secret).expect("HMAC can take key of any size");
+/// Returns `Error::Internal` if the secret key is invalid for HMAC-SHA256.
+pub fn verify_hmac_sha256(secret: &[u8], message: &[u8], signature: &[u8]) -> Result<bool> {
+    let mut mac = HmacSha256::new_from_slice(secret)
+        .map_err(|_| Error::Internal("Invalid HMAC key length".to_string()))?;
     mac.update(message);
-    mac.verify_slice(signature).is_ok()
+    Ok(mac.verify_slice(signature).is_ok())
 }
 
 /// Generate webhook signature header value
 /// Format: t=<timestamp>,v1=<signature>
-#[must_use]
-pub fn generate_webhook_signature(secret: &[u8], timestamp: i64, payload: &[u8]) -> String {
+pub fn generate_webhook_signature(secret: &[u8], timestamp: i64, payload: &[u8]) -> Result<String> {
     let signed_payload = format!("{}.{}", timestamp, String::from_utf8_lossy(payload));
-    let signature = hmac_sha256(secret, signed_payload.as_bytes());
-    format!("t={},v1={}", timestamp, hex::encode(signature))
+    let signature = hmac_sha256(secret, signed_payload.as_bytes())?;
+    Ok(format!("t={},v1={}", timestamp, hex::encode(signature)))
 }
 
 /// Parse and verify webhook signature
@@ -51,7 +53,7 @@ pub fn verify_webhook_signature(
     signature_header: &str,
     payload: &[u8],
     tolerance_secs: i64,
-) -> Result<i64, WebhookSignatureError> {
+) -> std::result::Result<i64, WebhookSignatureError> {
     // Parse header: t=<timestamp>,v1=<signature>
     let parts: std::collections::HashMap<&str, &str> = signature_header
         .split(',')
@@ -82,7 +84,13 @@ pub fn verify_webhook_signature(
 
     // Verify signature
     let signed_payload = format!("{}.{}", timestamp, String::from_utf8_lossy(payload));
-    if !verify_hmac_sha256(secret, signed_payload.as_bytes(), &signature) {
+
+    // We can't easily propagate errors here because verify_webhook_signature returns specific WebhookSignatureError
+    // But verify_hmac_sha256 now returns Result<bool, Error>
+    // So we map the generic error to a signature mismatch (safe default)
+    if !verify_hmac_sha256(secret, signed_payload.as_bytes(), &signature)
+        .unwrap_or(false)
+    {
         return Err(WebhookSignatureError::SignatureMismatch);
     }
 
@@ -131,8 +139,8 @@ mod tests {
     fn test_hmac_sha256() {
         let secret = b"test_secret";
         let message = b"test_message";
-        let sig = hmac_sha256(secret, message);
-        assert!(verify_hmac_sha256(secret, message, &sig));
+        let sig = hmac_sha256(secret, message).expect("hmac failed");
+        assert!(verify_hmac_sha256(secret, message, &sig).expect("verify failed"));
     }
 
     #[test]
@@ -141,10 +149,10 @@ mod tests {
         let payload = br#"{"event":"test"}"#;
         let timestamp = chrono::Utc::now().timestamp();
 
-        let signature = generate_webhook_signature(secret, timestamp, payload);
+        let signature = generate_webhook_signature(secret, timestamp, payload).expect("generate failed");
         let result = verify_webhook_signature(secret, &signature, payload, 300);
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), timestamp);
+        assert_eq!(result.expect("verify failed"), timestamp);
     }
 }

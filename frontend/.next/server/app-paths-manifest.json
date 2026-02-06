@@ -10,6 +10,7 @@
   "/_not-found/page": "app/_not-found/page.js",
   "/admin-login/page": "app/admin-login/page.js",
   "/api/admin-login/route": "app/api/admin-login/route.js",
+  "/api/csrf/route": "app/api/csrf/route.js",
   "/api/proxy/[...path]/route": "app/api/proxy/[...path]/route.js",
   "/portal/assets/page": "app/portal/assets/page.js",
   "/portal/deposit/page": "app/portal/deposit/page.js",

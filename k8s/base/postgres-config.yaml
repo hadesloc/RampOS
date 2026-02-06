@@ -1,0 +1,584 @@
+# PostgreSQL Additional Configuration and Backup Integration
+# This file contains backup CronJobs, PrometheusRules, and failover scripts
+---
+# ConfigMap for backup and failover scripts
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-scripts
+  namespace: rampos
+data:
+  # Automated failover script (triggered by operator or manually)
+  failover.sh: |
+    #!/bin/bash
+    set -e
+
+    # This script promotes a replica to primary
+    # It should be run on the replica pod that will become primary
+
+    REPLICA_POD=$1
+    NAMESPACE=${NAMESPACE:-rampos}
+
+    if [ -z "$REPLICA_POD" ]; then
+      echo "Usage: failover.sh <replica-pod-name>"
+      exit 1
+    fi
+
+    echo "Starting failover to $REPLICA_POD..."
+
+    # 1. Verify the old primary is down or unreachable
+    if pg_isready -h rampos-postgres-0.rampos-postgres-headless.${NAMESPACE}.svc.cluster.local -p 5432 2>/dev/null; then
+      echo "WARNING: Primary appears to be up. Performing forced failover."
+      echo "Consider using graceful switchover instead."
+    fi
+
+    # 2. Promote the replica
+    kubectl exec -n ${NAMESPACE} ${REPLICA_POD} -- bash -c '
+      # Create trigger file to promote replica
+      touch /tmp/postgresql.trigger
+
+      # Wait for promotion
+      sleep 5
+
+      # Verify promotion
+      psql -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT pg_is_in_recovery();" | grep -q "f"
+      if [ $? -eq 0 ]; then
+        echo "Successfully promoted to primary"
+      else
+        echo "ERROR: Promotion failed"
+        exit 1
+      fi
+    '
+
+    # 3. Update labels for service routing
+    kubectl label pod -n ${NAMESPACE} ${REPLICA_POD} role=primary --overwrite
+
+    # 4. Update other replicas to point to new primary
+    # (This requires updating recovery.conf on remaining replicas)
+
+    echo "Failover complete. New primary: ${REPLICA_POD}"
+    echo "IMPORTANT: Update remaining replicas to point to new primary"
+    echo "IMPORTANT: Reconfigure old primary as replica when recovered"
+
+  # Graceful switchover script (planned failover)
+  switchover.sh: |
+    #!/bin/bash
+    set -e
+
+    OLD_PRIMARY=$1
+    NEW_PRIMARY=$2
+    NAMESPACE=${NAMESPACE:-rampos}
+
+    if [ -z "$OLD_PRIMARY" ] || [ -z "$NEW_PRIMARY" ]; then
+      echo "Usage: switchover.sh <old-primary-pod> <new-primary-pod>"
+      exit 1
+    fi
+
+    echo "Starting graceful switchover from $OLD_PRIMARY to $NEW_PRIMARY..."
+
+    # 1. Verify replication is caught up
+    kubectl exec -n ${NAMESPACE} ${OLD_PRIMARY} -- bash -c '
+      # Check replication lag
+      LAG=$(psql -U $POSTGRES_USER -d $POSTGRES_DB -t -c \
+        "SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) FROM pg_stat_replication WHERE application_name = '\'${NEW_PRIMARY}\''")
+
+      if [ "$LAG" -gt 1048576 ]; then  # 1MB threshold
+        echo "Replication lag too high: $LAG bytes. Wait for sync."
+        exit 1
+      fi
+      echo "Replication lag acceptable: $LAG bytes"
+    '
+
+    # 2. Stop writes on old primary (set to read-only)
+    kubectl exec -n ${NAMESPACE} ${OLD_PRIMARY} -- bash -c '
+      psql -U $POSTGRES_USER -d $POSTGRES_DB -c "ALTER SYSTEM SET default_transaction_read_only = on;"
+      psql -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT pg_reload_conf();"
+      echo "Old primary set to read-only"
+    '
+
+    # 3. Wait for final replication sync
+    sleep 5
+
+    # 4. Promote new primary
+    kubectl exec -n ${NAMESPACE} ${NEW_PRIMARY} -- bash -c '
+      touch /tmp/postgresql.trigger
+      sleep 3
+      psql -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT pg_is_in_recovery();" | grep -q "f"
+    '
+
+    # 5. Update labels
+    kubectl label pod -n ${NAMESPACE} ${OLD_PRIMARY} role=replica --overwrite
+    kubectl label pod -n ${NAMESPACE} ${NEW_PRIMARY} role=primary --overwrite
+
+    # 6. Reconfigure old primary as replica
+    # (Manual step required - restart with recovery.conf)
+
+    echo "Switchover complete."
+    echo "New primary: ${NEW_PRIMARY}"
+    echo "IMPORTANT: Reconfigure ${OLD_PRIMARY} as replica and restart"
+
+  # Health check script for external monitoring
+  health-check.sh: |
+    #!/bin/bash
+    # Returns JSON health status for all PostgreSQL pods
+
+    NAMESPACE=${NAMESPACE:-rampos}
+
+    check_pod() {
+      local pod=$1
+      local is_primary=$(kubectl exec -n ${NAMESPACE} ${pod} -- psql -U rampos -d rampos -t -c "SELECT NOT pg_is_in_recovery();" 2>/dev/null | tr -d ' ')
+      local connections=$(kubectl exec -n ${NAMESPACE} ${pod} -- psql -U rampos -d rampos -t -c "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | tr -d ' ')
+      local replication_lag=""
+
+      if [ "$is_primary" = "f" ]; then
+        replication_lag=$(kubectl exec -n ${NAMESPACE} ${pod} -- psql -U rampos -d rampos -t -c "SELECT EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp()))::int;" 2>/dev/null | tr -d ' ')
+      fi
+
+      echo "{\"pod\":\"${pod}\",\"is_primary\":${is_primary:-null},\"connections\":${connections:-0},\"replication_lag_seconds\":${replication_lag:-null}}"
+    }
+
+    echo "["
+    first=true
+    for pod in $(kubectl get pods -n ${NAMESPACE} -l app=rampos-postgres -o jsonpath='{.items[*].metadata.name}'); do
+      if [ "$first" = true ]; then
+        first=false
+      else
+        echo ","
+      fi
+      check_pod $pod
+    done
+    echo "]"
+
+  # Backup verification script
+  verify-backup.sh: |
+    #!/bin/bash
+    set -e
+
+    BACKUP_FILE=$1
+    TEMP_DIR=/tmp/backup-verify-$$
+
+    if [ -z "$BACKUP_FILE" ]; then
+      echo "Usage: verify-backup.sh <backup-file>"
+      exit 1
+    fi
+
+    echo "Verifying backup: $BACKUP_FILE"
+
+    # Create temp directory
+    mkdir -p $TEMP_DIR
+
+    # Extract and verify
+    if [[ "$BACKUP_FILE" == *.gz ]]; then
+      gunzip -c "$BACKUP_FILE" | pg_restore --list > $TEMP_DIR/toc.txt 2>&1
+    else
+      pg_restore --list "$BACKUP_FILE" > $TEMP_DIR/toc.txt 2>&1
+    fi
+
+    if [ $? -eq 0 ]; then
+      echo "Backup verification PASSED"
+      echo "Objects in backup:"
+      wc -l < $TEMP_DIR/toc.txt
+    else
+      echo "Backup verification FAILED"
+      exit 1
+    fi
+
+    # Cleanup
+    rm -rf $TEMP_DIR
+
+---
+# CronJob for automated backups
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: rampos
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 7200  # 2 hours max
+      template:
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            fsGroup: 999
+            seccompProfile:
+              type: RuntimeDefault
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: postgres:15-alpine
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+            env:
+            - name: PGHOST
+              value: rampos-postgres-primary.rampos.svc.cluster.local
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              value: rampos
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rampos-secret
+                  key: DATABASE_PASSWORD
+            - name: PGDATABASE
+              value: rampos
+            - name: BACKUP_BUCKET
+              value: "s3://rampos-backups/postgres"
+            command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              BACKUP_FILE="/backups/rampos_${TIMESTAMP}.sql.gz"
+
+              echo "Starting backup at $(date)"
+
+              # Create full database dump
+              pg_dump -Fc --no-acl --no-owner | gzip > "$BACKUP_FILE"
+
+              # Verify backup
+              gunzip -t "$BACKUP_FILE"
+
+              # Get file size
+              SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
+              echo "Backup completed: $BACKUP_FILE ($SIZE)"
+
+              # Upload to S3 (if configured)
+              if [ -n "$AWS_ACCESS_KEY_ID" ]; then
+                aws s3 cp "$BACKUP_FILE" "${BACKUP_BUCKET}/"
+                echo "Uploaded to S3: ${BACKUP_BUCKET}/$(basename $BACKUP_FILE)"
+              fi
+
+              # Cleanup old local backups (keep last 7)
+              ls -t /backups/rampos_*.sql.gz | tail -n +8 | xargs -r rm
+
+              echo "Backup completed successfully at $(date)"
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: postgres-backup-pvc
+
+---
+# PVC for backup storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-backup-pvc
+  namespace: rampos
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# CronJob for WAL archiving to S3 (continuous backup)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-wal-archive
+  namespace: rampos
+spec:
+  schedule: "*/15 * * * *"  # Every 15 minutes
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900  # 15 minutes max
+      template:
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            fsGroup: 999
+            seccompProfile:
+              type: RuntimeDefault
+          restartPolicy: OnFailure
+          containers:
+          - name: wal-archiver
+            image: amazon/aws-cli:2.15.0
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+            env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: backup-credentials
+                  key: AWS_ACCESS_KEY_ID
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backup-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+                  optional: true
+            - name: BACKUP_BUCKET
+              value: "s3://rampos-backups/wal"
+            command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+
+              if [ -z "$AWS_ACCESS_KEY_ID" ]; then
+                echo "S3 credentials not configured, skipping WAL archive"
+                exit 0
+              fi
+
+              # Sync WAL files to S3
+              aws s3 sync /archive/ "${BACKUP_BUCKET}/" \
+                --exclude "*" \
+                --include "*.backup" \
+                --include "*.history"
+
+              echo "WAL archive sync completed"
+            resources:
+              requests:
+                memory: "64Mi"
+                cpu: "50m"
+              limits:
+                memory: "128Mi"
+                cpu: "100m"
+            volumeMounts:
+            - name: archive-volume
+              mountPath: /archive
+              readOnly: true
+          volumes:
+          - name: archive-volume
+            persistentVolumeClaim:
+              claimName: postgres-archive-pvc
+              readOnly: true
+
+---
+# PVC for WAL archive (if not using external storage directly)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-archive-pvc
+  namespace: rampos
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 100Gi
+
+---
+# PrometheusRule for PostgreSQL HA alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: postgres-ha-alerts
+  namespace: rampos
+  labels:
+    app: rampos-postgres
+    prometheus: main
+spec:
+  groups:
+  - name: postgres-ha
+    interval: 30s
+    rules:
+    # Alert: PostgreSQL primary is down
+    - alert: PostgresPrimaryDown
+      expr: |
+        absent(pg_up{job="rampos-postgres"} == 1)
+        or
+        sum(pg_up{job="rampos-postgres"}) < 1
+      for: 1m
+      labels:
+        severity: critical
+        service: postgres
+      annotations:
+        summary: "PostgreSQL primary is down"
+        description: "No PostgreSQL primary instance is responding. Immediate action required."
+        runbook_url: "https://docs.rampos.io/runbooks/postgres-primary-down"
+
+    # Alert: Replication lag too high
+    - alert: PostgresReplicationLagHigh
+      expr: |
+        pg_replication_lag{job="rampos-postgres"} > 60
+      for: 5m
+      labels:
+        severity: warning
+        service: postgres
+      annotations:
+        summary: "PostgreSQL replication lag is high"
+        description: "Replication lag is {{ $value }}s on {{ $labels.instance }}. This may cause data loss on failover."
+
+    # Alert: Replication lag critical
+    - alert: PostgresReplicationLagCritical
+      expr: |
+        pg_replication_lag{job="rampos-postgres"} > 300
+      for: 2m
+      labels:
+        severity: critical
+        service: postgres
+      annotations:
+        summary: "PostgreSQL replication lag is critical"
+        description: "Replication lag is {{ $value }}s on {{ $labels.instance }}. Investigate immediately."
+
+    # Alert: Too few replicas
+    - alert: PostgresTooFewReplicas
+      expr: |
+        pg_stat_replication_count{job="rampos-postgres"} < 2
+      for: 5m
+      labels:
+        severity: warning
+        service: postgres
+      annotations:
+        summary: "PostgreSQL has fewer than 2 replicas"
+        description: "Only {{ $value }} replicas connected. HA may be compromised."
+
+    # Alert: No replicas
+    - alert: PostgresNoReplicas
+      expr: |
+        pg_stat_replication_count{job="rampos-postgres"} < 1
+      for: 2m
+      labels:
+        severity: critical
+        service: postgres
+      annotations:
+        summary: "PostgreSQL has no replicas"
+        description: "No replicas connected to primary. Single point of failure!"
+
+    # Alert: High connection count
+    - alert: PostgresConnectionsHigh
+      expr: |
+        pg_stat_activity_count{job="rampos-postgres"} > 150
+      for: 5m
+      labels:
+        severity: warning
+        service: postgres
+      annotations:
+        summary: "PostgreSQL connection count is high"
+        description: "{{ $value }} connections on {{ $labels.instance }}. Consider scaling PgBouncer."
+
+    # Alert: Connection pool exhausted
+    - alert: PostgresConnectionsExhausted
+      expr: |
+        pg_stat_activity_count{job="rampos-postgres"} / pg_settings_max_connections{job="rampos-postgres"} > 0.9
+      for: 2m
+      labels:
+        severity: critical
+        service: postgres
+      annotations:
+        summary: "PostgreSQL connections near limit"
+        description: "{{ $value | humanizePercentage }} of max connections used on {{ $labels.instance }}."
+
+    # Alert: Disk space low
+    - alert: PostgresDiskSpaceLow
+      expr: |
+        (kubelet_volume_stats_available_bytes{persistentvolumeclaim=~"postgres-data-.*"} /
+         kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~"postgres-data-.*"}) < 0.2
+      for: 5m
+      labels:
+        severity: warning
+        service: postgres
+      annotations:
+        summary: "PostgreSQL disk space is low"
+        description: "Less than 20% disk space remaining on {{ $labels.persistentvolumeclaim }}."
+
+    # Alert: Disk space critical
+    - alert: PostgresDiskSpaceCritical
+      expr: |
+        (kubelet_volume_stats_available_bytes{persistentvolumeclaim=~"postgres-data-.*"} /
+         kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~"postgres-data-.*"}) < 0.1
+      for: 2m
+      labels:
+        severity: critical
+        service: postgres
+      annotations:
+        summary: "PostgreSQL disk space is critical"
+        description: "Less than 10% disk space remaining on {{ $labels.persistentvolumeclaim }}. Immediate action required."
+
+    # Alert: Backup failed
+    - alert: PostgresBackupFailed
+      expr: |
+        kube_job_status_failed{job_name=~"postgres-backup-.*"} > 0
+      for: 5m
+      labels:
+        severity: critical
+        service: postgres
+      annotations:
+        summary: "PostgreSQL backup job failed"
+        description: "Backup job {{ $labels.job_name }} has failed. Check logs immediately."
+
+    # Alert: No recent backup
+    - alert: PostgresNoRecentBackup
+      expr: |
+        time() - pg_last_backup_timestamp{job="rampos-postgres"} > 86400
+      for: 30m
+      labels:
+        severity: warning
+        service: postgres
+      annotations:
+        summary: "No recent PostgreSQL backup"
+        description: "Last backup was {{ $value | humanizeDuration }} ago."
+
+  - name: pgbouncer
+    interval: 30s
+    rules:
+    # Alert: PgBouncer down
+    - alert: PgBouncerDown
+      expr: |
+        up{job="pgbouncer"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        service: pgbouncer
+      annotations:
+        summary: "PgBouncer is down"
+        description: "PgBouncer instance {{ $labels.instance }} is not responding."
+
+    # Alert: PgBouncer pool exhausted
+    - alert: PgBouncerPoolExhausted
+      expr: |
+        pgbouncer_pools_client_waiting{job="pgbouncer"} > 10
+      for: 2m
+      labels:
+        severity: warning
+        service: pgbouncer
+      annotations:
+        summary: "PgBouncer has waiting clients"
+        description: "{{ $value }} clients waiting for connection in pool {{ $labels.database }}."
+
+    # Alert: High query wait time
+    - alert: PgBouncerHighWaitTime
+      expr: |
+        rate(pgbouncer_stats_total_wait_time_seconds{job="pgbouncer"}[5m]) > 0.5
+      for: 5m
+      labels:
+        severity: warning
+        service: pgbouncer
+      annotations:
+        summary: "PgBouncer clients waiting too long"
+        description: "Average wait time is {{ $value }}s in pool {{ $labels.database }}."

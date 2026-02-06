@@ -290,8 +290,12 @@ fn verify_webhook_signature(
 
         if let Some(sig) = signature {
             let valid = match secret.algorithm {
-                SignatureAlgorithm::HmacSha256 => verify_hmac_sha256(&secret.secret, body, sig),
-                SignatureAlgorithm::HmacSha512 => verify_hmac_sha512(&secret.secret, body, sig),
+                SignatureAlgorithm::HmacSha256 => {
+                    verify_hmac_sha256(&secret.secret, body, sig).unwrap_or(false)
+                }
+                SignatureAlgorithm::HmacSha512 => {
+                    verify_hmac_sha512(&secret.secret, body, sig).unwrap_or(false)
+                }
             };
 
             if valid {
@@ -310,17 +314,15 @@ fn verify_webhook_signature(
     ))
 }
 
-fn verify_hmac_sha256(secret: &[u8], data: &[u8], signature: &str) -> bool {
-    let mut mac = match Hmac::<Sha256>::new_from_slice(secret) {
-        Ok(mac) => mac,
-        Err(_) => return false,
-    };
+fn verify_hmac_sha256(secret: &[u8], data: &[u8], signature: &str) -> Result<bool, ApiError> {
+    let mut mac = Hmac::<Sha256>::new_from_slice(secret)
+        .map_err(|_| ApiError::Internal("Invalid HMAC key".to_string()))?;
     mac.update(data);
 
     // Try hex-encoded signature
     if let Ok(sig_bytes) = hex::decode(signature) {
         if mac.clone().verify_slice(&sig_bytes).is_ok() {
-            return true;
+            return Ok(true);
         }
     }
 
@@ -329,24 +331,22 @@ fn verify_hmac_sha256(secret: &[u8], data: &[u8], signature: &str) -> bool {
         base64::Engine::decode(&base64::engine::general_purpose::STANDARD, signature)
     {
         if mac.verify_slice(&sig_bytes).is_ok() {
-            return true;
+            return Ok(true);
         }
     }
 
-    false
+    Ok(false)
 }
 
-fn verify_hmac_sha512(secret: &[u8], data: &[u8], signature: &str) -> bool {
-    let mut mac = match Hmac::<Sha512>::new_from_slice(secret) {
-        Ok(mac) => mac,
-        Err(_) => return false,
-    };
+fn verify_hmac_sha512(secret: &[u8], data: &[u8], signature: &str) -> Result<bool, ApiError> {
+    let mut mac = Hmac::<Sha512>::new_from_slice(secret)
+        .map_err(|_| ApiError::Internal("Invalid HMAC key".to_string()))?;
     mac.update(data);
 
     // Try hex-encoded signature
     if let Ok(sig_bytes) = hex::decode(signature) {
         if mac.clone().verify_slice(&sig_bytes).is_ok() {
-            return true;
+            return Ok(true);
         }
     }
 
@@ -355,11 +355,11 @@ fn verify_hmac_sha512(secret: &[u8], data: &[u8], signature: &str) -> bool {
         base64::Engine::decode(&base64::engine::general_purpose::STANDARD, signature)
     {
         if mac.verify_slice(&sig_bytes).is_ok() {
-            return true;
+            return Ok(true);
         }
     }
 
-    false
+    Ok(false)
 }
 
 // ============================================================================
@@ -652,7 +652,7 @@ mod tests {
             "status": "SUCCESS"
         }"#;
 
-        let payload: VietQrWebhookPayload = serde_json::from_str(json).unwrap();
+        let payload: VietQrWebhookPayload = serde_json::from_str(json).expect("deserialization failed");
         assert_eq!(payload.transaction_id, "VQR123456");
         assert_eq!(payload.reference_code, "TENANT1_REF001");
         assert_eq!(payload.amount, 1000000);
@@ -671,7 +671,7 @@ mod tests {
             "stsCode": "00"
         }"#;
 
-        let payload: NapasWebhookPayload = serde_json::from_str(json).unwrap();
+        let payload: NapasWebhookPayload = serde_json::from_str(json).expect("deserialization failed");
         assert_eq!(payload.trans_id, "NAPAS123456");
         assert_eq!(payload.ref_no, "TENANT1-REF-001");
     }

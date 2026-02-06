@@ -1,0 +1,86 @@
+{
+  "project": "RampOS Security & Infrastructure Remediation",
+  "created": "2026-02-06",
+  "total_tasks": 23,
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Critical Security Fixes",
+      "duration": "Week 1",
+      "priority": "P0",
+      "tasks": [
+        {"id": "T-001", "name": "Rotate All Secrets", "owner": "security-worker", "estimate": "2h", "tier": {"model": "sonnet"}, "status": "pending"},
+        {"id": "T-002", "name": "Fix RLS Bypass (DB-002)", "owner": "security-worker", "estimate": "3h", "tier": {"model": "sonnet"}, "status": "pending"},
+        {"id": "T-003", "name": "Update Next.js CVE", "owner": "frontend-worker", "estimate": "1h", "tier": {"model": "haiku"}, "status": "pending"},
+        {"id": "T-004", "name": "Enable Redis Auth", "owner": "devops-worker", "estimate": "2h", "tier": {"model": "sonnet"}, "status": "pending"},
+        {"id": "T-005", "name": "Apply Network Policies", "owner": "devops-worker", "estimate": "2h", "tier": {"model": "sonnet"}, "status": "pending"}
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "Rust Panic Remediation",
+      "duration": "Week 2",
+      "priority": "P1",
+      "tasks": [
+        {"id": "T-006", "name": "Fix .expect() in ramp-api", "owner": "rust-worker-1", "estimate": "4h", "tier": {"model": "sonnet"}, "status": "pending"},
+        {"id": "T-007", "name": "Fix .expect() in ramp-core", "owner": "rust-worker-2", "estimate": "4h", "tier": {"model": "sonnet"}, "status": "pending"},
+        {"id": "T-008", "name": "Fix .expect() in ramp-aa", "owner": "rust-worker-1", "estimate": "3h", "tier": {"model": "sonnet"}, "status": "pending"},
+        {"id": "T-009", "name": "Fix .expect() in ramp-compliance", "owner": "rust-worker-2", "estimate": "3h", "tier": {"model": "sonnet"}, "status": "pending"},
+        {"id": "T-010", "name": "Fix .expect() in remaining crates", "owner": "rust-worker-1", "estimate": "4h", "tier": {"model": "sonnet"}, "status": "pending"}
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "Contract Security Tests",
+      "duration": "Week 2-3",
+      "priority": "P0",
+      "tasks": [
+        {"id": "T-011", "name": "Add Contract Invariant Tests", "owner": "contract-worker", "estimate": "6h", "tier": {"model": "opus"}, "status": "pending"},
+        {"id": "T-012", "name": "Add Contract Fuzz Tests", "owner": "contract-worker", "estimate": "6h", "tier": {"model": "opus"}, "status": "pending"},
+        {"id": "T-013", "name": "Add Reentrancy Attack Tests", "owner": "contract-worker", "estimate": "3h", "tier": {"model": "sonnet"}, "status": "pending"}
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "Infrastructure HA",
+      "duration": "Week 3",
+      "priority": "P0",
+      "tasks": [
+        {"id": "T-014", "name": "PostgreSQL High Availability", "owner": "devops-worker", "estimate": "8h", "tier": {"model": "opus"}, "status": "pending"},
+        {"id": "T-015", "name": "Redis High Availability", "owner": "devops-worker", "estimate": "4h", "tier": {"model": "sonnet"}, "status": "pending"},
+        {"id": "T-016", "name": "NATS JetStream Cluster", "owner": "devops-worker", "estimate": "4h", "tier": {"model": "sonnet"}, "status": "pending"},
+        {"id": "T-017", "name": "Backup and Disaster Recovery", "owner": "devops-worker", "estimate": "6h", "tier": {"model": "opus"}, "status": "pending"}
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "CI/CD Pipeline",
+      "duration": "Week 3-4",
+      "priority": "P1",
+      "tasks": [
+        {"id": "T-018", "name": "Create Rust CI Workflow", "owner": "devops-worker", "estimate": "4h", "tier": {"model": "sonnet"}, "status": "pending"},
+        {"id": "T-019", "name": "Create Solidity CI Workflow", "owner": "devops-worker", "estimate": "3h", "tier": {"model": "sonnet"}, "status": "pending"},
+        {"id": "T-020", "name": "Create Frontend CI Workflow", "owner": "devops-worker", "estimate": "3h", "tier": {"model": "haiku"}, "status": "pending"},
+        {"id": "T-021", "name": "Create Deployment Pipeline", "owner": "devops-worker", "estimate": "6h", "tier": {"model": "opus"}, "status": "pending"}
+      ]
+    },
+    {
+      "id": "phase-6",
+      "name": "Observability",
+      "duration": "Week 4",
+      "priority": "P2",
+      "tasks": [
+        {"id": "T-022", "name": "Add OpenTelemetry Tracing", "owner": "rust-worker-1", "estimate": "6h", "tier": {"model": "sonnet"}, "status": "pending"},
+        {"id": "T-023", "name": "Add Log Aggregation", "owner": "devops-worker", "estimate": "4h", "tier": {"model": "sonnet"}, "status": "pending"}
+      ]
+    }
+  ],
+  "team": [
+    {"name": "security-worker", "role": "Security fixes and secret management", "model": "sonnet"},
+    {"name": "frontend-worker", "role": "Next.js updates and frontend fixes", "model": "haiku"},
+    {"name": "devops-worker", "role": "Infrastructure, CI/CD, K8s", "model": "sonnet"},
+    {"name": "rust-worker-1", "role": "Rust panic fixes (api, aa, ledger)", "model": "sonnet"},
+    {"name": "rust-worker-2", "role": "Rust panic fixes (core, compliance)", "model": "sonnet"},
+    {"name": "contract-worker", "role": "Smart contract tests", "model": "opus"}
+  ]
+}

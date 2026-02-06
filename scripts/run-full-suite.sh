@@ -112,7 +112,7 @@ echo "[3/4] Running E2E Integration Tests..."
 cd "$PROJECT_ROOT"
 # Set environment variables for tests if needed
 export RAMPOS__DATABASE__URL="postgres://rampos:rampos_secret@localhost:5432/rampos"
-export RAMPOS__REDIS__URL="redis://localhost:6379"
+export RAMPOS__REDIS__URL="redis://:dev_redis_pass@localhost:6379"
 export RAMPOS__NATS__URL="nats://localhost:4222"
 
 # Run tests

@@ -24,7 +24,7 @@ mod tests {
             .build();
 
         assert!(tx.is_ok());
-        let tx = tx.unwrap();
+        let tx = tx.expect("Failed to build transaction");
         assert!(tx.is_balanced());
         assert_eq!(tx.entries.len(), 2);
     }

@@ -1,0 +1,48 @@
+name: Frontend CI
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'frontend-landing/**'
+      - '.github/workflows/frontend-ci.yaml'
+
+jobs:
+  test:
+    name: ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [frontend, frontend-landing]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.project }}
+        run: npm ci
+
+      - name: Lint
+        working-directory: ${{ matrix.project }}
+        run: npm run lint
+
+      - name: Type check
+        working-directory: ${{ matrix.project }}
+        run: npx tsc --noEmit
+
+      - name: Build
+        working-directory: ${{ matrix.project }}
+        run: npm run build
+
+      - name: Run unit tests
+        if: matrix.project == 'frontend'
+        working-directory: ${{ matrix.project }}
+        run: npm run test:run

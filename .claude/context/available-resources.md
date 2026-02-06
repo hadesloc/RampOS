@@ -1,20 +1,22 @@
 # Installed Claude Code Resources
 
-Generated: 2026-02-03T14:50:51.367099
+Generated: 2026-02-06T15:10:16.849533
 
 **This list shows ONLY resources that are currently ENABLED in Claude Code settings.**
 
 ---
 
-## Enabled Plugins (40)
+## Enabled Plugins (44)
 
 - **ai-generation-skills** (baoyu-skills): AI-powered generation backends
 - **ask-questions-if-underspecified** (trailofbits): Clarify requirements before implementing. When doubting, ask questions.
 - **audit-context-building** (trailofbits): Build deep architectural context through ultra-granular code analysis before vulnerability hunting
 - **building-secure-contracts** (trailofbits): Comprehensive smart contract security toolkit based on Trail of Bits' Building Secure Contracts framework. Includes vulnerability scanners for 6 blockchains and 5 development guideline assistants.
 - **burpsuite-project-parser** (trailofbits): Search and extract data from Burp Suite project files (.burp) for use in Claude
+- **claude-md-management** (claude-plugins-official): Tools to maintain and improve CLAUDE.md files - audit quality, capture session learnings, and keep project memory current.
 - **code-review** (claude-plugins-official): Automated code review for pull requests using multiple specialized agents with confidence-based scoring to filter false positives
 - **code-simplifier** (claude-plugins-official): Agent that simplifies and refines code for clarity, consistency, and maintainability while preserving functionality. Focuses on recently modified code.
+- **coderabbit** (claude-plugins-official): Your code review partner. CodeRabbit provides external validation using a specialized AI architecture and 40+ integrated static analyzers—offering a different perspective that catches bugs, security vulnerabilities, logic errors, and edge cases. Context-aware analysis via AST parsing and codegraph relationships. Automatically incorporates CLAUDE.md and project coding guidelines into reviews. Useful after writing or modifying code, before commits, when implementing complex or security-sensitive logic, or when a second opinion would increase confidence in the changes. Returns specific findings with suggested fixes that can be applied immediately. Free to use.
 - **constant-time-analysis** (trailofbits): Detect compiler-induced timing side-channels in cryptographic code
 - **content-skills** (baoyu-skills): Content generation and publishing skills
 - **context7** (claude-plugins-official): Upstash Context7 MCP server for up-to-date documentation lookup. Pull version-specific documentation and code examples directly from source repositories into your LLM context.
@@ -37,6 +39,7 @@ Generated: 2026-02-03T14:50:51.367099
 - **rlm-agent** (rlm-local): Recursive Language Model integration for handling near-infinite context tasks
 - **rlm-agent** (rlm-local): Recursive Language Model integration for handling near-infinite context tasks
 - **rust-analyzer-lsp** (claude-plugins-official): Rust language server for code intelligence and analysis
+- **security-guidance** (claude-plugins-official): Security reminder hook that warns about potential security issues when editing files, including command injection, XSS, and unsafe code patterns
 - **semgrep-rule-creator** (trailofbits): Create custom Semgrep rules for detecting bug patterns and security vulnerabilities
 - **semgrep-rule-variant-creator** (trailofbits): Creates language variants of existing Semgrep rules with proper applicability analysis and test-driven validation
 - **sharp-edges** (trailofbits): Identify error-prone APIs, dangerous configurations, and footgun designs that enable security mistakes
@@ -45,45 +48,34 @@ Generated: 2026-02-03T14:50:51.367099
 - **superpowers** (claude-plugins-official): Superpowers teaches Claude brainstorming, subagent driven development with built in code review, systematic debugging, and red/green TDD. Additionally, it teaches Claude how to author and test new skills.
 - **testing-handbook-skills** (trailofbits): Skills from the Trail of Bits Application Security Testing Handbook (appsec.guide)
 - **typescript-lsp** (claude-plugins-official): TypeScript/JavaScript language server for enhanced code intelligence
+- **ui-ux-pro-max** (ui-ux-pro-max-skill): Professional UI/UX design intelligence for AI coding assistants. Includes searchable databases of styles, colors, typography, charts, and UX guidelines for React, Next.js, Astro, Vue, Nuxt.js, Nuxt UI, Svelte, SwiftUI, React Native, Flutter, Tailwind, shadcn/ui, and Jetpack Compose.
 - **ultimate-workflow** (ultimate-workflow-local): Biến Claude Code thành công ty dev ảo - cho phép người non-code xây dựng sản phẩm phần mềm production-ready
 - **utility-skills** (baoyu-skills): Utility tools for content processing
 - **variant-analysis** (trailofbits): Find similar vulnerabilities and bugs across codebases using pattern-based analysis
 
-## Skills (149)
+## Skills (150)
 
 ### Internal Skills (use Skill tool)
 - **Agent Development**: This skill should be used when the user asks to "create an agent", "add an agent", "write a subagent", "agent frontmatter", "when to use description", "agent examples", "agent tools", "agent colors", "autonomous agent", or needs guidance on agent structure, system prompts, triggering conditions, or agent development best practices for Claude Code plugins.
-  - Plugin: plugin-dev (claude-plugins-official)
-- **Agent Development**: This skill should be used when the user asks to "create an agent", "add an agent", "write a subagent", "agent frontmatter", "when to use description", "agent examples", "agent tools", "agent colors", "autonomous agent", or needs guidance on agent structure, system prompts, triggering conditions, or agent development best practices for Claude Code plugins.
   - Plugin: plugin-factory (ultimate-workflow-local)
-- **Command Development**: This skill should be used when the user asks to "create a slash command", "add a command", "write a custom command", "define command arguments", "use command frontmatter", "organize commands", "create command with file references", "interactive command", "use AskUserQuestion in command", or needs guidance on slash command structure, YAML frontmatter fields, dynamic arguments, bash execution in commands, user interaction patterns, or command development best practices for Claude Code.
-  - Plugin: plugin-dev (claude-plugins-official)
 - **Command Development**: This skill should be used when the user asks to "create a slash command", "add a command", "write a custom command", "define command arguments", "use command frontmatter", "organize commands", "create command with file references", "interactive command", "use AskUserQuestion in command", or needs guidance on slash command structure, YAML frontmatter fields, dynamic arguments, bash execution in commands, user interaction patterns, or command development best practices for Claude Code.
   - Plugin: plugin-factory (ultimate-workflow-local)
 - **Hook Development**: This skill should be used when the user asks to "create a hook", "add a PreToolUse/PostToolUse/Stop hook", "validate tool use", "implement prompt-based hooks", "use ${CLAUDE_PLUGIN_ROOT}", "set up event-driven automation", "block dangerous commands", or mentions hook events (PreToolUse, PostToolUse, Stop, SubagentStop, SessionStart, SessionEnd, UserPromptSubmit, PreCompact, Notification). Provides comprehensive guidance for creating and implementing Claude Code plugin hooks with focus on advanced prompt-based hooks API.
-  - Plugin: plugin-dev (claude-plugins-official)
-- **Hook Development**: This skill should be used when the user asks to "create a hook", "add a PreToolUse/PostToolUse/Stop hook", "validate tool use", "implement prompt-based hooks", "use ${CLAUDE_PLUGIN_ROOT}", "set up event-driven automation", "block dangerous commands", or mentions hook events (PreToolUse, PostToolUse, Stop, SubagentStop, SessionStart, SessionEnd, UserPromptSubmit, PreCompact, Notification). Provides comprehensive guidance for creating and implementing Claude Code plugin hooks with focus on advanced prompt-based hooks API.
   - Plugin: plugin-factory (ultimate-workflow-local)
-- **MCP Integration**: This skill should be used when the user asks to "add MCP server", "integrate MCP", "configure MCP in plugin", "use .mcp.json", "set up Model Context Protocol", "connect external service", mentions "${CLAUDE_PLUGIN_ROOT} with MCP", or discusses MCP server types (SSE, stdio, HTTP, WebSocket). Provides comprehensive guidance for integrating Model Context Protocol servers into Claude Code plugins for external tool and service integration.
-  - Plugin: plugin-dev (claude-plugins-official)
 - **MCP Integration**: This skill should be used when the user asks to "add MCP server", "integrate MCP", "configure MCP in plugin", "use .mcp.json", "set up Model Context Protocol", "connect external service", mentions "${CLAUDE_PLUGIN_ROOT} with MCP", or discusses MCP server types (SSE, stdio, HTTP, WebSocket). Provides comprehensive guidance for integrating Model Context Protocol servers into Claude Code plugins for external tool and service integration.
   - Plugin: plugin-factory (ultimate-workflow-local)
 - **Plugin Settings**: This skill should be used when the user asks about "plugin settings", "store plugin configuration", "user-configurable plugin", ".local.md files", "plugin state files", "read YAML frontmatter", "per-project plugin settings", or wants to make plugin behavior configurable. Documents the .claude/plugin-name.local.md pattern for storing plugin-specific configuration with YAML frontmatter and markdown content.
-  - Plugin: plugin-dev (claude-plugins-official)
-- **Plugin Settings**: This skill should be used when the user asks about "plugin settings", "store plugin configuration", "user-configurable plugin", ".local.md files", "plugin state files", "read YAML frontmatter", "per-project plugin settings", or wants to make plugin behavior configurable. Documents the .claude/plugin-name.local.md pattern for storing plugin-specific configuration with YAML frontmatter and markdown content.
   - Plugin: plugin-factory (ultimate-workflow-local)
 - **Plugin Structure**: This skill should be used when the user asks to "create a plugin", "scaffold a plugin", "understand plugin structure", "organize plugin components", "set up plugin.json", "use ${CLAUDE_PLUGIN_ROOT}", "add commands/agents/skills/hooks", "configure auto-discovery", or needs guidance on plugin directory layout, manifest configuration, component organization, file naming conventions, or Claude Code plugin architecture best practices.
-  - Plugin: plugin-dev (claude-plugins-official)
-- **Plugin Structure**: This skill should be used when the user asks to "create a plugin", "scaffold a plugin", "understand plugin structure", "organize plugin components", "set up plugin.json", "use ${CLAUDE_PLUGIN_ROOT}", "add commands/agents/skills/hooks", "configure auto-discovery", or needs guidance on plugin directory layout, manifest configuration, component organization, file naming conventions, or Claude Code plugin architecture best practices.
   - Plugin: plugin-factory (ultimate-workflow-local)
-- **Skill Development**: This skill should be used when the user wants to "create a skill", "add a skill to plugin", "write a new skill", "improve skill description", "organize skill content", or needs guidance on skill structure, progressive disclosure, or skill development best practices for Claude Code plugins.
-  - Plugin: plugin-dev (claude-plugins-official)
 - **Skill Development**: This skill should be used when the user wants to "create a skill", "add a skill to plugin", "write a new skill", "improve skill description", "organize skill content", or needs guidance on skill structure, progressive disclosure, or skill development best practices for Claude Code plugins.
   - Plugin: plugin-factory (ultimate-workflow-local)
 - **address-sanitizer**: >
   - Plugin: testing-handbook-skills (trailofbits)
 - **aflpp**: >
   - Plugin: testing-handbook-skills (trailofbits)
+- **agent-development**: This skill should be used when the user asks to "create an agent", "add an agent", "write a subagent", "agent frontmatter", "when to use description", "agent examples", "agent tools", "agent colors", "autonomous agent", or needs guidance on agent structure, system prompts, triggering conditions, or agent development best practices for Claude Code plugins.
+  - Plugin: plugin-dev (claude-plugins-official)
 - **algorand-vulnerability-scanner**: Scans Algorand smart contracts for 11 common vulnerabilities including rekeying attacks, unchecked transaction fees, missing field validations, and access control issues. Use when auditing Algorand projects (TEAL/PyTeal).
   - Plugin: building-secure-contracts (trailofbits)
 - **algorithmic-art**: Creating algorithmic art using p5.js with seeded randomness and interactive parameter exploration. Use this when users request creating art using code, generative art, algorithmic art, flow fields, or particle systems. Create original algorithmic art rather than copying existing artists' work to avoid copyright violations.
@@ -220,12 +212,16 @@ Generated: 2026-02-03T14:50:51.367099
   - Plugin: example-skills (anthropic-agent-skills)
 - **cargo-fuzz**: >
   - Plugin: testing-handbook-skills (trailofbits)
+- **claude-md-improver**: Audit and improve CLAUDE.md files in repositories. Use when user asks to check, audit, update, improve, or fix CLAUDE.md files. Scans for all CLAUDE.md files, evaluates quality against templates, outputs quality report, then makes targeted updates. Also use when the user mentions "CLAUDE.md maintenance" or "project memory optimization".
+  - Plugin: claude-md-management (claude-plugins-official)
 - **code-maturity-assessor**: Systematic code maturity assessment using Trail of Bits' 9-category framework. Analyzes codebase for arithmetic safety, auditing practices, access controls, complexity, decentralization, documentation, MEV risks, low-level code, and testing. Produces professional scorecard with evidence-based ratings and actionable recommendations.
   - Plugin: building-secure-contracts (trailofbits)
 - **codeql**: Run CodeQL static analysis for security vulnerability detection, taint tracking, and data flow analysis. Use when asked to analyze code with CodeQL, create CodeQL databases, write custom QL queries, perform security audits, or set up CodeQL in CI/CD pipelines.
   - Plugin: static-analysis (trailofbits)
 - **codeql**: >
   - Plugin: testing-handbook-skills (trailofbits)
+- **command-development**: This skill should be used when the user asks to "create a slash command", "add a command", "write a custom command", "define command arguments", "use command frontmatter", "organize commands", "create command with file references", "interactive command", "use AskUserQuestion in command", or needs guidance on slash command structure, YAML frontmatter fields, dynamic arguments, bash execution in commands, user interaction patterns, or command development best practices for Claude Code.
+  - Plugin: plugin-dev (claude-plugins-official)
 - **constant-time-analysis**: Detects timing side-channel vulnerabilities in cryptographic code. Use when implementing or reviewing crypto code, encountering division on secrets, secret-dependent branches, or constant-time programming questions in C, C++, Go, Rust, Swift, Java, Kotlin, C#, PHP, JavaScript, TypeScript, Python, or Ruby.
   - Plugin: constant-time-analysis (trailofbits)
 - **constant-time-testing**: >
@@ -240,9 +236,9 @@ Generated: 2026-02-03T14:50:51.367099
   - Plugin: document-skills (anthropic-agent-skills)
 - **doc-coauthoring**: Guide users through a structured workflow for co-authoring documentation. Use when user wants to write documentation, proposals, technical specs, decision docs, or similar structured content. This workflow helps users efficiently transfer context, refine content through iteration, and verify the doc works for readers. Trigger when user mentions writing docs, creating proposals, drafting specs, or similar documentation tasks.
   - Plugin: example-skills (anthropic-agent-skills)
-- **docx**: Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. When Claude needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks
+- **docx**: Use this skill whenever the user wants to create, read, edit, or manipulate Word documents (.docx files). Triggers include: any mention of \"Word doc\", \"word document\", \".docx\", or requests to produce professional documents with formatting like tables of contents, headings, page numbers, or letterheads. Also use when extracting or reorganizing content from .docx files, inserting or replacing images in documents, performing find-and-replace in Word files, working with tracked changes or comments, or converting content into a polished Word document. If the user asks for a \"report\", \"memo\", \"letter\", \"template\", or similar deliverable as a Word or .docx file, use this skill. Do NOT use for PDFs, spreadsheets, Google Docs, or general coding tasks unrelated to document generation.
   - Plugin: document-skills (anthropic-agent-skills)
-- **docx**: Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. When Claude needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks
+- **docx**: Use this skill whenever the user wants to create, read, edit, or manipulate Word documents (.docx files). Triggers include: any mention of \"Word doc\", \"word document\", \".docx\", or requests to produce professional documents with formatting like tables of contents, headings, page numbers, or letterheads. Also use when extracting or reorganizing content from .docx files, inserting or replacing images in documents, performing find-and-replace in Word files, working with tracked changes or comments, or converting content into a polished Word document. If the user asks for a \"report\", \"memo\", \"letter\", \"template\", or similar deliverable as a Word or .docx file, use this skill. Do NOT use for PDFs, spreadsheets, Google Docs, or general coding tasks unrelated to document generation.
   - Plugin: example-skills (anthropic-agent-skills)
 - **dwarf-expert**: Provides expertise for analyzing DWARF debug files and understanding the DWARF debug format/standard (v3-v5). Triggers when understanding DWARF information, interacting with DWARF files, answering DWARF-related questions, or working with code that parses DWARF data.
   - Plugin: dwarf-expert (trailofbits)
@@ -264,6 +260,8 @@ Generated: 2026-02-03T14:50:51.367099
   - Plugin: building-secure-contracts (trailofbits)
 - **harness-writing**: >
   - Plugin: testing-handbook-skills (trailofbits)
+- **hook-development**: This skill should be used when the user asks to "create a hook", "add a PreToolUse/PostToolUse/Stop hook", "validate tool use", "implement prompt-based hooks", "use ${CLAUDE_PLUGIN_ROOT}", "set up event-driven automation", "block dangerous commands", or mentions hook events (PreToolUse, PostToolUse, Stop, SubagentStop, SessionStart, SessionEnd, UserPromptSubmit, PreCompact, Notification). Provides comprehensive guidance for creating and implementing Claude Code plugin hooks with focus on advanced prompt-based hooks API.
+  - Plugin: plugin-dev (claude-plugins-official)
 - **installing-local-plugins**: Installs and troubleshoots local Claude Code plugin marketplaces and plugins. Use when local plugin installation fails, Claude Code cannot find a marketplace path, or schema validation errors occur.
   - Plugin: plugin-factory (ultimate-workflow-local)
 - **internal-comms**: A set of resources to help me write all kinds of internal communications, using the formats that my company likes to use. Claude should use this skill whenever asked to write some sort of internal communications (status reports, leadership updates, 3P updates, company newsletters, FAQs, incident reports, project updates, etc.).
@@ -280,17 +278,23 @@ Generated: 2026-02-03T14:50:51.367099
   - Plugin: document-skills (anthropic-agent-skills)
 - **mcp-builder**: Guide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. Use when building MCP servers to integrate external APIs or services, whether in Python (FastMCP) or Node/TypeScript (MCP SDK).
   - Plugin: example-skills (anthropic-agent-skills)
+- **mcp-integration**: This skill should be used when the user asks to "add MCP server", "integrate MCP", "configure MCP in plugin", "use .mcp.json", "set up Model Context Protocol", "connect external service", mentions "${CLAUDE_PLUGIN_ROOT} with MCP", or discusses MCP server types (SSE, stdio, HTTP, WebSocket). Provides comprehensive guidance for integrating Model Context Protocol servers into Claude Code plugins for external tool and service integration.
+  - Plugin: plugin-dev (claude-plugins-official)
 - **ossfuzz**: >
   - Plugin: testing-handbook-skills (trailofbits)
-- **pdf**: Comprehensive PDF manipulation toolkit for extracting text and tables, creating new PDFs, merging/splitting documents, and handling forms. When Claude needs to fill in a PDF form or programmatically process, generate, or analyze PDF documents at scale.
+- **pdf**: Use this skill whenever the user wants to do anything with PDF files. This includes reading or extracting text/tables from PDFs, combining or merging multiple PDFs into one, splitting PDFs apart, rotating pages, adding watermarks, creating new PDFs, filling PDF forms, encrypting/decrypting PDFs, extracting images, and OCR on scanned PDFs to make them searchable. If the user mentions a .pdf file or asks to produce one, use this skill.
   - Plugin: document-skills (anthropic-agent-skills)
-- **pdf**: Comprehensive PDF manipulation toolkit for extracting text and tables, creating new PDFs, merging/splitting documents, and handling forms. When Claude needs to fill in a PDF form or programmatically process, generate, or analyze PDF documents at scale.
+- **pdf**: Use this skill whenever the user wants to do anything with PDF files. This includes reading or extracting text/tables from PDFs, combining or merging multiple PDFs into one, splitting PDFs apart, rotating pages, adding watermarks, creating new PDFs, filling PDF forms, encrypting/decrypting PDFs, extracting images, and OCR on scanned PDFs to make them searchable. If the user mentions a .pdf file or asks to produce one, use this skill.
   - Plugin: example-skills (anthropic-agent-skills)
 - **plugin-factory-wizard**: Creates and validates Claude Code plugins and skills using Trail of Bits standards. Use when creating a new plugin, adding skills, or registering a plugin in a marketplace.
   - Plugin: plugin-factory (ultimate-workflow-local)
-- **pptx**: Presentation creation, editing, and analysis. When Claude needs to work with presentations (.pptx files) for: (1) Creating new presentations, (2) Modifying or editing content, (3) Working with layouts, (4) Adding comments or speaker notes, or any other presentation tasks
+- **plugin-settings**: This skill should be used when the user asks about "plugin settings", "store plugin configuration", "user-configurable plugin", ".local.md files", "plugin state files", "read YAML frontmatter", "per-project plugin settings", or wants to make plugin behavior configurable. Documents the .claude/plugin-name.local.md pattern for storing plugin-specific configuration with YAML frontmatter and markdown content.
+  - Plugin: plugin-dev (claude-plugins-official)
+- **plugin-structure**: This skill should be used when the user asks to "create a plugin", "scaffold a plugin", "understand plugin structure", "organize plugin components", "set up plugin.json", "use ${CLAUDE_PLUGIN_ROOT}", "add commands/agents/skills/hooks", "configure auto-discovery", or needs guidance on plugin directory layout, manifest configuration, component organization, file naming conventions, or Claude Code plugin architecture best practices.
+  - Plugin: plugin-dev (claude-plugins-official)
+- **pptx**: Use this skill any time a .pptx file is involved in any way — as input, output, or both. This includes: creating slide decks, pitch decks, or presentations; reading, parsing, or extracting text from any .pptx file (even if the extracted content will be used elsewhere, like in an email or summary); editing, modifying, or updating existing presentations; combining or splitting slide files; working with templates, layouts, speaker notes, or comments. Trigger whenever the user mentions \"deck,\" \"slides,\" \"presentation,\" or references a .pptx filename, regardless of what they plan to do with the content afterward. If a .pptx file needs to be opened, created, or touched, use this skill.
   - Plugin: document-skills (anthropic-agent-skills)
-- **pptx**: Presentation creation, editing, and analysis. When Claude needs to work with presentations (.pptx files) for: (1) Creating new presentations, (2) Modifying or editing content, (3) Working with layouts, (4) Adding comments or speaker notes, or any other presentation tasks
+- **pptx**: Use this skill any time a .pptx file is involved in any way — as input, output, or both. This includes: creating slide decks, pitch decks, or presentations; reading, parsing, or extracting text from any .pptx file (even if the extracted content will be used elsewhere, like in an email or summary); editing, modifying, or updating existing presentations; combining or splitting slide files; working with templates, layouts, speaker notes, or comments. Trigger whenever the user mentions \"deck,\" \"slides,\" \"presentation,\" or references a .pptx filename, regardless of what they plan to do with the content afterward. If a .pptx file needs to be opened, created, or touched, use this skill.
   - Plugin: example-skills (anthropic-agent-skills)
 - **property-based-testing**: Provides guidance for property-based testing across multiple languages and smart contracts. Use when writing tests, reviewing code with serialization/validation/parsing patterns, designing features, or when property-based testing would provide stronger coverage than example-based tests.
   - Plugin: property-based-testing (trailofbits)
@@ -314,6 +318,8 @@ Generated: 2026-02-03T14:50:51.367099
   - Plugin: document-skills (anthropic-agent-skills)
 - **skill-creator**: Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Claude's capabilities with specialized knowledge, workflows, or tool integrations.
   - Plugin: example-skills (anthropic-agent-skills)
+- **skill-development**: This skill should be used when the user wants to "create a skill", "add a skill to plugin", "write a new skill", "improve skill description", "organize skill content", or needs guidance on skill structure, progressive disclosure, or skill development best practices for Claude Code plugins.
+  - Plugin: plugin-dev (claude-plugins-official)
 - **slack-gif-creator**: Knowledge and utilities for creating animated GIFs optimized for Slack. Provides constraints, validation tools, and animation concepts. Use when users request animated GIFs for Slack like "make me a GIF of X doing Y for Slack.
   - Plugin: document-skills (anthropic-agent-skills)
 - **slack-gif-creator**: Knowledge and utilities for creating animated GIFs optimized for Slack. Provides constraints, validation tools, and animation concepts. Use when users request animated GIFs for Slack like "make me a GIF of X doing Y for Slack.
@@ -346,14 +352,14 @@ Generated: 2026-02-03T14:50:51.367099
   - Plugin: example-skills (anthropic-agent-skills)
 - **wycheproof**: >
   - Plugin: testing-handbook-skills (trailofbits)
-- **xlsx**: Comprehensive spreadsheet creation, editing, and analysis with support for formulas, formatting, data analysis, and visualization. When Claude needs to work with spreadsheets (.xlsx, .xlsm, .csv, .tsv, etc) for: (1) Creating new spreadsheets with formulas and formatting, (2) Reading or analyzing data, (3) Modify existing spreadsheets while preserving formulas, (4) Data analysis and visualization in spreadsheets, or (5) Recalculating formulas
+- **xlsx**: Use this skill any time a spreadsheet file is the primary input or output. This means any task where the user wants to: open, read, edit, or fix an existing .xlsx, .xlsm, .csv, or .tsv file (e.g., adding columns, computing formulas, formatting, charting, cleaning messy data); create a new spreadsheet from scratch or from other data sources; or convert between tabular file formats. Trigger especially when the user references a spreadsheet file by name or path — even casually (like \"the xlsx in my downloads\") — and wants something done to it or produced from it. Also trigger for cleaning or restructuring messy tabular data files (malformed rows, misplaced headers, junk data) into proper spreadsheets. The deliverable must be a spreadsheet file. Do NOT trigger when the primary deliverable is a Word document, HTML report, standalone Python script, database pipeline, or Google Sheets API integration, even if tabular data is involved.
   - Plugin: document-skills (anthropic-agent-skills)
-- **xlsx**: Comprehensive spreadsheet creation, editing, and analysis with support for formulas, formatting, data analysis, and visualization. When Claude needs to work with spreadsheets (.xlsx, .xlsm, .csv, .tsv, etc) for: (1) Creating new spreadsheets with formulas and formatting, (2) Reading or analyzing data, (3) Modify existing spreadsheets while preserving formulas, (4) Data analysis and visualization in spreadsheets, or (5) Recalculating formulas
+- **xlsx**: Use this skill any time a spreadsheet file is the primary input or output. This means any task where the user wants to: open, read, edit, or fix an existing .xlsx, .xlsm, .csv, or .tsv file (e.g., adding columns, computing formulas, formatting, charting, cleaning messy data); create a new spreadsheet from scratch or from other data sources; or convert between tabular file formats. Trigger especially when the user references a spreadsheet file by name or path — even casually (like \"the xlsx in my downloads\") — and wants something done to it or produced from it. Also trigger for cleaning or restructuring messy tabular data files (malformed rows, misplaced headers, junk data) into proper spreadsheets. The deliverable must be a spreadsheet file. Do NOT trigger when the primary deliverable is a Word document, HTML report, standalone Python script, database pipeline, or Google Sheets API integration, even if tabular data is involved.
   - Plugin: example-skills (anthropic-agent-skills)
 
 ## Agents (18)
 
-- **agent-creator** (sonnet): Use this agent when the user asks to "create an agent", "generate an agent", "build a new agent", "make me an agent that...", or describes agent functionality they need. Trigger when user wants to create autonomous agents for plugins. Examples:
+- **agent-creator** (sonnet): |
   - Invoke: `Task tool with subagent_type: "plugin-dev:agent-creator"`
 - **agent-creator** (sonnet): Use this agent when the user asks to "create an agent", "generate an agent", "build a new agent", "make me an agent that...", or describes agent functionality they need. Trigger when user wants to create autonomous agents for plugins. Examples:
   - Invoke: `Task tool with subagent_type: "plugin-factory:agent-creator"`
@@ -373,7 +379,7 @@ Generated: 2026-02-03T14:50:51.367099
   - Invoke: `Task tool with subagent_type: "ultimate-workflow:plan-auditor-agent"`
 - **planner-agent** (sonnet): 
   - Invoke: `Task tool with subagent_type: "ultimate-workflow:planner-agent"`
-- **plugin-validator** (inherit): Use this agent when the user asks to "validate my plugin", "check plugin structure", "verify plugin is correct", "validate plugin.json", "check plugin files", or mentions plugin validation. Also trigger proactively after user creates or modifies plugin components. Examples:
+- **plugin-validator** (inherit): |
   - Invoke: `Task tool with subagent_type: "plugin-dev:plugin-validator"`
 - **plugin-validator** (inherit): Use this agent when the user asks to "validate my plugin", "check plugin structure", "verify plugin is correct", "validate plugin.json", "check plugin files", or mentions plugin validation. Also trigger proactively after user creates or modifies plugin components. Examples:
   - Invoke: `Task tool with subagent_type: "plugin-factory:plugin-validator"`
@@ -383,7 +389,7 @@ Generated: 2026-02-03T14:50:51.367099
   - Invoke: `Task tool with subagent_type: "rlm-agent:recursive-agent"`
 - **recursive-agent** (inherit): |
   - Invoke: `Task tool with subagent_type: "rlm-agent:recursive-agent"`
-- **skill-reviewer** (inherit): Use this agent when the user has created or modified a skill and needs quality review, asks to "review my skill", "check skill quality", "improve skill description", or wants to ensure skill follows best practices. Trigger proactively after skill creation. Examples:
+- **skill-reviewer** (inherit): |
   - Invoke: `Task tool with subagent_type: "plugin-dev:skill-reviewer"`
 - **skill-reviewer** (inherit): Use this agent when the user has created or modified a skill and needs quality review, asks to "review my skill", "check skill quality", "improve skill description", or wants to ensure skill follows best practices. Trigger proactively after skill creation. Examples:
   - Invoke: `Task tool with subagent_type: "plugin-factory:skill-reviewer"`

@@ -39,11 +39,14 @@ spec:
   # But standard policy is to trust CNI for node-level checks.
   # We will keep strict.
   egress:
-  # Connect to Postgres
+  # Connect to Postgres (via PgBouncer or directly for HA)
   - to:
     - podSelector:
         matchLabels:
           app: rampos-postgres
+    - podSelector:
+        matchLabels:
+          app: pgbouncer
     ports:
     - protocol: TCP
       port: 5432
@@ -105,7 +108,83 @@ spec:
       app: rampos-postgres
   policyTypes:
   - Ingress
+  - Egress
   ingress:
+  # Allow traffic from application server
+  - from:
+    - podSelector:
+        matchLabels:
+          app: rampos-server
+    - podSelector:
+        matchLabels:
+          app: rampos-migration
+    # Allow traffic from PgBouncer
+    - podSelector:
+        matchLabels:
+          app: pgbouncer
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow replication traffic between PostgreSQL pods
+  - from:
+    - podSelector:
+        matchLabels:
+          app: rampos-postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow metrics scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9187
+  egress:
+  # Allow replication traffic to other PostgreSQL pods
+  - to:
+    - podSelector:
+        matchLabels:
+          app: rampos-postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: coredns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+---
+# Network Policy for PgBouncer
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pgbouncer-policy
+  namespace: rampos
+spec:
+  podSelector:
+    matchLabels:
+      app: pgbouncer
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from application server
   - from:
     - podSelector:
         matchLabels:
@@ -116,6 +195,42 @@ spec:
     ports:
     - protocol: TCP
       port: 5432
+  # Allow metrics scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9127
+  egress:
+  # Connect to PostgreSQL primary
+  - to:
+    - podSelector:
+        matchLabels:
+          app: rampos-postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: coredns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

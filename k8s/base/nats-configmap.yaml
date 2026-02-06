@@ -5,8 +5,25 @@ metadata:
   namespace: rampos
 data:
   nats.conf: |
+    server_name: $POD_NAME
+
     authorization {
       user: "${NATS_USER}"
       password: "${NATS_PASSWORD}"
     }
-    jetstream: enabled
+
+    cluster {
+      name: rampos-nats
+      listen: 0.0.0.0:6222
+      routes: [
+        nats-route://rampos-nats-0.rampos-nats.rampos.svc.cluster.local:6222
+        nats-route://rampos-nats-1.rampos-nats.rampos.svc.cluster.local:6222
+        nats-route://rampos-nats-2.rampos-nats.rampos.svc.cluster.local:6222
+      ]
+    }
+
+    jetstream {
+      store_dir: /data/jetstream
+      max_mem: 1G
+      max_file: 10G
+    }

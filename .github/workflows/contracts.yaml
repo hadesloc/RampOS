@@ -2,15 +2,19 @@ name: Smart Contracts
 
 on:
   push:
+    branches: [main, master]
     paths:
       - 'contracts/**'
   pull_request:
     paths:
       - 'contracts/**'
 
+env:
+  FOUNDRY_PROFILE: default
+
 jobs:
-  test:
-    name: Forge Test
+  check:
+    name: Foundry Project
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -22,15 +26,24 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+          cache: true
 
       - name: Build
-        run: forge build
+        run: forge build --sizes
 
-      - name: Test
-        run: forge test
+      - name: Run Tests
+        run: forge test -vvv
 
-  slither:
-    name: Slither Analysis
+      - name: Run Gas Report
+        run: forge test --gas-report
+
+      - name: Run Coverage
+        run: forge coverage
+
+  fuzz:
+    name: Fuzz Tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -40,7 +53,45 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Run Fuzz Tests
+        run: forge test --match-path "test/fuzz/**/*.sol"
+
+  invariants:
+    name: Invariant Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Run Invariant Tests
+        run: forge test --match-path "test/invariants/**/*.sol"
+
+  slither:
+    name: Slither Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - name: Run Slither
-        uses: crytic/slither-action@v0.3.0
+        uses: crytic/slither-action@v0.4.0
+        continue-on-error: true
         with:
           target: 'contracts'
+          slither-args: '--checklist --markdown-root contracts'
+

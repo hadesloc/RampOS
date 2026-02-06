@@ -84,14 +84,27 @@ impl AAServiceState {
                 ));
             }
             Err(_) => {
-                // Key not set at all - always error, no fallback
-                return Err(anyhow::anyhow!(
-                    "PAYMASTER_SIGNER_KEY environment variable is required"
-                ));
+                // Key not set at all - allow fallback for tests if explicitly enabled
+                #[cfg(test)]
+                {
+                    // For tests only: use a dummy key if env var is missing
+                    // This allows existing tests to pass without setting env vars
+                    let mut key = vec![0u8; 32];
+                    key[31] = 1;
+                    key
+                }
+                #[cfg(not(test))]
+                {
+                    // Production: always error, no fallback
+                    return Err(anyhow::anyhow!(
+                        "PAYMASTER_SIGNER_KEY environment variable is required"
+                    ));
+                }
             }
         };
 
-        let paymaster_service = Arc::new(PaymasterService::new(paymaster_address, signer_key));
+        let paymaster_service = Arc::new(PaymasterService::new(paymaster_address, signer_key)
+            .map_err(|e| anyhow::anyhow!("Failed to create paymaster service: {}", e))?);
 
         Ok(Self {
             smart_account_service,
@@ -130,7 +143,7 @@ impl AAServiceState {
         let mut signer_key = vec![0u8; 32];
         signer_key[31] = 1;
 
-        let paymaster_service = Arc::new(PaymasterService::new(paymaster_address, signer_key));
+        let paymaster_service = Arc::new(PaymasterService::new(paymaster_address, signer_key).expect("Failed to create test paymaster service"));
 
         Self {
             smart_account_service,

@@ -1,80 +1,28 @@
 {
-  "generated_at": "2026-02-03T14:50:51.368881",
+  "generated_at": "2026-02-06T15:10:16.851182",
   "enabled_plugins": [
     [
-      "static-analysis",
+      "spec-to-code-compliance",
       "trailofbits"
     ],
     [
-      "semgrep-rule-creator",
+      "ask-questions-if-underspecified",
       "trailofbits"
     ],
     [
-      "ultimate-workflow",
-      "ultimate-workflow-local"
-    ],
-    [
-      "utility-skills",
-      "baoyu-skills"
-    ],
-    [
-      "typescript-lsp",
-      "claude-plugins-official"
-    ],
-    [
-      "fix-review",
+      "audit-context-building",
       "trailofbits"
-    ],
-    [
-      "rust-analyzer-lsp",
-      "claude-plugins-official"
-    ],
-    [
-      "frontend-design",
-      "claude-plugins-official"
     ],
     [
       "constant-time-analysis",
       "trailofbits"
     ],
     [
-      "plugin-dev",
+      "playwright",
       "claude-plugins-official"
     ],
     [
-      "content-skills",
-      "baoyu-skills"
-    ],
-    [
-      "example-skills",
-      "anthropic-agent-skills"
-    ],
-    [
-      "building-secure-contracts",
-      "trailofbits"
-    ],
-    [
-      "testing-handbook-skills",
-      "trailofbits"
-    ],
-    [
-      "spec-to-code-compliance",
-      "trailofbits"
-    ],
-    [
-      "feature-dev",
-      "claude-plugins-official"
-    ],
-    [
-      "differential-review",
-      "trailofbits"
-    ],
-    [
-      "plugin-factory",
-      "trailofbits"
-    ],
-    [
-      "burpsuite-project-parser",
+      "local-plugin-installer",
       "trailofbits"
     ],
     [
@@ -82,12 +30,108 @@
       "trailofbits"
     ],
     [
-      "pyright-lsp",
+      "dwarf-expert",
+      "trailofbits"
+    ],
+    [
+      "entry-point-analyzer",
+      "trailofbits"
+    ],
+    [
+      "building-secure-contracts",
+      "trailofbits"
+    ],
+    [
+      "plugin-factory",
+      "ultimate-workflow-local"
+    ],
+    [
+      "rlm-agent",
+      "rlm-local"
+    ],
+    [
+      "rust-analyzer-lsp",
       "claude-plugins-official"
+    ],
+    [
+      "testing-handbook-skills",
+      "trailofbits"
+    ],
+    [
+      "content-skills",
+      "baoyu-skills"
+    ],
+    [
+      "frontend-design",
+      "claude-plugins-official"
+    ],
+    [
+      "security-guidance",
+      "claude-plugins-official"
+    ],
+    [
+      "utility-skills",
+      "baoyu-skills"
+    ],
+    [
+      "variant-analysis",
+      "trailofbits"
+    ],
+    [
+      "ui-ux-pro-max",
+      "ui-ux-pro-max-skill"
+    ],
+    [
+      "claude-md-management",
+      "claude-plugins-official"
+    ],
+    [
+      "burpsuite-project-parser",
+      "trailofbits"
+    ],
+    [
+      "sharp-edges",
+      "trailofbits"
+    ],
+    [
+      "code-review",
+      "claude-plugins-official"
+    ],
+    [
+      "code-simplifier",
+      "claude-plugins-official"
+    ],
+    [
+      "ai-generation-skills",
+      "baoyu-skills"
     ],
     [
       "context7",
       "claude-plugins-official"
+    ],
+    [
+      "plugin-dev",
+      "claude-plugins-official"
+    ],
+    [
+      "ultimate-workflow",
+      "ultimate-workflow-local"
+    ],
+    [
+      "feature-dev",
+      "claude-plugins-official"
+    ],
+    [
+      "document-skills",
+      "anthropic-agent-skills"
+    ],
+    [
+      "fix-review",
+      "trailofbits"
+    ],
+    [
+      "semgrep-rule-creator",
+      "trailofbits"
     ],
     [
       "property-based-testing",
@@ -98,63 +142,7 @@
       "claude-plugins-official"
     ],
     [
-      "audit-context-building",
-      "trailofbits"
-    ],
-    [
-      "playwright",
-      "claude-plugins-official"
-    ],
-    [
-      "code-review",
-      "claude-plugins-official"
-    ],
-    [
-      "culture-index",
-      "trailofbits"
-    ],
-    [
-      "variant-analysis",
-      "trailofbits"
-    ],
-    [
-      "ai-generation-skills",
-      "baoyu-skills"
-    ],
-    [
-      "dwarf-expert",
-      "trailofbits"
-    ],
-    [
-      "superpowers",
-      "claude-plugins-official"
-    ],
-    [
-      "plugin-super-factory",
-      "hades-local"
-    ],
-    [
-      "sharp-edges",
-      "trailofbits"
-    ],
-    [
-      "plugin-factory",
-      "ultimate-workflow-local"
-    ],
-    [
-      "document-skills",
-      "anthropic-agent-skills"
-    ],
-    [
-      "code-simplifier",
-      "claude-plugins-official"
-    ],
-    [
-      "rlm-agent",
-      "rlm-local"
-    ],
-    [
-      "entry-point-analyzer",
+      "static-analysis",
       "trailofbits"
     ],
     [
@@ -162,11 +150,39 @@
       "trailofbits"
     ],
     [
-      "local-plugin-installer",
+      "culture-index",
       "trailofbits"
     ],
     [
-      "ask-questions-if-underspecified",
+      "example-skills",
+      "anthropic-agent-skills"
+    ],
+    [
+      "plugin-super-factory",
+      "hades-local"
+    ],
+    [
+      "typescript-lsp",
+      "claude-plugins-official"
+    ],
+    [
+      "coderabbit",
+      "claude-plugins-official"
+    ],
+    [
+      "superpowers",
+      "claude-plugins-official"
+    ],
+    [
+      "plugin-factory",
+      "trailofbits"
+    ],
+    [
+      "pyright-lsp",
+      "claude-plugins-official"
+    ],
+    [
+      "differential-review",
       "trailofbits"
     ]
   ],
@@ -226,6 +242,12 @@
       "category": "development"
     },
     {
+      "name": "security-guidance",
+      "description": "Security reminder hook that warns about potential security issues when editing files, including command injection, XSS, and unsafe code patterns",
+      "marketplace": "claude-plugins-official",
+      "category": "security"
+    },
+    {
       "name": "code-review",
       "description": "Automated code review for pull requests using multiple specialized agents with confidence-based scoring to filter false positives",
       "marketplace": "claude-plugins-official",
@@ -250,6 +272,12 @@
       "category": "development"
     },
     {
+      "name": "claude-md-management",
+      "description": "Tools to maintain and improve CLAUDE.md files - audit quality, capture session learnings, and keep project memory current.",
+      "marketplace": "claude-plugins-official",
+      "category": "productivity"
+    },
+    {
       "name": "greptile",
       "description": "AI-powered codebase search and understanding. Query your repositories using natural language to find relevant code, understand dependencies, and get contextual answers about your codebase architecture.",
       "marketplace": "claude-plugins-official",
@@ -272,6 +300,12 @@
       "description": "Superpowers teaches Claude brainstorming, subagent driven development with built in code review, systematic debugging, and red/green TDD. Additionally, it teaches Claude how to author and test new skills.",
       "marketplace": "claude-plugins-official",
       "category": "development"
+    },
+    {
+      "name": "coderabbit",
+      "description": "Your code review partner. CodeRabbit provides external validation using a specialized AI architecture and 40+ integrated static analyzers—offering a different perspective that catches bugs, security vulnerabilities, logic errors, and edge cases. Context-aware analysis via AST parsing and codegraph relationships. Automatically incorporates CLAUDE.md and project coding guidelines into reviews. Useful after writing or modifying code, before commits, when implementing complex or security-sensitive logic, or when a second opinion would increase confidence in the changes. Returns specific findings with suggested fixes that can be applied immediately. Free to use.",
+      "marketplace": "claude-plugins-official",
+      "category": "productivity"
     },
     {
       "name": "rlm-agent",
@@ -388,6 +422,12 @@
       "category": ""
     },
     {
+      "name": "ui-ux-pro-max",
+      "description": "Professional UI/UX design intelligence for AI coding assistants. Includes searchable databases of styles, colors, typography, charts, and UX guidelines for React, Next.js, Astro, Vue, Nuxt.js, Nuxt UI, Svelte, SwiftUI, React Native, Flutter, Tailwind, shadcn/ui, and Jetpack Compose.",
+      "marketplace": "ui-ux-pro-max-skill",
+      "category": "design"
+    },
+    {
       "name": "ultimate-workflow",
       "description": "Biến Claude Code thành công ty dev ảo - cho phép người non-code xây dựng sản phẩm phần mềm production-ready",
       "marketplace": "ultimate-workflow-local",
@@ -447,7 +487,7 @@
     },
     {
       "name": "docx",
-      "description": "Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. When Claude needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks",
+      "description": "Use this skill whenever the user wants to create, read, edit, or manipulate Word documents (.docx files). Triggers include: any mention of \\\"Word doc\\\", \\\"word document\\\", \\\".docx\\\", or requests to produce professional documents with formatting like tables of contents, headings, page numbers, or letterheads. Also use when extracting or reorganizing content from .docx files, inserting or replacing images in documents, performing find-and-replace in Word files, working with tracked changes or comments, or converting content into a polished Word document. If the user asks for a \\\"report\\\", \\\"memo\\\", \\\"letter\\\", \\\"template\\\", or similar deliverable as a Word or .docx file, use this skill. Do NOT use for PDFs, spreadsheets, Google Docs, or general coding tasks unrelated to document generation.",
       "plugin": "document-skills",
       "marketplace": "anthropic-agent-skills",
       "user_invocable": false,
@@ -479,7 +519,7 @@
     },
     {
       "name": "pdf",
-      "description": "Comprehensive PDF manipulation toolkit for extracting text and tables, creating new PDFs, merging/splitting documents, and handling forms. When Claude needs to fill in a PDF form or programmatically process, generate, or analyze PDF documents at scale.",
+      "description": "Use this skill whenever the user wants to do anything with PDF files. This includes reading or extracting text/tables from PDFs, combining or merging multiple PDFs into one, splitting PDFs apart, rotating pages, adding watermarks, creating new PDFs, filling PDF forms, encrypting/decrypting PDFs, extracting images, and OCR on scanned PDFs to make them searchable. If the user mentions a .pdf file or asks to produce one, use this skill.",
       "plugin": "document-skills",
       "marketplace": "anthropic-agent-skills",
       "user_invocable": false,
@@ -487,7 +527,7 @@
     },
     {
       "name": "pptx",
-      "description": "Presentation creation, editing, and analysis. When Claude needs to work with presentations (.pptx files) for: (1) Creating new presentations, (2) Modifying or editing content, (3) Working with layouts, (4) Adding comments or speaker notes, or any other presentation tasks",
+      "description": "Use this skill any time a .pptx file is involved in any way — as input, output, or both. This includes: creating slide decks, pitch decks, or presentations; reading, parsing, or extracting text from any .pptx file (even if the extracted content will be used elsewhere, like in an email or summary); editing, modifying, or updating existing presentations; combining or splitting slide files; working with templates, layouts, speaker notes, or comments. Trigger whenever the user mentions \\\"deck,\\\" \\\"slides,\\\" \\\"presentation,\\\" or references a .pptx filename, regardless of what they plan to do with the content afterward. If a .pptx file needs to be opened, created, or touched, use this skill.",
       "plugin": "document-skills",
       "marketplace": "anthropic-agent-skills",
       "user_invocable": false,
@@ -535,7 +575,7 @@
     },
     {
       "name": "xlsx",
-      "description": "Comprehensive spreadsheet creation, editing, and analysis with support for formulas, formatting, data analysis, and visualization. When Claude needs to work with spreadsheets (.xlsx, .xlsm, .csv, .tsv, etc) for: (1) Creating new spreadsheets with formulas and formatting, (2) Reading or analyzing data, (3) Modify existing spreadsheets while preserving formulas, (4) Data analysis and visualization in spreadsheets, or (5) Recalculating formulas",
+      "description": "Use this skill any time a spreadsheet file is the primary input or output. This means any task where the user wants to: open, read, edit, or fix an existing .xlsx, .xlsm, .csv, or .tsv file (e.g., adding columns, computing formulas, formatting, charting, cleaning messy data); create a new spreadsheet from scratch or from other data sources; or convert between tabular file formats. Trigger especially when the user references a spreadsheet file by name or path — even casually (like \\\"the xlsx in my downloads\\\") — and wants something done to it or produced from it. Also trigger for cleaning or restructuring messy tabular data files (malformed rows, misplaced headers, junk data) into proper spreadsheets. The deliverable must be a spreadsheet file. Do NOT trigger when the primary deliverable is a Word document, HTML report, standalone Python script, database pipeline, or Google Sheets API integration, even if tabular data is involved.",
       "plugin": "document-skills",
       "marketplace": "anthropic-agent-skills",
       "user_invocable": false,
@@ -575,7 +615,7 @@
     },
     {
       "name": "docx",
-      "description": "Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. When Claude needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks",
+      "description": "Use this skill whenever the user wants to create, read, edit, or manipulate Word documents (.docx files). Triggers include: any mention of \\\"Word doc\\\", \\\"word document\\\", \\\".docx\\\", or requests to produce professional documents with formatting like tables of contents, headings, page numbers, or letterheads. Also use when extracting or reorganizing content from .docx files, inserting or replacing images in documents, performing find-and-replace in Word files, working with tracked changes or comments, or converting content into a polished Word document. If the user asks for a \\\"report\\\", \\\"memo\\\", \\\"letter\\\", \\\"template\\\", or similar deliverable as a Word or .docx file, use this skill. Do NOT use for PDFs, spreadsheets, Google Docs, or general coding tasks unrelated to document generation.",
       "plugin": "example-skills",
       "marketplace": "anthropic-agent-skills",
       "user_invocable": false,
@@ -607,7 +647,7 @@
     },
     {
       "name": "pdf",
-      "description": "Comprehensive PDF manipulation toolkit for extracting text and tables, creating new PDFs, merging/splitting documents, and handling forms. When Claude needs to fill in a PDF form or programmatically process, generate, or analyze PDF documents at scale.",
+      "description": "Use this skill whenever the user wants to do anything with PDF files. This includes reading or extracting text/tables from PDFs, combining or merging multiple PDFs into one, splitting PDFs apart, rotating pages, adding watermarks, creating new PDFs, filling PDF forms, encrypting/decrypting PDFs, extracting images, and OCR on scanned PDFs to make them searchable. If the user mentions a .pdf file or asks to produce one, use this skill.",
       "plugin": "example-skills",
       "marketplace": "anthropic-agent-skills",
       "user_invocable": false,
@@ -615,7 +655,7 @@
     },
     {
       "name": "pptx",
-      "description": "Presentation creation, editing, and analysis. When Claude needs to work with presentations (.pptx files) for: (1) Creating new presentations, (2) Modifying or editing content, (3) Working with layouts, (4) Adding comments or speaker notes, or any other presentation tasks",
+      "description": "Use this skill any time a .pptx file is involved in any way — as input, output, or both. This includes: creating slide decks, pitch decks, or presentations; reading, parsing, or extracting text from any .pptx file (even if the extracted content will be used elsewhere, like in an email or summary); editing, modifying, or updating existing presentations; combining or splitting slide files; working with templates, layouts, speaker notes, or comments. Trigger whenever the user mentions \\\"deck,\\\" \\\"slides,\\\" \\\"presentation,\\\" or references a .pptx filename, regardless of what they plan to do with the content afterward. If a .pptx file needs to be opened, created, or touched, use this skill.",
       "plugin": "example-skills",
       "marketplace": "anthropic-agent-skills",
       "user_invocable": false,
@@ -663,7 +703,7 @@
     },
     {
       "name": "xlsx",
-      "description": "Comprehensive spreadsheet creation, editing, and analysis with support for formulas, formatting, data analysis, and visualization. When Claude needs to work with spreadsheets (.xlsx, .xlsm, .csv, .tsv, etc) for: (1) Creating new spreadsheets with formulas and formatting, (2) Reading or analyzing data, (3) Modify existing spreadsheets while preserving formulas, (4) Data analysis and visualization in spreadsheets, or (5) Recalculating formulas",
+      "description": "Use this skill any time a spreadsheet file is the primary input or output. This means any task where the user wants to: open, read, edit, or fix an existing .xlsx, .xlsm, .csv, or .tsv file (e.g., adding columns, computing formulas, formatting, charting, cleaning messy data); create a new spreadsheet from scratch or from other data sources; or convert between tabular file formats. Trigger especially when the user references a spreadsheet file by name or path — even casually (like \\\"the xlsx in my downloads\\\") — and wants something done to it or produced from it. Also trigger for cleaning or restructuring messy tabular data files (malformed rows, misplaced headers, junk data) into proper spreadsheets. The deliverable must be a spreadsheet file. Do NOT trigger when the primary deliverable is a Word document, HTML report, standalone Python script, database pipeline, or Google Sheets API integration, even if tabular data is involved.",
       "plugin": "example-skills",
       "marketplace": "anthropic-agent-skills",
       "user_invocable": false,
@@ -1038,60 +1078,68 @@
       "invoke": "Skill tool: frontend-design"
     },
     {
-      "name": "Agent Development",
+      "name": "agent-development",
       "description": "This skill should be used when the user asks to \"create an agent\", \"add an agent\", \"write a subagent\", \"agent frontmatter\", \"when to use description\", \"agent examples\", \"agent tools\", \"agent colors\", \"autonomous agent\", or needs guidance on agent structure, system prompts, triggering conditions, or agent development best practices for Claude Code plugins.",
       "plugin": "plugin-dev",
       "marketplace": "claude-plugins-official",
       "user_invocable": false,
-      "invoke": "Skill tool: Agent Development"
+      "invoke": "Skill tool: agent-development"
     },
     {
-      "name": "Command Development",
+      "name": "command-development",
       "description": "This skill should be used when the user asks to \"create a slash command\", \"add a command\", \"write a custom command\", \"define command arguments\", \"use command frontmatter\", \"organize commands\", \"create command with file references\", \"interactive command\", \"use AskUserQuestion in command\", or needs guidance on slash command structure, YAML frontmatter fields, dynamic arguments, bash execution in commands, user interaction patterns, or command development best practices for Claude Code.",
       "plugin": "plugin-dev",
       "marketplace": "claude-plugins-official",
       "user_invocable": false,
-      "invoke": "Skill tool: Command Development"
+      "invoke": "Skill tool: command-development"
     },
     {
-      "name": "Hook Development",
+      "name": "hook-development",
       "description": "This skill should be used when the user asks to \"create a hook\", \"add a PreToolUse/PostToolUse/Stop hook\", \"validate tool use\", \"implement prompt-based hooks\", \"use ${CLAUDE_PLUGIN_ROOT}\", \"set up event-driven automation\", \"block dangerous commands\", or mentions hook events (PreToolUse, PostToolUse, Stop, SubagentStop, SessionStart, SessionEnd, UserPromptSubmit, PreCompact, Notification). Provides comprehensive guidance for creating and implementing Claude Code plugin hooks with focus on advanced prompt-based hooks API.",
       "plugin": "plugin-dev",
       "marketplace": "claude-plugins-official",
       "user_invocable": false,
-      "invoke": "Skill tool: Hook Development"
+      "invoke": "Skill tool: hook-development"
     },
     {
-      "name": "MCP Integration",
+      "name": "mcp-integration",
       "description": "This skill should be used when the user asks to \"add MCP server\", \"integrate MCP\", \"configure MCP in plugin\", \"use .mcp.json\", \"set up Model Context Protocol\", \"connect external service\", mentions \"${CLAUDE_PLUGIN_ROOT} with MCP\", or discusses MCP server types (SSE, stdio, HTTP, WebSocket). Provides comprehensive guidance for integrating Model Context Protocol servers into Claude Code plugins for external tool and service integration.",
       "plugin": "plugin-dev",
       "marketplace": "claude-plugins-official",
       "user_invocable": false,
-      "invoke": "Skill tool: MCP Integration"
+      "invoke": "Skill tool: mcp-integration"
     },
     {
-      "name": "Plugin Settings",
+      "name": "plugin-settings",
       "description": "This skill should be used when the user asks about \"plugin settings\", \"store plugin configuration\", \"user-configurable plugin\", \".local.md files\", \"plugin state files\", \"read YAML frontmatter\", \"per-project plugin settings\", or wants to make plugin behavior configurable. Documents the .claude/plugin-name.local.md pattern for storing plugin-specific configuration with YAML frontmatter and markdown content.",
       "plugin": "plugin-dev",
       "marketplace": "claude-plugins-official",
       "user_invocable": false,
-      "invoke": "Skill tool: Plugin Settings"
+      "invoke": "Skill tool: plugin-settings"
     },
     {
-      "name": "Plugin Structure",
+      "name": "plugin-structure",
       "description": "This skill should be used when the user asks to \"create a plugin\", \"scaffold a plugin\", \"understand plugin structure\", \"organize plugin components\", \"set up plugin.json\", \"use ${CLAUDE_PLUGIN_ROOT}\", \"add commands/agents/skills/hooks\", \"configure auto-discovery\", or needs guidance on plugin directory layout, manifest configuration, component organization, file naming conventions, or Claude Code plugin architecture best practices.",
       "plugin": "plugin-dev",
       "marketplace": "claude-plugins-official",
       "user_invocable": false,
-      "invoke": "Skill tool: Plugin Structure"
+      "invoke": "Skill tool: plugin-structure"
     },
     {
-      "name": "Skill Development",
+      "name": "skill-development",
       "description": "This skill should be used when the user wants to \"create a skill\", \"add a skill to plugin\", \"write a new skill\", \"improve skill description\", \"organize skill content\", or needs guidance on skill structure, progressive disclosure, or skill development best practices for Claude Code plugins.",
       "plugin": "plugin-dev",
       "marketplace": "claude-plugins-official",
       "user_invocable": false,
-      "invoke": "Skill tool: Skill Development"
+      "invoke": "Skill tool: skill-development"
+    },
+    {
+      "name": "claude-md-improver",
+      "description": "Audit and improve CLAUDE.md files in repositories. Use when user asks to check, audit, update, improve, or fix CLAUDE.md files. Scans for all CLAUDE.md files, evaluates quality against templates, outputs quality report, then makes targeted updates. Also use when the user mentions \"CLAUDE.md maintenance\" or \"project memory optimization\".",
+      "plugin": "claude-md-management",
+      "marketplace": "claude-plugins-official",
+      "user_invocable": false,
+      "invoke": "Skill tool: claude-md-improver"
     },
     {
       "name": "ask-questions-if-underspecified",
@@ -1641,7 +1689,7 @@
     },
     {
       "name": "agent-creator",
-      "description": "Use this agent when the user asks to \"create an agent\", \"generate an agent\", \"build a new agent\", \"make me an agent that...\", or describes agent functionality they need. Trigger when user wants to create autonomous agents for plugins. Examples:",
+      "description": "|",
       "model": "sonnet",
       "plugin": "plugin-dev",
       "marketplace": "claude-plugins-official",
@@ -1649,7 +1697,7 @@
     },
     {
       "name": "plugin-validator",
-      "description": "Use this agent when the user asks to \"validate my plugin\", \"check plugin structure\", \"verify plugin is correct\", \"validate plugin.json\", \"check plugin files\", or mentions plugin validation. Also trigger proactively after user creates or modifies plugin components. Examples:",
+      "description": "|",
       "model": "inherit",
       "plugin": "plugin-dev",
       "marketplace": "claude-plugins-official",
@@ -1657,7 +1705,7 @@
     },
     {
       "name": "skill-reviewer",
-      "description": "Use this agent when the user has created or modified a skill and needs quality review, asks to \"review my skill\", \"check skill quality\", \"improve skill description\", or wants to ensure skill follows best practices. Trigger proactively after skill creation. Examples:",
+      "description": "|",
       "model": "inherit",
       "plugin": "plugin-dev",
       "marketplace": "claude-plugins-official",

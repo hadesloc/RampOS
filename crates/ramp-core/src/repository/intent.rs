@@ -8,6 +8,7 @@ use ramp_common::{
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
+use tracing::instrument;
 
 /// Intent database row
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
@@ -147,6 +148,7 @@ impl PgIntentRepository {
 
 #[async_trait]
 impl IntentRepository for PgIntentRepository {
+    #[instrument(skip(self, intent), fields(intent_id = %intent.id, tenant_id = %intent.tenant_id))]
     async fn create(&self, intent: &IntentRow) -> Result<()> {
         let mut tx = self
             .pool
@@ -202,6 +204,7 @@ impl IntentRepository for PgIntentRepository {
         Ok(())
     }
 
+    #[instrument(skip(self), fields(tenant_id = %tenant_id.0, intent_id = %id.0))]
     async fn get_by_id(&self, tenant_id: &TenantId, id: &IntentId) -> Result<Option<IntentRow>> {
         let mut tx = self
             .pool
@@ -285,6 +288,7 @@ impl IntentRepository for PgIntentRepository {
         Ok(row)
     }
 
+    #[instrument(skip(self), fields(tenant_id = %tenant_id.0, intent_id = %id.0, new_state = %new_state))]
     async fn update_state(
         &self,
         tenant_id: &TenantId,

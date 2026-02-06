@@ -1,0 +1,437 @@
+# PostgreSQL Backup CronJob
+# RampOS Backup and Disaster Recovery Infrastructure
+#
+# Strategy:
+# - Daily full backup using pg_dump with custom format (compressed)
+# - Continuous WAL archiving for point-in-time recovery (PITR)
+# - Backups stored in S3-compatible object storage
+# - Retention: 7 daily, 4 weekly, 12 monthly backups
+#
+# RPO: 5 minutes (with WAL archiving)
+# RTO: 30 minutes (restore + WAL replay)
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rampos-backup
+  namespace: rampos
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-scripts
+  namespace: rampos
+data:
+  backup-postgres.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    # Configuration
+    BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+    BACKUP_NAME="rampos_postgres_${BACKUP_DATE}"
+    BACKUP_FILE="/backup/${BACKUP_NAME}.dump"
+    S3_BUCKET="${BACKUP_S3_BUCKET:-rampos-backups}"
+    S3_PREFIX="${BACKUP_S3_PREFIX:-postgres}"
+    RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
+
+    echo "[$(date -Iseconds)] Starting PostgreSQL backup..."
+
+    # Create backup directory if it doesn't exist
+    mkdir -p /backup
+
+    # Perform full backup using pg_dump with custom format (compressed)
+    echo "[$(date -Iseconds)] Running pg_dump..."
+    PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump \
+      -h "${POSTGRES_HOST}" \
+      -U "${POSTGRES_USER}" \
+      -d "${POSTGRES_DB}" \
+      -Fc \
+      --no-owner \
+      --no-acl \
+      -f "${BACKUP_FILE}"
+
+    # Calculate backup size and checksum
+    BACKUP_SIZE=$(stat -c%s "${BACKUP_FILE}")
+    BACKUP_CHECKSUM=$(sha256sum "${BACKUP_FILE}" | cut -d' ' -f1)
+
+    echo "[$(date -Iseconds)] Backup created: ${BACKUP_FILE}"
+    echo "[$(date -Iseconds)] Size: ${BACKUP_SIZE} bytes"
+    echo "[$(date -Iseconds)] SHA256: ${BACKUP_CHECKSUM}"
+
+    # Upload to S3 (if configured)
+    if [ -n "${AWS_ACCESS_KEY_ID:-}" ] && [ -n "${BACKUP_S3_ENDPOINT:-}" ]; then
+      echo "[$(date -Iseconds)] Uploading to S3..."
+
+      # Install AWS CLI if not present (for minimal images)
+      if ! command -v aws &> /dev/null; then
+        apk add --no-cache aws-cli || pip install awscli
+      fi
+
+      aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 cp \
+        "${BACKUP_FILE}" \
+        "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.dump" \
+        --metadata "checksum=${BACKUP_CHECKSUM},created=$(date -Iseconds)"
+
+      # Create metadata file
+      cat > "/backup/${BACKUP_NAME}.meta.json" <<EOF
+    {
+      "backup_name": "${BACKUP_NAME}",
+      "backup_type": "full",
+      "database": "${POSTGRES_DB}",
+      "timestamp": "$(date -Iseconds)",
+      "size_bytes": ${BACKUP_SIZE},
+      "sha256": "${BACKUP_CHECKSUM}",
+      "postgres_version": "$(psql --version | head -n1)",
+      "retention_days": ${RETENTION_DAYS}
+    }
+    EOF
+
+      aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 cp \
+        "/backup/${BACKUP_NAME}.meta.json" \
+        "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.meta.json"
+
+      echo "[$(date -Iseconds)] Upload complete: s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.dump"
+
+      # Cleanup old backups based on retention policy
+      echo "[$(date -Iseconds)] Cleaning up old backups (retention: ${RETENTION_DAYS} days)..."
+      CUTOFF_DATE=$(date -d "-${RETENTION_DAYS} days" +%Y%m%d)
+
+      aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 ls \
+        "s3://${S3_BUCKET}/${S3_PREFIX}/" | \
+        awk '{print $4}' | \
+        grep -E '^rampos_postgres_[0-9]{8}' | \
+        while read -r file; do
+          FILE_DATE=$(echo "$file" | grep -oE '[0-9]{8}')
+          if [ "$FILE_DATE" -lt "$CUTOFF_DATE" ]; then
+            echo "[$(date -Iseconds)] Deleting old backup: $file"
+            aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 rm \
+              "s3://${S3_BUCKET}/${S3_PREFIX}/$file"
+          fi
+        done
+    else
+      echo "[$(date -Iseconds)] S3 not configured, backup stored locally only"
+    fi
+
+    # Cleanup local backup to save space
+    rm -f "${BACKUP_FILE}"
+    rm -f "/backup/${BACKUP_NAME}.meta.json"
+
+    echo "[$(date -Iseconds)] PostgreSQL backup completed successfully"
+
+  restore-postgres.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    # Usage: restore-postgres.sh <backup-name|latest> [target-time-for-pitr]
+    BACKUP_NAME="${1:-latest}"
+    TARGET_TIME="${2:-}"
+    S3_BUCKET="${BACKUP_S3_BUCKET:-rampos-backups}"
+    S3_PREFIX="${BACKUP_S3_PREFIX:-postgres}"
+
+    echo "[$(date -Iseconds)] Starting PostgreSQL restore..."
+    echo "[$(date -Iseconds)] Backup: ${BACKUP_NAME}"
+
+    mkdir -p /backup
+
+    # Download backup from S3
+    if [ "${BACKUP_NAME}" = "latest" ]; then
+      echo "[$(date -Iseconds)] Finding latest backup..."
+      BACKUP_NAME=$(aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 ls \
+        "s3://${S3_BUCKET}/${S3_PREFIX}/" | \
+        awk '{print $4}' | \
+        grep -E '\.dump$' | \
+        sort -r | \
+        head -n1 | \
+        sed 's/\.dump$//')
+    fi
+
+    if [ -z "${BACKUP_NAME}" ]; then
+      echo "[$(date -Iseconds)] ERROR: No backup found!"
+      exit 1
+    fi
+
+    echo "[$(date -Iseconds)] Downloading: ${BACKUP_NAME}.dump"
+    aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 cp \
+      "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.dump" \
+      "/backup/${BACKUP_NAME}.dump"
+
+    # Verify checksum
+    echo "[$(date -Iseconds)] Verifying backup integrity..."
+    aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 cp \
+      "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.meta.json" \
+      "/backup/${BACKUP_NAME}.meta.json" || true
+
+    if [ -f "/backup/${BACKUP_NAME}.meta.json" ]; then
+      EXPECTED_CHECKSUM=$(jq -r '.sha256' "/backup/${BACKUP_NAME}.meta.json")
+      ACTUAL_CHECKSUM=$(sha256sum "/backup/${BACKUP_NAME}.dump" | cut -d' ' -f1)
+
+      if [ "${EXPECTED_CHECKSUM}" != "${ACTUAL_CHECKSUM}" ]; then
+        echo "[$(date -Iseconds)] ERROR: Checksum mismatch!"
+        echo "[$(date -Iseconds)] Expected: ${EXPECTED_CHECKSUM}"
+        echo "[$(date -Iseconds)] Actual: ${ACTUAL_CHECKSUM}"
+        exit 1
+      fi
+      echo "[$(date -Iseconds)] Checksum verified"
+    fi
+
+    # Restore database
+    echo "[$(date -Iseconds)] Restoring database..."
+
+    # Drop existing connections
+    PGPASSWORD="${POSTGRES_PASSWORD}" psql \
+      -h "${POSTGRES_HOST}" \
+      -U "${POSTGRES_USER}" \
+      -d postgres \
+      -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${POSTGRES_DB}' AND pid <> pg_backend_pid();"
+
+    # Restore using pg_restore
+    PGPASSWORD="${POSTGRES_PASSWORD}" pg_restore \
+      -h "${POSTGRES_HOST}" \
+      -U "${POSTGRES_USER}" \
+      -d "${POSTGRES_DB}" \
+      --clean \
+      --if-exists \
+      --no-owner \
+      --no-acl \
+      "/backup/${BACKUP_NAME}.dump"
+
+    # Cleanup
+    rm -f "/backup/${BACKUP_NAME}.dump"
+    rm -f "/backup/${BACKUP_NAME}.meta.json"
+
+    echo "[$(date -Iseconds)] PostgreSQL restore completed successfully"
+
+  verify-backup.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    # Verify backup integrity without restoring
+    BACKUP_NAME="${1:-latest}"
+    S3_BUCKET="${BACKUP_S3_BUCKET:-rampos-backups}"
+    S3_PREFIX="${BACKUP_S3_PREFIX:-postgres}"
+
+    echo "[$(date -Iseconds)] Verifying PostgreSQL backup: ${BACKUP_NAME}"
+
+    mkdir -p /backup
+
+    # Find backup
+    if [ "${BACKUP_NAME}" = "latest" ]; then
+      BACKUP_NAME=$(aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 ls \
+        "s3://${S3_BUCKET}/${S3_PREFIX}/" | \
+        awk '{print $4}' | \
+        grep -E '\.dump$' | \
+        sort -r | \
+        head -n1 | \
+        sed 's/\.dump$//')
+    fi
+
+    # Download and verify
+    echo "[$(date -Iseconds)] Downloading backup..."
+    aws --endpoint-url "${BACKUP_S3_ENDPOINT}" s3 cp \
+      "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.dump" \
+      "/backup/${BACKUP_NAME}.dump"
+
+    # Verify pg_restore can read it
+    echo "[$(date -Iseconds)] Verifying backup format..."
+    pg_restore --list "/backup/${BACKUP_NAME}.dump" > /dev/null
+
+    # Get table of contents
+    echo "[$(date -Iseconds)] Backup contents:"
+    pg_restore --list "/backup/${BACKUP_NAME}.dump" | head -50
+
+    # Cleanup
+    rm -f "/backup/${BACKUP_NAME}.dump"
+
+    echo "[$(date -Iseconds)] Backup verification passed"
+---
+# Daily full backup CronJob
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup-daily
+  namespace: rampos
+  labels:
+    app: rampos-backup
+    component: postgres
+spec:
+  schedule: "0 2 * * *"  # Daily at 2:00 AM UTC
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600  # 1 hour timeout
+      template:
+        metadata:
+          labels:
+            app: rampos-backup
+            component: postgres
+        spec:
+          serviceAccountName: rampos-backup
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: postgres:15-alpine
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+              readOnlyRootFilesystem: false
+            command: ["/bin/bash", "/scripts/backup-postgres.sh"]
+            env:
+            - name: POSTGRES_HOST
+              value: "rampos-postgres"
+            - name: POSTGRES_USER
+              value: "rampos"
+            - name: POSTGRES_DB
+              value: "rampos"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rampos-secret
+                  key: DATABASE_PASSWORD
+            # S3 Configuration (optional - for off-site backups)
+            - name: BACKUP_S3_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: backup-s3-credentials
+                  key: ENDPOINT
+                  optional: true
+            - name: BACKUP_S3_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: backup-s3-credentials
+                  key: BUCKET
+                  optional: true
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: backup-s3-credentials
+                  key: ACCESS_KEY_ID
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backup-s3-credentials
+                  key: SECRET_ACCESS_KEY
+                  optional: true
+            - name: BACKUP_RETENTION_DAYS
+              value: "30"
+            volumeMounts:
+            - name: backup-scripts
+              mountPath: /scripts
+            - name: backup-storage
+              mountPath: /backup
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+          volumes:
+          - name: backup-scripts
+            configMap:
+              name: backup-scripts
+              defaultMode: 0755
+          - name: backup-storage
+            emptyDir:
+              sizeLimit: 10Gi
+---
+# Weekly verification job
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup-verify
+  namespace: rampos
+  labels:
+    app: rampos-backup
+    component: postgres
+spec:
+  schedule: "0 6 * * 0"  # Weekly on Sunday at 6:00 AM UTC
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800  # 30 minute timeout
+      template:
+        metadata:
+          labels:
+            app: rampos-backup
+            component: postgres
+            job: verify
+        spec:
+          serviceAccountName: rampos-backup
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          restartPolicy: OnFailure
+          containers:
+          - name: verify
+            image: postgres:15-alpine
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+              readOnlyRootFilesystem: false
+            command: ["/bin/bash", "/scripts/verify-backup.sh", "latest"]
+            env:
+            - name: BACKUP_S3_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: backup-s3-credentials
+                  key: ENDPOINT
+                  optional: true
+            - name: BACKUP_S3_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: backup-s3-credentials
+                  key: BUCKET
+                  optional: true
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: backup-s3-credentials
+                  key: ACCESS_KEY_ID
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backup-s3-credentials
+                  key: SECRET_ACCESS_KEY
+                  optional: true
+            volumeMounts:
+            - name: backup-scripts
+              mountPath: /scripts
+            - name: backup-storage
+              mountPath: /backup
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "50m"
+              limits:
+                memory: "512Mi"
+                cpu: "200m"
+          volumes:
+          - name: backup-scripts
+            configMap:
+              name: backup-scripts
+              defaultMode: 0755
+          - name: backup-storage
+            emptyDir:
+              sizeLimit: 10Gi

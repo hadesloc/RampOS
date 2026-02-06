@@ -1,18 +1,39 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# NOTE: secret.example.yaml is a TEMPLATE only - do NOT include in resources
+# Real secrets should be managed via:
+# - SealedSecrets (https://github.com/bitnami-labs/sealed-secrets)
+# - External Secrets Operator (https://external-secrets.io/)
+# - HashiCorp Vault
+# - Cloud provider secret managers (AWS Secrets Manager, GCP Secret Manager, Azure Key Vault)
+
 resources:
 - namespace.yaml
 - configmap.yaml
 - nats-configmap.yaml
-- secret.example.yaml
+- redis-scripts-configmap.yaml
+# - secret.example.yaml  # REMOVED: Never include example secrets in deployment
 - rbac.yaml
-- postgres-statefulset.yaml
+# PostgreSQL HA (replaces single postgres-statefulset.yaml)
+- postgres-ha.yaml
+- pgbouncer.yaml
+- postgres-config.yaml
+# - postgres-statefulset.yaml  # DEPRECATED: Use postgres-ha.yaml instead
 - redis-statefulset.yaml
 - nats-statefulset.yaml
+- otel-collector.yaml
+- jaeger.yaml
+- loki.yaml
+- promtail.yaml
 - deployment.yaml
 - service.yaml
 - ingress.yaml
 - hpa.yaml
 - network-policy.yaml
 - ../jobs/migration-job.yaml
+# Backup CronJobs
+- ../jobs/backup-postgres.yaml
+- ../jobs/backup-redis.yaml
+- ../jobs/backup-nats.yaml
+# NOTE: backup-s3-credentials.example.yaml is a TEMPLATE - configure separately

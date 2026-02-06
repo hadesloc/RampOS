@@ -15,6 +15,7 @@ configMapGenerator:
       - grafana-dashboards/compliance.json
       - grafana-dashboards/infrastructure.json
       - grafana-dashboards/database.json
+      - grafana-dashboards/logs.json
     options:
       labels:
         grafana_dashboard: "1"

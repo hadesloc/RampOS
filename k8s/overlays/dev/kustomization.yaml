@@ -1,9 +1,17 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+namespace: rampos-dev
+
 resources:
 - ../../base
 
+# Image configuration - updated by CI/CD
+images:
+- name: ghcr.io/rampos/rampos
+  newTag: latest
+
+# Dev-specific patches
 patches:
 - target:
     kind: Deployment
@@ -12,6 +20,18 @@ patches:
     - op: replace
       path: /spec/replicas
       value: 1
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/cpu
+      value: "250m"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: "256Mi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/cpu
+      value: "50m"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: "64Mi"
 - target:
     kind: StatefulSet
     name: rampos-postgres
@@ -43,3 +63,18 @@ patches:
     - op: replace
       path: /spec/rules/0/host
       value: dev-api.rampos.io
+
+# Dev-specific config
+configMapGenerator:
+- name: rampos-config
+  behavior: merge
+  literals:
+  - RUST_LOG=debug
+  - ENVIRONMENT=dev
+  - ENABLE_DEBUG_ENDPOINTS=true
+  - CORS_ALLOWED_ORIGINS=http://localhost:3000,https://dev.rampos.io
+
+# Labels for all resources
+commonLabels:
+  app.kubernetes.io/environment: dev
+  app.kubernetes.io/managed-by: kustomize

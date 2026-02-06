@@ -163,7 +163,8 @@ impl WebhookService {
         // Generate signature using the actual secret (decrypted)
         // NOTE: In production, decrypt webhook_secret here using application encryption key
         let timestamp = Utc::now().timestamp();
-        let signature = generate_webhook_signature(&webhook_secret, timestamp, &payload_bytes);
+        let signature = generate_webhook_signature(&webhook_secret, timestamp, &payload_bytes)
+            .map_err(|e| ramp_common::Error::Internal(format!("Failed to generate signature: {}", e)))?;
 
         // Send request
         let response = self

@@ -512,7 +512,7 @@ mod tests {
             expires_at: None,
         };
 
-        let json = serde_json::to_string(&intent).unwrap();
+        let json = serde_json::to_string(&intent).expect("serialization failed");
         assert!(json.contains("\"type\":\"PAY_IN\""));
         // None fields should be skipped
         assert!(!json.contains("\"reference\""));

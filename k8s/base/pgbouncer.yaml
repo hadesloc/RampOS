@@ -1,0 +1,407 @@
+# PgBouncer Connection Pooler for PostgreSQL HA
+# Provides connection pooling, load balancing, and automatic failover handling
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-config
+  namespace: rampos
+data:
+  # Main PgBouncer configuration
+  pgbouncer.ini: |
+    [databases]
+    # Primary database for read-write operations
+    rampos = host=rampos-postgres-primary.rampos.svc.cluster.local port=5432 dbname=rampos
+    # Read replica pool for read-only queries (load balanced)
+    rampos_readonly = host=rampos-postgres-replica.rampos.svc.cluster.local port=5432 dbname=rampos
+
+    # Explicit connection to primary (for transactions requiring strong consistency)
+    rampos_primary = host=rampos-postgres-primary.rampos.svc.cluster.local port=5432 dbname=rampos
+
+    [pgbouncer]
+    # Listen on all interfaces
+    listen_addr = 0.0.0.0
+    listen_port = 5432
+
+    # Authentication
+    auth_type = scram-sha-256
+    auth_file = /etc/pgbouncer/userlist.txt
+
+    # Pool mode: transaction pooling (recommended for most apps)
+    # - session: client gets dedicated server connection
+    # - transaction: server connection returned after each transaction
+    # - statement: server connection returned after each statement
+    pool_mode = transaction
+
+    # Pool sizing
+    default_pool_size = 25
+    min_pool_size = 5
+    reserve_pool_size = 5
+    reserve_pool_timeout = 3
+
+    # Connection limits
+    max_client_conn = 500
+    max_db_connections = 100
+    max_user_connections = 100
+
+    # Connection timeouts
+    server_connect_timeout = 15
+    server_login_retry = 5
+    query_timeout = 300
+    query_wait_timeout = 120
+    client_idle_timeout = 300
+    client_login_timeout = 60
+    server_idle_timeout = 600
+
+    # When server connection is reset
+    server_reset_query = DISCARD ALL
+    server_reset_query_always = 0
+
+    # Logging
+    log_connections = 1
+    log_disconnections = 1
+    log_pooler_errors = 1
+    stats_period = 60
+
+    # Security
+    ignore_startup_parameters = extra_float_digits
+
+    # Admin console (for monitoring)
+    admin_users = pgbouncer_admin
+    stats_users = pgbouncer_stats
+
+    # TLS settings (enable in production)
+    # client_tls_sslmode = require
+    # client_tls_key_file = /etc/pgbouncer/ssl/server.key
+    # client_tls_cert_file = /etc/pgbouncer/ssl/server.crt
+    # server_tls_sslmode = require
+
+    # Socket directory
+    unix_socket_dir = /tmp
+
+  # User authentication file (populated from secrets)
+  userlist.txt.template: |
+    "rampos" "SCRAM-SHA-256$${POSTGRES_PASSWORD_HASH}"
+    "pgbouncer_admin" "SCRAM-SHA-256$${ADMIN_PASSWORD_HASH}"
+    "pgbouncer_stats" "SCRAM-SHA-256$${STATS_PASSWORD_HASH}"
+    "replicator" "SCRAM-SHA-256$${REPLICATION_PASSWORD_HASH}"
+
+---
+# PgBouncer Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  namespace: rampos
+  labels:
+    app: pgbouncer
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: pgbouncer
+  template:
+    metadata:
+      labels:
+        app: pgbouncer
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9127"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Spread across nodes for HA
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - pgbouncer
+              topologyKey: kubernetes.io/hostname
+
+      initContainers:
+      # Generate userlist.txt from secrets
+      - name: init-userlist
+        image: alpine:3.19
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        command:
+        - sh
+        - -c
+        - |
+          # Generate userlist.txt with plain passwords (PgBouncer handles hashing)
+          cat > /etc/pgbouncer/userlist.txt << EOF
+          "rampos" "${DATABASE_PASSWORD}"
+          "pgbouncer_admin" "${PGBOUNCER_ADMIN_PASSWORD}"
+          "pgbouncer_stats" "${PGBOUNCER_STATS_PASSWORD}"
+          EOF
+          chmod 600 /etc/pgbouncer/userlist.txt
+        env:
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rampos-secret
+              key: DATABASE_PASSWORD
+        - name: PGBOUNCER_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pgbouncer-secret
+              key: ADMIN_PASSWORD
+        - name: PGBOUNCER_STATS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pgbouncer-secret
+              key: STATS_PASSWORD
+        volumeMounts:
+        - name: pgbouncer-auth
+          mountPath: /etc/pgbouncer
+
+      containers:
+      - name: pgbouncer
+        image: bitnami/pgbouncer:1.22.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: PGBOUNCER_DATABASE
+          value: rampos
+        - name: POSTGRESQL_HOST
+          value: rampos-postgres-primary.rampos.svc.cluster.local
+        - name: POSTGRESQL_PORT
+          value: "5432"
+        - name: PGBOUNCER_PORT
+          value: "5432"
+        - name: PGBOUNCER_AUTH_TYPE
+          value: scram-sha-256
+        - name: PGBOUNCER_POOL_MODE
+          value: transaction
+        - name: PGBOUNCER_MAX_CLIENT_CONN
+          value: "500"
+        - name: PGBOUNCER_DEFAULT_POOL_SIZE
+          value: "25"
+
+        # Override with custom config
+        args:
+        - /opt/bitnami/pgbouncer/conf/pgbouncer.ini
+
+        livenessProbe:
+          tcpSocket:
+            port: 5432
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          tcpSocket:
+            port: 5432
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+        volumeMounts:
+        - name: pgbouncer-config
+          mountPath: /opt/bitnami/pgbouncer/conf/pgbouncer.ini
+          subPath: pgbouncer.ini
+        - name: pgbouncer-auth
+          mountPath: /etc/pgbouncer
+        - name: tmp
+          mountPath: /tmp
+
+      # PgBouncer Exporter for metrics
+      - name: pgbouncer-exporter
+        image: prometheuscommunity/pgbouncer-exporter:v0.7.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
+        ports:
+        - containerPort: 9127
+          name: metrics
+        env:
+        - name: PGBOUNCER_EXPORTER_HOST
+          value: "127.0.0.1"
+        - name: PGBOUNCER_EXPORTER_PORT
+          value: "5432"
+        - name: PGBOUNCER_EXPORTER_USER
+          value: "pgbouncer_stats"
+        - name: PGBOUNCER_EXPORTER_PASS
+          valueFrom:
+            secretKeyRef:
+              name: pgbouncer-secret
+              key: STATS_PASSWORD
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "32Mi"
+            cpu: "50m"
+
+      volumes:
+      - name: pgbouncer-config
+        configMap:
+          name: pgbouncer-config
+      - name: pgbouncer-auth
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+
+---
+# Service for PgBouncer (main entry point for applications)
+apiVersion: v1
+kind: Service
+metadata:
+  name: rampos-postgres
+  namespace: rampos
+  labels:
+    app: pgbouncer
+  annotations:
+    description: "Main PostgreSQL connection endpoint via PgBouncer"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    name: postgres
+  selector:
+    app: pgbouncer
+
+---
+# Separate service for direct replica access (read-only queries)
+apiVersion: v1
+kind: Service
+metadata:
+  name: rampos-postgres-readonly
+  namespace: rampos
+  labels:
+    app: pgbouncer
+  annotations:
+    description: "Read-only PostgreSQL endpoint for analytics/reporting"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    name: postgres
+  selector:
+    app: pgbouncer
+
+---
+# PgBouncer Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pgbouncer-secret
+  namespace: rampos
+  annotations:
+    description: "PgBouncer admin credentials - replace with real values"
+type: Opaque
+stringData:
+  # Generate with: openssl rand -base64 24
+  ADMIN_PASSWORD: "${PGBOUNCER_ADMIN_PASSWORD}"
+  STATS_PASSWORD: "${PGBOUNCER_STATS_PASSWORD}"
+
+---
+# PodDisruptionBudget for PgBouncer
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pgbouncer-pdb
+  namespace: rampos
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: pgbouncer
+
+---
+# HorizontalPodAutoscaler for PgBouncer
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pgbouncer-hpa
+  namespace: rampos
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pgbouncer
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+
+---
+# ServiceMonitor for Prometheus (PgBouncer metrics)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pgbouncer
+  namespace: rampos
+  labels:
+    app: pgbouncer
+spec:
+  selector:
+    matchLabels:
+      app: pgbouncer
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics

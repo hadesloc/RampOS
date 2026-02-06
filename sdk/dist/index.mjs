@@ -8,48 +8,90 @@ import axios from "axios";
 // src/types/intent.ts
 import { z } from "zod";
 var IntentType = /* @__PURE__ */ ((IntentType2) => {
-  IntentType2["PAY_IN"] = "PAY_IN";
-  IntentType2["PAY_OUT"] = "PAY_OUT";
+  IntentType2["PAYIN"] = "PAYIN";
+  IntentType2["PAYOUT"] = "PAYOUT";
   IntentType2["TRADE"] = "TRADE";
   return IntentType2;
 })(IntentType || {});
-var IntentStatus = /* @__PURE__ */ ((IntentStatus2) => {
-  IntentStatus2["CREATED"] = "CREATED";
-  IntentStatus2["PENDING"] = "PENDING";
-  IntentStatus2["COMPLETED"] = "COMPLETED";
-  IntentStatus2["FAILED"] = "FAILED";
-  IntentStatus2["CANCELLED"] = "CANCELLED";
-  return IntentStatus2;
-})(IntentStatus || {});
+var StateHistoryEntrySchema = z.object({
+  state: z.string(),
+  timestamp: z.string(),
+  reason: z.string().optional()
+});
 var IntentSchema = z.object({
   id: z.string(),
-  tenantId: z.string(),
-  type: z.nativeEnum(IntentType),
-  status: z.nativeEnum(IntentStatus),
+  userId: z.string().optional(),
+  intentType: z.string(),
+  state: z.string(),
   amount: z.string(),
   currency: z.string(),
-  bankAccount: z.string().optional(),
-  bankRef: z.string().optional(),
-  metadata: z.record(z.any()).optional(),
+  actualAmount: z.string().optional(),
+  referenceCode: z.string().optional(),
+  bankTxId: z.string().optional(),
+  chainId: z.string().optional(),
+  txHash: z.string().optional(),
+  stateHistory: z.array(StateHistoryEntrySchema).optional(),
   createdAt: z.string(),
-  updatedAt: z.string()
-});
-var CreatePayInSchema = z.object({
-  amount: z.string(),
-  currency: z.string(),
+  updatedAt: z.string(),
+  expiresAt: z.string().optional(),
+  completedAt: z.string().optional(),
   metadata: z.record(z.any()).optional()
 });
-var CreatePayOutSchema = z.object({
-  amount: z.string(),
-  currency: z.string(),
-  bankAccount: z.string(),
+var VirtualAccountSchema = z.object({
+  bank: z.string(),
+  accountNumber: z.string(),
+  accountName: z.string()
+});
+var BankAccountSchema = z.object({
+  bankCode: z.string(),
+  accountNumber: z.string(),
+  accountName: z.string()
+});
+var CreatePayinRequestSchema = z.object({
+  tenantId: z.string(),
+  userId: z.string(),
+  amountVnd: z.number(),
+  railsProvider: z.string(),
   metadata: z.record(z.any()).optional()
 });
+var CreatePayinResponseSchema = z.object({
+  intentId: z.string(),
+  referenceCode: z.string(),
+  virtualAccount: VirtualAccountSchema.optional(),
+  expiresAt: z.string(),
+  status: z.string()
+});
+var ConfirmPayinRequestSchema = z.object({
+  tenantId: z.string(),
+  referenceCode: z.string(),
+  status: z.string(),
+  bankTxId: z.string(),
+  amountVnd: z.number(),
+  settledAt: z.string(),
+  rawPayloadHash: z.string()
+});
+var ConfirmPayinResponseSchema = z.object({
+  intentId: z.string(),
+  status: z.string()
+});
+var CreatePayoutRequestSchema = z.object({
+  tenantId: z.string(),
+  userId: z.string(),
+  amountVnd: z.number(),
+  railsProvider: z.string(),
+  bankAccount: BankAccountSchema,
+  metadata: z.record(z.any()).optional()
+});
+var CreatePayoutResponseSchema = z.object({
+  intentId: z.string(),
+  status: z.string()
+});
+var CreatePayInSchema = CreatePayinRequestSchema;
+var CreatePayOutSchema = CreatePayoutRequestSchema;
 var IntentFilterSchema = z.object({
-  type: z.nativeEnum(IntentType).optional(),
-  status: z.nativeEnum(IntentStatus).optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  userId: z.string().optional(),
+  intentType: z.string().optional(),
+  state: z.string().optional(),
   limit: z.number().optional(),
   offset: z.number().optional()
 });
@@ -65,18 +107,17 @@ var IntentService = class {
    * @returns Created Intent
    */
   async createPayIn(data) {
-    const response = await this.httpClient.post("/intents/pay-in", data);
-    return IntentSchema.parse(response.data);
+    const response = await this.httpClient.post("/intents/payin", data);
+    return CreatePayinResponseSchema.parse(response.data);
   }
   /**
    * Confirm a Pay-In intent.
-   * @param id Intent ID
-   * @param bankRef Bank Reference Code
-   * @returns Updated Intent
+   * @param data Confirm Pay-In data
+   * @returns Confirmation result
    */
-  async confirmPayIn(id, bankRef) {
-    const response = await this.httpClient.post(`/intents/${id}/confirm`, { bankRef });
-    return IntentSchema.parse(response.data);
+  async confirmPayIn(data) {
+    const response = await this.httpClient.post("/intents/payin/confirm", data);
+    return ConfirmPayinResponseSchema.parse(response.data);
   }
   /**
    * Create a new Pay-Out intent.
@@ -84,8 +125,8 @@ var IntentService = class {
    * @returns Created Intent
    */
   async createPayOut(data) {
-    const response = await this.httpClient.post("/intents/pay-out", data);
-    return IntentSchema.parse(response.data);
+    const response = await this.httpClient.post("/intents/payout", data);
+    return CreatePayoutResponseSchema.parse(response.data);
   }
   /**
    * Get an intent by ID.
@@ -115,11 +156,15 @@ var IntentService = class {
 
 // src/types/user.ts
 import { z as z2 } from "zod";
-var UserBalanceSchema = z2.object({
+var BalanceSchema = z2.object({
+  accountType: z2.string(),
   currency: z2.string(),
-  amount: z2.string(),
-  locked: z2.string()
+  balance: z2.string()
 });
+var UserBalancesResponseSchema = z2.object({
+  balances: z2.array(BalanceSchema)
+});
+var UserBalanceSchema = BalanceSchema;
 var KycStatus = /* @__PURE__ */ ((KycStatus2) => {
   KycStatus2["NONE"] = "NONE";
   KycStatus2["PENDING"] = "PENDING";
@@ -140,16 +185,12 @@ var UserService = class {
   }
   /**
    * Get user balances.
-   * @param tenantId Tenant ID
    * @param userId User ID
    * @returns List of User Balances
    */
-  async getBalances(tenantId, userId) {
-    const response = await this.httpClient.get(`/tenants/${tenantId}/users/${userId}/balances`);
-    if (Array.isArray(response.data)) {
-      return response.data.map((item) => UserBalanceSchema.parse(item));
-    }
-    return [];
+  async getBalances(userId) {
+    const response = await this.httpClient.get(`/balance/${userId}`);
+    return UserBalancesResponseSchema.parse(response.data).balances;
   }
   /**
    * Get user KYC status.
@@ -215,26 +256,82 @@ var LedgerService = class {
 
 // src/types/aa.ts
 import { z as z4 } from "zod";
-var SmartAccountSchema = z4.object({
+var CreateAccountParamsSchema = z4.object({
+  tenantId: z4.string(),
+  userId: z4.string(),
+  ownerAddress: z4.string()
+});
+var CreateAccountResponseSchema = z4.object({
   address: z4.string(),
   owner: z4.string(),
-  factoryAddress: z4.string(),
-  deployed: z4.boolean(),
-  balance: z4.string().optional()
+  accountType: z4.string(),
+  isDeployed: z4.boolean(),
+  chainId: z4.number(),
+  entryPoint: z4.string()
 });
-var CreateAccountParamsSchema = z4.object({
+var GetAccountResponseSchema = z4.object({
+  address: z4.string(),
   owner: z4.string(),
-  salt: z4.string().optional()
+  isDeployed: z4.boolean(),
+  chainId: z4.number(),
+  entryPoint: z4.string(),
+  accountType: z4.string()
+});
+var SmartAccountSchema = GetAccountResponseSchema;
+var UserOperationSchema = z4.object({
+  sender: z4.string(),
+  nonce: z4.string(),
+  initCode: z4.string().optional(),
+  callData: z4.string(),
+  callGasLimit: z4.string(),
+  verificationGasLimit: z4.string(),
+  preVerificationGas: z4.string(),
+  maxFeePerGas: z4.string(),
+  maxPriorityFeePerGas: z4.string(),
+  paymasterAndData: z4.string().optional(),
+  signature: z4.string().optional()
+});
+var SendUserOperationRequestSchema = z4.object({
+  tenantId: z4.string(),
+  userOperation: UserOperationSchema,
+  sponsor: z4.boolean().optional()
+});
+var SendUserOperationResponseSchema = z4.object({
+  userOpHash: z4.string(),
+  sender: z4.string(),
+  nonce: z4.string(),
+  status: z4.string(),
+  sponsored: z4.boolean()
+});
+var EstimateGasRequestSchema = z4.object({
+  tenantId: z4.string(),
+  userOperation: UserOperationSchema
+});
+var GasEstimateSchema = z4.object({
+  preVerificationGas: z4.string(),
+  verificationGasLimit: z4.string(),
+  callGasLimit: z4.string(),
+  maxFeePerGas: z4.string(),
+  maxPriorityFeePerGas: z4.string()
+});
+var UserOpReceiptSchema = z4.object({
+  userOpHash: z4.string(),
+  sender: z4.string(),
+  nonce: z4.string(),
+  success: z4.boolean(),
+  actualGasCost: z4.string(),
+  actualGasUsed: z4.string(),
+  paymaster: z4.string().optional(),
+  transactionHash: z4.string(),
+  blockHash: z4.string(),
+  blockNumber: z4.string()
 });
 var SessionKeySchema = z4.object({
   id: z4.string().optional(),
-  // ID might be assigned by backend
   publicKey: z4.string(),
   permissions: z4.array(z4.string()),
   validUntil: z4.number(),
-  // timestamp
   validAfter: z4.number().optional()
-  // timestamp
 });
 var AddSessionKeyParamsSchema = z4.object({
   accountAddress: z4.string(),
@@ -243,38 +340,6 @@ var AddSessionKeyParamsSchema = z4.object({
 var RemoveSessionKeyParamsSchema = z4.object({
   accountAddress: z4.string(),
   keyId: z4.string()
-});
-var UserOperationSchema = z4.object({
-  sender: z4.string(),
-  nonce: z4.string(),
-  initCode: z4.string(),
-  callData: z4.string(),
-  callGasLimit: z4.string(),
-  verificationGasLimit: z4.string(),
-  preVerificationGas: z4.string(),
-  maxFeePerGas: z4.string(),
-  maxPriorityFeePerGas: z4.string(),
-  paymasterAndData: z4.string(),
-  signature: z4.string()
-});
-var UserOperationParamsSchema = z4.object({
-  target: z4.string(),
-  value: z4.string().default("0"),
-  data: z4.string().default("0x"),
-  sponsored: z4.boolean().optional(),
-  accountAddress: z4.string().optional()
-  // If not inferred from client context
-});
-var GasEstimateSchema = z4.object({
-  preVerificationGas: z4.string(),
-  verificationGas: z4.string(),
-  callGasLimit: z4.string(),
-  total: z4.string().optional()
-});
-var UserOpReceiptSchema = z4.object({
-  userOpHash: z4.string(),
-  txHash: z4.string().optional(),
-  success: z4.boolean().optional()
 });
 
 // src/services/aa.service.ts
@@ -289,7 +354,7 @@ var AAService = class {
    */
   async createSmartAccount(params) {
     const response = await this.httpClient.post(`/aa/accounts`, params);
-    return SmartAccountSchema.parse(response.data);
+    return CreateAccountResponseSchema.parse(response.data);
   }
   /**
    * Get smart account info for a user.
@@ -306,7 +371,8 @@ var AAService = class {
    * @returns Void (throws on error)
    */
   async addSessionKey(params) {
-    await this.httpClient.post(`/aa/accounts/${params.accountAddress}/sessions`, params.sessionKey);
+    void params;
+    throw new Error("Session key management is not exposed via the API");
   }
   /**
    * Remove a session key from an account.
@@ -314,7 +380,8 @@ var AAService = class {
    * @returns Void (throws on error)
    */
   async removeSessionKey(params) {
-    await this.httpClient.delete(`/aa/accounts/${params.accountAddress}/sessions/${params.keyId}`);
+    void params;
+    throw new Error("Session key management is not exposed via the API");
   }
   /**
    * Send a user operation.
@@ -322,8 +389,8 @@ var AAService = class {
    * @returns User Operation Receipt
    */
   async sendUserOperation(params) {
-    const response = await this.httpClient.post(`/aa/bundler/user-op`, params);
-    return UserOpReceiptSchema.parse(response.data);
+    const response = await this.httpClient.post(`/aa/user-operations`, params);
+    return SendUserOperationResponseSchema.parse(response.data);
   }
   /**
    * Estimate gas for a user operation.
@@ -331,8 +398,22 @@ var AAService = class {
    * @returns Gas Estimate
    */
   async estimateGas(params) {
-    const response = await this.httpClient.post(`/aa/bundler/estimate-gas`, params);
+    const response = await this.httpClient.post(`/aa/user-operations/estimate`, params);
     return GasEstimateSchema.parse(response.data);
+  }
+  /**
+   * Get a user operation by hash.
+   */
+  async getUserOperation(hash) {
+    const response = await this.httpClient.get(`/aa/user-operations/${hash}`);
+    return UserOperationSchema.parse(response.data);
+  }
+  /**
+   * Get a user operation receipt by hash.
+   */
+  async getUserOperationReceipt(hash) {
+    const response = await this.httpClient.get(`/aa/user-operations/${hash}/receipt`);
+    return UserOpReceiptSchema.parse(response.data);
   }
 };
 
@@ -364,23 +445,102 @@ var WebhookVerifier = class {
   }
 };
 
+// src/utils/crypto.ts
+import { createHmac as createHmac2 } from "crypto";
+function signRequest(_apiKey, apiSecret, method, path, body, timestamp) {
+  const message = `${method}
+${path}
+${timestamp}
+${body}`;
+  return createHmac2("sha256", apiSecret).update(message).digest("hex");
+}
+
+// src/utils/retry.ts
+async function withRetry(fn, maxRetries = 3, baseDelay = 1e3) {
+  let lastError;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (i < maxRetries - 1) {
+        await sleep(baseDelay * Math.pow(2, i));
+      }
+    }
+  }
+  throw lastError;
+}
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // src/client.ts
 var RampOSClient = class {
-  constructor(options) {
+  constructor(config) {
     __publicField(this, "httpClient");
     __publicField(this, "intents");
     __publicField(this, "users");
     __publicField(this, "ledger");
     __publicField(this, "aa");
     __publicField(this, "webhooks");
-    const baseURL = options.baseURL || "https://api.rampos.io/v1";
+    const baseURL = config.baseURL || "https://api.rampos.io/v1";
     this.httpClient = axios.create({
       baseURL,
-      timeout: options.timeout || 1e4,
+      timeout: config.timeout || 1e4,
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${options.apiKey}`
+        "Authorization": `Bearer ${config.apiKey}`
       }
+    });
+    this.httpClient.interceptors.request.use((reqConfig) => {
+      const timestamp = Math.floor(Date.now() / 1e3);
+      const method = (reqConfig.method || "GET").toUpperCase();
+      const base = reqConfig.baseURL ?? baseURL;
+      const url = new URL(reqConfig.url ?? "", base);
+      const path = url.pathname;
+      let body = "";
+      if (reqConfig.data) {
+        if (typeof reqConfig.data === "string") {
+          body = reqConfig.data;
+        } else {
+          body = JSON.stringify(reqConfig.data);
+          reqConfig.data = body;
+        }
+      }
+      const signature = signRequest(
+        config.apiKey,
+        config.apiSecret,
+        method,
+        path,
+        body,
+        timestamp
+      );
+      if (reqConfig.headers) {
+        reqConfig.headers["X-Timestamp"] = timestamp.toString();
+        reqConfig.headers["X-Signature"] = signature;
+        if (config.tenantId) {
+          reqConfig.headers["X-Tenant-ID"] = config.tenantId;
+        }
+      }
+      return reqConfig;
+    });
+    const retryConfig = config.retry || { maxRetries: 3, baseDelay: 1e3 };
+    const methods = ["get", "post", "put", "delete", "patch", "head", "options"];
+    methods.forEach((method) => {
+      const original = this.httpClient[method];
+      const wrappedMethod = (url, dataOrConfig, config2) => {
+        return withRetry(
+          () => {
+            if (method === "get" || method === "delete" || method === "head" || method === "options") {
+              return original(url, dataOrConfig);
+            }
+            return original(url, dataOrConfig, config2);
+          },
+          retryConfig.maxRetries,
+          retryConfig.baseDelay
+        );
+      };
+      this.httpClient[method] = wrappedMethod;
     });
     this.intents = new IntentService(this.httpClient);
     this.users = new UserService(this.httpClient);
@@ -392,14 +552,24 @@ var RampOSClient = class {
 export {
   AAService,
   AddSessionKeyParamsSchema,
+  BalanceSchema,
+  BankAccountSchema,
+  ConfirmPayinRequestSchema,
+  ConfirmPayinResponseSchema,
   CreateAccountParamsSchema,
+  CreateAccountResponseSchema,
   CreatePayInSchema,
   CreatePayOutSchema,
+  CreatePayinRequestSchema,
+  CreatePayinResponseSchema,
+  CreatePayoutRequestSchema,
+  CreatePayoutResponseSchema,
+  EstimateGasRequestSchema,
   GasEstimateSchema,
+  GetAccountResponseSchema,
   IntentFilterSchema,
   IntentSchema,
   IntentService,
-  IntentStatus,
   IntentType,
   KycStatus,
   LedgerEntrySchema,
@@ -408,13 +578,18 @@ export {
   LedgerService,
   RampOSClient,
   RemoveSessionKeyParamsSchema,
+  SendUserOperationRequestSchema,
+  SendUserOperationResponseSchema,
   SessionKeySchema,
   SmartAccountSchema,
+  StateHistoryEntrySchema,
   UserBalanceSchema,
+  UserBalancesResponseSchema,
   UserKycStatusSchema,
   UserOpReceiptSchema,
-  UserOperationParamsSchema,
   UserOperationSchema,
   UserService,
-  WebhookVerifier
+  VirtualAccountSchema,
+  WebhookVerifier,
+  withRetry
 };

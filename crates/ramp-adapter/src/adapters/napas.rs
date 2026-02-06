@@ -114,9 +114,9 @@ pub struct NapasAdapter {
 impl NapasAdapter {
     /// Create a new Napas adapter with minimal config (backwards compatible)
     ///
-    /// # Panics
-    /// Panics if HTTP client creation fails (should never happen with default config)
-    pub fn new(provider_code: impl Into<String>, webhook_secret: impl Into<String>) -> Self {
+    /// # Errors
+    /// Returns an error if HTTP client creation fails
+    pub fn new(provider_code: impl Into<String>, webhook_secret: impl Into<String>) -> Result<Self> {
         let config = NapasConfig {
             base: AdapterConfig {
                 provider_code: provider_code.into(),
@@ -135,7 +135,7 @@ impl NapasAdapter {
             napas_public_key_pem: None,
         };
 
-        Self::with_config(config).expect("Failed to create Napas adapter with default config")
+        Self::with_config(config)
     }
 
     /// Create a new Napas adapter with full configuration
@@ -168,6 +168,7 @@ impl NapasAdapter {
                 timestamp,
                 _payload.as_bytes(),
             )
+            .unwrap_or_else(|_| "signature_error".to_string())
         }
     }
 
@@ -555,7 +556,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_payin_instruction() {
-        let adapter = NapasAdapter::new("napas", "test_secret");
+        let adapter = NapasAdapter::new("napas", "test_secret").unwrap();
 
         let request = CreatePayinInstructionRequest {
             reference_code: "TEST123".to_string(),
@@ -575,7 +576,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_initiate_payout_simulation() {
-        let adapter = NapasAdapter::new("napas", "test_secret");
+        let adapter = NapasAdapter::new("napas", "test_secret").unwrap();
 
         let request = InitiatePayoutRequest {
             reference_code: "PAYOUT123".to_string(),
@@ -598,7 +599,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_check_payout_status_simulation() {
-        let adapter = NapasAdapter::new("napas", "test_secret");
+        let adapter = NapasAdapter::new("napas", "test_secret").unwrap();
 
         let status = adapter.check_payout_status("REF123").await.unwrap();
         assert_eq!(status, PayoutStatus::Completed);
@@ -606,7 +607,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_payout_webhook() {
-        let adapter = NapasAdapter::new("napas", "test_secret");
+        let adapter = NapasAdapter::new("napas", "test_secret").unwrap();
 
         let payload = serde_json::json!({
             "eventType": "TRANSFER_COMPLETED",

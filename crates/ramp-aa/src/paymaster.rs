@@ -60,20 +60,20 @@ pub struct PaymasterService {
 }
 
 impl PaymasterService {
-    pub fn new(paymaster_address: Address, signer_key: Vec<u8>) -> Self {
+    pub fn new(paymaster_address: Address, signer_key: Vec<u8>) -> Result<Self> {
         // Convert raw bytes to SigningKey
         // The key must be exactly 32 bytes for secp256k1
         let key_bytes: [u8; 32] = signer_key
             .try_into()
-            .expect("Signer key must be exactly 32 bytes for secp256k1");
+            .map_err(|_| ramp_common::Error::Validation("Signer key must be exactly 32 bytes for secp256k1".into()))?;
 
         let signing_key =
-            SigningKey::from_bytes(&key_bytes.into()).expect("Invalid secp256k1 private key");
+            SigningKey::from_bytes(&key_bytes.into()).map_err(|e| ramp_common::Error::Validation(format!("Invalid secp256k1 private key: {}", e)))?;
 
-        Self {
+        Ok(Self {
             paymaster_address,
             signing_key,
-        }
+        })
     }
 
     /// Get the verifying (public) key for signature verification
@@ -106,7 +106,7 @@ impl PaymasterService {
         user_op_hash: &[u8],
         valid_until: u64,
         valid_after: u64,
-    ) -> Vec<u8> {
+    ) -> Result<Vec<u8>> {
         use ethers::utils::keccak256;
 
         // Construct the message to sign
@@ -129,7 +129,7 @@ impl PaymasterService {
         let (signature, recovery_id): (Signature, RecoveryId) = self
             .signing_key
             .sign_prehash_recoverable(&eth_signed_hash)
-            .expect("signing should not fail with valid key");
+            .map_err(|e| ramp_common::Error::Internal(format!("Signing failed: {}", e)))?;
 
         // Convert to Ethereum signature format (r || s || v)
         let r = signature.r().to_bytes();
@@ -144,7 +144,7 @@ impl PaymasterService {
         sig_bytes.extend_from_slice(&s);
         sig_bytes.push(v);
 
-        sig_bytes
+        Ok(sig_bytes)
     }
 
     /// Verify a signature and recover the signer's Ethereum address
@@ -282,7 +282,7 @@ impl Paymaster for PaymasterService {
         paymaster_and_data.extend_from_slice(&valid_after.to_be_bytes()[2..8]); // 6 bytes
 
         // Sign (in production, would use proper signature)
-        let signature = self.sign_paymaster_data(&user_op.call_data, valid_until, valid_after);
+        let signature = self.sign_paymaster_data(&user_op.call_data, valid_until, valid_after)?;
         paymaster_and_data.extend_from_slice(&signature);
 
         info!(
@@ -422,7 +422,7 @@ mod tests {
     fn test_sign_and_recover_address() {
         // Create paymaster service with test key
         let paymaster_address = Address::from([0x42u8; 20]);
-        let service = PaymasterService::new(paymaster_address, test_signing_key());
+        let service = PaymasterService::new(paymaster_address, test_signing_key()).expect("Failed to create PaymasterService");
 
         // Get the expected signer address
         let expected_address = service.signer_address();
@@ -432,7 +432,7 @@ mod tests {
         let valid_until = 1700000000u64;
         let valid_after = 1699999000u64;
 
-        let signature = service.sign_paymaster_data(&user_op_hash, valid_until, valid_after);
+        let signature = service.sign_paymaster_data(&user_op_hash, valid_until, valid_after).expect("Signing failed");
 
         // Verify signature length is 65 bytes (r=32 + s=32 + v=1)
         assert_eq!(signature.len(), 65);
@@ -455,7 +455,7 @@ mod tests {
         let eth_signed_hash = keccak256(&prefixed);
 
         // Recover signer address from signature
-        let sig_array: [u8; 65] = signature.try_into().expect("signature should be 65 bytes");
+        let sig_array: [u8; 65] = signature.try_into().unwrap_or([0u8; 65]);
         let recovered_address = PaymasterService::recover_signer(&eth_signed_hash, &sig_array)
             .expect("recovery should succeed");
 
@@ -470,7 +470,7 @@ mod tests {
     fn test_recovery_id_is_correct() {
         // Create multiple signatures and verify all have valid v values
         let paymaster_address = Address::from([0x42u8; 20]);
-        let service = PaymasterService::new(paymaster_address, test_signing_key());
+        let service = PaymasterService::new(paymaster_address, test_signing_key()).expect("Failed to create PaymasterService");
 
         let expected_address = service.signer_address();
 
@@ -480,7 +480,7 @@ mod tests {
             let valid_until = 1700000000u64 + i as u64;
             let valid_after = 1699999000u64;
 
-            let signature = service.sign_paymaster_data(&user_op_hash, valid_until, valid_after);
+            let signature = service.sign_paymaster_data(&user_op_hash, valid_until, valid_after).expect("Signing failed");
             let v = signature[64];
 
             // v must be 27 or 28
@@ -504,7 +504,7 @@ mod tests {
             let eth_signed_hash = keccak256(&prefixed);
 
             // Recover and verify
-            let sig_array: [u8; 65] = signature.try_into().expect("signature should be 65 bytes");
+            let sig_array: [u8; 65] = signature.try_into().unwrap_or([0u8; 65]);
             let recovered_address = PaymasterService::recover_signer(&eth_signed_hash, &sig_array)
                 .expect(&format!("Iteration {}: recovery should succeed", i));
 
@@ -520,7 +520,7 @@ mod tests {
     fn test_signer_address_derivation() {
         // Verify that signer_address correctly derives the Ethereum address
         let paymaster_address = Address::from([0x42u8; 20]);
-        let service = PaymasterService::new(paymaster_address, test_signing_key());
+        let service = PaymasterService::new(paymaster_address, test_signing_key()).expect("Failed to create PaymasterService");
 
         let address = service.signer_address();
 
@@ -528,7 +528,7 @@ mod tests {
         assert_ne!(address, Address::zero());
 
         // The address should be deterministic
-        let service2 = PaymasterService::new(paymaster_address, test_signing_key());
+        let service2 = PaymasterService::new(paymaster_address, test_signing_key()).expect("Failed to create PaymasterService");
         assert_eq!(service.signer_address(), service2.signer_address());
     }
 
@@ -539,8 +539,8 @@ mod tests {
         let key1 = vec![1u8; 32];
         let key2 = vec![2u8; 32];
 
-        let service1 = PaymasterService::new(paymaster_address, key1);
-        let service2 = PaymasterService::new(paymaster_address, key2);
+        let service1 = PaymasterService::new(paymaster_address, key1).expect("Failed to create PaymasterService");
+        let service2 = PaymasterService::new(paymaster_address, key2).expect("Failed to create PaymasterService");
 
         assert_ne!(
             service1.signer_address(),
@@ -553,13 +553,13 @@ mod tests {
     fn test_signature_format_compatibility() {
         // Test that the signature format is compatible with Ethereum ecrecover
         let paymaster_address = Address::from([0x42u8; 20]);
-        let service = PaymasterService::new(paymaster_address, test_signing_key());
+        let service = PaymasterService::new(paymaster_address, test_signing_key()).expect("Failed to create PaymasterService");
 
         let user_op_hash = [0xde; 32];
         let valid_until = 1700000000u64;
         let valid_after = 1699999000u64;
 
-        let signature = service.sign_paymaster_data(&user_op_hash, valid_until, valid_after);
+        let signature = service.sign_paymaster_data(&user_op_hash, valid_until, valid_after).expect("Signing failed");
 
         // Verify r is 32 bytes (first 32 bytes)
         let r = &signature[0..32];
@@ -606,7 +606,7 @@ mod tests {
         use crate::user_operation::UserOperation;
 
         let paymaster_address = Address::from([0x42u8; 20]);
-        let service = PaymasterService::new(paymaster_address, test_signing_key());
+        let service = PaymasterService::new(paymaster_address, test_signing_key()).expect("Failed to create PaymasterService");
 
         let user_op = UserOperation {
             sender: Address::from([0x11u8; 20]),

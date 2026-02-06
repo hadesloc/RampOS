@@ -34,14 +34,24 @@ var index_exports = {};
 __export(index_exports, {
   AAService: () => AAService,
   AddSessionKeyParamsSchema: () => AddSessionKeyParamsSchema,
+  BalanceSchema: () => BalanceSchema,
+  BankAccountSchema: () => BankAccountSchema,
+  ConfirmPayinRequestSchema: () => ConfirmPayinRequestSchema,
+  ConfirmPayinResponseSchema: () => ConfirmPayinResponseSchema,
   CreateAccountParamsSchema: () => CreateAccountParamsSchema,
+  CreateAccountResponseSchema: () => CreateAccountResponseSchema,
   CreatePayInSchema: () => CreatePayInSchema,
   CreatePayOutSchema: () => CreatePayOutSchema,
+  CreatePayinRequestSchema: () => CreatePayinRequestSchema,
+  CreatePayinResponseSchema: () => CreatePayinResponseSchema,
+  CreatePayoutRequestSchema: () => CreatePayoutRequestSchema,
+  CreatePayoutResponseSchema: () => CreatePayoutResponseSchema,
+  EstimateGasRequestSchema: () => EstimateGasRequestSchema,
   GasEstimateSchema: () => GasEstimateSchema,
+  GetAccountResponseSchema: () => GetAccountResponseSchema,
   IntentFilterSchema: () => IntentFilterSchema,
   IntentSchema: () => IntentSchema,
   IntentService: () => IntentService,
-  IntentStatus: () => IntentStatus,
   IntentType: () => IntentType,
   KycStatus: () => KycStatus,
   LedgerEntrySchema: () => LedgerEntrySchema,
@@ -50,15 +60,20 @@ __export(index_exports, {
   LedgerService: () => LedgerService,
   RampOSClient: () => RampOSClient,
   RemoveSessionKeyParamsSchema: () => RemoveSessionKeyParamsSchema,
+  SendUserOperationRequestSchema: () => SendUserOperationRequestSchema,
+  SendUserOperationResponseSchema: () => SendUserOperationResponseSchema,
   SessionKeySchema: () => SessionKeySchema,
   SmartAccountSchema: () => SmartAccountSchema,
+  StateHistoryEntrySchema: () => StateHistoryEntrySchema,
   UserBalanceSchema: () => UserBalanceSchema,
+  UserBalancesResponseSchema: () => UserBalancesResponseSchema,
   UserKycStatusSchema: () => UserKycStatusSchema,
   UserOpReceiptSchema: () => UserOpReceiptSchema,
-  UserOperationParamsSchema: () => UserOperationParamsSchema,
   UserOperationSchema: () => UserOperationSchema,
   UserService: () => UserService,
-  WebhookVerifier: () => WebhookVerifier
+  VirtualAccountSchema: () => VirtualAccountSchema,
+  WebhookVerifier: () => WebhookVerifier,
+  withRetry: () => withRetry
 });
 module.exports = __toCommonJS(index_exports);
 
@@ -68,48 +83,90 @@ var import_axios = __toESM(require("axios"));
 // src/types/intent.ts
 var import_zod = require("zod");
 var IntentType = /* @__PURE__ */ ((IntentType2) => {
-  IntentType2["PAY_IN"] = "PAY_IN";
-  IntentType2["PAY_OUT"] = "PAY_OUT";
+  IntentType2["PAYIN"] = "PAYIN";
+  IntentType2["PAYOUT"] = "PAYOUT";
   IntentType2["TRADE"] = "TRADE";
   return IntentType2;
 })(IntentType || {});
-var IntentStatus = /* @__PURE__ */ ((IntentStatus2) => {
-  IntentStatus2["CREATED"] = "CREATED";
-  IntentStatus2["PENDING"] = "PENDING";
-  IntentStatus2["COMPLETED"] = "COMPLETED";
-  IntentStatus2["FAILED"] = "FAILED";
-  IntentStatus2["CANCELLED"] = "CANCELLED";
-  return IntentStatus2;
-})(IntentStatus || {});
+var StateHistoryEntrySchema = import_zod.z.object({
+  state: import_zod.z.string(),
+  timestamp: import_zod.z.string(),
+  reason: import_zod.z.string().optional()
+});
 var IntentSchema = import_zod.z.object({
   id: import_zod.z.string(),
-  tenantId: import_zod.z.string(),
-  type: import_zod.z.nativeEnum(IntentType),
-  status: import_zod.z.nativeEnum(IntentStatus),
+  userId: import_zod.z.string().optional(),
+  intentType: import_zod.z.string(),
+  state: import_zod.z.string(),
   amount: import_zod.z.string(),
   currency: import_zod.z.string(),
-  bankAccount: import_zod.z.string().optional(),
-  bankRef: import_zod.z.string().optional(),
-  metadata: import_zod.z.record(import_zod.z.any()).optional(),
+  actualAmount: import_zod.z.string().optional(),
+  referenceCode: import_zod.z.string().optional(),
+  bankTxId: import_zod.z.string().optional(),
+  chainId: import_zod.z.string().optional(),
+  txHash: import_zod.z.string().optional(),
+  stateHistory: import_zod.z.array(StateHistoryEntrySchema).optional(),
   createdAt: import_zod.z.string(),
-  updatedAt: import_zod.z.string()
-});
-var CreatePayInSchema = import_zod.z.object({
-  amount: import_zod.z.string(),
-  currency: import_zod.z.string(),
+  updatedAt: import_zod.z.string(),
+  expiresAt: import_zod.z.string().optional(),
+  completedAt: import_zod.z.string().optional(),
   metadata: import_zod.z.record(import_zod.z.any()).optional()
 });
-var CreatePayOutSchema = import_zod.z.object({
-  amount: import_zod.z.string(),
-  currency: import_zod.z.string(),
-  bankAccount: import_zod.z.string(),
+var VirtualAccountSchema = import_zod.z.object({
+  bank: import_zod.z.string(),
+  accountNumber: import_zod.z.string(),
+  accountName: import_zod.z.string()
+});
+var BankAccountSchema = import_zod.z.object({
+  bankCode: import_zod.z.string(),
+  accountNumber: import_zod.z.string(),
+  accountName: import_zod.z.string()
+});
+var CreatePayinRequestSchema = import_zod.z.object({
+  tenantId: import_zod.z.string(),
+  userId: import_zod.z.string(),
+  amountVnd: import_zod.z.number(),
+  railsProvider: import_zod.z.string(),
   metadata: import_zod.z.record(import_zod.z.any()).optional()
 });
+var CreatePayinResponseSchema = import_zod.z.object({
+  intentId: import_zod.z.string(),
+  referenceCode: import_zod.z.string(),
+  virtualAccount: VirtualAccountSchema.optional(),
+  expiresAt: import_zod.z.string(),
+  status: import_zod.z.string()
+});
+var ConfirmPayinRequestSchema = import_zod.z.object({
+  tenantId: import_zod.z.string(),
+  referenceCode: import_zod.z.string(),
+  status: import_zod.z.string(),
+  bankTxId: import_zod.z.string(),
+  amountVnd: import_zod.z.number(),
+  settledAt: import_zod.z.string(),
+  rawPayloadHash: import_zod.z.string()
+});
+var ConfirmPayinResponseSchema = import_zod.z.object({
+  intentId: import_zod.z.string(),
+  status: import_zod.z.string()
+});
+var CreatePayoutRequestSchema = import_zod.z.object({
+  tenantId: import_zod.z.string(),
+  userId: import_zod.z.string(),
+  amountVnd: import_zod.z.number(),
+  railsProvider: import_zod.z.string(),
+  bankAccount: BankAccountSchema,
+  metadata: import_zod.z.record(import_zod.z.any()).optional()
+});
+var CreatePayoutResponseSchema = import_zod.z.object({
+  intentId: import_zod.z.string(),
+  status: import_zod.z.string()
+});
+var CreatePayInSchema = CreatePayinRequestSchema;
+var CreatePayOutSchema = CreatePayoutRequestSchema;
 var IntentFilterSchema = import_zod.z.object({
-  type: import_zod.z.nativeEnum(IntentType).optional(),
-  status: import_zod.z.nativeEnum(IntentStatus).optional(),
-  startDate: import_zod.z.string().optional(),
-  endDate: import_zod.z.string().optional(),
+  userId: import_zod.z.string().optional(),
+  intentType: import_zod.z.string().optional(),
+  state: import_zod.z.string().optional(),
   limit: import_zod.z.number().optional(),
   offset: import_zod.z.number().optional()
 });
@@ -125,18 +182,17 @@ var IntentService = class {
    * @returns Created Intent
    */
   async createPayIn(data) {
-    const response = await this.httpClient.post("/intents/pay-in", data);
-    return IntentSchema.parse(response.data);
+    const response = await this.httpClient.post("/intents/payin", data);
+    return CreatePayinResponseSchema.parse(response.data);
   }
   /**
    * Confirm a Pay-In intent.
-   * @param id Intent ID
-   * @param bankRef Bank Reference Code
-   * @returns Updated Intent
+   * @param data Confirm Pay-In data
+   * @returns Confirmation result
    */
-  async confirmPayIn(id, bankRef) {
-    const response = await this.httpClient.post(`/intents/${id}/confirm`, { bankRef });
-    return IntentSchema.parse(response.data);
+  async confirmPayIn(data) {
+    const response = await this.httpClient.post("/intents/payin/confirm", data);
+    return ConfirmPayinResponseSchema.parse(response.data);
   }
   /**
    * Create a new Pay-Out intent.
@@ -144,8 +200,8 @@ var IntentService = class {
    * @returns Created Intent
    */
   async createPayOut(data) {
-    const response = await this.httpClient.post("/intents/pay-out", data);
-    return IntentSchema.parse(response.data);
+    const response = await this.httpClient.post("/intents/payout", data);
+    return CreatePayoutResponseSchema.parse(response.data);
   }
   /**
    * Get an intent by ID.
@@ -175,11 +231,15 @@ var IntentService = class {
 
 // src/types/user.ts
 var import_zod2 = require("zod");
-var UserBalanceSchema = import_zod2.z.object({
+var BalanceSchema = import_zod2.z.object({
+  accountType: import_zod2.z.string(),
   currency: import_zod2.z.string(),
-  amount: import_zod2.z.string(),
-  locked: import_zod2.z.string()
+  balance: import_zod2.z.string()
 });
+var UserBalancesResponseSchema = import_zod2.z.object({
+  balances: import_zod2.z.array(BalanceSchema)
+});
+var UserBalanceSchema = BalanceSchema;
 var KycStatus = /* @__PURE__ */ ((KycStatus2) => {
   KycStatus2["NONE"] = "NONE";
   KycStatus2["PENDING"] = "PENDING";
@@ -200,16 +260,12 @@ var UserService = class {
   }
   /**
    * Get user balances.
-   * @param tenantId Tenant ID
    * @param userId User ID
    * @returns List of User Balances
    */
-  async getBalances(tenantId, userId) {
-    const response = await this.httpClient.get(`/tenants/${tenantId}/users/${userId}/balances`);
-    if (Array.isArray(response.data)) {
-      return response.data.map((item) => UserBalanceSchema.parse(item));
-    }
-    return [];
+  async getBalances(userId) {
+    const response = await this.httpClient.get(`/balance/${userId}`);
+    return UserBalancesResponseSchema.parse(response.data).balances;
   }
   /**
    * Get user KYC status.
@@ -275,26 +331,82 @@ var LedgerService = class {
 
 // src/types/aa.ts
 var import_zod4 = require("zod");
-var SmartAccountSchema = import_zod4.z.object({
+var CreateAccountParamsSchema = import_zod4.z.object({
+  tenantId: import_zod4.z.string(),
+  userId: import_zod4.z.string(),
+  ownerAddress: import_zod4.z.string()
+});
+var CreateAccountResponseSchema = import_zod4.z.object({
   address: import_zod4.z.string(),
   owner: import_zod4.z.string(),
-  factoryAddress: import_zod4.z.string(),
-  deployed: import_zod4.z.boolean(),
-  balance: import_zod4.z.string().optional()
+  accountType: import_zod4.z.string(),
+  isDeployed: import_zod4.z.boolean(),
+  chainId: import_zod4.z.number(),
+  entryPoint: import_zod4.z.string()
 });
-var CreateAccountParamsSchema = import_zod4.z.object({
+var GetAccountResponseSchema = import_zod4.z.object({
+  address: import_zod4.z.string(),
   owner: import_zod4.z.string(),
-  salt: import_zod4.z.string().optional()
+  isDeployed: import_zod4.z.boolean(),
+  chainId: import_zod4.z.number(),
+  entryPoint: import_zod4.z.string(),
+  accountType: import_zod4.z.string()
+});
+var SmartAccountSchema = GetAccountResponseSchema;
+var UserOperationSchema = import_zod4.z.object({
+  sender: import_zod4.z.string(),
+  nonce: import_zod4.z.string(),
+  initCode: import_zod4.z.string().optional(),
+  callData: import_zod4.z.string(),
+  callGasLimit: import_zod4.z.string(),
+  verificationGasLimit: import_zod4.z.string(),
+  preVerificationGas: import_zod4.z.string(),
+  maxFeePerGas: import_zod4.z.string(),
+  maxPriorityFeePerGas: import_zod4.z.string(),
+  paymasterAndData: import_zod4.z.string().optional(),
+  signature: import_zod4.z.string().optional()
+});
+var SendUserOperationRequestSchema = import_zod4.z.object({
+  tenantId: import_zod4.z.string(),
+  userOperation: UserOperationSchema,
+  sponsor: import_zod4.z.boolean().optional()
+});
+var SendUserOperationResponseSchema = import_zod4.z.object({
+  userOpHash: import_zod4.z.string(),
+  sender: import_zod4.z.string(),
+  nonce: import_zod4.z.string(),
+  status: import_zod4.z.string(),
+  sponsored: import_zod4.z.boolean()
+});
+var EstimateGasRequestSchema = import_zod4.z.object({
+  tenantId: import_zod4.z.string(),
+  userOperation: UserOperationSchema
+});
+var GasEstimateSchema = import_zod4.z.object({
+  preVerificationGas: import_zod4.z.string(),
+  verificationGasLimit: import_zod4.z.string(),
+  callGasLimit: import_zod4.z.string(),
+  maxFeePerGas: import_zod4.z.string(),
+  maxPriorityFeePerGas: import_zod4.z.string()
+});
+var UserOpReceiptSchema = import_zod4.z.object({
+  userOpHash: import_zod4.z.string(),
+  sender: import_zod4.z.string(),
+  nonce: import_zod4.z.string(),
+  success: import_zod4.z.boolean(),
+  actualGasCost: import_zod4.z.string(),
+  actualGasUsed: import_zod4.z.string(),
+  paymaster: import_zod4.z.string().optional(),
+  transactionHash: import_zod4.z.string(),
+  blockHash: import_zod4.z.string(),
+  blockNumber: import_zod4.z.string()
 });
 var SessionKeySchema = import_zod4.z.object({
   id: import_zod4.z.string().optional(),
-  // ID might be assigned by backend
   publicKey: import_zod4.z.string(),
   permissions: import_zod4.z.array(import_zod4.z.string()),
   validUntil: import_zod4.z.number(),
-  // timestamp
   validAfter: import_zod4.z.number().optional()
-  // timestamp
 });
 var AddSessionKeyParamsSchema = import_zod4.z.object({
   accountAddress: import_zod4.z.string(),
@@ -303,38 +415,6 @@ var AddSessionKeyParamsSchema = import_zod4.z.object({
 var RemoveSessionKeyParamsSchema = import_zod4.z.object({
   accountAddress: import_zod4.z.string(),
   keyId: import_zod4.z.string()
-});
-var UserOperationSchema = import_zod4.z.object({
-  sender: import_zod4.z.string(),
-  nonce: import_zod4.z.string(),
-  initCode: import_zod4.z.string(),
-  callData: import_zod4.z.string(),
-  callGasLimit: import_zod4.z.string(),
-  verificationGasLimit: import_zod4.z.string(),
-  preVerificationGas: import_zod4.z.string(),
-  maxFeePerGas: import_zod4.z.string(),
-  maxPriorityFeePerGas: import_zod4.z.string(),
-  paymasterAndData: import_zod4.z.string(),
-  signature: import_zod4.z.string()
-});
-var UserOperationParamsSchema = import_zod4.z.object({
-  target: import_zod4.z.string(),
-  value: import_zod4.z.string().default("0"),
-  data: import_zod4.z.string().default("0x"),
-  sponsored: import_zod4.z.boolean().optional(),
-  accountAddress: import_zod4.z.string().optional()
-  // If not inferred from client context
-});
-var GasEstimateSchema = import_zod4.z.object({
-  preVerificationGas: import_zod4.z.string(),
-  verificationGas: import_zod4.z.string(),
-  callGasLimit: import_zod4.z.string(),
-  total: import_zod4.z.string().optional()
-});
-var UserOpReceiptSchema = import_zod4.z.object({
-  userOpHash: import_zod4.z.string(),
-  txHash: import_zod4.z.string().optional(),
-  success: import_zod4.z.boolean().optional()
 });
 
 // src/services/aa.service.ts
@@ -349,7 +429,7 @@ var AAService = class {
    */
   async createSmartAccount(params) {
     const response = await this.httpClient.post(`/aa/accounts`, params);
-    return SmartAccountSchema.parse(response.data);
+    return CreateAccountResponseSchema.parse(response.data);
   }
   /**
    * Get smart account info for a user.
@@ -366,7 +446,8 @@ var AAService = class {
    * @returns Void (throws on error)
    */
   async addSessionKey(params) {
-    await this.httpClient.post(`/aa/accounts/${params.accountAddress}/sessions`, params.sessionKey);
+    void params;
+    throw new Error("Session key management is not exposed via the API");
   }
   /**
    * Remove a session key from an account.
@@ -374,7 +455,8 @@ var AAService = class {
    * @returns Void (throws on error)
    */
   async removeSessionKey(params) {
-    await this.httpClient.delete(`/aa/accounts/${params.accountAddress}/sessions/${params.keyId}`);
+    void params;
+    throw new Error("Session key management is not exposed via the API");
   }
   /**
    * Send a user operation.
@@ -382,8 +464,8 @@ var AAService = class {
    * @returns User Operation Receipt
    */
   async sendUserOperation(params) {
-    const response = await this.httpClient.post(`/aa/bundler/user-op`, params);
-    return UserOpReceiptSchema.parse(response.data);
+    const response = await this.httpClient.post(`/aa/user-operations`, params);
+    return SendUserOperationResponseSchema.parse(response.data);
   }
   /**
    * Estimate gas for a user operation.
@@ -391,8 +473,22 @@ var AAService = class {
    * @returns Gas Estimate
    */
   async estimateGas(params) {
-    const response = await this.httpClient.post(`/aa/bundler/estimate-gas`, params);
+    const response = await this.httpClient.post(`/aa/user-operations/estimate`, params);
     return GasEstimateSchema.parse(response.data);
+  }
+  /**
+   * Get a user operation by hash.
+   */
+  async getUserOperation(hash) {
+    const response = await this.httpClient.get(`/aa/user-operations/${hash}`);
+    return UserOperationSchema.parse(response.data);
+  }
+  /**
+   * Get a user operation receipt by hash.
+   */
+  async getUserOperationReceipt(hash) {
+    const response = await this.httpClient.get(`/aa/user-operations/${hash}/receipt`);
+    return UserOpReceiptSchema.parse(response.data);
   }
 };
 
@@ -424,23 +520,102 @@ var WebhookVerifier = class {
   }
 };
 
+// src/utils/crypto.ts
+var import_crypto2 = require("crypto");
+function signRequest(_apiKey, apiSecret, method, path, body, timestamp) {
+  const message = `${method}
+${path}
+${timestamp}
+${body}`;
+  return (0, import_crypto2.createHmac)("sha256", apiSecret).update(message).digest("hex");
+}
+
+// src/utils/retry.ts
+async function withRetry(fn, maxRetries = 3, baseDelay = 1e3) {
+  let lastError;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (i < maxRetries - 1) {
+        await sleep(baseDelay * Math.pow(2, i));
+      }
+    }
+  }
+  throw lastError;
+}
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // src/client.ts
 var RampOSClient = class {
-  constructor(options) {
+  constructor(config) {
     __publicField(this, "httpClient");
     __publicField(this, "intents");
     __publicField(this, "users");
     __publicField(this, "ledger");
     __publicField(this, "aa");
     __publicField(this, "webhooks");
-    const baseURL = options.baseURL || "https://api.rampos.io/v1";
+    const baseURL = config.baseURL || "https://api.rampos.io/v1";
     this.httpClient = import_axios.default.create({
       baseURL,
-      timeout: options.timeout || 1e4,
+      timeout: config.timeout || 1e4,
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${options.apiKey}`
+        "Authorization": `Bearer ${config.apiKey}`
       }
+    });
+    this.httpClient.interceptors.request.use((reqConfig) => {
+      const timestamp = Math.floor(Date.now() / 1e3);
+      const method = (reqConfig.method || "GET").toUpperCase();
+      const base = reqConfig.baseURL ?? baseURL;
+      const url = new URL(reqConfig.url ?? "", base);
+      const path = url.pathname;
+      let body = "";
+      if (reqConfig.data) {
+        if (typeof reqConfig.data === "string") {
+          body = reqConfig.data;
+        } else {
+          body = JSON.stringify(reqConfig.data);
+          reqConfig.data = body;
+        }
+      }
+      const signature = signRequest(
+        config.apiKey,
+        config.apiSecret,
+        method,
+        path,
+        body,
+        timestamp
+      );
+      if (reqConfig.headers) {
+        reqConfig.headers["X-Timestamp"] = timestamp.toString();
+        reqConfig.headers["X-Signature"] = signature;
+        if (config.tenantId) {
+          reqConfig.headers["X-Tenant-ID"] = config.tenantId;
+        }
+      }
+      return reqConfig;
+    });
+    const retryConfig = config.retry || { maxRetries: 3, baseDelay: 1e3 };
+    const methods = ["get", "post", "put", "delete", "patch", "head", "options"];
+    methods.forEach((method) => {
+      const original = this.httpClient[method];
+      const wrappedMethod = (url, dataOrConfig, config2) => {
+        return withRetry(
+          () => {
+            if (method === "get" || method === "delete" || method === "head" || method === "options") {
+              return original(url, dataOrConfig);
+            }
+            return original(url, dataOrConfig, config2);
+          },
+          retryConfig.maxRetries,
+          retryConfig.baseDelay
+        );
+      };
+      this.httpClient[method] = wrappedMethod;
     });
     this.intents = new IntentService(this.httpClient);
     this.users = new UserService(this.httpClient);
@@ -453,14 +628,24 @@ var RampOSClient = class {
 0 && (module.exports = {
   AAService,
   AddSessionKeyParamsSchema,
+  BalanceSchema,
+  BankAccountSchema,
+  ConfirmPayinRequestSchema,
+  ConfirmPayinResponseSchema,
   CreateAccountParamsSchema,
+  CreateAccountResponseSchema,
   CreatePayInSchema,
   CreatePayOutSchema,
+  CreatePayinRequestSchema,
+  CreatePayinResponseSchema,
+  CreatePayoutRequestSchema,
+  CreatePayoutResponseSchema,
+  EstimateGasRequestSchema,
   GasEstimateSchema,
+  GetAccountResponseSchema,
   IntentFilterSchema,
   IntentSchema,
   IntentService,
-  IntentStatus,
   IntentType,
   KycStatus,
   LedgerEntrySchema,
@@ -469,13 +654,18 @@ var RampOSClient = class {
   LedgerService,
   RampOSClient,
   RemoveSessionKeyParamsSchema,
+  SendUserOperationRequestSchema,
+  SendUserOperationResponseSchema,
   SessionKeySchema,
   SmartAccountSchema,
+  StateHistoryEntrySchema,
   UserBalanceSchema,
+  UserBalancesResponseSchema,
   UserKycStatusSchema,
   UserOpReceiptSchema,
-  UserOperationParamsSchema,
   UserOperationSchema,
   UserService,
-  WebhookVerifier
+  VirtualAccountSchema,
+  WebhookVerifier,
+  withRetry
 });

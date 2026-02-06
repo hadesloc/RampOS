@@ -256,7 +256,9 @@ impl<T> CompensatedStep<T> {
         let comp = compensation_fn(result.clone());
         self.compensation = Some(CompensationAction::new(compensation_name, comp));
         self.result = Some(result);
-        Ok(self.result.as_ref().unwrap())
+        self.result
+            .as_ref()
+            .ok_or_else(|| "Internal error: result not set after execution".to_string())
     }
 
     /// Take the compensation action (to add to a chain)

@@ -5,7 +5,7 @@ metadata:
   namespace: rampos
 spec:
   serviceName: rampos-nats
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: rampos-nats
@@ -32,9 +32,16 @@ spec:
         - "/etc/nats/nats.conf"
         ports:
         - containerPort: 4222
-        - containerPort: 8222 # Monitor
-        - containerPort: 6222 # Cluster
+          name: client
+        - containerPort: 8222
+          name: monitor
+        - containerPort: 6222
+          name: cluster
         env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: NATS_USER
           valueFrom:
             secretKeyRef:
@@ -57,6 +64,18 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8222
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8222
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
       volumes:
       - name: nats-config
         configMap:
@@ -68,7 +87,7 @@ spec:
       accessModes: [ "ReadWriteOnce" ]
       resources:
         requests:
-          storage: 1Gi
+          storage: 10Gi
 ---
 apiVersion: v1
 kind: Service
@@ -81,6 +100,8 @@ spec:
     name: client
   - port: 8222
     name: monitor
+  - port: 6222
+    name: cluster
   clusterIP: None
   selector:
     app: rampos-nats

@@ -1,0 +1,508 @@
+# PostgreSQL High Availability Configuration
+# Implements Primary-Replica setup with streaming replication
+# Designed for automatic failover and zero data loss on critical writes
+---
+# ConfigMap for PostgreSQL primary configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-primary-config
+  namespace: rampos
+data:
+  # Primary PostgreSQL configuration
+  postgresql.conf: |
+    # Connection Settings
+    listen_addresses = '*'
+    port = 5432
+    max_connections = 200
+
+    # Memory Settings (adjust based on pod resources)
+    shared_buffers = 256MB
+    effective_cache_size = 768MB
+    work_mem = 4MB
+    maintenance_work_mem = 64MB
+
+    # WAL Settings for Replication
+    wal_level = replica
+    max_wal_senders = 10
+    max_replication_slots = 10
+    wal_keep_size = 1GB
+    hot_standby = on
+    hot_standby_feedback = on
+
+    # Synchronous Replication (for critical writes - zero data loss)
+    # Use 'rampos-postgres-1' for sync, others async
+    synchronous_standby_names = 'FIRST 1 (rampos-postgres-1)'
+    synchronous_commit = on
+
+    # Archiving for Point-in-Time Recovery
+    archive_mode = on
+    archive_command = 'test ! -f /var/lib/postgresql/archive/%f && cp %p /var/lib/postgresql/archive/%f'
+
+    # Logging
+    logging_collector = on
+    log_directory = 'pg_log'
+    log_filename = 'postgresql-%a.log'
+    log_rotation_age = 1d
+    log_rotation_size = 100MB
+    log_min_duration_statement = 1000
+    log_checkpoints = on
+    log_connections = on
+    log_disconnections = on
+    log_lock_waits = on
+
+    # Performance
+    checkpoint_completion_target = 0.9
+    random_page_cost = 1.1
+    effective_io_concurrency = 200
+
+    # SSL (certificates mounted separately)
+    ssl = off
+    # ssl_cert_file = '/etc/postgresql/ssl/server.crt'
+    # ssl_key_file = '/etc/postgresql/ssl/server.key'
+
+  # Host-based authentication
+  pg_hba.conf: |
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    # Local connections
+    local   all             all                                     trust
+    # IPv4 local connections
+    host    all             all             127.0.0.1/32            scram-sha-256
+    # IPv6 local connections
+    host    all             all             ::1/128                 scram-sha-256
+    # Allow replication connections from replicas
+    host    replication     replicator      10.0.0.0/8              scram-sha-256
+    host    replication     replicator      172.16.0.0/12           scram-sha-256
+    host    replication     replicator      192.168.0.0/16          scram-sha-256
+    # Allow connections from within the cluster
+    host    all             all             10.0.0.0/8              scram-sha-256
+    host    all             all             172.16.0.0/12           scram-sha-256
+    host    all             all             192.168.0.0/16          scram-sha-256
+
+  # Primary initialization script
+  init-primary.sh: |
+    #!/bin/bash
+    set -e
+
+    # Create replication user if not exists
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        DO \$\$
+        BEGIN
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'replicator') THEN
+                CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '${REPLICATION_PASSWORD}';
+            END IF;
+        END
+        \$\$;
+
+        -- Create replication slot for each replica
+        SELECT pg_create_physical_replication_slot('replica_1_slot', true)
+        WHERE NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'replica_1_slot');
+
+        SELECT pg_create_physical_replication_slot('replica_2_slot', true)
+        WHERE NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'replica_2_slot');
+    EOSQL
+
+    # Create archive directory
+    mkdir -p /var/lib/postgresql/archive
+    chown postgres:postgres /var/lib/postgresql/archive
+
+---
+# ConfigMap for PostgreSQL replica configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-replica-config
+  namespace: rampos
+data:
+  postgresql.conf: |
+    # Connection Settings
+    listen_addresses = '*'
+    port = 5432
+    max_connections = 200
+
+    # Memory Settings
+    shared_buffers = 256MB
+    effective_cache_size = 768MB
+    work_mem = 4MB
+    maintenance_work_mem = 64MB
+
+    # Hot Standby Settings
+    hot_standby = on
+    hot_standby_feedback = on
+    max_standby_streaming_delay = 30s
+    max_standby_archive_delay = 60s
+
+    # Logging (same as primary)
+    logging_collector = on
+    log_directory = 'pg_log'
+    log_filename = 'postgresql-%a.log'
+
+  # Replica recovery configuration
+  recovery.conf: |
+    standby_mode = 'on'
+    primary_conninfo = 'host=rampos-postgres-0.rampos-postgres-headless.rampos.svc.cluster.local port=5432 user=replicator password=${REPLICATION_PASSWORD} application_name=${HOSTNAME}'
+    primary_slot_name = '${REPLICA_SLOT}'
+    trigger_file = '/tmp/postgresql.trigger'
+    recovery_target_timeline = 'latest'
+
+---
+# Headless Service for StatefulSet (stable DNS for replication)
+apiVersion: v1
+kind: Service
+metadata:
+  name: rampos-postgres-headless
+  namespace: rampos
+  labels:
+    app: rampos-postgres
+    component: database
+spec:
+  ports:
+  - port: 5432
+    name: postgres
+  clusterIP: None
+  selector:
+    app: rampos-postgres
+
+---
+# Primary Service (read-write operations)
+apiVersion: v1
+kind: Service
+metadata:
+  name: rampos-postgres-primary
+  namespace: rampos
+  labels:
+    app: rampos-postgres
+    role: primary
+spec:
+  ports:
+  - port: 5432
+    targetPort: 5432
+    name: postgres
+  selector:
+    app: rampos-postgres
+    role: primary
+
+---
+# Replica Service (read-only operations - load balanced)
+apiVersion: v1
+kind: Service
+metadata:
+  name: rampos-postgres-replica
+  namespace: rampos
+  labels:
+    app: rampos-postgres
+    role: replica
+spec:
+  ports:
+  - port: 5432
+    targetPort: 5432
+    name: postgres
+  selector:
+    app: rampos-postgres
+    role: replica
+
+---
+# StatefulSet for PostgreSQL HA cluster
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rampos-postgres
+  namespace: rampos
+  labels:
+    app: rampos-postgres
+spec:
+  serviceName: rampos-postgres-headless
+  replicas: 3
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: rampos-postgres
+  template:
+    metadata:
+      labels:
+        app: rampos-postgres
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9187"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Anti-affinity to spread pods across nodes
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - rampos-postgres
+            topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - rampos-postgres
+              topologyKey: topology.kubernetes.io/zone
+
+      terminationGracePeriodSeconds: 120
+
+      initContainers:
+      # Init container to determine if this is primary or replica
+      - name: init-postgres
+        image: postgres:15-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          runAsUser: 999
+        command:
+        - bash
+        - -c
+        - |
+          set -ex
+          # Get ordinal index from hostname
+          [[ $(hostname) =~ -([0-9]+)$ ]] || exit 1
+          ordinal=${BASH_REMATCH[1]}
+
+          # First pod (ordinal 0) is the primary
+          if [[ $ordinal -eq 0 ]]; then
+            echo "primary" > /var/lib/postgresql/role
+            cp /config/primary/postgresql.conf /var/lib/postgresql/data/postgresql.conf
+            cp /config/primary/pg_hba.conf /var/lib/postgresql/data/pg_hba.conf
+          else
+            echo "replica" > /var/lib/postgresql/role
+
+            # Wait for primary to be ready
+            until pg_isready -h rampos-postgres-0.rampos-postgres-headless.rampos.svc.cluster.local -p 5432; do
+              echo "Waiting for primary..."
+              sleep 2
+            done
+
+            # If data directory is empty, perform base backup from primary
+            if [ ! -s "/var/lib/postgresql/data/PG_VERSION" ]; then
+              rm -rf /var/lib/postgresql/data/*
+              PGPASSWORD=${REPLICATION_PASSWORD} pg_basebackup \
+                -h rampos-postgres-0.rampos-postgres-headless.rampos.svc.cluster.local \
+                -D /var/lib/postgresql/data \
+                -U replicator \
+                -X stream \
+                -P \
+                -R \
+                --slot=replica_${ordinal}_slot
+            fi
+
+            cp /config/replica/postgresql.conf /var/lib/postgresql/data/postgresql.conf
+          fi
+        env:
+        - name: REPLICATION_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rampos-postgres-secret
+              key: REPLICATION_PASSWORD
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: primary-config
+          mountPath: /config/primary
+        - name: replica-config
+          mountPath: /config/replica
+
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          runAsUser: 999
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_USER
+          value: rampos
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rampos-secret
+              key: DATABASE_PASSWORD
+        - name: POSTGRES_DB
+          value: rampos
+        - name: REPLICATION_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rampos-postgres-secret
+              key: REPLICATION_PASSWORD
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+
+        # Lifecycle hooks for graceful failover
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - bash
+              - -c
+              - |
+                # Ensure all transactions are flushed before shutdown
+                pg_ctl stop -D $PGDATA -m fast -w -t 60
+
+        # Startup probe - allow time for recovery replay
+        startupProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+
+        # Liveness probe
+        livenessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
+
+        # Readiness probe - check if accepting connections
+        readinessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - |
+              pg_isready -U $POSTGRES_USER -d $POSTGRES_DB && \
+              psql -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT 1"
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: primary-config
+          mountPath: /docker-entrypoint-initdb.d
+          subPath: init-primary.sh
+
+      # Postgres Exporter sidecar for metrics
+      - name: postgres-exporter
+        image: prometheuscommunity/postgres-exporter:v0.15.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          runAsUser: 999
+        ports:
+        - containerPort: 9187
+          name: metrics
+        env:
+        - name: DATA_SOURCE_URI
+          value: "localhost:5432/rampos?sslmode=disable"
+        - name: DATA_SOURCE_USER
+          value: rampos
+        - name: DATA_SOURCE_PASS
+          valueFrom:
+            secretKeyRef:
+              name: rampos-secret
+              key: DATABASE_PASSWORD
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+
+      volumes:
+      - name: primary-config
+        configMap:
+          name: postgres-primary-config
+      - name: replica-config
+        configMap:
+          name: postgres-replica-config
+
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: standard  # Adjust for your cluster
+      resources:
+        requests:
+          storage: 100Gi
+
+---
+# Secret for replication user
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rampos-postgres-secret
+  namespace: rampos
+  annotations:
+    description: "PostgreSQL replication credentials - replace with real values"
+type: Opaque
+stringData:
+  # Generate with: openssl rand -base64 32
+  REPLICATION_PASSWORD: "${REPLICATION_PASSWORD}"
+
+---
+# PodDisruptionBudget to ensure HA during maintenance
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rampos-postgres-pdb
+  namespace: rampos
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: rampos-postgres
+
+---
+# ServiceMonitor for Prometheus (if using Prometheus Operator)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rampos-postgres
+  namespace: rampos
+  labels:
+    app: rampos-postgres
+spec:
+  selector:
+    matchLabels:
+      app: rampos-postgres
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics

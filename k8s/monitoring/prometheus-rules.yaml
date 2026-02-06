@@ -57,3 +57,55 @@ spec:
       annotations:
         summary: "PVC Disk Usage High"
         description: "PVC {{ $labels.persistentvolumeclaim }} is at {{ $value }}% usage."
+
+  # Backup and Disaster Recovery Alerts
+  - name: rampos.backup.rules
+    rules:
+    - alert: BackupJobFailed
+      expr: kube_job_status_failed{namespace="rampos",job_name=~".*backup.*"} > 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Backup job failed"
+        description: "Backup job {{ $labels.job_name }} has failed. Check job logs immediately."
+        runbook_url: "https://docs.rampos.io/runbooks/backup-job-failed"
+
+    - alert: BackupJobMissing
+      expr: time() - kube_cronjob_status_last_successful_time{namespace="rampos",cronjob=~".*backup.*"} > 172800
+      for: 1h
+      labels:
+        severity: warning
+      annotations:
+        summary: "Backup job hasn't run successfully in 2 days"
+        description: "CronJob {{ $labels.cronjob }} hasn't completed successfully since {{ $value | humanizeDuration }} ago."
+        runbook_url: "https://docs.rampos.io/runbooks/backup-missing"
+
+    - alert: PostgresBackupTooOld
+      expr: time() - kube_cronjob_status_last_successful_time{namespace="rampos",cronjob="postgres-backup-daily"} > 90000
+      for: 30m
+      labels:
+        severity: critical
+      annotations:
+        summary: "PostgreSQL backup is more than 25 hours old"
+        description: "Last successful PostgreSQL backup was {{ $value | humanizeDuration }} ago. RPO may be at risk."
+        runbook_url: "https://docs.rampos.io/runbooks/postgres-backup-old"
+
+    - alert: BackupStorageNearCapacity
+      expr: rampos_backup_storage_used_bytes / rampos_backup_storage_capacity_bytes * 100 > 80
+      for: 1h
+      labels:
+        severity: warning
+      annotations:
+        summary: "Backup storage nearing capacity"
+        description: "Backup storage is at {{ $value }}% capacity. Consider increasing retention cleanup or storage."
+
+    - alert: BackupVerificationFailed
+      expr: kube_job_status_failed{namespace="rampos",job_name=~"postgres-backup-verify.*"} > 0
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Backup verification failed"
+        description: "Weekly backup verification job failed. Backup integrity may be compromised."
+        runbook_url: "https://docs.rampos.io/runbooks/backup-verification-failed"

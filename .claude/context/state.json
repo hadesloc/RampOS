@@ -1,0 +1,31 @@
+{
+  "project": "RampOS Security & Infrastructure Remediation",
+  "phase": "DEVELOPMENT",
+  "plan_approved": true,
+  "created": "2026-02-06",
+  "last_updated": "2026-02-06T10:00:00Z",
+  "workflow": {
+    "type": "security-remediation",
+    "source": "strategic-council-report-2026-02-06.md",
+    "task_breakdown": ".claude/reports/security-task-breakdown.json"
+  },
+  "phases_completed": ["DISCOVERY", "PLANNING", "DESIGN"],
+  "current_focus": "Phase 1: Critical Security Fixes",
+  "team": {
+    "name": "rampos-remediation",
+    "members": [
+      {"name": "security-worker", "tasks": ["T-001", "T-002"], "model": "sonnet"},
+      {"name": "frontend-worker", "tasks": ["T-003"], "model": "haiku"},
+      {"name": "devops-worker", "tasks": ["T-004", "T-005", "T-014", "T-015", "T-016", "T-017", "T-018", "T-019", "T-020", "T-021", "T-023"], "model": "sonnet"},
+      {"name": "rust-worker-1", "tasks": ["T-006", "T-008", "T-010", "T-022"], "model": "sonnet"},
+      {"name": "rust-worker-2", "tasks": ["T-007", "T-009"], "model": "sonnet"},
+      {"name": "contract-worker", "tasks": ["T-011", "T-012", "T-013"], "model": "opus"}
+    ]
+  },
+  "progress": {
+    "total_tasks": 23,
+    "completed": 0,
+    "in_progress": 0,
+    "pending": 23
+  }
+}

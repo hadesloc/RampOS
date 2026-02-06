@@ -14,7 +14,7 @@ use std::sync::{Arc, RwLock};
 use tracing::{debug, info};
 
 /// Constructor function type
-type AdapterConstructor = Box<dyn Fn(AdapterConfig) -> Box<dyn RailsAdapter> + Send + Sync>;
+type AdapterConstructor = Box<dyn Fn(AdapterConfig) -> Result<Box<dyn RailsAdapter>> + Send + Sync>;
 
 /// Extended constructor that takes JSON config
 type ExtendedConstructor =
@@ -28,74 +28,78 @@ pub struct AdapterFactory {
 
 impl AdapterFactory {
     /// Create a new adapter factory with built-in adapters registered
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         let factory = Self {
             constructors: Arc::new(RwLock::new(HashMap::new())),
             extended_constructors: Arc::new(RwLock::new(HashMap::new())),
         };
 
         // Register built-in adapters
-        factory.register_builtin();
+        factory.register_builtin()?;
 
-        factory
+        Ok(factory)
     }
 
-    fn register_builtin(&self) {
+    fn register_builtin(&self) -> Result<()> {
         // Register mock adapter
         self.register("mock", |config| {
-            Box::new(MockAdapter::new(
+            Ok(Box::new(MockAdapter::new(
                 config.provider_code,
                 config.webhook_secret,
-            ))
-        });
+            )))
+        })?;
 
         // Register vietqr adapter (basic config)
         self.register("vietqr", |config| {
-            Box::new(VietQRAdapter::new(
+            Ok(Box::new(VietQRAdapter::new(
                 config.provider_code,
                 config.webhook_secret,
-            ))
-        });
+            )?))
+        })?;
 
         // Register napas adapter (basic config)
         self.register("napas", |config| {
-            Box::new(NapasAdapter::new(
+            Ok(Box::new(NapasAdapter::new(
                 config.provider_code,
                 config.webhook_secret,
-            ))
-        });
+            )?))
+        })?;
 
         // Register extended constructors for full config
         self.register_extended("vietqr", |config_value| {
             let config: VietQRConfig = serde_json::from_value(config_value)
                 .map_err(|e| Error::Validation(format!("Invalid VietQR config: {}", e)))?;
             Ok(Box::new(VietQRAdapter::with_config(config)?) as Box<dyn RailsAdapter>)
-        });
+        })?;
 
         self.register_extended("napas", |config_value| {
             let config: NapasConfig = serde_json::from_value(config_value)
                 .map_err(|e| Error::Validation(format!("Invalid Napas config: {}", e)))?;
             Ok(Box::new(NapasAdapter::with_config(config)?) as Box<dyn RailsAdapter>)
-        });
+        })?;
+
+        Ok(())
     }
 
     /// Register a new adapter type with basic constructor
-    pub fn register<F>(&self, adapter_type: &str, constructor: F)
+    pub fn register<F>(&self, adapter_type: &str, constructor: F) -> Result<()>
     where
-        F: Fn(AdapterConfig) -> Box<dyn RailsAdapter> + Send + Sync + 'static,
+        F: Fn(AdapterConfig) -> Result<Box<dyn RailsAdapter>> + Send + Sync + 'static,
     {
-        let mut constructors = self.constructors.write().unwrap();
+        let mut constructors = self.constructors.write().map_err(|_| Error::Internal("Failed to acquire write lock on constructors".to_string()))?;
         constructors.insert(adapter_type.to_lowercase(), Box::new(constructor));
         debug!(adapter_type = %adapter_type, "Registered adapter type");
+        Ok(())
     }
 
     /// Register an extended constructor that takes JSON config
-    pub fn register_extended<F>(&self, adapter_type: &str, constructor: F)
+    pub fn register_extended<F>(&self, adapter_type: &str, constructor: F) -> Result<()>
     where
         F: Fn(serde_json::Value) -> Result<Box<dyn RailsAdapter>> + Send + Sync + 'static,
     {
-        let mut constructors = self.extended_constructors.write().unwrap();
+        let mut constructors = self.extended_constructors.write().map_err(|_| Error::Internal("Failed to acquire write lock on extended_constructors".to_string()))?;
         constructors.insert(adapter_type.to_lowercase(), Box::new(constructor));
+        Ok(())
     }
 
     /// Create an adapter instance with basic config
@@ -104,12 +108,12 @@ impl AdapterFactory {
         adapter_type: &str,
         config: AdapterConfig,
     ) -> Result<Box<dyn RailsAdapter>> {
-        let constructors = self.constructors.read().unwrap();
+        let constructors = self.constructors.read().map_err(|_| Error::Internal("Failed to acquire read lock on constructors".to_string()))?;
         let adapter_type_lower = adapter_type.to_lowercase();
 
         if let Some(constructor) = constructors.get(&adapter_type_lower) {
             info!(adapter_type = %adapter_type, "Creating adapter");
-            Ok(constructor(config))
+            constructor(config)
         } else {
             Err(Error::Validation(format!(
                 "Unknown adapter type: {}",
@@ -124,7 +128,7 @@ impl AdapterFactory {
         adapter_type: &str,
         config: serde_json::Value,
     ) -> Result<Box<dyn RailsAdapter>> {
-        let constructors = self.extended_constructors.read().unwrap();
+        let constructors = self.extended_constructors.read().map_err(|_| Error::Internal("Failed to acquire read lock on extended_constructors".to_string()))?;
         let adapter_type_lower = adapter_type.to_lowercase();
 
         if let Some(constructor) = constructors.get(&adapter_type_lower) {
@@ -171,20 +175,20 @@ impl AdapterFactory {
 
     /// List registered adapter types
     pub fn list_types(&self) -> Vec<String> {
-        let constructors = self.constructors.read().unwrap();
+        let constructors = self.constructors.read().expect("Failed to acquire read lock on constructors");
         constructors.keys().cloned().collect()
     }
 
     /// Check if an adapter type is registered
     pub fn is_registered(&self, adapter_type: &str) -> bool {
-        let constructors = self.constructors.read().unwrap();
+        let constructors = self.constructors.read().expect("Failed to acquire read lock on constructors");
         constructors.contains_key(&adapter_type.to_lowercase())
     }
 }
 
 impl Default for AdapterFactory {
     fn default() -> Self {
-        Self::new()
+        Self::new().expect("Failed to initialize AdapterFactory")
     }
 }
 
@@ -199,12 +203,12 @@ pub fn create_test_adapters() -> HashMap<String, Arc<dyn RailsAdapter>> {
 
     adapters.insert(
         "vietqr".to_string(),
-        Arc::new(VietQRAdapter::new("vietqr", "test_webhook_secret")),
+        Arc::new(VietQRAdapter::new("vietqr", "test_webhook_secret").expect("Failed to create test VietQR adapter")),
     );
 
     adapters.insert(
         "napas".to_string(),
-        Arc::new(NapasAdapter::new("napas", "test_webhook_secret")),
+        Arc::new(NapasAdapter::new("napas", "test_webhook_secret").expect("Failed to create test Napas adapter")),
     );
 
     adapters
@@ -291,7 +295,7 @@ mod tests {
 
     #[test]
     fn test_factory_registration() {
-        let factory = AdapterFactory::new();
+        let factory = AdapterFactory::new().unwrap();
         let types = factory.list_types();
         assert!(types.contains(&"mock".to_string()));
         assert!(types.contains(&"vietqr".to_string()));
@@ -300,7 +304,7 @@ mod tests {
 
     #[test]
     fn test_create_mock_adapter() {
-        let factory = AdapterFactory::new();
+        let factory = AdapterFactory::new().unwrap();
         let config = AdapterConfig {
             provider_code: "MOCK".to_string(),
             api_base_url: "http://localhost".to_string(),
@@ -318,7 +322,7 @@ mod tests {
 
     #[test]
     fn test_create_vietqr_from_json() {
-        let factory = AdapterFactory::new();
+        let factory = AdapterFactory::new().unwrap();
         let config = json!({
             "provider_code": "vietqr",
             "api_base_url": "https://api.vietqr.io",
@@ -341,7 +345,7 @@ mod tests {
 
     #[test]
     fn test_create_unknown_adapter() {
-        let factory = AdapterFactory::new();
+        let factory = AdapterFactory::new().unwrap();
         let config = AdapterConfig {
             provider_code: "UNKNOWN".to_string(),
             api_base_url: "http://localhost".to_string(),
@@ -366,7 +370,7 @@ mod tests {
 
     #[test]
     fn test_is_registered() {
-        let factory = AdapterFactory::new();
+        let factory = AdapterFactory::new().unwrap();
         assert!(factory.is_registered("mock"));
         assert!(factory.is_registered("VIETQR")); // Case insensitive
         assert!(!factory.is_registered("unknown"));

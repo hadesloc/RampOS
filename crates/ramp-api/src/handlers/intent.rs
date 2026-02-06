@@ -6,7 +6,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, instrument};
 
 use ramp_common::types::IntentId;
 use ramp_core::repository::intent::{IntentRepository, IntentRow};
@@ -146,6 +146,7 @@ pub struct PaginationInfo {
         ("bearer_auth" = [])
     )
 )]
+#[instrument(skip(intent_repo, tenant_ctx), fields(tenant_id = %tenant_ctx.tenant_id.0))]
 pub async fn get_intent(
     State(intent_repo): State<Arc<dyn IntentRepository>>,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -188,6 +189,7 @@ pub async fn get_intent(
         ("bearer_auth" = [])
     )
 )]
+#[instrument(skip(intent_repo, tenant_ctx), fields(tenant_id = %tenant_ctx.tenant_id.0, limit = %query.limit, offset = %query.offset))]
 pub async fn list_intents(
     State(intent_repo): State<Arc<dyn IntentRepository>>,
     Extension(tenant_ctx): Extension<TenantContext>,

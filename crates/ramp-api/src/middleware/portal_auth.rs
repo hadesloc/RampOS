@@ -242,7 +242,7 @@ mod tests {
 
     fn create_test_token(claims: &PortalClaims, secret: &str) -> String {
         let encoding_key = EncodingKey::from_secret(secret.as_bytes());
-        encode(&Header::default(), claims, &encoding_key).unwrap()
+        encode(&Header::default(), claims, &encoding_key).expect("token creation should succeed")
     }
 
     #[test]

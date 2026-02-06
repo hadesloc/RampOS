@@ -1,0 +1,41 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rampos-server-pdb
+  namespace: rampos
+  labels:
+    app: rampos-server
+spec:
+  # Ensure at least 2 pods are always available
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: rampos-server
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rampos-postgres-pdb
+  namespace: rampos
+  labels:
+    app: rampos-postgres
+spec:
+  # Ensure at least 2 postgres replicas for quorum
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: rampos-postgres
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rampos-redis-pdb
+  namespace: rampos
+  labels:
+    app: rampos-redis
+spec:
+  # Ensure at least 2 redis replicas
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: rampos-redis

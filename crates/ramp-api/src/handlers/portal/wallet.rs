@@ -364,7 +364,7 @@ mod tests {
             qr_code_url: None,
         };
 
-        let json = serde_json::to_string(&info).unwrap();
+        let json = serde_json::to_string(&info).expect("serialization failed");
         assert!(json.contains("\"method\":\"VND_BANK\""));
         assert!(json.contains("\"bankName\":\"VCB\""));
         // None fields should be skipped

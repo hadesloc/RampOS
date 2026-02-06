@@ -91,9 +91,9 @@ pub struct VietQRAdapter {
 impl VietQRAdapter {
     /// Create a new VietQR adapter with minimal config (backwards compatible)
     ///
-    /// # Panics
-    /// Panics if HTTP client creation fails (should never happen with default config)
-    pub fn new(provider_code: impl Into<String>, webhook_secret: impl Into<String>) -> Self {
+    /// # Errors
+    /// Returns an error if HTTP client creation fails
+    pub fn new(provider_code: impl Into<String>, webhook_secret: impl Into<String>) -> Result<Self> {
         let config = VietQRConfig {
             base: AdapterConfig {
                 provider_code: provider_code.into(),
@@ -111,7 +111,7 @@ impl VietQRAdapter {
             enable_real_api: false,
         };
 
-        Self::with_config(config).expect("Failed to create VietQR adapter with default config")
+        Self::with_config(config)
     }
 
     /// Create a new VietQR adapter with full configuration
@@ -626,7 +626,7 @@ mod tests {
 
     #[test]
     fn test_qr_content_generation() {
-        let adapter = VietQRAdapter::new("vietqr", "test_secret");
+        let adapter = VietQRAdapter::new("vietqr", "test_secret").unwrap();
 
         let content = adapter.generate_qr_content(
             "970436",
@@ -649,7 +649,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_payin_instruction() {
-        let adapter = VietQRAdapter::new("vietqr", "test_secret");
+        let adapter = VietQRAdapter::new("vietqr", "test_secret").unwrap();
 
         let request = CreatePayinInstructionRequest {
             reference_code: "TEST123".to_string(),
@@ -670,7 +670,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_supported_banks() {
-        let adapter = VietQRAdapter::new("vietqr", "test_secret");
+        let adapter = VietQRAdapter::new("vietqr", "test_secret").unwrap();
 
         let banks = adapter.list_supported_banks().await.unwrap();
         assert!(!banks.is_empty());
@@ -679,7 +679,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_generate_qr_code() {
-        let adapter = VietQRAdapter::new("vietqr", "test_secret");
+        let adapter = VietQRAdapter::new("vietqr", "test_secret").unwrap();
 
         let qr = adapter
             .generate_qr_code("1234567890", Some(Decimal::from(50000)), "Test payment", "REF001")

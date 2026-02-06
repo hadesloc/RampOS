@@ -165,13 +165,13 @@ impl IdempotencyStore for MemoryIdempotencyStore {
         let full_key = format!("{}:{}:{}", key_prefix, tenant_id, key);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or(std::time::Duration::from_secs(0))
             .as_secs();
 
-        let mut responses = self.responses.lock().unwrap_or_else(|e| {
+        let mut responses = self.responses.lock().map_err(|e| {
             warn!(error = ?e, "Idempotency in-memory responses mutex poisoned");
-            e.into_inner()
-        });
+            e.to_string()
+        }).ok()?;
         if let Some((response, expires_at)) = responses.get(&full_key) {
             if *expires_at > now {
                 return Some(response.clone());
@@ -193,13 +193,13 @@ impl IdempotencyStore for MemoryIdempotencyStore {
         let full_key = format!("{}:{}:{}", key_prefix, tenant_id, key);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or(std::time::Duration::from_secs(0))
             .as_secs();
 
-        let mut responses = self.responses.lock().unwrap_or_else(|e| {
+        let mut responses = self.responses.lock().map_err(|e| {
             warn!(error = ?e, "Idempotency in-memory responses mutex poisoned");
-            e.into_inner()
-        });
+            e.to_string()
+        })?;
         responses.insert(full_key, (response.clone(), now + ttl_seconds));
         Ok(())
     }
@@ -208,13 +208,13 @@ impl IdempotencyStore for MemoryIdempotencyStore {
         let lock_key = format!("{}:{}:{}:lock", key_prefix, tenant_id, key);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or(std::time::Duration::from_secs(0))
             .as_secs();
 
-        let mut locks = self.locks.lock().unwrap_or_else(|e| {
+        let mut locks = self.locks.lock().map_err(|e| {
             warn!(error = ?e, "Idempotency in-memory locks mutex poisoned");
-            e.into_inner()
-        });
+            e.to_string()
+        })?;
         // Check if locked
         if let Some(expires_at) = locks.get(&lock_key) {
             if *expires_at > now {
@@ -229,10 +229,10 @@ impl IdempotencyStore for MemoryIdempotencyStore {
 
     async fn unlock(&self, tenant_id: &str, key: &str, key_prefix: &str) -> Result<(), String> {
         let lock_key = format!("{}:{}:{}:lock", key_prefix, tenant_id, key);
-        let mut locks = self.locks.lock().unwrap_or_else(|e| {
+        let mut locks = self.locks.lock().map_err(|e| {
             warn!(error = ?e, "Idempotency in-memory locks mutex poisoned");
-            e.into_inner()
-        });
+            e.to_string()
+        })?;
         locks.remove(&lock_key);
         Ok(())
     }
@@ -352,7 +352,12 @@ pub async fn idempotency_middleware(
             .header("Content-Type", stored.content_type)
             .header("Idempotent-Replayed", "true")
             .body(Body::from(stored.body))
-            .unwrap();
+            .unwrap_or_else(|_| {
+                Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::empty())
+                    .expect("failed to build error response")
+            });
 
         return Ok(response);
     }
@@ -381,7 +386,9 @@ pub async fn idempotency_middleware(
                 })),
             )
                 .into_response();
-            response.headers_mut().insert("Retry-After", "60".parse().unwrap());
+            response.headers_mut().insert("Retry-After", "60".parse().unwrap_or(
+                axum::http::HeaderValue::from_static("60")
+            ));
             return Ok(response);
         }
     }
@@ -391,7 +398,7 @@ pub async fn idempotency_middleware(
 
     // Store the response
     let (parts, body) = response.into_parts();
-    let body_bytes = axum::body::to_bytes(body, 1024 * 1024)
+        let body_bytes = axum::body::to_bytes(body, 1024 * 1024)
         .await
         .unwrap_or_default();
     let body_string = String::from_utf8_lossy(&body_bytes).to_string();
@@ -420,7 +427,9 @@ pub async fn idempotency_middleware(
             })),
         )
             .into_response();
-        response.headers_mut().insert("Retry-After", "60".parse().unwrap());
+        response.headers_mut().insert("Retry-After", "60".parse().unwrap_or(
+            axum::http::HeaderValue::from_static("60")
+        ));
         return Ok(response);
     }
 

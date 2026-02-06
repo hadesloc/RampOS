@@ -295,8 +295,8 @@ fn verify_hmac_signature(
     debug!("HMAC verification - provided signature: {}", provided_signature);
 
     // Compute HMAC-SHA256
-    let mut mac =
-        HmacSha256::new_from_slice(api_secret_str.as_bytes()).expect("HMAC can take any size key");
+    let mut mac = HmacSha256::new_from_slice(api_secret_str.as_bytes())
+        .map_err(|_| SignatureValidationError::NoApiSecret)?;
     mac.update(message.as_bytes());
     let expected_signature = hex::encode(mac.finalize().into_bytes());
 

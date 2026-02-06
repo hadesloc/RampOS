@@ -1,5 +1,6 @@
 -- RampOS Seed Data
 -- Environment: Development / Test
+-- SECURITY WARNING: These are TEST credentials only. Never use in production!
 
 -- Clean up existing data (in reverse order of dependencies)
 -- Note: In production we would probably not want to truncate, but for seed data it's useful
@@ -9,31 +10,39 @@
 -- ============================================================================
 -- 1. TENANTS
 -- ============================================================================
+-- NOTE: In production, API keys and webhook secrets should be:
+-- 1. Generated using cryptographically secure random generators
+-- 2. At least 32 bytes (256 bits) of entropy
+-- 3. Rotated regularly (every 90 days minimum)
+-- 4. Stored using strong hashing (bcrypt/argon2)
 
 INSERT INTO tenants (id, name, status, api_key_hash, webhook_secret_hash, webhook_url, config, daily_payin_limit_vnd, daily_payout_limit_vnd)
 VALUES
     -- Tenant 1: CryptoExchange A (Active, high limits)
+    -- Test API key: test_api_key_tenant_a_dev_only_32chars!
     ('tenant_a_123', 'CryptoExchange A', 'ACTIVE',
-     crypt('api_key_a', gen_salt('bf')),
-     crypt('webhook_secret_a', gen_salt('bf')),
+     crypt('test_api_key_tenant_a_dev_only_32chars!', gen_salt('bf', 10)),
+     crypt('test_webhook_secret_a_dev_only_32chars!', gen_salt('bf', 10)),
      'https://api.exchange-a.com/webhooks/rampos',
      '{"tier": "enterprise", "features": ["payin", "payout", "va"]}',
      50000000000, -- 50B VND
      20000000000  -- 20B VND
     ),
     -- Tenant 2: WalletApp B (Active, standard limits)
+    -- Test API key: test_api_key_tenant_b_dev_only_32chars!
     ('tenant_b_456', 'WalletApp B', 'ACTIVE',
-     crypt('api_key_b', gen_salt('bf')),
-     crypt('webhook_secret_b', gen_salt('bf')),
+     crypt('test_api_key_tenant_b_dev_only_32chars!', gen_salt('bf', 10)),
+     crypt('test_webhook_secret_b_dev_only_32chars!', gen_salt('bf', 10)),
      'https://backend.wallet-b.app/callbacks',
      '{"tier": "standard", "features": ["payin"]}',
      10000000000, -- 10B VND
      5000000000   -- 5B VND
     ),
     -- Tenant 3: Startup C (Pending)
+    -- Test API key: test_api_key_tenant_c_dev_only_32chars!
     ('tenant_c_789', 'Startup C', 'PENDING',
-     crypt('api_key_c', gen_salt('bf')),
-     crypt('webhook_secret_c', gen_salt('bf')),
+     crypt('test_api_key_tenant_c_dev_only_32chars!', gen_salt('bf', 10)),
+     crypt('test_webhook_secret_c_dev_only_32chars!', gen_salt('bf', 10)),
      NULL,
      '{"tier": "starter"}',
      1000000000, -- 1B VND

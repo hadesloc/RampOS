@@ -6,7 +6,7 @@ connect_timeout_secs = 30
 idle_timeout_secs = 600
 
 [redis]
-url = "redis://:change_me@localhost:6379"
+url = "redis://:dev_redis_pass@localhost:6379"
 pool_size = 20
 
 [nats]

@@ -17,7 +17,7 @@
 //! let adapters = create_adapters_from_env()?;
 //!
 //! // Or use the factory for custom configuration
-//! let factory = AdapterFactory::new();
+//! let factory = AdapterFactory::new()?;
 //! let adapter = factory.create_from_json("vietqr", config)?;
 //! ```
 //!

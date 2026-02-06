@@ -12,40 +12,40 @@ pub struct ChainConfig {
 }
 
 impl ChainConfig {
-    pub fn ethereum_mainnet() -> Self {
-        Self {
+    pub fn ethereum_mainnet() -> Result<Self, String> {
+        Ok(Self {
             chain_id: 1,
             name: "Ethereum Mainnet".to_string(),
             entry_point_address: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
                 .parse()
-                .unwrap(),
+                .map_err(|e| format!("Invalid entry point address: {}", e))?,
             bundler_url: "https://bundler.example.com".to_string(),
             paymaster_address: None,
-        }
+        })
     }
 
-    pub fn polygon_mainnet() -> Self {
-        Self {
+    pub fn polygon_mainnet() -> Result<Self, String> {
+        Ok(Self {
             chain_id: 137,
             name: "Polygon Mainnet".to_string(),
             entry_point_address: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
                 .parse()
-                .unwrap(),
+                .map_err(|e| format!("Invalid entry point address: {}", e))?,
             bundler_url: "https://bundler.polygon.example.com".to_string(),
             paymaster_address: None,
-        }
+        })
     }
 
-    pub fn bnb_chain() -> Self {
-        Self {
+    pub fn bnb_chain() -> Result<Self, String> {
+        Ok(Self {
             chain_id: 56,
             name: "BNB Chain".to_string(),
             entry_point_address: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
                 .parse()
-                .unwrap(),
+                .map_err(|e| format!("Invalid entry point address: {}", e))?,
             bundler_url: "https://bundler.bnb.example.com".to_string(),
             paymaster_address: None,
-        }
+        })
     }
 }
 

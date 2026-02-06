@@ -1,9 +1,17 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+namespace: rampos-staging
+
 resources:
 - ../../base
 
+# Image configuration - updated by CI/CD
+images:
+- name: ghcr.io/rampos/rampos
+  newTag: latest
+
+# Staging-specific patches
 patches:
 - target:
     kind: Deployment
@@ -56,9 +64,17 @@ patches:
       path: /spec/rules/0/host
       value: staging-api.rampos.io
 
+# Staging-specific config
 configMapGenerator:
 - name: rampos-config
   behavior: merge
   literals:
   - RUST_LOG=info
   - ENVIRONMENT=staging
+  - ENABLE_DEBUG_ENDPOINTS=false
+  - CORS_ALLOWED_ORIGINS=https://staging.rampos.io
+
+# Labels for all resources
+commonLabels:
+  app.kubernetes.io/environment: staging
+  app.kubernetes.io/managed-by: kustomize

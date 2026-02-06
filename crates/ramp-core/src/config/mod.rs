@@ -45,15 +45,19 @@ impl Default for DatabaseConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RedisConfig {
-    pub url: String,
+    pub url: String, // Keep this for backward compatibility/single node
     pub pool_size: u32,
+    pub sentinel_urls: Option<Vec<String>>,
+    pub sentinel_master_name: Option<String>,
 }
 
 impl Default for RedisConfig {
     fn default() -> Self {
         Self {
-            url: "redis://localhost:6379".to_string(),
+            url: "redis://:dev_redis_pass@localhost:6379".to_string(),
             pool_size: 20,
+            sentinel_urls: None,
+            sentinel_master_name: None,
         }
     }
 }
@@ -142,5 +146,16 @@ impl Config {
         let cfg = builder.build()?;
 
         cfg.try_deserialize()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_redis_default_config() {
+        let config = RedisConfig::default();
+        assert_eq!(config.url, "redis://:dev_redis_pass@localhost:6379");
     }
 }

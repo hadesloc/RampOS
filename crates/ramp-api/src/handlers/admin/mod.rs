@@ -737,7 +737,7 @@ pub async fn get_dashboard(
         .user_service
         .count_users_created_since(
             &tenant_ctx.tenant_id,
-            now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc(),
+            now.date_naive().and_time(chrono::NaiveTime::MIN).and_utc(),
         )
         .await
         .map_err(ApiError::from)?;
@@ -901,7 +901,7 @@ mod tests {
             avg_resolution_hours: 24.5,
         };
 
-        let json = serde_json::to_string(&stats).unwrap();
+        let json = serde_json::to_string(&stats).expect("serialization failed");
         assert!(json.contains("\"total\":100"));
         assert!(json.contains("\"avgResolutionHours\":24.5"));
     }

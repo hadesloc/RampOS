@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-scripts
+  namespace: rampos
+data:
+  init-redis.sh: |
+    #!/bin/sh
+    set -e
+
+    # Hostname is like rampos-redis-0
+    echo "Initializing Redis..."
+    echo "Hostname: $(hostname)"
+
+    # Copy config to writable location
+    cp /config/redis.conf /data/redis.conf
+
+    # Determine master
+    # We try to ask the Sentinel service who the master is.
+    # If Sentinel says nothing (or we can't reach it), and we are redis-0, we assume we are master.
+
+    MASTER_HOST=""
+
+    # Try to find master via Sentinel
+    # We loop through sentinels (rampos-redis-sentinel service)
+    # Using redis-cli to query sentinel
+
+    echo "Looking for master via Sentinel..."
+    MASTER_INFO=$(redis-cli -h rampos-redis-sentinel -p 26379 sentinel get-master-addr-by-name rampos-master 2>/dev/null || true)
+
+    if [ -n "$MASTER_INFO" ]; then
+      MASTER_HOST=$(echo "$MASTER_INFO" | head -n1)
+      echo "Found master: $MASTER_HOST"
+    else
+      echo "No master found via Sentinel."
+    fi
+
+    if [ -z "$MASTER_HOST" ]; then
+      if [ "$(hostname)" = "rampos-redis-0" ]; then
+        echo "I am redis-0 and no master found. I will be master."
+        # Remove replicaof if exists
+        sed -i '/^replicaof/d' /data/redis.conf
+      else
+        echo "I am not redis-0 and no master found. Defaulting to replica of redis-0."
+        echo "replicaof rampos-redis-0.rampos-redis 6379" >> /data/redis.conf
+      fi
+    elif [ "$MASTER_HOST" != "$(hostname -i)" ] && [ "$MASTER_HOST" != "127.0.0.1" ]; then
+       # We are not the master, so we replicate
+       echo "Configuring as replica of $MASTER_HOST"
+       echo "replicaof $MASTER_HOST 6379" >> /data/redis.conf
+    else
+       echo "I am the master ($MASTER_HOST)."
+       sed -i '/^replicaof/d' /data/redis.conf
+    fi
+
+    # Set password if env var exists
+    if [ -n "$REDIS_PASSWORD" ]; then
+      echo "requirepass $REDIS_PASSWORD" >> /data/redis.conf
+      echo "masterauth $REDIS_PASSWORD" >> /data/redis.conf
+    fi
+
+    echo "Starting Redis..."
+    exec redis-server /data/redis.conf
+
+  redis.conf: |
+    bind 0.0.0.0
+    protected-mode no
+    port 6379
+    dir /data
+    appendonly yes
+
+  init-sentinel.sh: |
+    #!/bin/sh
+    set -e
+
+    echo "Initializing Sentinel..."
+
+    cp /config/sentinel.conf /data/sentinel.conf
+
+    # We need to resolve redis-0 IP or hostname
+    # Initially monitor redis-0
+
+    echo "sentinel monitor rampos-master rampos-redis-0.rampos-redis 6379 2" >> /data/sentinel.conf
+    echo "sentinel down-after-milliseconds rampos-master 5000" >> /data/sentinel.conf
+    echo "sentinel failover-timeout rampos-master 60000" >> /data/sentinel.conf
+    echo "sentinel parallel-syncs rampos-master 1" >> /data/sentinel.conf
+
+    if [ -n "$REDIS_PASSWORD" ]; then
+      echo "sentinel auth-pass rampos-master $REDIS_PASSWORD" >> /data/sentinel.conf
+    fi
+
+    echo "Starting Sentinel..."
+    exec redis-sentinel /data/sentinel.conf
+
+  sentinel.conf: |
+    port 26379
+    dir /data
+    protected-mode no

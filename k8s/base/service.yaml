@@ -11,3 +11,29 @@ spec:
     port: 80
     targetPort: 8080
   type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rampos-redis
+  namespace: rampos
+spec:
+  ports:
+  - port: 6379
+    name: client
+  clusterIP: None
+  selector:
+    app: rampos-redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rampos-redis-sentinel
+  namespace: rampos
+spec:
+  ports:
+  - port: 26379
+    name: sentinel
+  clusterIP: None
+  selector:
+    app: rampos-redis-sentinel

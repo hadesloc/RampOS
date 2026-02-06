@@ -1,22 +1,193 @@
+---
+# Dev Environment Application
 apiVersion: argoproj.io/v1alpha1
 kind: Application
+metadata:
+  name: rampos-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: rampos
+    app.kubernetes.io/environment: dev
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: rampos-deployments
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: rampos-alerts
+spec:
+  project: rampos
+  source:
+    repoURL: https://github.com/rampos/rampos.git
+    targetRevision: develop
+    path: k8s/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: rampos-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+---
+# Staging Environment Application
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rampos-staging
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: rampos
+    app.kubernetes.io/environment: staging
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: rampos-deployments
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: rampos-alerts
+spec:
+  project: rampos
+  source:
+    repoURL: https://github.com/rampos/rampos.git
+    targetRevision: main
+    path: k8s/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: rampos-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+---
+# Production Environment Application
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rampos
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: rampos
+    app.kubernetes.io/environment: production
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: rampos-deployments
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: rampos-alerts
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: rampos-alerts
+spec:
+  project: rampos
+  source:
+    repoURL: https://github.com/rampos/rampos.git
+    # Production uses version tags
+    targetRevision: HEAD
+    path: k8s/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: rampos
+  syncPolicy:
+    # Production requires manual sync for safety
+    automated:
+      prune: false
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - Validate=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+
+---
+# ArgoCD Project for RampOS
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
 metadata:
   name: rampos
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  project: default
-  source:
-    repoURL: https://github.com/rampos/rampos.git
-    targetRevision: v0.1.0
-    path: k8s/overlays/prod
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: rampos
-  syncPolicy:
-    automated:
-      prune: false  # Change to false for production
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
+  description: RampOS Application Project
+
+  # Allow manifests from rampos repo only
+  sourceRepos:
+    - https://github.com/rampos/rampos.git
+
+  # Destination clusters and namespaces
+  destinations:
+    - namespace: rampos
+      server: https://kubernetes.default.svc
+    - namespace: rampos-dev
+      server: https://kubernetes.default.svc
+    - namespace: rampos-staging
+      server: https://kubernetes.default.svc
+
+  # Allowed cluster-scoped resources
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: networking.k8s.io
+      kind: IngressClass
+
+  # Allowed namespace-scoped resources
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  # Deny specific dangerous resources
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: LimitRange
+
+  # Role definitions for project access
+  roles:
+    - name: developer
+      description: Developer access - can sync dev/staging
+      policies:
+        - p, proj:rampos:developer, applications, get, rampos/*, allow
+        - p, proj:rampos:developer, applications, sync, rampos/rampos-dev, allow
+        - p, proj:rampos:developer, applications, sync, rampos/rampos-staging, allow
+      groups:
+        - developers
+
+    - name: deployer
+      description: Deployer access - can sync all environments
+      policies:
+        - p, proj:rampos:deployer, applications, *, rampos/*, allow
+      groups:
+        - deployers
+
+    - name: admin
+      description: Admin access - full control
+      policies:
+        - p, proj:rampos:admin, *, *, rampos/*, allow
+      groups:
+        - admins

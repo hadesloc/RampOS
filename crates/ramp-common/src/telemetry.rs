@@ -88,7 +88,7 @@ pub fn init_telemetry(config: TelemetryConfig) -> anyhow::Result<()> {
     // OTLP exporter (if configured)
     if let Some(endpoint) = &config.otlp_endpoint {
         let exporter = opentelemetry_otlp::new_exporter()
-            .http()
+            .tonic()
             .with_endpoint(endpoint);
 
         let tracer_provider = TracerProvider::builder()
@@ -116,16 +116,13 @@ pub fn init_telemetry(config: TelemetryConfig) -> anyhow::Result<()> {
             .init();
     } else {
         // Local logging only
+        let subscriber = tracing_subscriber::registry()
+            .with(env_filter);
+
         if config.json_logs {
-            tracing_subscriber::registry()
-                .with(env_filter)
-                .with(fmt::layer().json())
-                .init();
+            subscriber.with(fmt::layer().json()).init();
         } else {
-            tracing_subscriber::registry()
-                .with(env_filter)
-                .with(fmt::layer())
-                .init();
+            subscriber.with(fmt::layer()).init();
         }
     }
 

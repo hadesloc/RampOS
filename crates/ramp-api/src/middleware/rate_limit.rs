@@ -92,7 +92,7 @@ impl RateLimitStore for RedisRateLimitStore {
         let full_key = format!("{}:{}", key_prefix, key);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or(std::time::Duration::from_secs(0))
             .as_secs();
 
         let window_start = now - window_seconds;
@@ -190,14 +190,14 @@ impl RateLimitStore for MemoryRateLimitStore {
         let full_key = format!("{}:{}", key_prefix, key);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or(std::time::Duration::from_secs(0))
             .as_secs();
         let window_start = now - window_seconds;
 
-        let mut history = self.history.lock().unwrap_or_else(|e| {
+        let mut history = self.history.lock().map_err(|e| {
             warn!(error = ?e, "Rate limit in-memory history mutex poisoned");
-            e.into_inner()
-        });
+            RateLimitError::Store(e.to_string())
+        })?;
         let entries = history.entry(full_key).or_default();
 
         // Remove old entries
@@ -283,7 +283,9 @@ pub async fn rate_limit_middleware(
 
             response.headers_mut().insert(
                 "Retry-After",
-                result.reset_after_seconds.to_string().parse().unwrap(),
+                result.reset_after_seconds.to_string().parse().unwrap_or(
+                    axum::http::HeaderValue::from_static("60")
+                ),
             );
             return Ok(response);
         }
@@ -342,17 +344,25 @@ pub async fn rate_limit_middleware(
 
         response.headers_mut().insert(
             "Retry-After",
-            result.reset_after_seconds.to_string().parse().unwrap(),
+            result.reset_after_seconds.to_string().parse().unwrap_or(
+                axum::http::HeaderValue::from_static("60")
+            ),
         );
         response
             .headers_mut()
-            .insert("X-RateLimit-Limit", limit.to_string().parse().unwrap());
+            .insert("X-RateLimit-Limit", limit.to_string().parse().unwrap_or(
+                axum::http::HeaderValue::from_static("0")
+            ));
         response
             .headers_mut()
-            .insert("X-RateLimit-Remaining", "0".parse().unwrap());
+            .insert("X-RateLimit-Remaining", "0".parse().unwrap_or(
+                axum::http::HeaderValue::from_static("0")
+            ));
         response.headers_mut().insert(
             "X-RateLimit-Reset",
-            result.reset_after_seconds.to_string().parse().unwrap(),
+            result.reset_after_seconds.to_string().parse().unwrap_or(
+                axum::http::HeaderValue::from_static("0")
+            ),
         );
         return Ok(response);
     }
@@ -389,7 +399,7 @@ pub async fn rate_limit_middleware(
                     .reset_after_seconds
                     .to_string()
                     .parse()
-                    .unwrap(),
+                    .unwrap_or(axum::http::HeaderValue::from_static("60")),
             );
             return Ok(response);
         }
@@ -404,14 +414,20 @@ pub async fn rate_limit_middleware(
     // Add rate limit headers (using tenant result)
     response
         .headers_mut()
-        .insert("X-RateLimit-Limit", limit.to_string().parse().unwrap());
+        .insert("X-RateLimit-Limit", limit.to_string().parse().unwrap_or(
+            axum::http::HeaderValue::from_static("0")
+        ));
     response.headers_mut().insert(
         "X-RateLimit-Remaining",
-        result.remaining.to_string().parse().unwrap(),
+        result.remaining.to_string().parse().unwrap_or(
+            axum::http::HeaderValue::from_static("0")
+        ),
     );
     response.headers_mut().insert(
         "X-RateLimit-Reset",
-        result.reset_after_seconds.to_string().parse().unwrap(),
+        result.reset_after_seconds.to_string().parse().unwrap_or(
+            axum::http::HeaderValue::from_static("0")
+        ),
     );
 
     Ok(response)

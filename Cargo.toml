@@ -58,7 +58,7 @@ async-nats = { version = "0.33", default-features = false }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 opentelemetry = "0.21"
-opentelemetry-otlp = { version = "0.14", default-features = false, features = ["http-proto", "trace", "reqwest-client"] }
+opentelemetry-otlp = { version = "0.14", default-features = false, features = ["grpc-tonic", "trace", "http-proto", "reqwest-client"] }
 
 # Utils
 uuid = { version = "1.6", features = ["v4", "v7", "serde"] }
