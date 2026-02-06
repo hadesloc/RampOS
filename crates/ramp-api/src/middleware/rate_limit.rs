@@ -301,25 +301,18 @@ pub async fn rate_limit_middleware(
 
     // 2. Check tenant/IP limit
     // Get tenant context from request extensions
-    let tenant_key = req
-        .extensions()
-        .get::<TenantContext>()
-        .map(|ctx| ctx.tenant_id.0.clone())
-        .unwrap_or_else(|| {
-            // Fall back to IP-based rate limiting for unauthenticated requests
-            req.headers()
-                .get("x-forwarded-for")
-                .and_then(|v| v.to_str().ok())
-                .map(|s| s.split(',').next().unwrap_or("unknown").trim().to_string())
-                .unwrap_or_else(|| "unknown".to_string())
-        });
-
-    // Determine limit for this request
-    let path = req.uri().path().to_string();
-    let _method = req.method().clone();
-
-    // Check general tenant limit
-    let limit = limiter.config.tenant_max_requests;
+    let (tenant_key, limit) = if let Some(ctx) = req.extensions().get::<TenantContext>() {
+        (ctx.tenant_id.0.clone(), ctx.tier.rate_limit())
+    } else {
+        // Fall back to IP-based rate limiting for unauthenticated requests
+        let ip = req
+            .headers()
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.split(',').next().unwrap_or("unknown").trim().to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        (ip, limiter.config.tenant_max_requests)
+    };
     let result = match limiter.check(&tenant_key, limit).await {
         Ok(res) => res,
         Err(e) => {

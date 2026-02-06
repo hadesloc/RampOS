@@ -1,5 +1,7 @@
 use crate::middleware::{rate_limit_middleware, RateLimitConfig, RateLimitError, RateLimitResult};
 use crate::middleware::{RateLimitStore, RateLimiter};
+use crate::middleware::tenant::{TenantContext, TenantTier};
+use ramp_common::types::TenantId;
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -137,4 +139,48 @@ async fn test_rate_limit_middleware_endpoint_store_error_returns_503() {
     let req = Request::builder().uri("/").body(Body::empty()).unwrap();
     let response = app.oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn test_enterprise_rate_limit() {
+    let mut config = RateLimitConfig::default();
+    config.window_seconds = 1;
+
+    let limiter = Arc::new(RateLimiter::with_memory(config));
+
+    let app = Router::new()
+        .route("/", get(|| async { "ok" }))
+        .layer(from_fn_with_state(limiter.clone(), rate_limit_middleware));
+
+    // 1. Test Standard Tier (limit 100)
+    let context = TenantContext {
+        tenant_id: TenantId::new("standard-tenant"),
+        name: "Standard Tenant".to_string(),
+        tier: TenantTier::Standard,
+    };
+    
+    let mut req = Request::builder().uri("/").body(Body::empty()).unwrap();
+    req.extensions_mut().insert(context);
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let limit_header = response.headers().get("X-RateLimit-Limit").unwrap();
+    assert_eq!(limit_header, "100");
+
+    // 2. Test Enterprise Tier (limit 1000)
+    let context_ent = TenantContext {
+        tenant_id: TenantId::new("enterprise-tenant"),
+        name: "Enterprise Tenant".to_string(),
+        tier: TenantTier::Enterprise,
+    };
+
+    let mut req_ent = Request::builder().uri("/").body(Body::empty()).unwrap();
+    req_ent.extensions_mut().insert(context_ent);
+
+    let response_ent = app.oneshot(req_ent).await.unwrap();
+    assert_eq!(response_ent.status(), StatusCode::OK);
+
+    let limit_header_ent = response_ent.headers().get("X-RateLimit-Limit").unwrap();
+    assert_eq!(limit_header_ent, "1000");
 }

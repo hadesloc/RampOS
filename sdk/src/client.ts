@@ -122,4 +122,16 @@ export class RampOSClient {
     this.aa = new AAService(this.httpClient);
     this.webhooks = new WebhookVerifier();
   }
+
+  // ============================================================================
+  // Multi-chain Provider Helper
+  // ============================================================================
+
+  /**
+   * Initialize a MultichainProvider for direct chain interaction
+   * @param rpcUrls Optional map of chain ID to RPC URL overrides
+   */
+  createMultichainProvider(rpcUrls: Record<number, string> = {}): MultichainProvider {
+      return new MultichainProvider(rpcUrls);
+  }
 }
