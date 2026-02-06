@@ -1,193 +1,195 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: rampos-api-network-policy
+  name: default-deny-all
+  namespace: rampos
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rampos-server-policy
   namespace: rampos
 spec:
   podSelector:
     matchLabels:
       app: rampos-server
   policyTypes:
-    - Ingress
-    - Egress
+  - Ingress
+  - Egress
   ingress:
-    # Allow ingress from ingress controller only
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: ingress-nginx
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: ingress-nginx
-      ports:
-        - protocol: TCP
-          port: 8080
-    # Allow health checks from kubelet
-    - from: []
-      ports:
-        - protocol: TCP
-          port: 8080
+  # Allow traffic from Ingress Controller
+  # We check for standard ingress-nginx namespace labels
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Allow health checks from Kubelet (though often implicit or node-level)
+  # Keeping open to all for health checks if needed, or rely on CNI.
+  # But standard policy is to trust CNI for node-level checks.
+  # We will keep strict.
   egress:
-    # Allow egress to PostgreSQL
-    - to:
-        - podSelector:
-            matchLabels:
-              app: rampos-postgres
-      ports:
-        - protocol: TCP
-          port: 5432
-    # Allow egress to Redis
-    - to:
-        - podSelector:
-            matchLabels:
-              app: rampos-redis
-      ports:
-        - protocol: TCP
-          port: 6379
-    # Allow egress to NATS
-    - to:
-        - podSelector:
-            matchLabels:
-              app: rampos-nats
-      ports:
-        - protocol: TCP
-          port: 4222
-    # Allow DNS resolution
-    - to:
-        - namespaceSelector: {}
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
-    # Allow outbound HTTPS for external webhooks
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-            except:
-              - 10.0.0.0/8
-              - 172.16.0.0/12
-              - 192.168.0.0/16
-      ports:
-        - protocol: TCP
-          port: 443
+  # Connect to Postgres
+  - to:
+    - podSelector:
+        matchLabels:
+          app: rampos-postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Connect to Redis
+  - to:
+    - podSelector:
+        matchLabels:
+          app: rampos-redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Connect to NATS
+  - to:
+    - podSelector:
+        matchLabels:
+          app: rampos-nats
+    ports:
+    - protocol: TCP
+      port: 4222
+  # Allow DNS resolution (CoreDNS)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: coredns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow HTTPS to external world (webhooks, etc.)
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+    ports:
+    - protocol: TCP
+      port: 443
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: postgres-network-policy
+  name: rampos-postgres-policy
   namespace: rampos
 spec:
   podSelector:
     matchLabels:
       app: rampos-postgres
   policyTypes:
-    - Ingress
-    - Egress
+  - Ingress
   ingress:
-    # Only allow from rampos-server
-    - from:
-        - podSelector:
-            matchLabels:
-              app: rampos-server
-      ports:
-        - protocol: TCP
-          port: 5432
-    # Allow from migration jobs
-    - from:
-        - podSelector:
-            matchLabels:
-              app: rampos-migration
-      ports:
-        - protocol: TCP
-          port: 5432
-  egress:
-    # Deny all egress - postgres doesn't need outbound
-    []
+  - from:
+    - podSelector:
+        matchLabels:
+          app: rampos-server
+    - podSelector:
+        matchLabels:
+          app: rampos-migration
+    ports:
+    - protocol: TCP
+      port: 5432
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: redis-network-policy
+  name: rampos-redis-policy
   namespace: rampos
 spec:
   podSelector:
     matchLabels:
       app: rampos-redis
   policyTypes:
-    - Ingress
-    - Egress
+  - Ingress
   ingress:
-    # Only allow from rampos-server
-    - from:
-        - podSelector:
-            matchLabels:
-              app: rampos-server
-      ports:
-        - protocol: TCP
-          port: 6379
-  egress:
-    # Deny all egress - redis doesn't need outbound
-    []
+  - from:
+    - podSelector:
+        matchLabels:
+          app: rampos-server
+    ports:
+    - protocol: TCP
+      port: 6379
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: nats-network-policy
+  name: rampos-nats-policy
   namespace: rampos
 spec:
   podSelector:
     matchLabels:
       app: rampos-nats
   policyTypes:
-    - Ingress
-    - Egress
+  - Ingress
+  - Egress
   ingress:
-    # Only allow from rampos-server
-    - from:
-        - podSelector:
-            matchLabels:
-              app: rampos-server
-      ports:
-        - protocol: TCP
-          port: 4222
-    # Allow NATS cluster communication
-    - from:
-        - podSelector:
-            matchLabels:
-              app: rampos-nats
-      ports:
-        - protocol: TCP
-          port: 6222
+  - from:
+    - podSelector:
+        matchLabels:
+          app: rampos-server
+    ports:
+    - protocol: TCP
+      port: 4222
+  # Allow clustering traffic
+  - from:
+    - podSelector:
+        matchLabels:
+          app: rampos-nats
+    ports:
+    - protocol: TCP
+      port: 6222
   egress:
-    # Allow NATS cluster communication
-    - to:
-        - podSelector:
-            matchLabels:
-              app: rampos-nats
-      ports:
-        - protocol: TCP
-          port: 6222
-    # Allow DNS
-    - to:
-        - namespaceSelector: {}
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
-      ports:
-        - protocol: UDP
-          port: 53
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: default-deny-all
-  namespace: rampos
-spec:
-  podSelector: {}
-  policyTypes:
-    - Ingress
-    - Egress
+  # Allow clustering traffic
+  - to:
+    - podSelector:
+        matchLabels:
+          app: rampos-nats
+    ports:
+    - protocol: TCP
+      port: 6222
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: coredns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
