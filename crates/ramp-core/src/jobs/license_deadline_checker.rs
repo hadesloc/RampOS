@@ -113,9 +113,14 @@ impl<L: LicenseRepository, E: EventPublisher> LicenseDeadlineChecker<L, E> {
 mod tests {
     use super::*;
     use crate::event::InMemoryEventPublisher;
-    use crate::repository::license::{LicenseRepository, LicenseRow};
+    use crate::repository::license::{
+        CreateLicenseDocumentRequest, CreateTenantLicenseRequest, DocumentStatus,
+        LicenseRepository, LicenseRow, LicenseRequirementRow, LicenseStatus, LicenseTypeRow,
+        TenantLicenseDocumentRow, TenantLicenseRow,
+    };
     use async_trait::async_trait;
     use chrono::{DateTime, Utc};
+    use rust_decimal::Decimal;
     use std::sync::Mutex;
 
     struct MockLicenseRepository {
@@ -136,6 +141,31 @@ mod tests {
 
     #[async_trait]
     impl LicenseRepository for MockLicenseRepository {
+        async fn get_license_types(&self) -> Result<Vec<LicenseTypeRow>> { Ok(vec![]) }
+        async fn get_license_type_by_id(&self, _id: &str) -> Result<Option<LicenseTypeRow>> { Ok(None) }
+        async fn get_license_type_by_code(&self, _code: &str) -> Result<Option<LicenseTypeRow>> { Ok(None) }
+        async fn get_requirements_by_license_type(&self, _license_type_id: &str) -> Result<Vec<LicenseRequirementRow>> { Ok(vec![]) }
+        async fn get_requirement_by_id(&self, _id: &str) -> Result<Option<LicenseRequirementRow>> { Ok(None) }
+        async fn get_mandatory_requirements(&self, _license_type_id: &str) -> Result<Vec<LicenseRequirementRow>> { Ok(vec![]) }
+        async fn get_tenant_licenses(&self, _tenant_id: &TenantId) -> Result<Vec<TenantLicenseRow>> { Ok(vec![]) }
+        async fn get_tenant_license_by_id(&self, _tenant_id: &TenantId, _license_id: &str) -> Result<Option<TenantLicenseRow>> { Ok(None) }
+        async fn get_tenant_license_by_type(&self, _tenant_id: &TenantId, _license_type_id: &str) -> Result<Option<TenantLicenseRow>> { Ok(None) }
+        async fn create_tenant_license(&self, _request: &CreateTenantLicenseRequest) -> Result<TenantLicenseRow> {
+            Err(ramp_common::Error::NotFound("not implemented".to_string()))
+        }
+        async fn update_license_status(&self, _tenant_id: &TenantId, _license_id: &str, _status: LicenseStatus, _reviewed_by: Option<&str>, _review_notes: Option<&str>, _rejection_reason: Option<&str>) -> Result<()> { Ok(()) }
+        async fn update_compliance_percentage(&self, _tenant_id: &TenantId, _license_id: &str, _percentage: Decimal) -> Result<()> { Ok(()) }
+        async fn set_license_number(&self, _tenant_id: &TenantId, _license_id: &str, _license_number: &str, _issued_at: DateTime<Utc>, _expires_at: Option<DateTime<Utc>>) -> Result<()> { Ok(()) }
+        async fn get_expiring_licenses(&self, _days_until_expiry: i32) -> Result<Vec<TenantLicenseRow>> { Ok(vec![]) }
+        async fn get_license_documents(&self, _tenant_id: &TenantId, _tenant_license_id: &str) -> Result<Vec<TenantLicenseDocumentRow>> { Ok(vec![]) }
+        async fn get_document_by_id(&self, _tenant_id: &TenantId, _document_id: &str) -> Result<Option<TenantLicenseDocumentRow>> { Ok(None) }
+        async fn get_document_by_requirement(&self, _tenant_id: &TenantId, _tenant_license_id: &str, _requirement_id: &str) -> Result<Option<TenantLicenseDocumentRow>> { Ok(None) }
+        async fn create_document(&self, _request: &CreateLicenseDocumentRequest) -> Result<TenantLicenseDocumentRow> {
+            Err(ramp_common::Error::NotFound("not implemented".to_string()))
+        }
+        async fn update_document_status(&self, _tenant_id: &TenantId, _document_id: &str, _status: DocumentStatus, _reviewed_by: Option<&str>, _review_notes: Option<&str>, _rejection_reason: Option<&str>) -> Result<()> { Ok(()) }
+        async fn count_approved_documents(&self, _tenant_id: &TenantId, _tenant_license_id: &str) -> Result<i64> { Ok(0) }
+
         async fn find_expiring_before(&self, before: DateTime<Utc>) -> Result<Vec<LicenseRow>> {
             let licenses = self.licenses.lock().unwrap();
             Ok(licenses

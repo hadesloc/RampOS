@@ -5,12 +5,15 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use hickory_resolver::config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts};
+use hickory_resolver::TokioAsyncResolver;
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// DNS record type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -109,20 +112,33 @@ pub struct DomainResolution {
     pub checked_at: DateTime<Utc>,
 }
 
-/// System DNS provider using the system resolver
+/// System DNS provider using hickory-resolver for real DNS lookups
 #[allow(dead_code)]
 pub struct SystemDnsProvider {
     /// DNS timeout in seconds
     timeout_secs: u64,
+    /// The async DNS resolver
+    resolver: TokioAsyncResolver,
 }
 
 impl SystemDnsProvider {
     pub fn new() -> Self {
-        Self { timeout_secs: 10 }
+        Self::with_timeout(5)
     }
 
     pub fn with_timeout(timeout_secs: u64) -> Self {
-        Self { timeout_secs }
+        let mut opts = ResolverOpts::default();
+        opts.timeout = Duration::from_secs(timeout_secs);
+        opts.attempts = 2;
+        opts.use_hosts_file = false;
+
+        let resolver =
+            TokioAsyncResolver::tokio(ResolverConfig::default(), opts);
+
+        Self {
+            timeout_secs,
+            resolver,
+        }
     }
 }
 
@@ -135,7 +151,7 @@ impl Default for SystemDnsProvider {
 #[async_trait]
 impl DnsProvider for SystemDnsProvider {
     fn name(&self) -> &str {
-        "System DNS Resolver"
+        "System DNS Resolver (hickory)"
     }
 
     async fn lookup(&self, name: &str, record_type: DnsRecordType) -> Result<Vec<DnsRecord>> {
@@ -145,28 +161,149 @@ impl DnsProvider for SystemDnsProvider {
             "Looking up DNS record"
         );
 
-        // In a real implementation, this would use trust-dns or tokio::net::lookup_host
-        // For now, return empty results (system DNS lookup requires native resolver)
-
-        Ok(vec![])
+        match record_type {
+            DnsRecordType::A => {
+                match self.resolver.ipv4_lookup(name).await {
+                    Ok(lookup) => {
+                        let values: Vec<String> = lookup.iter().map(|ip| ip.to_string()).collect();
+                        Ok(vec![DnsRecord {
+                            name: name.to_string(),
+                            record_type,
+                            values,
+                            ttl: 300,
+                            queried_at: Utc::now(),
+                        }])
+                    }
+                    Err(e) => {
+                        debug!(error = %e, "A record lookup failed");
+                        Ok(vec![])
+                    }
+                }
+            }
+            DnsRecordType::Aaaa => {
+                match self.resolver.ipv6_lookup(name).await {
+                    Ok(lookup) => {
+                        let values: Vec<String> = lookup.iter().map(|ip| ip.to_string()).collect();
+                        Ok(vec![DnsRecord {
+                            name: name.to_string(),
+                            record_type,
+                            values,
+                            ttl: 300,
+                            queried_at: Utc::now(),
+                        }])
+                    }
+                    Err(e) => {
+                        debug!(error = %e, "AAAA record lookup failed");
+                        Ok(vec![])
+                    }
+                }
+            }
+            DnsRecordType::Cname => {
+                match self.resolver.lookup(name, hickory_resolver::proto::rr::RecordType::CNAME).await {
+                    Ok(lookup) => {
+                        let values: Vec<String> = lookup
+                            .iter()
+                            .filter_map(|rdata| {
+                                rdata.as_cname().map(|cname| cname.0.to_string().trim_end_matches('.').to_string())
+                            })
+                            .collect();
+                        Ok(vec![DnsRecord {
+                            name: name.to_string(),
+                            record_type,
+                            values,
+                            ttl: 300,
+                            queried_at: Utc::now(),
+                        }])
+                    }
+                    Err(e) => {
+                        debug!(error = %e, "CNAME record lookup failed");
+                        Ok(vec![])
+                    }
+                }
+            }
+            DnsRecordType::Txt => {
+                match self.resolver.txt_lookup(name).await {
+                    Ok(lookup) => {
+                        let values: Vec<String> = lookup
+                            .iter()
+                            .map(|txt| txt.to_string())
+                            .collect();
+                        Ok(vec![DnsRecord {
+                            name: name.to_string(),
+                            record_type,
+                            values,
+                            ttl: 300,
+                            queried_at: Utc::now(),
+                        }])
+                    }
+                    Err(e) => {
+                        debug!(error = %e, "TXT record lookup failed");
+                        Ok(vec![])
+                    }
+                }
+            }
+            DnsRecordType::Mx => {
+                match self.resolver.mx_lookup(name).await {
+                    Ok(lookup) => {
+                        let values: Vec<String> = lookup
+                            .iter()
+                            .map(|mx| format!("{} {}", mx.preference(), mx.exchange().to_string().trim_end_matches('.')))
+                            .collect();
+                        Ok(vec![DnsRecord {
+                            name: name.to_string(),
+                            record_type,
+                            values,
+                            ttl: 300,
+                            queried_at: Utc::now(),
+                        }])
+                    }
+                    Err(e) => {
+                        debug!(error = %e, "MX record lookup failed");
+                        Ok(vec![])
+                    }
+                }
+            }
+            DnsRecordType::Ns => {
+                match self.resolver.ns_lookup(name).await {
+                    Ok(lookup) => {
+                        let values: Vec<String> = lookup
+                            .iter()
+                            .map(|ns| ns.0.to_string().trim_end_matches('.').to_string())
+                            .collect();
+                        Ok(vec![DnsRecord {
+                            name: name.to_string(),
+                            record_type,
+                            values,
+                            ttl: 300,
+                            queried_at: Utc::now(),
+                        }])
+                    }
+                    Err(e) => {
+                        debug!(error = %e, "NS record lookup failed");
+                        Ok(vec![])
+                    }
+                }
+            }
+        }
     }
 
     async fn verify_txt_record(&self, name: &str, expected_value: &str) -> Result<DnsVerification> {
         debug!(
             name = %name,
             expected = %expected_value,
-            "Verifying TXT record"
+            "Verifying TXT record via real DNS"
         );
 
         let records = self.lookup(name, DnsRecordType::Txt).await?;
 
         for record in &records {
             for value in &record.values {
-                if value.trim_matches('"') == expected_value {
+                let cleaned = value.trim_matches('"');
+                if cleaned == expected_value {
                     return Ok(DnsVerification {
                         record_name: name.to_string(),
                         expected_value: expected_value.to_string(),
-                        actual_value: Some(value.clone()),
+                        actual_value: Some(cleaned.to_string()),
                         status: DnsVerificationStatus::Verified,
                         error: None,
                         verified_at: Utc::now(),
@@ -175,19 +312,18 @@ impl DnsProvider for SystemDnsProvider {
             }
         }
 
-        // Record not found or doesn't match
         let actual_value = records
             .first()
             .and_then(|r| r.values.first())
             .cloned();
 
-        let status = if records.is_empty() {
+        let status = if records.is_empty() || records.iter().all(|r| r.values.is_empty()) {
             DnsVerificationStatus::Pending
         } else {
             DnsVerificationStatus::Failed
         };
 
-        let error = if records.is_empty() {
+        let error = if status == DnsVerificationStatus::Pending {
             Some(format!("TXT record {} not found", name))
         } else {
             Some(format!(
@@ -210,19 +346,67 @@ impl DnsProvider for SystemDnsProvider {
     async fn check_domain_resolution(&self, domain: &str) -> Result<DomainResolution> {
         debug!(
             domain = %domain,
-            "Checking domain resolution"
+            "Checking domain resolution via real DNS"
         );
 
-        // In a real implementation, this would resolve the domain
-        // For now, return a mock result
+        let mut ipv4_addresses = Vec::new();
+        let mut ipv6_addresses = Vec::new();
+        let mut cname_chain = Vec::new();
+        let mut resolution_error = None;
+
+        // Look up CNAME chain
+        match self.lookup(domain, DnsRecordType::Cname).await {
+            Ok(records) => {
+                for record in &records {
+                    cname_chain.extend(record.values.clone());
+                }
+            }
+            Err(e) => {
+                warn!(error = %e, "CNAME lookup failed during resolution check");
+            }
+        }
+
+        // Look up A records
+        match self.lookup(domain, DnsRecordType::A).await {
+            Ok(records) => {
+                for record in &records {
+                    ipv4_addresses.extend(record.values.clone());
+                }
+            }
+            Err(e) => {
+                warn!(error = %e, "A record lookup failed during resolution check");
+                resolution_error = Some(format!("IPv4 resolution failed: {}", e));
+            }
+        }
+
+        // Look up AAAA records
+        match self.lookup(domain, DnsRecordType::Aaaa).await {
+            Ok(records) => {
+                for record in &records {
+                    ipv6_addresses.extend(record.values.clone());
+                }
+            }
+            Err(e) => {
+                warn!(error = %e, "AAAA record lookup failed during resolution check");
+                if resolution_error.is_none() {
+                    resolution_error = Some(format!("IPv6 resolution failed: {}", e));
+                }
+            }
+        }
+
+        let resolves = !ipv4_addresses.is_empty() || !ipv6_addresses.is_empty();
+
+        if !resolves && resolution_error.is_none() {
+            resolution_error = Some(format!("Domain {} does not resolve to any IP address", domain));
+        }
 
         Ok(DomainResolution {
             domain: domain.to_string(),
-            resolves: true,
-            ipv4_addresses: vec![],
-            ipv6_addresses: vec![],
-            cname_chain: vec![],
-            error: None,
+            resolves,
+            ipv4_addresses,
+            ipv6_addresses,
+            cname_chain,
+            error: if resolves { None } else { resolution_error },
             checked_at: Utc::now(),
         })
     }
@@ -440,17 +624,60 @@ impl DnsPropagationChecker {
         record_name: &str,
         expected_value: &str,
     ) -> DnsPropagationStatus {
-        // In a real implementation, query each resolver
-        // For now, return mock result
+        let mut resolver_results = HashMap::new();
+        let mut propagated = 0usize;
+
+        for resolver_ip in &self.resolvers {
+            let found = match resolver_ip.parse::<std::net::IpAddr>() {
+                Ok(ip) => {
+                    let mut opts = ResolverOpts::default();
+                    opts.timeout = Duration::from_secs(3);
+                    opts.attempts = 1;
+                    let nameserver = NameServerConfig::new(
+                        std::net::SocketAddr::new(ip, 53),
+                        Protocol::Udp,
+                    );
+                    let config = ResolverConfig::from_parts(
+                        None,
+                        vec![],
+                        vec![nameserver],
+                    );
+                    let resolver = TokioAsyncResolver::tokio(config, opts);
+
+                    match resolver.txt_lookup(record_name).await {
+                        Ok(lookup) => {
+                            lookup.iter().any(|txt| {
+                                let val = txt.to_string();
+                                val.trim_matches('"') == expected_value
+                            })
+                        }
+                        Err(_) => false,
+                    }
+                }
+                Err(_) => false,
+            };
+
+            resolver_results.insert(resolver_ip.clone(), found);
+            if found {
+                propagated += 1;
+            }
+        }
+
+        let total = self.resolvers.len();
+        let percentage = if total > 0 {
+            propagated as f32 / total as f32
+        } else {
+            0.0
+        };
 
         DnsPropagationStatus {
             record_name: record_name.to_string(),
             expected_value: expected_value.to_string(),
-            total_resolvers: self.resolvers.len(),
-            propagated_resolvers: self.resolvers.len(), // Mock: all propagated
-            propagation_percentage: 1.0,
-            is_fully_propagated: true,
-            resolver_results: HashMap::new(),
+            total_resolvers: total,
+            propagated_resolvers: propagated,
+            propagation_percentage: percentage,
+            is_fully_propagated: percentage >= self.required_percentage,
+            resolver_results,
             checked_at: Utc::now(),
         }
     }
@@ -572,7 +799,10 @@ mod tests {
             .check_propagation("_ramp-verify.example.com", "token123")
             .await;
 
-        assert!(status.is_fully_propagated);
-        assert_eq!(status.propagation_percentage, 1.0);
+        // This record doesn't actually exist in DNS, so propagation won't be full
+        // Just verify the checker returns a valid status structure
+        assert!(status.total_resolvers > 0);
+        assert!(status.propagation_percentage >= 0.0);
+        assert!(status.propagation_percentage <= 1.0);
     }
 }

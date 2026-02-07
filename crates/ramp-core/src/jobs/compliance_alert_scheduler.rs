@@ -199,10 +199,13 @@ mod tests {
         let compliance_repo = Arc::new(MockComplianceRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
 
+        // Set due_date exactly 7 days from now (at the same time) so days_remaining == 7
+        let due_date = Utc::now() + Duration::days(7) + Duration::hours(1);
+
         compliance_repo.add_report(SbvReportSchedule {
             tenant_id: "tenant_1".to_string(),
             report_type: "monthly_transaction".to_string(),
-            due_date: Utc::now() + Duration::days(7),
+            due_date,
             status: "PENDING".to_string(),
         });
 

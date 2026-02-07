@@ -74,6 +74,7 @@ dotenvy = "0.15"
 validator = { version = "0.16", features = ["derive"] }
 aws-sdk-s3 = "1.13"
 aws-config = "1.1"
+hickory-resolver = { version = "0.24", features = ["tokio-runtime", "dns-over-https-rustls"] }
 
 [profile.release]
 lto = true

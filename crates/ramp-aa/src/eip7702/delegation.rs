@@ -325,8 +325,14 @@ impl DelegationManager {
         delegate: Address,
         nonce: u64,
     ) -> Result<Delegation> {
-        // Check for existing active delegation
-        if self.registry.get_active(delegator).is_some() {
+        // Check for existing active or pending delegation
+        let delegations = self.registry.delegations.read().unwrap();
+        let has_existing = delegations.get(&delegator).map_or(false, |list| {
+            list.iter().any(|d| d.status == DelegationStatus::Active || d.status == DelegationStatus::Pending)
+        });
+        drop(delegations);
+
+        if has_existing {
             return Err(Eip7702Error::DelegationAlreadyExists(delegator));
         }
 

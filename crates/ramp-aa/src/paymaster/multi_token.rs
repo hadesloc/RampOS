@@ -203,6 +203,22 @@ impl MockPriceOracle {
             U256::from(1_000_000_000_000_000_000u64),
         );
 
+        // Arbitrum prices (uses ETH as native)
+        prices.insert((GasToken::USDT, 42161), U256::from(500_000_000_000_000u64));
+        prices.insert((GasToken::USDC, 42161), U256::from(500_000_000_000_000u64));
+        prices.insert(
+            (GasToken::Native, 42161),
+            U256::from(1_000_000_000_000_000_000u64),
+        );
+
+        // Optimism prices (uses ETH as native)
+        prices.insert((GasToken::USDT, 10), U256::from(500_000_000_000_000u64));
+        prices.insert((GasToken::USDC, 10), U256::from(500_000_000_000_000u64));
+        prices.insert(
+            (GasToken::Native, 10),
+            U256::from(1_000_000_000_000_000_000u64),
+        );
+
         Self { prices }
     }
 

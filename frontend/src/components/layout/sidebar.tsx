@@ -16,6 +16,9 @@ import {
   ChevronRight,
   Menu,
   X,
+  RefreshCw,
+  Network,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -59,6 +62,26 @@ const sidebarSections = [
         title: "Ledger",
         href: "/ledger",
         icon: BookOpen,
+      },
+    ],
+  },
+  {
+    title: "DeFi",
+    items: [
+      {
+        title: "Swap",
+        href: "/swap",
+        icon: RefreshCw,
+      },
+      {
+        title: "Bridge",
+        href: "/bridge",
+        icon: Network,
+      },
+      {
+        title: "Yield",
+        href: "/yield",
+        icon: TrendingUp,
       },
     ],
   },

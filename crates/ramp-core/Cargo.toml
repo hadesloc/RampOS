@@ -45,11 +45,16 @@ subtle = "2.5"
 base64 = { workspace = true }
 jsonwebtoken = { workspace = true }
 urlencoding = "2.1"
+hickory-resolver = { workspace = true }
 
 # XML signature verification for SAML
 ring = "0.17"
 pem = "3.0"
 sha1 = "0.10"
+
+# ACME / Let's Encrypt SSL provisioning
+instant-acme = { version = "0.7", default-features = false, features = ["hyper-rustls", "ring"] }
+rcgen = "0.13"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

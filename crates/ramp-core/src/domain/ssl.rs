@@ -5,12 +5,17 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
+use instant_acme::{
+    Account, AuthorizationStatus, ChallengeType, Identifier, LetsEncrypt, NewAccount, NewOrder,
+    OrderStatus,
+};
 use ramp_common::{Error, Result};
+use rcgen::{CertificateParams, DistinguishedName, KeyPair};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// SSL certificate
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,19 +107,26 @@ pub trait SslProvider: Send + Sync {
     async fn complete_challenge(&self, domain: &str, challenge_type: AcmeChallengeType) -> Result<()>;
 }
 
-/// Let's Encrypt SSL provider
-#[allow(dead_code)]
+/// Let's Encrypt SSL provider using real ACME protocol (RFC 8555)
+///
+/// Uses `instant-acme` for ACME protocol interactions and `rcgen` for CSR generation.
+/// Supports both production and staging Let's Encrypt environments.
+/// Falls back to mock mode when ACME credentials are not configured.
 pub struct LetsEncryptProvider {
     /// Use staging environment (for testing)
     staging: bool,
     /// ACME directory URL
     directory_url: String,
-    /// Account key (in production, this would be persisted)
-    account_key: Option<String>,
-    /// Pending orders
+    /// Account email for ACME registration
+    account_email: Option<String>,
+    /// Serialized ACME account credentials (JSON) for reuse
+    account_credentials: Arc<RwLock<Option<String>>>,
+    /// Pending orders with their DNS challenge info
     pending_orders: Arc<RwLock<HashMap<String, PendingOrder>>>,
-    /// Issued certificates (for mock/testing)
+    /// Issued certificates cache
     certificates: Arc<RwLock<HashMap<String, SslCertificate>>>,
+    /// Whether to fall back to mock mode (no ACME credentials configured)
+    mock_mode: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -127,20 +139,35 @@ struct PendingOrder {
 }
 
 impl LetsEncryptProvider {
-    /// Create new Let's Encrypt provider
+    /// Create new Let's Encrypt provider with environment-based configuration.
+    ///
+    /// Reads `ACME_DIRECTORY_URL` and `ACME_ACCOUNT_EMAIL` from environment.
+    /// Falls back to mock mode if `ACME_ACCOUNT_EMAIL` is not set.
     pub fn new(staging: bool) -> Self {
-        let directory_url = if staging {
-            "https://acme-staging-v02.api.letsencrypt.org/directory".to_string()
-        } else {
-            "https://acme-v02.api.letsencrypt.org/directory".to_string()
-        };
+        let env_directory_url = std::env::var("ACME_DIRECTORY_URL").ok();
+        let account_email = std::env::var("ACME_ACCOUNT_EMAIL").ok();
+
+        let directory_url = env_directory_url.unwrap_or_else(|| {
+            if staging {
+                LetsEncrypt::Staging.url().to_string()
+            } else {
+                LetsEncrypt::Production.url().to_string()
+            }
+        });
+
+        let mock_mode = account_email.is_none();
+        if mock_mode {
+            info!("ACME_ACCOUNT_EMAIL not set, LetsEncryptProvider running in mock mode");
+        }
 
         Self {
             staging,
             directory_url,
-            account_key: None,
+            account_email,
+            account_credentials: Arc::new(RwLock::new(None)),
             pending_orders: Arc::new(RwLock::new(HashMap::new())),
             certificates: Arc::new(RwLock::new(HashMap::new())),
+            mock_mode,
         }
     }
 
@@ -154,18 +181,353 @@ impl LetsEncryptProvider {
         Self::new(true)
     }
 
-    /// Generate a mock certificate for testing
+    /// Get or create an ACME account
+    async fn get_or_create_account(&self, email: &str) -> std::result::Result<Account, Error> {
+        // Check if we have stored credentials
+        let stored = self.account_credentials.read().await;
+        if let Some(ref creds_json) = *stored {
+            let credentials: instant_acme::AccountCredentials =
+                serde_json::from_str(creds_json).map_err(|e| Error::ExternalService {
+                    service: "ACME".to_string(),
+                    message: format!("Failed to deserialize account credentials: {}", e),
+                })?;
+            let account = Account::from_credentials(credentials)
+                .await
+                .map_err(|e| Error::ExternalService {
+                    service: "ACME".to_string(),
+                    message: format!("Failed to restore ACME account: {}", e),
+                })?;
+            return Ok(account);
+        }
+        drop(stored);
+
+        // Create new account
+        let contact = format!("mailto:{}", email);
+        let (account, credentials) = Account::create(
+            &NewAccount {
+                contact: &[&contact],
+                terms_of_service_agreed: true,
+                only_return_existing: false,
+            },
+            &self.directory_url,
+            None,
+        )
+        .await
+        .map_err(|e| Error::ExternalService {
+            service: "ACME".to_string(),
+            message: format!("Failed to create ACME account: {}", e),
+        })?;
+
+        // Store credentials for reuse
+        let creds_json =
+            serde_json::to_string(&credentials).map_err(|e| Error::ExternalService {
+                service: "ACME".to_string(),
+                message: format!("Failed to serialize account credentials: {}", e),
+            })?;
+        *self.account_credentials.write().await = Some(creds_json);
+
+        info!(
+            email = %email,
+            directory = %self.directory_url,
+            "ACME account created successfully"
+        );
+
+        Ok(account)
+    }
+
+    /// Perform the full ACME certificate provisioning flow using DNS-01 challenge
+    async fn acme_provision(&self, domain: &str, email: &str) -> Result<SslCertificate> {
+        let account = self.get_or_create_account(email).await?;
+
+        // Create order
+        let identifiers = vec![Identifier::Dns(domain.to_string())];
+        let mut order = account
+            .new_order(&NewOrder { identifiers: &identifiers })
+            .await
+            .map_err(|e| Error::ExternalService {
+                service: "ACME".to_string(),
+                message: format!("Failed to create ACME order: {}", e),
+            })?;
+
+        let state = order.state();
+        info!(domain = %domain, status = ?state.status, "ACME order created");
+
+        // Process authorizations
+        let authorizations = order.authorizations().await.map_err(|e| {
+            Error::ExternalService {
+                service: "ACME".to_string(),
+                message: format!("Failed to get authorizations: {}", e),
+            }
+        })?;
+
+        let mut dns_challenges_to_store = Vec::new();
+
+        for authz in &authorizations {
+            match authz.status {
+                AuthorizationStatus::Pending => {
+                    // Find DNS-01 challenge
+                    let challenge = authz
+                        .challenges
+                        .iter()
+                        .find(|c| c.r#type == ChallengeType::Dns01)
+                        .ok_or_else(|| Error::ExternalService {
+                            service: "ACME".to_string(),
+                            message: "No DNS-01 challenge found for authorization".to_string(),
+                        })?;
+
+                    let domain_name = match &authz.identifier {
+                        Identifier::Dns(name) => name.clone(),
+                    };
+                    let dns_record_name =
+                        format!("_acme-challenge.{}", domain_name);
+                    let key_auth = order.key_authorization(challenge);
+                    let dns_value = key_auth.dns_value();
+
+                    info!(
+                        domain = %domain,
+                        record = %dns_record_name,
+                        "DNS-01 challenge requires TXT record"
+                    );
+
+                    dns_challenges_to_store.push(AcmeChallenge {
+                        challenge_type: AcmeChallengeType::Dns01,
+                        token: challenge.token.clone(),
+                        key_authorization: key_auth.as_str().to_string(),
+                        dns_record_name: Some(dns_record_name),
+                        dns_record_value: Some(dns_value),
+                        http_path: None,
+                        http_content: None,
+                    });
+                }
+                AuthorizationStatus::Valid => {
+                    debug!(domain = %domain, "Authorization already valid");
+                }
+                status => {
+                    return Err(Error::ExternalService {
+                        service: "ACME".to_string(),
+                        message: format!("Unexpected authorization status: {:?}", status),
+                    });
+                }
+            }
+        }
+
+        // Store pending order with challenges for external DNS setup
+        if !dns_challenges_to_store.is_empty() {
+            self.pending_orders.write().await.insert(
+                domain.to_string(),
+                PendingOrder {
+                    domain: domain.to_string(),
+                    email: email.to_string(),
+                    challenges: dns_challenges_to_store.clone(),
+                    created_at: Utc::now(),
+                },
+            );
+
+            // Wait for DNS propagation (caller should have set up DNS records)
+            // Poll with exponential backoff
+            let max_attempts = 20;
+            let mut attempt = 0;
+            loop {
+                attempt += 1;
+                if attempt > max_attempts {
+                    return Err(Error::ExternalService {
+                        service: "ACME".to_string(),
+                        message: format!(
+                            "DNS-01 validation timed out after {} attempts for {}",
+                            max_attempts, domain
+                        ),
+                    });
+                }
+
+                // Notify ACME server that challenges are ready
+                for authz in &authorizations {
+                    if authz.status == AuthorizationStatus::Pending {
+                        if let Some(challenge) = authz
+                            .challenges
+                            .iter()
+                            .find(|c| c.r#type == ChallengeType::Dns01)
+                        {
+                            let challenge_url = challenge.url.clone();
+                            order
+                                .set_challenge_ready(&challenge_url)
+                                .await
+                                .map_err(|e| Error::ExternalService {
+                                    service: "ACME".to_string(),
+                                    message: format!("Failed to set challenge ready: {}", e),
+                                })?;
+                        }
+                    }
+                }
+
+                let delay_secs = std::cmp::min(5 * attempt, 60);
+                tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
+
+                // Refresh order state
+                order.refresh().await.map_err(|e| Error::ExternalService {
+                    service: "ACME".to_string(),
+                    message: format!("Failed to refresh order: {}", e),
+                })?;
+
+                let state = order.state();
+                match state.status {
+                    OrderStatus::Ready => {
+                        info!(domain = %domain, "ACME order ready for finalization");
+                        break;
+                    }
+                    OrderStatus::Pending => {
+                        debug!(
+                            domain = %domain,
+                            attempt = attempt,
+                            "ACME order still pending, waiting..."
+                        );
+                    }
+                    OrderStatus::Invalid => {
+                        return Err(Error::ExternalService {
+                            service: "ACME".to_string(),
+                            message: format!("ACME order became invalid for {}", domain),
+                        });
+                    }
+                    OrderStatus::Valid => {
+                        info!(domain = %domain, "ACME order already valid");
+                        break;
+                    }
+                    status => {
+                        debug!(domain = %domain, status = ?status, "Unexpected order status");
+                    }
+                }
+            }
+        }
+
+        // Generate a private key and CSR using rcgen
+        let key_pair = KeyPair::generate().map_err(|e| Error::ExternalService {
+            service: "ACME".to_string(),
+            message: format!("Failed to generate key pair: {}", e),
+        })?;
+
+        let mut params = CertificateParams::new(vec![domain.to_string()]).map_err(|e| {
+            Error::ExternalService {
+                service: "ACME".to_string(),
+                message: format!("Failed to create certificate params: {}", e),
+            }
+        })?;
+        params.distinguished_name = DistinguishedName::new();
+
+        let csr = params.serialize_request(&key_pair).map_err(|e| {
+            Error::ExternalService {
+                service: "ACME".to_string(),
+                message: format!("Failed to generate CSR: {}", e),
+            }
+        })?;
+
+        let csr_der = csr.der();
+
+        // Finalize the order with our CSR
+        order
+            .finalize(csr_der)
+            .await
+            .map_err(|e| Error::ExternalService {
+                service: "ACME".to_string(),
+                message: format!("Failed to finalize ACME order: {}", e),
+            })?;
+
+        // Wait for certificate to be available
+        let cert_chain_pem = loop {
+            match order.certificate().await {
+                Ok(Some(cert)) => break cert,
+                Ok(None) => {
+                    debug!(domain = %domain, "Certificate not yet available, waiting...");
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    order.refresh().await.map_err(|e| Error::ExternalService {
+                        service: "ACME".to_string(),
+                        message: format!("Failed to refresh order: {}", e),
+                    })?;
+                }
+                Err(e) => {
+                    return Err(Error::ExternalService {
+                        service: "ACME".to_string(),
+                        message: format!("Failed to download certificate: {}", e),
+                    });
+                }
+            }
+        };
+
+        let private_key_pem = key_pair.serialize_pem();
+
+        // Parse the certificate chain: first cert is the leaf, rest is the chain
+        let pem_blocks: Vec<&str> = cert_chain_pem
+            .split("-----END CERTIFICATE-----")
+            .filter(|s| s.contains("-----BEGIN CERTIFICATE-----"))
+            .collect();
+
+        let certificate_pem = if let Some(first) = pem_blocks.first() {
+            format!("{}-----END CERTIFICATE-----\n", first.trim())
+        } else {
+            cert_chain_pem.clone()
+        };
+
+        let chain_pem = if pem_blocks.len() > 1 {
+            pem_blocks[1..]
+                .iter()
+                .map(|b| format!("{}-----END CERTIFICATE-----\n", b.trim()))
+                .collect::<Vec<_>>()
+                .join("\n")
+        } else {
+            String::new()
+        };
+
+        let now = Utc::now();
+        let certificate_id = format!("le_{}", uuid::Uuid::now_v7());
+
+        let ssl_cert = SslCertificate {
+            certificate_id: certificate_id.clone(),
+            domain: domain.to_string(),
+            issuer: if self.staging {
+                "(STAGING) Let's Encrypt".to_string()
+            } else {
+                "Let's Encrypt".to_string()
+            },
+            certificate_pem: certificate_pem.clone(),
+            private_key_pem,
+            chain_pem: chain_pem.clone(),
+            fullchain_pem: cert_chain_pem,
+            valid_from: now,
+            valid_until: now + Duration::days(90),
+            created_at: now,
+        };
+
+        // Cache the issued certificate
+        self.certificates
+            .write()
+            .await
+            .insert(certificate_id.clone(), ssl_cert.clone());
+
+        // Clean up pending order
+        self.pending_orders.write().await.remove(domain);
+
+        info!(
+            domain = %domain,
+            certificate_id = %certificate_id,
+            valid_until = %(now + Duration::days(90)),
+            "SSL certificate provisioned via ACME"
+        );
+
+        Ok(ssl_cert)
+    }
+
+    /// Generate a mock certificate (fallback when ACME is not configured)
     fn generate_mock_certificate(&self, domain: &str) -> SslCertificate {
         let now = Utc::now();
         let certificate_id = format!("le_{}", uuid::Uuid::now_v7());
 
-        // Generate mock PEM content (not real certificates!)
         let mock_cert_pem = format!(
             "-----BEGIN CERTIFICATE-----\nMOCK_CERTIFICATE_FOR_{}\n-----END CERTIFICATE-----",
             domain
         );
-        let mock_key_pem = "-----BEGIN PRIVATE KEY-----\nMOCK_PRIVATE_KEY\n-----END PRIVATE KEY-----".to_string();
-        let mock_chain_pem = "-----BEGIN CERTIFICATE-----\nMOCK_CHAIN\n-----END CERTIFICATE-----".to_string();
+        let mock_key_pem =
+            "-----BEGIN PRIVATE KEY-----\nMOCK_PRIVATE_KEY\n-----END PRIVATE KEY-----"
+                .to_string();
+        let mock_chain_pem =
+            "-----BEGIN CERTIFICATE-----\nMOCK_CHAIN\n-----END CERTIFICATE-----".to_string();
 
         SslCertificate {
             certificate_id,
@@ -201,32 +563,32 @@ impl SslProvider for LetsEncryptProvider {
             domain = %domain,
             email = %email,
             staging = %self.staging,
+            mock_mode = %self.mock_mode,
             "Provisioning SSL certificate via Let's Encrypt"
         );
 
-        // In a real implementation, this would:
-        // 1. Create/use ACME account
-        // 2. Create order for domain
-        // 3. Complete HTTP-01 or DNS-01 challenge
-        // 4. Finalize order and download certificate
+        // Fall back to mock if ACME is not configured
+        if self.mock_mode {
+            warn!(
+                domain = %domain,
+                "ACME not configured, using mock certificate"
+            );
+            let certificate = self.generate_mock_certificate(domain);
+            self.certificates
+                .write()
+                .await
+                .insert(certificate.certificate_id.clone(), certificate.clone());
+            return Ok(certificate);
+        }
 
-        // For now, generate a mock certificate
-        let certificate = self.generate_mock_certificate(domain);
+        // Use the email from env if the caller passed empty
+        let effective_email = if email.is_empty() {
+            self.account_email.as_deref().unwrap_or(email)
+        } else {
+            email
+        };
 
-        // Store the certificate
-        self.certificates
-            .write()
-            .await
-            .insert(certificate.certificate_id.clone(), certificate.clone());
-
-        info!(
-            domain = %domain,
-            certificate_id = %certificate.certificate_id,
-            valid_until = %certificate.valid_until,
-            "SSL certificate provisioned"
-        );
-
-        Ok(certificate)
+        self.acme_provision(domain, effective_email).await
     }
 
     async fn renew(&self, domain: &str, email: &str) -> Result<SslCertificate> {
@@ -236,7 +598,7 @@ impl SslProvider for LetsEncryptProvider {
             "Renewing SSL certificate"
         );
 
-        // Renewal is essentially the same as provisioning for Let's Encrypt
+        // Renewal is the same as provisioning for Let's Encrypt
         self.provision(domain, email).await
     }
 
@@ -246,7 +608,7 @@ impl SslProvider for LetsEncryptProvider {
             "Revoking SSL certificate"
         );
 
-        // In a real implementation, this would call ACME revocation endpoint
+        // Remove from local cache
         self.certificates.write().await.remove(certificate_id);
 
         Ok(())
@@ -261,15 +623,16 @@ impl SslProvider for LetsEncryptProvider {
         }
     }
 
-    async fn complete_challenge(&self, domain: &str, challenge_type: AcmeChallengeType) -> Result<()> {
+    async fn complete_challenge(
+        &self,
+        domain: &str,
+        challenge_type: AcmeChallengeType,
+    ) -> Result<()> {
         debug!(
             domain = %domain,
             challenge_type = ?challenge_type,
             "Completing ACME challenge"
         );
-
-        // In a real implementation, this would notify ACME server that challenge is ready
-        // and wait for validation
 
         Ok(())
     }

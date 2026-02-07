@@ -271,7 +271,7 @@ mod tests {
         assert!(!fallback.is_stale(&price));
 
         // Make price old (6 minutes > 5 minutes max)
-        price.timestamp = Utc::now() - chrono::Duration::minutes(6);
+        price.timestamp = chrono::Utc::now() - chrono::Duration::minutes(6);
         assert!(fallback.is_stale(&price));
     }
 

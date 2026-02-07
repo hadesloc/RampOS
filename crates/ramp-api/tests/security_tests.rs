@@ -4,7 +4,7 @@ use axum::{
     routing::get,
     Router,
 };
-use ramp_api::{handlers::intent::get_intent, middleware::tenant::TenantContext};
+use ramp_api::{handlers::intent::get_intent, middleware::tenant::{TenantContext, TenantTier}};
 use ramp_common::types::{IntentId, TenantId};
 use ramp_core::repository::intent::{IntentRepository, IntentRow};
 use std::sync::Arc;
@@ -175,11 +175,12 @@ async fn test_sql_injection_attempt() {
         .layer(axum::Extension(TenantContext {
             tenant_id: TenantId::new("tenant_123"),
             name: "Test Tenant".to_string(),
+            tier: TenantTier::Standard,
         }))
         .with_state(intent_repo);
 
-    // Attempt SQL injection in the ID
-    let injection_payload = "valid_id' OR '1'='1";
+    // Attempt SQL injection in the ID (URL-encode single quotes)
+    let injection_payload = "valid_id%27%20OR%20%271%27%3D%271";
     let response = app
         .oneshot(
             Request::builder()
@@ -190,8 +191,6 @@ async fn test_sql_injection_attempt() {
         .await
         .unwrap();
 
-    // Should be Not Found because "valid_id' OR '1'='1" is treated as a literal string ID
-    // and doesn't match "valid_id".
-    // If injection worked, it might have returned 200 (if we were running against a real DB with vulnerable query).
+    // Should be Not Found because the injection payload is treated as a literal string ID
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }

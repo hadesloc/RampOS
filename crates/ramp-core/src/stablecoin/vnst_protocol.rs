@@ -538,7 +538,7 @@ impl VnstProtocolService {
         let target_rate = Decimal::ONE;
 
         let deviation_decimal = (current_rate - target_rate).abs() / target_rate * Decimal::from(10_000);
-        let deviation_bps = deviation_decimal.to_string().parse::<i32>().unwrap_or(0);
+        let deviation_bps = deviation_decimal.trunc().to_string().parse::<i32>().unwrap_or(0);
 
         let (status, message) = if deviation_bps < self.config.peg_deviation_warning_bps as i32 {
             (PegHealthStatus::Healthy, "VNST peg is stable".to_string())
@@ -726,9 +726,9 @@ mod tests {
     fn test_calculate_fees() {
         let service = create_test_service();
 
-        // Mint fee: 0.1% of 1,000,000 VND = 1,000 VND
+        // Mint fee: 10 bps = 0.1% of 1,000,000 VND = 1,000 VND
         let mint_fee = service.calculate_mint_fee(Decimal::from(1_000_000));
-        assert_eq!(mint_fee, Decimal::from(100)); // 10 bps = 0.1%
+        assert_eq!(mint_fee, Decimal::from(1000));
 
         // Burn fee: 0.1% of 1M VNST base units
         let vnst_amount = U256::from(1_000_000u64) * U256::from(10u64).pow(U256::from(18));

@@ -7,7 +7,7 @@ mod dai;
 mod usdc;
 mod usdt;
 mod vnst;
-mod vnst_protocol;
+pub mod vnst_protocol;
 
 pub use dai::DaiToken;
 pub use usdc::UsdcToken;

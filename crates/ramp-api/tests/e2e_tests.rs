@@ -226,6 +226,17 @@ async fn setup_test_app() -> TestContext {
         aa_service: None,
         portal_auth_config: Arc::new(PortalAuthConfig::default()),
         bank_confirmation_repo: None,
+        licensing_repo: None,
+        compliance_audit_service: None,
+        sso_service: Arc::new(ramp_core::sso::SsoService::new()),
+        billing_service: Arc::new(ramp_core::billing::BillingService::new(
+            ramp_core::billing::BillingConfig::default(),
+            Arc::new(ramp_core::billing::mock::MockBillingDataProvider::new()),
+        )),
+        vnst_protocol: Arc::new(ramp_core::stablecoin::vnst_protocol::VnstProtocolService::new(
+            ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
+            Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
+        )),
     };
 
     let app = create_router(app_state);

@@ -521,6 +521,7 @@ impl CrossChainExecutor for IntentExecutor {
 mod tests {
     use super::*;
     use crate::bridge::{BridgeConfig, BridgeToken};
+    use ethers::types::Address;
 
     #[tokio::test]
     async fn test_executor_creation() {

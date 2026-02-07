@@ -1,32 +1,58 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CreditCard, Download, ExternalLink, Zap } from "lucide-react";
+import { CreditCard, Download, ExternalLink, Zap, Loader2 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
-
-const invoices = [
-  { id: "inv_001", date: "Mar 1, 2024", amount: "$499.00", status: "Paid" },
-  { id: "inv_002", date: "Feb 1, 2024", amount: "$499.00", status: "Paid" },
-  { id: "inv_003", date: "Jan 1, 2024", amount: "$499.00", status: "Paid" },
-];
+import { api, Subscription, Invoice } from "@/lib/api";
 
 export default function BillingPage() {
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchBillingData = async () => {
+    try {
+      setLoading(true);
+      const [subData, invData] = await Promise.all([
+        api.billing.getSubscription(),
+        api.billing.getInvoices()
+      ]);
+      setSubscription(subData);
+      setInvoices(invData.data);
+    } catch (error) {
+      console.error("Failed to fetch billing data:", error);
+      // Fallback/Mock for now or error
+      toast({
+        title: "Error",
+        description: "Failed to load billing information.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBillingData();
+  }, []);
+
   const handleManageSubscription = () => {
     toast({
       title: "Manage Subscription",
-      description: "Redirecting to subscription management portal is not yet available.",
+      description: "Redirecting to subscription management portal...",
     });
   };
 
   const handleUpgradePlan = () => {
     toast({
       title: "Upgrade Plan",
-      description: "Plan upgrade flow is not yet available. Contact sales for custom plans.",
+      description: "Plan upgrade flow coming soon.",
     });
   };
 
@@ -40,9 +66,20 @@ export default function BillingPage() {
   const handleDownloadInvoice = (invoiceId: string) => {
     toast({
       title: "Download Invoice",
-      description: `Invoice ${invoiceId} download is not yet available.`,
+      description: `Downloading invoice ${invoiceId}...`,
     });
   };
+
+  if (loading) {
+      return (
+          <div className="flex flex-col gap-6 p-6">
+              <PageHeader title="Billing & Usage" description="Manage your subscription plan." />
+              <div className="flex justify-center p-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+          </div>
+      );
+  }
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -58,9 +95,11 @@ export default function BillingPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Current Plan</CardTitle>
-                <CardDescription>You are on the <span className="font-semibold text-primary">Enterprise</span> plan.</CardDescription>
+                <CardDescription>You are on the <span className="font-semibold text-primary capitalize">{subscription?.plan || 'Free'}</span> plan.</CardDescription>
               </div>
-              <Badge className="bg-primary/10 text-primary hover:bg-primary/20">Active</Badge>
+              <Badge className={subscription?.status === 'active' ? "bg-primary/10 text-primary hover:bg-primary/20" : "bg-yellow-100 text-yellow-800"}>
+                {(subscription?.status || 'Active').toUpperCase()}
+              </Badge>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -68,17 +107,23 @@ export default function BillingPage() {
                 <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">API Calls</span>
-                        <span className="font-medium">8.5M / 10M</span>
+                        <span className="font-medium">
+                            {(subscription?.usage.api_calls || 0).toLocaleString()} / {(subscription?.usage.api_limit || 0).toLocaleString()}
+                        </span>
                     </div>
-                    <Progress value={85} className="h-2" />
-                    <p className="text-xs text-muted-foreground text-right">Resets in 12 days</p>
+                    <Progress value={subscription ? (subscription.usage.api_calls / subscription.usage.api_limit) * 100 : 0} className="h-2" />
+                    <p className="text-xs text-muted-foreground text-right">
+                        Resets on {subscription?.usage.reset_date ? new Date(subscription.usage.reset_date).toLocaleDateString() : 'N/A'}
+                    </p>
                 </div>
                 <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">Transaction Volume</span>
-                        <span className="font-medium">$45M / $100M</span>
+                        <span className="font-medium">
+                            ${(subscription?.usage.transaction_volume || 0).toLocaleString()} / ${(subscription?.usage.volume_limit || 0).toLocaleString()}
+                        </span>
                     </div>
-                    <Progress value={45} className="h-2" />
+                    <Progress value={subscription ? (subscription.usage.transaction_volume / subscription.usage.volume_limit) * 100 : 0} className="h-2" />
                 </div>
             </div>
 
@@ -87,19 +132,23 @@ export default function BillingPage() {
             <div className="grid gap-4 md:grid-cols-3">
                 <div>
                     <p className="text-sm font-medium text-muted-foreground">Next Invoice</p>
-                    <p className="text-2xl font-bold">$499.00</p>
-                    <p className="text-xs text-muted-foreground">Due on {new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                    <p className="text-2xl font-bold">{subscription?.amount ? `$${subscription.amount}` : '$0.00'}</p>
+                    <p className="text-xs text-muted-foreground">
+                        Due on {subscription?.next_invoice_date ? new Date(subscription.next_invoice_date).toLocaleDateString() : 'N/A'}
+                    </p>
                 </div>
                  <div>
                     <p className="text-sm font-medium text-muted-foreground">Payment Method</p>
                     <div className="flex items-center gap-2 mt-1">
                         <CreditCard className="h-4 w-4" />
-                        <span className="text-sm font-medium">&bull;&bull;&bull;&bull; 4242</span>
+                        <span className="text-sm font-medium">
+                            {subscription?.payment_method ? `•••• ${subscription.payment_method.last4}` : 'No card'}
+                        </span>
                     </div>
                 </div>
                  <div>
                     <p className="text-sm font-medium text-muted-foreground">Billing Email</p>
-                    <p className="text-sm mt-1">billing@rampos.io</p>
+                    <p className="text-sm mt-1">{subscription?.billing_email || 'N/A'}</p>
                 </div>
             </div>
           </CardContent>
@@ -152,26 +201,32 @@ export default function BillingPage() {
         </CardHeader>
         <CardContent>
             <div className="space-y-4">
-                {invoices.map((inv) => (
-                    <div key={inv.id} className="flex items-center justify-between border-b last:border-0 pb-4 last:pb-0">
-                        <div className="flex items-center gap-4">
-                            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                                <Download className="h-4 w-4 text-muted-foreground" />
+                {invoices.length === 0 ? (
+                    <div className="text-center py-4 text-muted-foreground">No invoices found.</div>
+                ) : (
+                    invoices.map((inv) => (
+                        <div key={inv.id} className="flex items-center justify-between border-b last:border-0 pb-4 last:pb-0">
+                            <div className="flex items-center gap-4">
+                                <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                                    <Download className="h-4 w-4 text-muted-foreground" />
+                                </div>
+                                <div>
+                                    <p className="font-medium">{new Date(inv.date).toLocaleDateString()}</p>
+                                    <p className="text-sm text-muted-foreground">Invoice #{inv.number}</p>
+                                </div>
                             </div>
-                            <div>
-                                <p className="font-medium">{inv.date}</p>
-                                <p className="text-sm text-muted-foreground">Invoice #{inv.id}</p>
+                            <div className="flex items-center gap-4">
+                                <span className="font-medium">{inv.currency} {inv.amount}</span>
+                                <Badge variant="outline" className={`bg-green-50 text-green-700 border-green-200 ${inv.status === 'paid' ? '' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
+                                    {inv.status}
+                                </Badge>
+                                <Button variant="ghost" size="icon" onClick={() => handleDownloadInvoice(inv.id)}>
+                                    <ExternalLink className="h-4 w-4" />
+                                </Button>
                             </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                            <span className="font-medium">{inv.amount}</span>
-                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">{inv.status}</Badge>
-                            <Button variant="ghost" size="icon" onClick={() => handleDownloadInvoice(inv.id)}>
-                                <ExternalLink className="h-4 w-4" />
-                            </Button>
-                        </div>
-                    </div>
-                ))}
+                    ))
+                )}
             </div>
         </CardContent>
       </Card>

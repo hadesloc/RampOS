@@ -771,7 +771,7 @@ mod tests {
         let provider = Arc::new(
             MockVndLimitDataProvider::new()
                 .with_tier(KycTier::Tier3)
-                .with_daily_used(dec!(10_000_000_000i64)), // 10B used
+                .with_daily_used(dec!(10_000_000_000)), // 10B used
         );
         let checker = create_test_checker(provider);
 
@@ -820,7 +820,7 @@ mod tests {
             VndTierLimits {
                 single_transaction_limit: dec!(200_000_000), // 200M
                 daily_limit: dec!(500_000_000),              // 500M
-                monthly_limit: dec!(5_000_000_000i64),       // 5B
+                monthly_limit: dec!(5_000_000_000),       // 5B
                 requires_manual_approval_threshold: None,
             },
         );
@@ -873,7 +873,7 @@ mod tests {
 
         let tier2 = VndTierLimits::tier2();
         assert_eq!(tier2.daily_limit, dec!(500_000_000));
-        assert_eq!(tier2.monthly_limit, dec!(5_000_000_000i64));
+        assert_eq!(tier2.monthly_limit, dec!(5_000_000_000));
 
         let tier3 = VndTierLimits::tier3();
         assert_eq!(tier3.daily_limit, Decimal::MAX);

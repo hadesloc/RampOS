@@ -1135,6 +1135,390 @@ export const riskApi = {
   },
 };
 
+// SSO Types
+export interface SsoProvider {
+  provider: string; // 'okta', 'azure', 'google'
+  name: string;
+  enabled: boolean;
+  config: {
+    client_id?: string;
+    issuer_url?: string;
+    domain?: string;
+    last_sync?: string;
+    [key: string]: unknown;
+  };
+}
+
+// Domain Types
+export interface Domain {
+  id: string;
+  domain: string;
+  status: 'pending' | 'active' | 'failed';
+  ssl_status: 'pending' | 'issued' | 'failed';
+  dns_verified: boolean;
+  is_primary: boolean;
+  cname_target: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Billing Types
+export interface SubscriptionUsage {
+  api_calls: number;
+  api_limit: number;
+  transaction_volume: number;
+  volume_limit: number;
+  reset_date: string;
+}
+
+export interface Subscription {
+  plan: 'starter' | 'growth' | 'enterprise';
+  status: 'active' | 'past_due' | 'canceled';
+  amount: string;
+  currency: string;
+  interval: 'month' | 'year';
+  next_invoice_date: string;
+  payment_method?: {
+    brand: string;
+    last4: string;
+  };
+  billing_email?: string;
+  usage: SubscriptionUsage;
+}
+
+export interface Invoice {
+  id: string;
+  number: string;
+  amount: string;
+  currency: string;
+  status: 'paid' | 'open' | 'void';
+  date: string;
+  due_date: string;
+  pdf_url?: string;
+}
+
+// SSO API
+export const ssoApi = {
+  listProviders: async (): Promise<SsoProvider[]> => {
+    return apiRequest<SsoProvider[]>('/v1/admin/sso/providers');
+  },
+
+  configure: async (provider: string, config: Record<string, unknown>): Promise<SsoProvider> => {
+    return apiRequest<SsoProvider>(`/v1/admin/sso/providers/${provider}`, {
+      method: 'PUT',
+      body: JSON.stringify({ config }),
+    });
+  },
+
+  toggle: async (provider: string, enabled: boolean): Promise<SsoProvider> => {
+    return apiRequest<SsoProvider>(`/v1/admin/sso/providers/${provider}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    });
+  },
+};
+
+// Domains API
+export const domainsApi = {
+  list: async (): Promise<Domain[]> => {
+    return apiRequest<Domain[]>('/v1/admin/domains');
+  },
+
+  create: async (domain: string): Promise<Domain> => {
+    return apiRequest<Domain>('/v1/admin/domains', {
+      method: 'POST',
+      body: JSON.stringify({ domain }),
+    });
+  },
+
+  get: async (id: string): Promise<Domain> => {
+    return apiRequest<Domain>(`/v1/admin/domains/${id}`);
+  },
+
+  delete: async (id: string): Promise<void> => {
+    return apiRequest<void>(`/v1/admin/domains/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  verifyDns: async (id: string): Promise<Domain> => {
+    return apiRequest<Domain>(`/v1/admin/domains/${id}/verify-dns`, {
+      method: 'POST',
+    });
+  },
+
+  provisionSsl: async (id: string): Promise<Domain> => {
+    return apiRequest<Domain>(`/v1/admin/domains/${id}/provision-ssl`, {
+      method: 'POST',
+    });
+  },
+};
+
+// Billing API
+export const billingApi = {
+  getSubscription: async (): Promise<Subscription> => {
+    return apiRequest<Subscription>('/v1/admin/billing/subscription');
+  },
+
+  getInvoices: async (params?: { page?: number; per_page?: number }): Promise<PaginatedResponse<Invoice>> => {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.per_page) searchParams.set('per_page', params.per_page.toString());
+    const query = searchParams.toString();
+    return apiRequest<PaginatedResponse<Invoice>>(`/v1/admin/billing/invoices${query ? `?${query}` : ''}`);
+  },
+
+  upgradePlan: async (plan: string): Promise<Subscription> => {
+    return apiRequest<Subscription>('/v1/admin/billing/subscription/upgrade', {
+      method: 'POST',
+      body: JSON.stringify({ plan }),
+    });
+  },
+};
+
+// DeFi Swap Types
+export interface SwapQuote {
+  quoteId: string;
+  fromToken: string;
+  toToken: string;
+  fromAmount: string;
+  toAmount: string;
+  rate: string;
+  priceImpact: string;
+  gasCost: string;
+  route: string;
+  expiresAt: string;
+}
+
+export interface SwapTransaction {
+  txHash: string;
+  status: 'pending' | 'success' | 'failed';
+  fromToken: string;
+  toToken: string;
+  fromAmount: string;
+  toAmount: string;
+  rate: string;
+  timestamp: string;
+}
+
+// DeFi Bridge Types
+export interface BridgeChain {
+  chainId: number;
+  name: string;
+  tokens: BridgeTokenInfo[];
+}
+
+export interface BridgeTokenInfo {
+  symbol: string;
+  address: string;
+  decimals: number;
+}
+
+export interface BridgeQuoteResponse {
+  quoteId: string;
+  bridgeName: string;
+  fromChainId: number;
+  toChainId: number;
+  token: string;
+  amount: string;
+  amountOut: string;
+  bridgeFee: string;
+  gasFee: string;
+  totalFee: string;
+  estimatedTimeSeconds: number;
+  expiresAt: string;
+}
+
+export interface BridgeTransferResponse {
+  txHash: string;
+  status: string;
+  bridgeName: string;
+  fromChainId: number;
+  toChainId: number;
+  estimatedTimeSeconds: number;
+}
+
+export interface BridgeTransferStatus {
+  txHash: string;
+  status: string;
+  isFinal: boolean;
+}
+
+// DeFi Yield Types
+export interface YieldStrategy {
+  id: string;
+  name: string;
+  description: string;
+  riskLevel: string;
+  maxProtocolExposure: number;
+  maxTokenExposure: number;
+  minApyThreshold: number;
+  rebalanceApyThreshold: number;
+  minHealthFactor: number;
+  rebalanceIntervalSecs: number;
+  gasAwareRebalancing: boolean;
+  allowedProtocols: string[];
+  isActive: boolean;
+}
+
+export interface YieldPerformance {
+  periodStart: string;
+  periodEnd: string;
+  totalDeposited: string;
+  totalWithdrawn: string;
+  totalYieldEarned: string;
+  averageApy: number;
+  netApy: number;
+  numRebalances: number;
+  totalGasCost: string;
+  positions: YieldPositionPerformance[];
+  protocolBreakdown: YieldProtocolBreakdown[];
+}
+
+export interface YieldPositionPerformance {
+  protocol: string;
+  token: string;
+  principal: string;
+  currentValue: string;
+  yieldEarned: string;
+  apy: number;
+}
+
+export interface YieldProtocolBreakdown {
+  protocol: string;
+  allocationPercent: number;
+  currentApy: number;
+  yieldEarned: string;
+}
+
+export interface YieldApyData {
+  timestamp: string;
+  protocols: {
+    id: string;
+    name: string;
+    tokens: {
+      address: string;
+      symbol: string;
+      supplyApy: number;
+      incentiveApy: number;
+      totalApy: number;
+    }[];
+  }[];
+}
+
+// DeFi Swap API
+export const swapApi = {
+  getQuote: async (params: {
+    fromToken: string;
+    toToken: string;
+    amount: string;
+  }): Promise<SwapQuote> => {
+    const searchParams = new URLSearchParams();
+    searchParams.set('from_token', params.fromToken);
+    searchParams.set('to_token', params.toToken);
+    searchParams.set('amount', params.amount);
+    return apiRequest<SwapQuote>(`/v1/swap/quote?${searchParams.toString()}`);
+  },
+
+  executeSwap: async (data: {
+    quoteId: string;
+    fromToken: string;
+    toToken: string;
+    amount: string;
+    slippage: number;
+  }): Promise<SwapTransaction> => {
+    return apiRequest<SwapTransaction>('/v1/swap/execute', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getHistory: async (params?: { page?: number; per_page?: number }): Promise<PaginatedResponse<SwapTransaction>> => {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.per_page) searchParams.set('per_page', params.per_page.toString());
+    const query = searchParams.toString();
+    return apiRequest<PaginatedResponse<SwapTransaction>>(`/v1/swap/history${query ? `?${query}` : ''}`);
+  },
+};
+
+// DeFi Bridge API
+export const bridgeApi = {
+  listChains: async (): Promise<BridgeChain[]> => {
+    return apiRequest<BridgeChain[]>('/v1/admin/bridge/chains');
+  },
+
+  getQuote: async (params: {
+    fromChainId: number;
+    toChainId: number;
+    token: string;
+    amount: string;
+    recipient: string;
+  }): Promise<BridgeQuoteResponse[]> => {
+    const searchParams = new URLSearchParams();
+    searchParams.set('fromChainId', params.fromChainId.toString());
+    searchParams.set('toChainId', params.toChainId.toString());
+    searchParams.set('token', params.token);
+    searchParams.set('amount', params.amount);
+    searchParams.set('recipient', params.recipient);
+    return apiRequest<BridgeQuoteResponse[]>(`/v1/admin/bridge/quote?${searchParams.toString()}`);
+  },
+
+  transfer: async (data: {
+    quoteId: string;
+    bridgeName: string;
+    fromChainId: number;
+    toChainId: number;
+    token: string;
+    amount: string;
+    recipient: string;
+  }): Promise<BridgeTransferResponse> => {
+    return apiRequest<BridgeTransferResponse>('/v1/admin/bridge/transfer', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getTransferStatus: async (bridgeName: string, txHash: string): Promise<BridgeTransferStatus> => {
+    return apiRequest<BridgeTransferStatus>(`/v1/admin/bridge/transfer/${bridgeName}/${txHash}`);
+  },
+};
+
+// DeFi Yield API
+export const yieldApi = {
+  listStrategies: async (): Promise<{ data: YieldStrategy[]; activeStrategy: string | null }> => {
+    return apiRequest<{ data: YieldStrategy[]; activeStrategy: string | null }>('/v1/yield/strategies');
+  },
+
+  getStrategy: async (id: string): Promise<YieldStrategy> => {
+    return apiRequest<YieldStrategy>(`/v1/yield/strategies/${id}`);
+  },
+
+  activateStrategy: async (id: string, autoRebalance: boolean): Promise<{ strategyId: string; activatedAt: string }> => {
+    return apiRequest<{ strategyId: string; activatedAt: string }>(`/v1/yield/strategies/${id}/activate`, {
+      method: 'POST',
+      body: JSON.stringify({ autoRebalance }),
+    });
+  },
+
+  deactivateStrategy: async (id: string): Promise<{ strategyId: string; status: string }> => {
+    return apiRequest<{ strategyId: string; status: string }>(`/v1/yield/strategies/${id}/deactivate`, {
+      method: 'POST',
+    });
+  },
+
+  getPerformance: async (period?: string): Promise<YieldPerformance> => {
+    const searchParams = new URLSearchParams();
+    if (period) searchParams.set('period', period);
+    const query = searchParams.toString();
+    return apiRequest<YieldPerformance>(`/v1/yield/performance${query ? `?${query}` : ''}`);
+  },
+
+  getApys: async (): Promise<YieldApyData> => {
+    return apiRequest<YieldApyData>('/v1/yield/apys');
+  },
+};
+
 // Export all APIs
 export const api = {
   dashboard: dashboardApi,
@@ -1150,6 +1534,12 @@ export const api = {
   licensing: licensingApi,
   treasury: treasuryApi,
   risk: riskApi,
+  sso: ssoApi,
+  domains: domainsApi,
+  billing: billingApi,
+  swap: swapApi,
+  bridge: bridgeApi,
+  yield: yieldApi,
 };
 
 export default api;
