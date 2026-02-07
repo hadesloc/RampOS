@@ -3,10 +3,11 @@
 //! Supports Okta, Azure AD, Google Workspace, Auth0, and generic OIDC providers.
 
 use async_trait::async_trait;
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use ramp_common::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tokio::sync::RwLock;
 
 use super::{
     RampRole, RoleMapping, SsoAuthRequest, SsoAuthResponse, SsoCallback, SsoProtocol,
@@ -128,9 +129,13 @@ impl OidcConfig {
             client_id,
             client_secret_encrypted,
             issuer_url: "https://accounts.google.com".to_string(),
-            authorization_endpoint: Some("https://accounts.google.com/o/oauth2/v2/auth".to_string()),
+            authorization_endpoint: Some(
+                "https://accounts.google.com/o/oauth2/v2/auth".to_string(),
+            ),
             token_endpoint: Some("https://oauth2.googleapis.com/token".to_string()),
-            userinfo_endpoint: Some("https://openidconnect.googleapis.com/v1/userinfo".to_string()),
+            userinfo_endpoint: Some(
+                "https://openidconnect.googleapis.com/v1/userinfo".to_string(),
+            ),
             jwks_uri: Some("https://www.googleapis.com/oauth2/v3/certs".to_string()),
             end_session_endpoint: None, // Google doesn't support RP-initiated logout
             scopes: vec![
@@ -172,7 +177,9 @@ impl OidcConfig {
             name_claim: "name".to_string(),
             extra_auth_params: HashMap::new(),
             default_redirect_uri: std::env::var("OIDC_REDIRECT_URI")
-                .unwrap_or_else(|_| format!("https://{}/v1/auth/sso/auth0/callback", auth0_domain)),
+                .unwrap_or_else(|_| {
+                    format!("https://{}/v1/auth/sso/auth0/callback", auth0_domain)
+                }),
         }
     }
 }
@@ -222,6 +229,31 @@ pub struct IdTokenClaims {
     pub extra: HashMap<String, serde_json::Value>,
 }
 
+/// JWKS (JSON Web Key Set) response from the IdP's JWKS endpoint
+#[derive(Debug, Clone, Deserialize)]
+struct JwksResponse {
+    keys: Vec<JwkKey>,
+}
+
+/// Individual JSON Web Key from the JWKS endpoint
+#[derive(Debug, Clone, Deserialize)]
+struct JwkKey {
+    /// Key ID - used to match against the JWT header's `kid` field
+    kid: Option<String>,
+    /// Key type (e.g., "RSA")
+    kty: String,
+    /// RSA modulus (base64url-encoded)
+    n: Option<String>,
+    /// RSA exponent (base64url-encoded)
+    e: Option<String>,
+    /// Algorithm (e.g., "RS256")
+    #[allow(dead_code)]
+    alg: Option<String>,
+    /// Key usage (e.g., "sig" for signature)
+    #[serde(rename = "use")]
+    use_: Option<String>,
+}
+
 /// OIDC Provider implementation
 pub struct OidcProvider {
     provider_type: SsoProviderType,
@@ -229,6 +261,8 @@ pub struct OidcProvider {
     role_mappings: Vec<RoleMapping>,
     default_role: RampRole,
     http_client: reqwest::Client,
+    /// Cached JWKS keys with timestamp for expiry-based refresh (1 hour TTL)
+    jwks_cache: RwLock<Option<(Vec<JwkKey>, DateTime<Utc>)>>,
 }
 
 impl OidcProvider {
@@ -249,6 +283,7 @@ impl OidcProvider {
             role_mappings,
             default_role,
             http_client,
+            jwks_cache: RwLock::new(None),
         })
     }
 
@@ -289,11 +324,7 @@ impl OidcProvider {
     }
 
     /// Exchange authorization code for tokens
-    async fn exchange_code(
-        &self,
-        code: &str,
-        redirect_uri: &str,
-    ) -> Result<TokenResponse> {
+    async fn exchange_code(&self, code: &str, redirect_uri: &str) -> Result<TokenResponse> {
         let default_token_endpoint = format!("{}/token", self.config.issuer_url);
         let token_endpoint = self
             .config
@@ -302,7 +333,8 @@ impl OidcProvider {
             .unwrap_or(&default_token_endpoint);
 
         // Decrypt client secret (placeholder - implement actual decryption)
-        let client_secret = String::from_utf8_lossy(&self.config.client_secret_encrypted).to_string();
+        let client_secret =
+            String::from_utf8_lossy(&self.config.client_secret_encrypted).to_string();
 
         let params = [
             ("grant_type", "authorization_code"),
@@ -334,38 +366,204 @@ impl OidcProvider {
             .map_err(|e| ramp_common::Error::Internal(e.to_string()))
     }
 
-    /// Decode and validate ID token
+    /// Fetch JWKS keys from the IdP's JWKS endpoint
+    async fn fetch_jwks(&self) -> Result<Vec<JwkKey>> {
+        let jwks_uri = self
+            .config
+            .jwks_uri
+            .as_deref()
+            .ok_or_else(|| ramp_common::Error::Internal("No JWKS URI configured".into()))?;
+
+        let response = self
+            .http_client
+            .get(jwks_uri)
+            .send()
+            .await
+            .map_err(|e| {
+                ramp_common::Error::External(format!("Failed to fetch JWKS: {}", e))
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(ramp_common::Error::External(format!(
+                "JWKS endpoint returned {}: {}",
+                status, body
+            )));
+        }
+
+        let jwks: JwksResponse = response
+            .json()
+            .await
+            .map_err(|e| ramp_common::Error::Internal(format!("Failed to parse JWKS: {}", e)))?;
+
+        Ok(jwks.keys)
+    }
+
+    /// Get JWKS keys from cache if fresh (< 1 hour), otherwise fetch and cache
+    async fn get_cached_jwks(&self) -> Result<Vec<JwkKey>> {
+        // Check cache under read lock
+        {
+            let cache = self.jwks_cache.read().await;
+            if let Some((keys, fetched_at)) = cache.as_ref() {
+                if Utc::now() - *fetched_at < Duration::hours(1) {
+                    return Ok(keys.clone());
+                }
+            }
+        }
+
+        // Cache miss or expired - fetch fresh keys
+        let keys = self.fetch_jwks().await?;
+
+        // Update cache under write lock
+        {
+            let mut cache = self.jwks_cache.write().await;
+            *cache = Some((keys.clone(), Utc::now()));
+        }
+
+        Ok(keys)
+    }
+
+    /// Decode and validate ID token with cryptographic signature verification
     ///
-    /// SECURITY WARNING: This method only decodes the JWT payload and checks
-    /// expiration/issuer claims. It does NOT verify the JWT cryptographic
-    /// signature. An attacker could forge tokens with arbitrary claims.
-    // SECURITY: TODO - JWKS-based JWT signature verification required before production use.
-    // The token signature MUST be verified against the IdP's public keys (JWKS)
-    // available at `self.config.jwks_uri` before trusting ANY claims.
-    fn decode_id_token(&self, id_token: &str) -> Result<IdTokenClaims> {
-        // Split JWT parts
-        let parts: Vec<&str> = id_token.split('.').collect();
-        if parts.len() != 3 {
-            return Err(ramp_common::Error::Authentication("Invalid ID token format".into()));
+    /// When a JWKS URI is configured, this method:
+    /// 1. Fetches the IdP's public keys (JWKS) with 1-hour caching
+    /// 2. Decodes the JWT header to find the key ID (kid)
+    /// 3. Finds the matching RSA public key
+    /// 4. Verifies the JWT signature using the RSA public key
+    /// 5. Validates issuer and expiration claims
+    ///
+    /// Falls back to insecure base64 decode (with warning) only when no JWKS URI
+    /// is configured.
+    async fn decode_id_token(&self, id_token: &str) -> Result<IdTokenClaims> {
+        if self.config.jwks_uri.is_some() {
+            // Real JWKS-based JWT signature verification
+            let keys = self.get_cached_jwks().await?;
+
+            // Decode the JWT header to get the key ID
+            let header = jsonwebtoken::decode_header(id_token).map_err(|e| {
+                ramp_common::Error::Authentication(format!("Invalid JWT header: {}", e))
+            })?;
+
+            // Find the matching key by kid (key ID)
+            let matching_key = if let Some(kid) = &header.kid {
+                keys.iter().find(|k| k.kid.as_deref() == Some(kid))
+            } else {
+                // If no kid in header, use the first RSA signing key
+                keys.iter().find(|k| {
+                    k.kty == "RSA"
+                        && k.use_.as_deref() != Some("enc") // exclude encryption keys
+                })
+            };
+
+            let jwk = matching_key.ok_or_else(|| {
+                ramp_common::Error::Authentication(
+                    "No matching key found in JWKS for JWT verification".into(),
+                )
+            })?;
+
+            // Ensure the key is RSA and has the required components
+            if jwk.kty != "RSA" {
+                return Err(ramp_common::Error::Authentication(format!(
+                    "Unsupported key type: {}. Only RSA is supported.",
+                    jwk.kty
+                )));
+            }
+
+            let n = jwk.n.as_deref().ok_or_else(|| {
+                ramp_common::Error::Authentication(
+                    "JWKS key missing RSA modulus (n)".into(),
+                )
+            })?;
+            let e = jwk.e.as_deref().ok_or_else(|| {
+                ramp_common::Error::Authentication(
+                    "JWKS key missing RSA exponent (e)".into(),
+                )
+            })?;
+
+            // Build the decoding key from RSA components
+            let decoding_key =
+                jsonwebtoken::DecodingKey::from_rsa_components(n, e).map_err(|err| {
+                    ramp_common::Error::Authentication(format!(
+                        "Failed to build decoding key from RSA components: {}",
+                        err
+                    ))
+                })?;
+
+            // Configure validation - match algorithm from JWT header
+            let algorithm = match header.alg {
+                jsonwebtoken::Algorithm::RS256 => jsonwebtoken::Algorithm::RS256,
+                jsonwebtoken::Algorithm::RS384 => jsonwebtoken::Algorithm::RS384,
+                jsonwebtoken::Algorithm::RS512 => jsonwebtoken::Algorithm::RS512,
+                alg => {
+                    return Err(ramp_common::Error::Authentication(format!(
+                        "Unsupported JWT algorithm: {:?}",
+                        alg
+                    )));
+                }
+            };
+
+            let mut validation = jsonwebtoken::Validation::new(algorithm);
+
+            // Set issuer validation
+            validation.set_issuer(&[&self.config.issuer_url]);
+
+            // Disable audience validation since the aud claim can be a string or
+            // array and we handle the client_id check separately if needed
+            validation.validate_aud = false;
+
+            // Decode and verify the token
+            let token_data = jsonwebtoken::decode::<IdTokenClaims>(
+                id_token,
+                &decoding_key,
+                &validation,
+            )
+            .map_err(|e| {
+                ramp_common::Error::Authentication(format!(
+                    "JWT signature verification failed: {}",
+                    e
+                ))
+            })?;
+
+            Ok(token_data.claims)
+        } else {
+            // Fallback: insecure decode when no JWKS URI is configured
+            tracing::warn!(
+                "No JWKS URI configured - skipping JWT signature verification. \
+                 This is insecure and should only be used in development."
+            );
+
+            // Split JWT parts
+            let parts: Vec<&str> = id_token.split('.').collect();
+            if parts.len() != 3 {
+                return Err(ramp_common::Error::Authentication(
+                    "Invalid ID token format".into(),
+                ));
+            }
+
+            // Decode payload (base64url)
+            let payload = base64_url_decode(parts[1])?;
+            let claims: IdTokenClaims = serde_json::from_slice(&payload).map_err(|e| {
+                ramp_common::Error::Authentication(format!("Invalid claims: {}", e))
+            })?;
+
+            // Validate expiration
+            let now = Utc::now().timestamp();
+            if claims.exp < now {
+                return Err(ramp_common::Error::Authentication(
+                    "ID token expired".into(),
+                ));
+            }
+
+            // Validate issuer
+            if !claims.iss.starts_with(&self.config.issuer_url) {
+                return Err(ramp_common::Error::Authentication(
+                    "Invalid issuer".into(),
+                ));
+            }
+
+            Ok(claims)
         }
-
-        // Decode payload (base64url)
-        let payload = base64_url_decode(parts[1])?;
-        let claims: IdTokenClaims = serde_json::from_slice(&payload)
-            .map_err(|e| ramp_common::Error::Authentication(format!("Invalid claims: {}", e)))?;
-
-        // Validate expiration
-        let now = Utc::now().timestamp();
-        if claims.exp < now {
-            return Err(ramp_common::Error::Authentication("ID token expired".into()));
-        }
-
-        // Validate issuer
-        if !claims.iss.starts_with(&self.config.issuer_url) {
-            return Err(ramp_common::Error::Authentication("Invalid issuer".into()));
-        }
-
-        Ok(claims)
     }
 
     /// Extract groups from claims
@@ -421,21 +619,25 @@ impl SsoProvider for OidcProvider {
         let code = callback
             .code
             .as_ref()
-            .ok_or_else(|| ramp_common::Error::Authentication("Missing authorization code".into()))?;
+            .ok_or_else(|| {
+                ramp_common::Error::Authentication("Missing authorization code".into())
+            })?;
 
         // Exchange code for tokens
         // SECURITY: TODO - The redirect_uri should be stored with the state parameter
         // during the authorize step and retrieved here, rather than using a default.
         // Using a static default is acceptable for MVP but does not fully protect
         // against redirect_uri manipulation in a multi-origin deployment.
-        let tokens = self.exchange_code(code, &self.config.default_redirect_uri).await?;
+        let tokens = self
+            .exchange_code(code, &self.config.default_redirect_uri)
+            .await?;
 
-        // Decode ID token
+        // Decode ID token with signature verification
         let id_token = tokens
             .id_token
             .ok_or_else(|| ramp_common::Error::Authentication("Missing ID token".into()))?;
 
-        let claims = self.decode_id_token(&id_token)?;
+        let claims = self.decode_id_token(&id_token).await?;
 
         // Extract user info
         let groups = self.extract_groups(&claims);
@@ -516,7 +718,8 @@ mod tests {
 
     #[test]
     fn test_google_workspace_config() {
-        let config = OidcConfig::google_workspace("client123".to_string(), b"secret".to_vec());
+        let config =
+            OidcConfig::google_workspace("client123".to_string(), b"secret".to_vec());
 
         assert_eq!(config.issuer_url, "https://accounts.google.com");
         assert!(config.extra_auth_params.contains_key("hd"));

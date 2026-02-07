@@ -68,6 +68,7 @@ pub struct CompoundTokenConfig {
 }
 
 /// Compound V3 Protocol implementation
+#[allow(dead_code)]
 pub struct CompoundV3Protocol {
     chain_id: u64,
     addresses: CompoundV3Addresses,

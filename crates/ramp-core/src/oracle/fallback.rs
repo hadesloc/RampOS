@@ -4,7 +4,6 @@
 
 use super::{Price, PriceOracle, PriceSource};
 use async_trait::async_trait;
-use chrono::Utc;
 use ethers::types::Address;
 use ramp_common::{Error, Result};
 use rust_decimal::Decimal;
@@ -196,12 +195,14 @@ impl PriceOracle for CoinGeckoFallback {
 
 /// API response types for CoinGecko
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct SimplePriceResponse {
     #[serde(flatten)]
     pub prices: HashMap<String, CoinPrice>,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct CoinPrice {
     pub usd: f64,
     #[serde(default)]

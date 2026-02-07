@@ -9,7 +9,6 @@ use ethers::types::{Address, Bytes, H256, U256};
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
@@ -158,6 +157,7 @@ pub struct RelayRecord {
     pub errors: Vec<String>,
 }
 
+#[allow(dead_code)]
 impl RelayRecord {
     pub fn new(message: CrossChainMessage) -> Self {
         Self {
@@ -175,6 +175,7 @@ impl RelayRecord {
 
 /// Cross-chain relayer trait
 #[async_trait]
+#[allow(dead_code)]
 pub trait Relayer: Send + Sync {
     /// Submit a message for relaying
     async fn submit_message(&self, message: CrossChainMessage) -> Result<String>;
@@ -364,11 +365,13 @@ impl Relayer for CrossChainRelayer {
 }
 
 /// Proof verification for cross-chain messages
+#[allow(dead_code)]
 pub struct ProofVerifier {
     /// Trusted block headers per chain
     trusted_headers: RwLock<HashMap<ChainId, Vec<H256>>>,
 }
 
+#[allow(dead_code)]
 impl ProofVerifier {
     pub fn new() -> Self {
         Self {

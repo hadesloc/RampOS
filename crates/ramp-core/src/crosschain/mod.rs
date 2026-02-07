@@ -11,11 +11,11 @@ mod relayer;
 pub use executor::{IntentExecutor, ExecutionResult, ExecutionConfig};
 pub use relayer::{CrossChainRelayer, RelayerConfig, MessageStatus, CrossChainMessage};
 
-use crate::bridge::{BridgeQuote, BridgeRegistry, BridgeStatus, BridgeToken, ChainId, TxHash};
+use crate::bridge::{BridgeQuote, BridgeToken, ChainId, TxHash};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ethers::types::{Address, U256};
-use ramp_common::{Error, Result};
+use ramp_common::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;

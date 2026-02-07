@@ -7,8 +7,7 @@ use axum::{
     middleware::Next,
     response::IntoResponse,
 };
-use ramp_core::billing::{BillingService, MeterType, MetricValue};
-use std::sync::Arc;
+use ramp_core::billing::{MeterType, MetricValue};
 use tokio::time::Instant;
 
 use crate::AppState;

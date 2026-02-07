@@ -5,9 +5,9 @@ use axum::{
     response::Response,
 };
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::warn;
 
-use crate::middleware::rate_limit::{RateLimitStore, RateLimiter};
+use crate::middleware::rate_limit::RateLimiter;
 use crate::middleware::tenant::{TenantContext, TenantTier};
 
 /// Configuration for tiered rate limiting
@@ -24,6 +24,7 @@ impl TieredRateLimitState {
 
 /// struct to hold rate limit config for a tenant
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct TenantRateLimitConfig {
     max_requests: u64,
     window_seconds: u64,

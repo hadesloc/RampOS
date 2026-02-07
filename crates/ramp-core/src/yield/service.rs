@@ -6,7 +6,7 @@
 //! - Yield reporting and analytics
 //! - Safety controls and emergency withdrawal
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use ethers::types::{Address, H256, U256};
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
@@ -15,7 +15,7 @@ use tracing::{error, info, warn};
 
 use super::{
     ProtocolId, ProtocolRegistry, YieldAllocationConfig, YieldOperation,
-    YieldPosition, YieldPositionReport, YieldProtocol, YieldReport, YieldTransaction,
+    YieldPosition, YieldPositionReport, YieldReport, YieldTransaction,
     YieldTxStatus,
 };
 

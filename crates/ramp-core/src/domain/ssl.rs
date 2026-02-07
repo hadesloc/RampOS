@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 /// SSL certificate
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,6 +103,7 @@ pub trait SslProvider: Send + Sync {
 }
 
 /// Let's Encrypt SSL provider
+#[allow(dead_code)]
 pub struct LetsEncryptProvider {
     /// Use staging environment (for testing)
     staging: bool,
@@ -117,6 +118,7 @@ pub struct LetsEncryptProvider {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct PendingOrder {
     domain: String,
     email: String,

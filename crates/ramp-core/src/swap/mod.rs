@@ -3,7 +3,9 @@
 //! DEX aggregator for optimal stablecoin swaps with multi-DEX price comparison,
 //! gas-optimized routing, slippage protection, and MEV protection.
 
+#[allow(dead_code)]
 mod oneinch;
+#[allow(dead_code)]
 mod paraswap;
 mod router;
 
@@ -13,7 +15,7 @@ pub use router::{SwapRouter, RouteResult};
 
 use async_trait::async_trait;
 use ethers::types::{Address, Bytes, U256};
-use ramp_common::{types::ChainId, Result};
+use ramp_common::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

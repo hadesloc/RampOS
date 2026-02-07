@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::debug;
 
 /// DNS record type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -110,6 +110,7 @@ pub struct DomainResolution {
 }
 
 /// System DNS provider using the system resolver
+#[allow(dead_code)]
 pub struct SystemDnsProvider {
     /// DNS timeout in seconds
     timeout_secs: u64,
@@ -409,6 +410,7 @@ impl DnsProvider for MockDnsProvider {
 }
 
 /// DNS propagation checker
+#[allow(dead_code)]
 pub struct DnsPropagationChecker {
     /// List of DNS resolvers to check
     resolvers: Vec<String>,

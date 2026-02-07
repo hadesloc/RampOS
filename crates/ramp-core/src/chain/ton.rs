@@ -4,7 +4,6 @@
 //! Full implementation requires tonlib-rs or similar crate.
 
 use async_trait::async_trait;
-use std::collections::HashMap;
 
 use super::{
     Balance, Chain, ChainError, ChainId, ChainType, FeeEstimate, FeeOption, Result,

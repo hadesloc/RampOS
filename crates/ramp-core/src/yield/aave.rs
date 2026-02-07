@@ -9,7 +9,7 @@ use ethers::types::{Address, Bytes, H256, U256};
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::info;
 
 use super::{ProtocolId, YieldProtocol};
 
@@ -65,6 +65,7 @@ pub struct AaveTokenConfig {
 }
 
 /// Aave V3 Protocol implementation
+#[allow(dead_code)]
 pub struct AaveV3Protocol {
     chain_id: u64,
     addresses: AaveV3Addresses,

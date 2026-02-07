@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 use super::{
-    AggregatorRegistry, DexAggregator, SwapQuote, SwapTxData, Token,
+    AggregatorRegistry, SwapQuote, SwapTxData, Token,
 };
 
 /// Route finding result

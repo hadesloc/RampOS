@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 use ethers::types::{Address, Bytes, U256};
 use ramp_common::{Error, Result};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{

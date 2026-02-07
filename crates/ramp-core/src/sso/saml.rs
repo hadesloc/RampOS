@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use super::{
     RampRole, RoleMapping, SsoAuthRequest, SsoAuthResponse, SsoCallback, SsoProtocol,
-    SsoProvider, SsoProviderType, SsoService, SsoUser,
+    SsoProvider, SsoProviderType, SsoUser,
 };
 
 /// SAML configuration
@@ -115,7 +115,7 @@ impl SamlProvider {
             .ok_or_else(|| ramp_common::Error::Authentication("Missing NameID in SAML response".into()))?;
 
         // Extract attributes (simplified)
-        let mut attributes = HashMap::new();
+        let attributes = HashMap::new();
         // Mock extraction logic...
 
         Ok(ParsedSamlResponse {
@@ -134,7 +134,7 @@ struct ParsedSamlResponse {
 
 fn extract_tag_value(xml: &str, tag: &str) -> Option<String> {
     let start_tag = format!("<{}>", tag); // Naive, ignores namespaces
-    let end_tag = format!("</{}>", tag); // Naive
+    let _end_tag = format!("</{}>", tag); // Naive
 
     // Fallback for namespaced tags often seen in SAML
     let start_tag_ns = format!(":{}", tag);

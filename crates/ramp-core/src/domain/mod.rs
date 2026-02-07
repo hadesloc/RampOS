@@ -607,7 +607,7 @@ impl<S: DomainStore, D: DnsProvider, L: SslProvider> DomainService<S, D, L> {
             Error::NotFound(format!("Domain {} not found", domain_id))
         })?;
 
-        let url = format!("https://{}{}", domain.domain, domain.health_check_path);
+        let _url = format!("https://{}{}", domain.domain, domain.health_check_path);
         let start = std::time::Instant::now();
 
         // Perform health check (simplified - in production use reqwest)

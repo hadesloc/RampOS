@@ -9,6 +9,7 @@ pub mod intent;
 pub mod payin;
 pub mod payout;
 pub mod portal;
+pub mod domain;
 pub mod stablecoin;
 pub mod trade;
 pub mod auth;

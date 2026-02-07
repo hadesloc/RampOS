@@ -281,17 +281,13 @@ pub fn create_router(state: AppState) -> Router {
         Router::new()
     };
 
-    // TODO(H-4): Add domain management routes here once domain handlers are implemented.
-    // Expected routes:
-    //   GET    /admin/domains           -> list domains for tenant
-    //   POST   /admin/domains           -> register a new custom domain
-    //   GET    /admin/domains/:id       -> get domain details
-    //   PUT    /admin/domains/:id       -> update domain configuration
-    //   DELETE /admin/domains/:id       -> delete domain
-    //   POST   /admin/domains/:id/verify-dns   -> trigger DNS verification
-    //   POST   /admin/domains/:id/provision-ssl -> trigger SSL provisioning
-    //   POST   /admin/domains/:id/health-check  -> run health check
-    // See: crates/ramp-core/src/domain/mod.rs for DomainService
+    // Domain management routes
+    let domain_routes = Router::new()
+        .route("/", get(handlers::domain::list_domains).post(handlers::domain::create_domain))
+        .route("/:id", get(handlers::domain::get_domain).delete(handlers::domain::delete_domain))
+        .route("/:id/verify-dns", post(handlers::domain::verify_dns))
+        .route("/:id/provision-ssl", post(handlers::domain::provision_ssl))
+        .with_state(state.clone());
 
     // Combine them
     let admin_routes = Router::new()
@@ -300,7 +296,8 @@ pub fn create_router(state: AppState) -> Router {
         .merge(tier_routes)
         .merge(licensing_routes)
         .merge(audit_routes)
-        .nest("/reports", report_routes);
+        .nest("/reports", report_routes)
+        .nest("/domains", domain_routes);
 
     // Yield Strategy routes
     let yield_routes = Router::new()

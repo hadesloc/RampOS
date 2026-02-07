@@ -6,10 +6,10 @@ use super::{
     CrossChainExecutor, CrossChainIntent, ExecutionStep, GasEstimate, IntentExecution,
     IntentStatus, IntentType, StepStatus, StepType,
 };
-use crate::bridge::{BridgeRegistry, BridgeStatus, ChainId, TxHash};
+use crate::bridge::{BridgeRegistry, ChainId, TxHash};
 use async_trait::async_trait;
 use chrono::Utc;
-use ethers::types::{Address, U256};
+use ethers::types::U256;
 use ramp_common::{Error, Result};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};

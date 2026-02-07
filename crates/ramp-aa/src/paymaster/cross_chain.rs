@@ -180,7 +180,7 @@ pub trait LiquidityProvider: Send + Sync {
 /// Mock liquidity provider for testing
 pub struct MockLiquidityProvider {
     pools: HashMap<(SupportedChain, GasToken), U256>,
-    reservations: HashMap<String, (SupportedChain, GasToken, U256)>,
+    _reservations: HashMap<String, (SupportedChain, GasToken, U256)>,
 }
 
 impl MockLiquidityProvider {
@@ -203,7 +203,7 @@ impl MockLiquidityProvider {
 
         Self {
             pools,
-            reservations: HashMap::new(),
+            _reservations: HashMap::new(),
         }
     }
 }
@@ -294,7 +294,7 @@ pub struct CrossChainPaymaster {
     price_oracle: Arc<dyn PriceOracle>,
     liquidity_provider: Arc<dyn LiquidityProvider>,
     tenant_limits: HashMap<TenantId, TenantGasLimits>,
-    pending_quotes: HashMap<String, CrossChainGasQuote>,
+    _pending_quotes: HashMap<String, CrossChainGasQuote>,
 }
 
 impl CrossChainPaymaster {
@@ -308,7 +308,7 @@ impl CrossChainPaymaster {
             price_oracle,
             liquidity_provider,
             tenant_limits: HashMap::new(),
-            pending_quotes: HashMap::new(),
+            _pending_quotes: HashMap::new(),
         }
     }
 
@@ -446,7 +446,7 @@ impl CrossChainPaymaster {
         &self,
         quote: &CrossChainGasQuote,
     ) -> Result<CrossChainPaymentInstruction> {
-        let source_chain = SupportedChain::from_chain_id(quote.source_chain_id)
+        let _source_chain = SupportedChain::from_chain_id(quote.source_chain_id)
             .ok_or_else(|| Error::Validation("Invalid source chain".to_string()))?;
 
         let paymaster_address = self
@@ -517,7 +517,7 @@ impl CrossChainPaymaster {
     /// Generate paymaster data for cross-chain operation
     pub async fn generate_paymaster_data(
         &self,
-        user_op: &UserOperation,
+        _user_op: &UserOperation,
         quote: &CrossChainGasQuote,
     ) -> Result<Bytes> {
         // Verify quote validity

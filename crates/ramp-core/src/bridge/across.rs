@@ -76,6 +76,7 @@ impl AcrossBridge {
     }
 
     /// Generate deposit ID for tracking
+    #[allow(dead_code)]
     fn generate_deposit_id(&self) -> u32 {
         // In production, this would be fetched from the SpokePool contract
         rand::random::<u32>()

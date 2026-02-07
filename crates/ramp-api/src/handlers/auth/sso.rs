@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 use ramp_core::sso::{
-    SsoAuthRequest, SsoCallback, SsoProviderType,
+    SsoAuthRequest, SsoCallback,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -98,7 +98,7 @@ pub async fn sso_callback(
 
     // Authenticate with provider
     let tenant_id = ramp_common::types::TenantId::new(&provider_id);
-    let sso_user = state.sso_service.handle_callback(&tenant_id, &callback).await.map_err(ApiError::from)?;
+    let _sso_user = state.sso_service.handle_callback(&tenant_id, &callback).await.map_err(ApiError::from)?;
 
     // Create session for user
     // 1. Check if user exists (by email) or JIT provision
@@ -130,7 +130,7 @@ pub async fn sso_callback(
     )
 )]
 pub async fn list_providers(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
 ) -> Result<Json<Vec<SsoProviderSummary>>, ApiError> {
     // Implementation requires Admin API extensions
     // This is a placeholder

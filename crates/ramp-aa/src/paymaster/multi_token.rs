@@ -316,7 +316,7 @@ impl MultiTokenPaymaster {
         // token_cost = native_cost * (1e18 / exchange_rate) * (1 + markup/100)
         // For tokens with different decimals, we need to adjust
         let token_decimals = token.decimals();
-        let native_decimals = 18u8;
+        let _native_decimals = 18u8;
 
         let token_gas_cost = if token == GasToken::Native {
             native_gas_cost
@@ -353,11 +353,11 @@ impl MultiTokenPaymaster {
     /// Check if user has approved enough tokens
     pub async fn check_token_approval(
         &self,
-        user: Address,
+        _user: Address,
         token: GasToken,
         required_amount: U256,
     ) -> Result<TokenApprovalStatus> {
-        let token_config = self
+        let _token_config = self
             .config
             .supported_tokens
             .iter()
@@ -368,9 +368,14 @@ impl MultiTokenPaymaster {
         // For now, return a mock status
         let current_allowance = U256::zero(); // Would be fetched from chain
 
+        let token_address = self.config.supported_tokens.iter()
+            .find(|t| t.token == token && t.chain_id == self.config.chain_id)
+            .map(|t| t.token_address)
+            .unwrap_or(Address::zero());
+
         Ok(TokenApprovalStatus {
             token,
-            token_address: token_config.token_address,
+            token_address,
             spender: self.config.paymaster_address,
             current_allowance,
             required_allowance: required_amount,
@@ -380,7 +385,7 @@ impl MultiTokenPaymaster {
 
     /// Generate approval transaction data
     pub fn generate_approval_data(&self, token: GasToken, amount: U256) -> Result<Bytes> {
-        let token_config = self
+        let _token_config = self
             .config
             .supported_tokens
             .iter()
@@ -482,7 +487,7 @@ impl MultiTokenPaymaster {
     /// Generate paymaster data for token payment
     pub async fn generate_paymaster_data(
         &self,
-        user_op: &UserOperation,
+        _user_op: &UserOperation,
         token: GasToken,
         tenant_id: &TenantId,
         quote: &GasQuote,

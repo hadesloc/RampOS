@@ -11,17 +11,17 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
 
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
-use ramp_common::licensing::{LicenseRequirementId, LicenseStatus, LicenseType};
+use ramp_common::licensing::{LicenseRequirementId, LicenseStatus};
 use ramp_common::types::TenantId;
 use ramp_core::repository::licensing::{
-    CreateLicenseSubmissionRequest, LicensingRepository, PgLicensingRepository,
+    CreateLicenseSubmissionRequest, LicensingRepository,
 };
 
 // ============================================================================
@@ -316,7 +316,7 @@ pub async fn submit_license(
 
     // Validate requirement exists
     let requirement_id = LicenseRequirementId::new(&request.requirement_id);
-    let requirement = licensing_repo
+    let _requirement = licensing_repo
         .get_requirement(&requirement_id)
         .await
         .map_err(ApiError::from)?

@@ -13,10 +13,9 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{info, warn};
 
 use super::{
-    Chain, ChainError, ChainId, ChainRegistry, ChainType, EvmChain, EvmChainConfig,
+    Chain, ChainId, ChainRegistry, EvmChain, EvmChainConfig,
     SolanaChain, SolanaChainConfig, TonChain, TonChainConfig, Transaction, TxHash,
     TxStatus, UnifiedAddress, Balance, TokenBalance, FeeEstimate, Result
 };

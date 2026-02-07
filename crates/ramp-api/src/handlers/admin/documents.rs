@@ -18,8 +18,8 @@ use tracing::info;
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
 use ramp_compliance::documents::{
-    ComplianceDocumentGenerator, ComplianceReport, ComplianceReportType,
-    DocumentFormat, DocumentStatus, GeneratedDocument,
+    ComplianceDocumentGenerator, ComplianceReportType,
+    DocumentFormat,
 };
 
 /// Request body for document generation
@@ -122,7 +122,7 @@ pub async fn generate_document(
     );
 
     // Parse document type
-    let doc_type = parse_document_type(&request.document_type)
+    let _doc_type = parse_document_type(&request.document_type)
         .map_err(|e| ApiError::BadRequest(e))?;
 
     // Parse format
@@ -162,7 +162,7 @@ pub async fn generate_document(
 pub async fn download_document(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
-    State(state): State<DocumentState>,
+    State(_state): State<DocumentState>,
     Path(document_id): Path<String>,
     Query(params): Query<DownloadParams>,
 ) -> Result<Response, ApiError> {
@@ -308,7 +308,7 @@ pub async fn generate_transaction_summary(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     State(state): State<DocumentState>,
-    Query(params): Query<ReportQueryParams>,
+    Query(params): Query<DocumentReportQueryParams>,
 ) -> Result<Json<ramp_compliance::documents::TransactionSummary>, ApiError> {
     super::tier::check_admin_key(&headers)?;
 
@@ -335,7 +335,7 @@ pub async fn generate_kyc_statistics(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     State(state): State<DocumentState>,
-    Query(params): Query<ReportQueryParams>,
+    Query(params): Query<DocumentReportQueryParams>,
 ) -> Result<Json<ramp_compliance::documents::KYCStatistics>, ApiError> {
     super::tier::check_admin_key(&headers)?;
 
@@ -362,7 +362,7 @@ pub async fn generate_aml_metrics(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     State(state): State<DocumentState>,
-    Query(params): Query<ReportQueryParams>,
+    Query(params): Query<DocumentReportQueryParams>,
 ) -> Result<Json<ramp_compliance::documents::AMLMetrics>, ApiError> {
     super::tier::check_admin_key(&headers)?;
 
@@ -386,7 +386,7 @@ pub async fn generate_aml_metrics(
 /// Query parameters for report endpoints
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReportQueryParams {
+pub struct DocumentReportQueryParams {
     pub start_date: chrono::DateTime<chrono::Utc>,
     pub end_date: chrono::DateTime<chrono::Utc>,
 }

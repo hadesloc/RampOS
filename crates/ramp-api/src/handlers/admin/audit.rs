@@ -18,7 +18,7 @@ use tracing::info;
 
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
-use ramp_core::repository::{AuditQueryFilter, ChainVerificationResult, ComplianceEventType};
+use ramp_core::repository::{AuditQueryFilter, ComplianceEventType};
 use ramp_core::service::{AuditLogExport, ComplianceAuditService};
 
 /// Query parameters for listing audit entries

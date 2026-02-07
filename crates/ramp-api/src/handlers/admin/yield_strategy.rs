@@ -9,12 +9,12 @@
 //! - POST /v1/yield/rebalance - Trigger manual rebalance
 
 use axum::{
-    extract::{Extension, Path, Query, State},
+    extract::{Extension, Path, Query},
     http::HeaderMap,
     Json,
 };
-use chrono::{DateTime, Duration, Utc};
-use ethers::types::{Address, U256};
+use chrono::{Duration, Utc};
+use ethers::types::Address;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 

@@ -20,7 +20,7 @@ use tracing::info;
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
 use ramp_core::bridge::{
-    BridgeConfig, BridgeQuote, BridgeRegistry, BridgeStatus, BridgeToken, ChainId, SupportedChain,
+    BridgeConfig, BridgeQuote, BridgeRegistry, BridgeStatus, BridgeToken, SupportedChain,
 };
 
 /// State for bridge handlers
