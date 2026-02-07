@@ -321,7 +321,7 @@ impl BillingService {
             event_type: BillingEventType::InvoiceCreated,
             details: serde_json::json!({
                 "invoice_id": invoice.id,
-                "amount": invoice.total.to_string(),
+                "amount": invoice.amount_due.to_string(),
             }),
             created_at: Utc::now(),
         };
@@ -384,7 +384,6 @@ impl BillingService {
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
 pub mod mock {
     use super::*;
     use std::collections::HashMap;

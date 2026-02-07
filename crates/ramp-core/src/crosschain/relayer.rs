@@ -376,24 +376,68 @@ impl ProofVerifier {
         }
     }
 
+    // SECURITY WARNING: Proof verification is currently a placeholder.
+    // In production, this MUST implement real Merkle proof verification
+    // against trusted block headers. Without proper verification, an attacker
+    // could forge cross-chain messages and steal funds.
+    // TODO(security): Implement full Merkle Patricia proof verification before mainnet.
     /// Verify a message proof
     pub async fn verify_proof(
         &self,
         message: &CrossChainMessage,
-        _proof: &[u8],
+        proof: &[u8],
     ) -> Result<bool> {
-        // In production:
-        // 1. Decode Merkle proof
-        // 2. Verify against trusted block header
-        // 3. Validate message hash matches
+        // Basic sanity checks to reject obviously invalid proofs.
+        // These are NOT sufficient for production security - real Merkle proof
+        // verification must be implemented before deployment.
+        if proof.is_empty() {
+            return Err(Error::Validation(
+                "Proof verification failed: proof data is empty".to_string(),
+            ));
+        }
+
+        // Minimum proof length check - a valid Merkle proof requires at least
+        // a 32-byte hash node
+        if proof.len() < 32 {
+            return Err(Error::Validation(
+                "Proof verification failed: proof data too short (minimum 32 bytes required)".to_string(),
+            ));
+        }
+
+        // Verify the proof is not all zeros (malformed placeholder)
+        if proof.iter().all(|&b| b == 0) {
+            return Err(Error::Validation(
+                "Proof verification failed: proof data is all zeros".to_string(),
+            ));
+        }
+
+        // Verify that the message has valid chain IDs
+        if message.source_chain == 0 || message.dest_chain == 0 {
+            return Err(Error::Validation(
+                "Proof verification failed: invalid chain ID (0)".to_string(),
+            ));
+        }
+
+        // Verify source and destination are different chains
+        if message.source_chain == message.dest_chain {
+            return Err(Error::Validation(
+                "Proof verification failed: source and destination chains are the same".to_string(),
+            ));
+        }
 
         info!(
             message_id = %message.id,
             source_chain = message.source_chain,
-            "Verifying message proof"
+            proof_len = proof.len(),
+            "Verifying message proof (placeholder - real verification pending)"
         );
 
-        // Mock verification
+        // PLACEHOLDER: Accept proofs that pass basic sanity checks above.
+        // In production, this would:
+        // 1. Decode Merkle proof structure
+        // 2. Verify proof against trusted block header for source_chain
+        // 3. Validate message hash matches the proven leaf
+        // 4. Check that the block header is recent and from a trusted source
         Ok(true)
     }
 
@@ -504,7 +548,23 @@ mod tests {
             Bytes::new(),
         );
 
-        let result = verifier.verify_proof(&message, &[]).await.unwrap();
-        assert!(result);
+        // Empty proof should be rejected
+        let result = verifier.verify_proof(&message, &[]).await;
+        assert!(result.is_err(), "Empty proof should be rejected");
+
+        // Too-short proof should be rejected
+        let short_proof = vec![1u8; 16];
+        let result = verifier.verify_proof(&message, &short_proof).await;
+        assert!(result.is_err(), "Short proof should be rejected");
+
+        // All-zeros proof should be rejected
+        let zero_proof = vec![0u8; 64];
+        let result = verifier.verify_proof(&message, &zero_proof).await;
+        assert!(result.is_err(), "All-zeros proof should be rejected");
+
+        // Valid-looking proof (non-empty, >= 32 bytes, not all zeros) should pass placeholder check
+        let valid_proof = vec![1u8; 64];
+        let result = verifier.verify_proof(&message, &valid_proof).await.unwrap();
+        assert!(result, "Valid-looking proof should pass placeholder verification");
     }
 }

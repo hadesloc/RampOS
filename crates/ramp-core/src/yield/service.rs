@@ -10,7 +10,7 @@ use chrono::{DateTime, Duration, Utc};
 use ethers::types::{Address, H256, U256};
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
-use std::sync::RwLock;
+use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
 use super::{
@@ -46,8 +46,8 @@ impl YieldService {
     }
 
     /// Get current allocations per protocol
-    pub fn get_allocations(&self) -> Result<HashMap<ProtocolId, U256>> {
-        let allocations = self.allocations.read().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+    pub async fn get_allocations(&self) -> Result<HashMap<ProtocolId, U256>> {
+        let allocations = self.allocations.read().await;
         Ok(allocations.clone())
     }
 
@@ -67,7 +67,7 @@ impl YieldService {
         let protocol_id = best_protocol.protocol_id();
 
         // Check allocation limits
-        self.check_allocation_limit(protocol_id, amount)?;
+        self.check_allocation_limit(protocol_id, amount).await?;
 
         // Get current APY for position tracking
         let apy = best_protocol.current_apy(token).await?;
@@ -84,13 +84,13 @@ impl YieldService {
         let tx_hash = best_protocol.deposit(token, amount).await?;
 
         // Track position
-        self.add_position(protocol_id, token, amount, apy)?;
+        self.add_position(protocol_id, token, amount, apy).await?;
 
         // Record transaction
-        self.record_transaction(tx_hash, protocol_id, token, YieldOperation::Deposit, amount)?;
+        self.record_transaction(tx_hash, protocol_id, token, YieldOperation::Deposit, amount).await?;
 
         // Update allocation
-        self.update_allocation(protocol_id, amount, true)?;
+        self.update_allocation(protocol_id, amount, true).await?;
 
         Ok((protocol_id, tx_hash))
     }
@@ -112,7 +112,7 @@ impl YieldService {
         }
 
         // Check allocation limits
-        self.check_allocation_limit(protocol_id, amount)?;
+        self.check_allocation_limit(protocol_id, amount).await?;
 
         let apy = protocol.current_apy(token).await?;
 
@@ -125,9 +125,9 @@ impl YieldService {
 
         let tx_hash = protocol.deposit(token, amount).await?;
 
-        self.add_position(protocol_id, token, amount, apy)?;
-        self.record_transaction(tx_hash, protocol_id, token, YieldOperation::Deposit, amount)?;
-        self.update_allocation(protocol_id, amount, true)?;
+        self.add_position(protocol_id, token, amount, apy).await?;
+        self.record_transaction(tx_hash, protocol_id, token, YieldOperation::Deposit, amount).await?;
+        self.update_allocation(protocol_id, amount, true).await?;
 
         Ok(tx_hash)
     }
@@ -162,8 +162,8 @@ impl YieldService {
 
         let tx_hash = protocol.withdraw(token, amount).await?;
 
-        self.record_transaction(tx_hash, protocol_id, token, YieldOperation::Withdraw, amount)?;
-        self.update_allocation(protocol_id, amount, false)?;
+        self.record_transaction(tx_hash, protocol_id, token, YieldOperation::Withdraw, amount).await?;
+        self.update_allocation(protocol_id, amount, false).await?;
 
         Ok(tx_hash)
     }
@@ -199,8 +199,8 @@ impl YieldService {
             token,
             YieldOperation::EmergencyWithdraw,
             balance,
-        )?;
-        self.update_allocation(protocol_id, balance, false)?;
+        ).await?;
+        self.update_allocation(protocol_id, balance, false).await?;
 
         Ok(tx_hash)
     }
@@ -393,8 +393,8 @@ impl YieldService {
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> Result<YieldReport> {
-        let positions = self.positions.read().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
-        let transactions = self.transactions.read().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+        let positions = self.positions.read().await;
+        let transactions = self.transactions.read().await;
 
         let mut total_deposited = U256::zero();
         let mut total_withdrawn = U256::zero();
@@ -455,8 +455,8 @@ impl YieldService {
     }
 
     /// Get all positions
-    pub fn get_positions(&self) -> Result<Vec<YieldPosition>> {
-        let positions = self.positions.read().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+    pub async fn get_positions(&self) -> Result<Vec<YieldPosition>> {
+        let positions = self.positions.read().await;
         Ok(positions.clone())
     }
 
@@ -492,8 +492,8 @@ impl YieldService {
 
     // Private helper methods
 
-    fn check_allocation_limit(&self, protocol_id: ProtocolId, amount: U256) -> Result<()> {
-        let allocations = self.allocations.read().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+    async fn check_allocation_limit(&self, protocol_id: ProtocolId, amount: U256) -> Result<()> {
+        let allocations = self.allocations.read().await;
         let current = allocations.get(&protocol_id).copied().unwrap_or_default();
         let new_total = current.saturating_add(amount);
 
@@ -507,19 +507,19 @@ impl YieldService {
         Ok(())
     }
 
-    fn add_position(
+    async fn add_position(
         &self,
         protocol: ProtocolId,
         token: Address,
         amount: U256,
         apy: f64,
     ) -> Result<()> {
-        let mut positions = self.positions.write().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+        let mut positions = self.positions.write().await;
         positions.push(YieldPosition::new(protocol, token, amount, apy));
         Ok(())
     }
 
-    fn record_transaction(
+    async fn record_transaction(
         &self,
         tx_hash: H256,
         protocol: ProtocolId,
@@ -527,7 +527,7 @@ impl YieldService {
         operation: YieldOperation,
         amount: U256,
     ) -> Result<()> {
-        let mut transactions = self.transactions.write().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+        let mut transactions = self.transactions.write().await;
         transactions.push(YieldTransaction {
             id: uuid::Uuid::new_v4().to_string(),
             tx_hash,
@@ -541,8 +541,8 @@ impl YieldService {
         Ok(())
     }
 
-    fn update_allocation(&self, protocol: ProtocolId, amount: U256, is_deposit: bool) -> Result<()> {
-        let mut allocations = self.allocations.write().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+    async fn update_allocation(&self, protocol: ProtocolId, amount: U256, is_deposit: bool) -> Result<()> {
+        let mut allocations = self.allocations.write().await;
         let current = allocations.entry(protocol).or_insert(U256::zero());
 
         if is_deposit {
@@ -569,13 +569,13 @@ impl YieldService {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_yield_service_creation() {
+    #[tokio::test]
+    async fn test_yield_service_creation() {
         let registry = ProtocolRegistry::new();
         let config = YieldAllocationConfig::default();
         let service = YieldService::new(registry, config);
 
-        assert!(service.get_positions().unwrap().is_empty());
+        assert!(service.get_positions().await.unwrap().is_empty());
     }
 
     #[test]

@@ -19,7 +19,6 @@ pub use vnst_protocol::{
     VnstProtocolDataProvider, VnstProtocolService, VnstReserveInfo,
 };
 
-#[cfg(any(test, feature = "testing"))]
 pub use vnst_protocol::MockVnstProtocolDataProvider;
 
 use async_trait::async_trait;
@@ -141,11 +140,21 @@ impl Default for TenantTokenConfig {
 }
 
 /// Token registry entry
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TokenEntry {
     pub token: Arc<dyn Stablecoin>,
     pub global_enabled: bool,
     pub tenant_configs: HashMap<TenantId, TenantTokenConfig>,
+}
+
+impl std::fmt::Debug for TokenEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TokenEntry")
+            .field("symbol", &self.token.symbol())
+            .field("global_enabled", &self.global_enabled)
+            .field("tenant_configs", &self.tenant_configs)
+            .finish()
+    }
 }
 
 /// Stablecoin registry - manages all supported tokens

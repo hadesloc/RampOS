@@ -75,7 +75,7 @@ impl ChainId {
     pub const OPTIMISM: Self = Self(10);
     pub const OPTIMISM_SEPOLIA: Self = Self(11155420);
     pub const POLYGON: Self = Self(137);
-    pub const POLYGON_MUMBAI: Self = Self(80001);
+    pub const POLYGON_AMOY: Self = Self(80002);
     pub const POLYGON_ZKEVM: Self = Self(1101);
     pub const BSC: Self = Self(56);
     pub const AVALANCHE: Self = Self(43114);

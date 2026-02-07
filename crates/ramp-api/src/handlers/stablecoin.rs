@@ -144,7 +144,7 @@ pub async fn mint_vnst(
     Json(request): Json<VnstMintApiRequest>,
 ) -> Result<Json<VnstMintApiResponse>, ApiError> {
     // Verify API key and get user
-    let auth = crate::handlers::admin::tier::check_api_key(&headers)?;
+    let auth = crate::handlers::admin::tier::check_admin_key_operator(&headers)?;
     let user_id = auth.user_id.ok_or_else(|| {
         ApiError::Unauthorized("User authentication required for VNST mint".to_string())
     })?;
@@ -207,7 +207,7 @@ pub async fn burn_vnst(
     Json(request): Json<VnstBurnApiRequest>,
 ) -> Result<Json<VnstBurnApiResponse>, ApiError> {
     // Verify API key and get user
-    let auth = crate::handlers::admin::tier::check_api_key(&headers)?;
+    let auth = crate::handlers::admin::tier::check_admin_key_operator(&headers)?;
     let user_id = auth.user_id.ok_or_else(|| {
         ApiError::Unauthorized("User authentication required for VNST burn".to_string())
     })?;
@@ -267,7 +267,7 @@ pub async fn get_vnst_reserves(
     State(app_state): State<crate::router::AppState>,
 ) -> Result<Json<VnstReservesApiResponse>, ApiError> {
     // Verify API key (read-only, no user required)
-    crate::handlers::admin::tier::check_api_key(&headers)?;
+    crate::handlers::admin::tier::check_admin_key(&headers)?;
 
     info!(
         tenant = %tenant_ctx.tenant_id.0,
@@ -309,7 +309,7 @@ pub async fn get_vnst_peg_status(
     State(app_state): State<crate::router::AppState>,
 ) -> Result<Json<VnstPegStatusResponse>, ApiError> {
     // Verify API key (read-only)
-    crate::handlers::admin::tier::check_api_key(&headers)?;
+    crate::handlers::admin::tier::check_admin_key(&headers)?;
 
     info!(
         tenant = %tenant_ctx.tenant_id.0,
@@ -340,7 +340,7 @@ pub async fn get_vnst_config(
     State(app_state): State<crate::router::AppState>,
 ) -> Result<Json<VnstConfigResponse>, ApiError> {
     // Verify API key (read-only)
-    crate::handlers::admin::tier::check_api_key(&headers)?;
+    crate::handlers::admin::tier::check_admin_key(&headers)?;
 
     info!(
         tenant = %tenant_ctx.tenant_id.0,

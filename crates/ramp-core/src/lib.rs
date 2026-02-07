@@ -16,15 +16,18 @@
 //! - Cross-chain intent execution
 
 pub mod bridge;
+pub mod billing;
 pub mod chain;
 pub mod config;
 pub mod crosschain;
+pub mod domain;
 pub mod event;
 pub mod jobs;
 pub mod oracle;
 pub mod repository;
 pub mod service;
 pub mod stablecoin;
+pub mod sso;
 pub mod state_machine;
 pub mod swap;
 pub mod temporal_worker;

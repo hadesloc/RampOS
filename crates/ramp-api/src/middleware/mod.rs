@@ -11,6 +11,8 @@ pub mod tiered_rate_limit;
 #[cfg(test)]
 mod rate_limit_test;
 
+pub mod billing;
+
 pub use auth::*;
 pub use idempotency::*;
 pub use portal_auth::*;

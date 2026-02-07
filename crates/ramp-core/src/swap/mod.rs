@@ -309,14 +309,37 @@ impl SwapService {
         from_decimals: u8,
         to_decimals: u8,
     ) -> f64 {
-        // Normalize amounts to same decimal base
-        let from_normalized = from_amount.as_u128() as f64 / 10f64.powi(from_decimals as i32);
-        let to_normalized = to_amount.as_u128() as f64 / 10f64.powi(to_decimals as i32);
+        use rust_decimal::Decimal;
+        use std::str::FromStr;
+
+        if from_amount.is_zero() {
+            return 0.0;
+        }
+
+        // Use string conversion for safe U256 -> Decimal (avoids as_u128 overflow)
+        let from_dec = Decimal::from_str(&from_amount.to_string()).unwrap_or(Decimal::MAX);
+        let to_dec = Decimal::from_str(&to_amount.to_string()).unwrap_or(Decimal::ZERO);
+
+        let from_divisor = Decimal::from_str(&10f64.powi(from_decimals as i32).to_string())
+            .unwrap_or(Decimal::ONE);
+        let to_divisor = Decimal::from_str(&10f64.powi(to_decimals as i32).to_string())
+            .unwrap_or(Decimal::ONE);
+
+        let from_normalized = from_dec / from_divisor;
+        let to_normalized = to_dec / to_divisor;
+
+        if from_normalized.is_zero() {
+            return 0.0;
+        }
 
         // For stablecoins, expected rate is ~1:1
         // Price impact = (1 - actual_rate) * 100
         let actual_rate = to_normalized / from_normalized;
-        (1.0 - actual_rate) * 100.0
+        let impact = (Decimal::ONE - actual_rate) * Decimal::from(100);
+
+        // Convert to f64 for return
+        use rust_decimal::prelude::ToPrimitive;
+        impact.to_f64().unwrap_or(0.0)
     }
 }
 

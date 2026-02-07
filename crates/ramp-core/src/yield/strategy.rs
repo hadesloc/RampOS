@@ -13,7 +13,7 @@ use ethers::types::{Address, H256, U256};
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::RwLock;
+use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 use super::{ProtocolId, ProtocolRegistry, YieldService};
@@ -268,7 +268,7 @@ impl YieldStrategy for ConservativeStrategy {
         }
 
         // 2. Calculate target allocation
-        let current_allocations = service.get_allocations()?;
+        let current_allocations = service.get_allocations().await?;
         let targets = self.calculate_allocation(
             service.registry(),
             token,
@@ -456,7 +456,7 @@ impl YieldStrategy for BalancedStrategy {
             return Ok(vec![]);
         }
 
-        let current_allocations = service.get_allocations()?;
+        let current_allocations = service.get_allocations().await?;
         let targets = self.calculate_allocation(
             service.registry(),
             token,
@@ -615,7 +615,7 @@ impl YieldStrategy for AggressiveStrategy {
             return Ok(vec![]);
         }
 
-        let current_allocations = service.get_allocations()?;
+        let current_allocations = service.get_allocations().await?;
         let targets = self.calculate_allocation(
             service.registry(),
             token,
@@ -681,13 +681,12 @@ impl StrategyManager {
     }
 
     /// Activate a strategy
-    pub fn activate_strategy(&self, id: StrategyId) -> Result<()> {
+    pub async fn activate_strategy(&self, id: StrategyId) -> Result<()> {
         if !self.strategies.contains_key(&id) {
             return Err(Error::NotFound(format!("Strategy not found: {}", id)));
         }
 
-        let mut active = self.active_strategy.write()
-            .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+        let mut active = self.active_strategy.write().await;
         *active = Some(id);
 
         info!(strategy = %id, "Strategy activated");
@@ -695,25 +694,22 @@ impl StrategyManager {
     }
 
     /// Get active strategy
-    pub fn active_strategy(&self) -> Result<Option<StrategyId>> {
-        let active = self.active_strategy.read()
-            .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+    pub async fn active_strategy(&self) -> Result<Option<StrategyId>> {
+        let active = self.active_strategy.read().await;
         Ok(*active)
     }
 
     /// Deactivate current strategy
-    pub fn deactivate_strategy(&self) -> Result<()> {
-        let mut active = self.active_strategy.write()
-            .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+    pub async fn deactivate_strategy(&self) -> Result<()> {
+        let mut active = self.active_strategy.write().await;
         *active = None;
         Ok(())
     }
 
     /// Check if rebalancing is due for a token
-    pub fn is_rebalance_due(&self, token: Address) -> Result<bool> {
+    pub async fn is_rebalance_due(&self, token: Address) -> Result<bool> {
         let active_id = {
-            let active = self.active_strategy.read()
-                .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+            let active = self.active_strategy.read().await;
             match *active {
                 Some(id) => id,
                 None => return Ok(false),
@@ -723,8 +719,7 @@ impl StrategyManager {
         let strategy = self.strategies.get(&active_id)
             .ok_or_else(|| Error::NotFound("Strategy not found".to_string()))?;
 
-        let last_rebalance = self.last_rebalance.read()
-            .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+        let last_rebalance = self.last_rebalance.read().await;
 
         let interval = Duration::seconds(strategy.config().rebalance_interval_secs as i64);
 
@@ -735,9 +730,8 @@ impl StrategyManager {
     }
 
     /// Record a rebalance
-    pub fn record_rebalance(&self, token: Address) -> Result<()> {
-        let mut last_rebalance = self.last_rebalance.write()
-            .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+    pub async fn record_rebalance(&self, token: Address) -> Result<()> {
+        let mut last_rebalance = self.last_rebalance.write().await;
         last_rebalance.insert(token, Utc::now());
         Ok(())
     }
@@ -751,13 +745,12 @@ impl StrategyManager {
         current_allocations: &HashMap<ProtocolId, U256>,
     ) -> Result<Vec<H256>> {
         // Check if rebalancing is due
-        if !self.is_rebalance_due(token)? {
+        if !self.is_rebalance_due(token).await? {
             return Ok(vec![]);
         }
 
         let active_id = {
-            let active = self.active_strategy.read()
-                .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+            let active = self.active_strategy.read().await;
             match *active {
                 Some(id) => id,
                 None => return Ok(vec![]),
@@ -783,7 +776,7 @@ impl StrategyManager {
         let txs = strategy.execute_rebalance(service, token).await?;
 
         // Record rebalance
-        self.record_rebalance(token)?;
+        self.record_rebalance(token).await?;
 
         Ok(txs)
     }
@@ -796,8 +789,7 @@ impl StrategyManager {
         tokens: &[Address],
     ) -> Result<Vec<H256>> {
         let active_id = {
-            let active = self.active_strategy.read()
-                .map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+            let active = self.active_strategy.read().await;
             match *active {
                 Some(id) => id,
                 None => return Ok(vec![]),
@@ -845,24 +837,24 @@ pub struct StrategyPerformance {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_strategy_manager_creation() {
+    #[tokio::test]
+    async fn test_strategy_manager_creation() {
         let manager = StrategyManager::new();
         let strategies = manager.list_strategies();
 
         assert_eq!(strategies.len(), 3);
-        assert!(manager.active_strategy().unwrap().is_none());
+        assert!(manager.active_strategy().await.unwrap().is_none());
     }
 
-    #[test]
-    fn test_activate_strategy() {
+    #[tokio::test]
+    async fn test_activate_strategy() {
         let manager = StrategyManager::new();
 
-        manager.activate_strategy(StrategyId::Conservative).unwrap();
-        assert_eq!(manager.active_strategy().unwrap(), Some(StrategyId::Conservative));
+        manager.activate_strategy(StrategyId::Conservative).await.unwrap();
+        assert_eq!(manager.active_strategy().await.unwrap(), Some(StrategyId::Conservative));
 
-        manager.activate_strategy(StrategyId::Aggressive).unwrap();
-        assert_eq!(manager.active_strategy().unwrap(), Some(StrategyId::Aggressive));
+        manager.activate_strategy(StrategyId::Aggressive).await.unwrap();
+        assert_eq!(manager.active_strategy().await.unwrap(), Some(StrategyId::Aggressive));
     }
 
     #[test]

@@ -20,19 +20,23 @@ use ramp_core::repository::intent::IntentRepository;
 use ramp_core::repository::licensing::LicensingRepository;
 use ramp_core::repository::tenant::TenantRepository;
 use ramp_core::repository::BankConfirmationRepository;
+use ramp_core::billing::BillingService;
+use ramp_core::stablecoin::VnstProtocolService;
 use ramp_core::service::{
     ledger::LedgerService, onboarding::OnboardingService, payin::PayinService,
     payout::PayoutService, trade::TradeService, user::UserService, webhook::WebhookService,
     ComplianceAuditService,
 };
+use ramp_core::sso::SsoService;
 
 use crate::handlers;
 use crate::handlers::aa::AAServiceState;
 use crate::handlers::bank_webhooks::BankWebhookState;
 use crate::middleware::{
-    auth_middleware, idempotency_middleware, portal_auth_middleware, rate_limit_middleware,
-    request_id_middleware, tiered_rate_limit_middleware, IdempotencyHandler, PortalAuthConfig,
-    RateLimiter, TieredRateLimitState,
+    auth_middleware, billing::usage_metering_middleware, idempotency_middleware,
+    portal_auth_middleware, rate_limit_middleware, request_id_middleware,
+    tiered_rate_limit_middleware, IdempotencyHandler, PortalAuthConfig, RateLimiter,
+    TieredRateLimitState,
 };
 use crate::openapi::ApiDoc;
 
@@ -62,6 +66,9 @@ pub struct AppState {
     pub bank_confirmation_repo: Option<Arc<dyn BankConfirmationRepository>>,
     pub licensing_repo: Option<Arc<dyn LicensingRepository>>,
     pub compliance_audit_service: Option<Arc<ComplianceAuditService>>,
+    pub sso_service: Arc<SsoService>,
+    pub billing_service: Arc<BillingService>,
+    pub vnst_protocol: Arc<VnstProtocolService>,
 }
 
 /// Create the API router with full middleware stack
@@ -93,6 +100,11 @@ pub fn create_router(state: AppState) -> Router {
         .merge(payout_routes);
 
     // Event routes (auth required)
+    let sso_routes = Router::new()
+        .route("/:provider/login", get(handlers::auth::sso::sso_login))
+        .route("/:provider/callback", get(handlers::auth::sso::sso_callback))
+        .with_state(state.clone());
+
     let event_routes = Router::new()
         .route("/trade-executed", post(handlers::record_trade))
         .with_state(state.trade_service.clone());
@@ -269,6 +281,18 @@ pub fn create_router(state: AppState) -> Router {
         Router::new()
     };
 
+    // TODO(H-4): Add domain management routes here once domain handlers are implemented.
+    // Expected routes:
+    //   GET    /admin/domains           -> list domains for tenant
+    //   POST   /admin/domains           -> register a new custom domain
+    //   GET    /admin/domains/:id       -> get domain details
+    //   PUT    /admin/domains/:id       -> update domain configuration
+    //   DELETE /admin/domains/:id       -> delete domain
+    //   POST   /admin/domains/:id/verify-dns   -> trigger DNS verification
+    //   POST   /admin/domains/:id/provision-ssl -> trigger SSL provisioning
+    //   POST   /admin/domains/:id/health-check  -> run health check
+    // See: crates/ramp-core/src/domain/mod.rs for DomainService
+
     // Combine them
     let admin_routes = Router::new()
         .merge(admin_general_routes)
@@ -356,6 +380,10 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/yield", yield_routes)
         .nest("/aa", aa_routes)
         .layer(middleware::from_fn_with_state(
+            state.clone(),
+            usage_metering_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
             state.tenant_repo.clone(),
             auth_middleware,
         ));
@@ -430,6 +458,7 @@ pub fn create_router(state: AppState) -> Router {
         )
         // Bank webhook routes (no auth required - uses signature verification)
         .nest("/v1/webhooks/bank", bank_webhook_routes)
+        .nest("/v1/auth/sso", sso_routes)
         .layer(middleware::from_fn(request_id_middleware))
         .layer({
             let request_headers = Arc::new([

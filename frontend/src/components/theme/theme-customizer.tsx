@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Check, Copy, Monitor, Moon, RefreshCcw, Save, Smartphone, Sun, Undo } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Monitor, Moon, RotateCcw, Save, Sun, Undo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { useWhiteLabel, useThemeConfig } from "@/lib/theme/provider";
 import { themePresets, getDefaultPreset } from "@/lib/theme/presets";
 import { hslToHex, hexToHSL, type HSLColor, type ThemeColors } from "@/lib/theme/config";
-import { toast } from "@/hooks/use-toast"; // Assuming toast hook exists
+import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
 // Simple Color Picker Component
@@ -67,11 +67,36 @@ export function ThemeCustomizer() {
   // Local state for undo functionality
   const [history, setHistory] = useState([theme]);
   const [historyIndex, setHistoryIndex] = useState(0);
+  const isUndoing = useRef(false);
 
-  // Update history when theme changes externally (except from undo/redo)
+  // Push current theme to history with 500ms debounce
   useEffect(() => {
-    // Debounced history push could go here
+    if (isUndoing.current) {
+      isUndoing.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      setHistory(prev => {
+        const truncated = prev.slice(0, historyIndex + 1);
+        return [...truncated, theme];
+      });
+      setHistoryIndex(prev => prev + 1);
+    }, 500);
+    return () => clearTimeout(timer);
   }, [theme]);
+
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      isUndoing.current = true;
+      const prevIndex = historyIndex - 1;
+      setHistoryIndex(prevIndex);
+      setTheme(history[prevIndex]);
+      toast({
+        title: "Undone",
+        description: "Reverted to previous theme state.",
+      });
+    }
+  }, [historyIndex, history, setTheme]);
 
   const handleApplyPreset = (presetId: string) => {
     const preset = themePresets.find(p => p.id === presetId);
@@ -85,7 +110,7 @@ export function ThemeCustomizer() {
   };
 
   const handleSave = () => {
-    // In a real app, this would save to API
+    // TODO: Persist to server API when endpoint is available
     localStorage.setItem("whitelabel-theme", JSON.stringify(theme));
     toast({
       title: "Theme Saved",
@@ -94,13 +119,11 @@ export function ThemeCustomizer() {
   };
 
   const handleReset = () => {
-    if (confirm("Are you sure you want to reset to defaults?")) {
-      resetToDefault();
-      toast({
-        title: "Theme Reset",
-        description: "Restored default RampOS theme.",
-      });
-    }
+    resetToDefault();
+    toast({
+      title: "Theme Reset",
+      description: "Restored default RampOS theme. Use Undo to revert.",
+    });
   };
 
   const currentColors = previewMode === "light" ? theme.colors.light : theme.colors.dark;
@@ -112,8 +135,11 @@ export function ThemeCustomizer() {
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold tracking-tight">Theme Editor</h2>
           <div className="flex gap-2">
-            <Button variant="outline" size="icon" onClick={handleReset} title="Reset to Default">
+            <Button variant="outline" size="icon" onClick={handleUndo} disabled={historyIndex <= 0} title="Undo">
               <Undo className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="icon" onClick={handleReset} title="Reset to Default">
+              <RotateCcw className="h-4 w-4" />
             </Button>
             <Button onClick={handleSave} className="gap-2">
               <Save className="h-4 w-4" />

@@ -4407,6 +4407,7 @@ dependencies = [
  "anyhow",
  "async-nats",
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "config",
  "ethers",
@@ -4430,6 +4431,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "urlencoding",
  "uuid 1.19.0",
  "wiremock",
 ]

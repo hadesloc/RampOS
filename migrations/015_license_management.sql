@@ -149,8 +149,6 @@ CREATE POLICY tenant_licenses_isolation ON tenant_licenses
     FOR ALL
     USING (
         tenant_id = current_setting('app.current_tenant', true)
-        OR current_setting('app.current_tenant', true) IS NULL
-        OR current_setting('app.current_tenant', true) = ''
     );
 
 -- Policy for tenant_license_documents
@@ -158,8 +156,6 @@ CREATE POLICY tenant_license_documents_isolation ON tenant_license_documents
     FOR ALL
     USING (
         tenant_id = current_setting('app.current_tenant', true)
-        OR current_setting('app.current_tenant', true) IS NULL
-        OR current_setting('app.current_tenant', true) = ''
     );
 
 -- ============================================================================

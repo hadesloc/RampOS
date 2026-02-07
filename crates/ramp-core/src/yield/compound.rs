@@ -8,7 +8,7 @@ use ethers::abi::{encode, Token};
 use ethers::types::{Address, Bytes, H256, U256};
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
-use std::sync::RwLock;
+use tokio::sync::RwLock;
 use tracing::info;
 
 use super::{ProtocolId, YieldProtocol};
@@ -148,7 +148,7 @@ impl CompoundV3Protocol {
     /// Build withdraw call data for Comet
     fn build_withdraw_calldata(&self, token: Address, amount: U256) -> Bytes {
         // withdraw(address asset, uint amount)
-        let selector: [u8; 4] = [0xf3, 0xfef, 0x3a, 0x3a]; // keccak256("withdraw(address,uint256)")[:4]
+        let selector: [u8; 4] = [0xf3, 0xef, 0x3a, 0x3a]; // keccak256("withdraw(address,uint256)")[:4]
 
         let mut data = Vec::new();
         data.extend_from_slice(&selector);
@@ -240,7 +240,7 @@ impl YieldProtocol for CompoundV3Protocol {
 
         // Update simulated balance
         {
-            let mut balances = self.balances.write().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+            let mut balances = self.balances.write().await;
             let balance = balances.entry(token).or_insert(U256::zero());
             *balance = balance.saturating_add(amount);
         }
@@ -280,7 +280,7 @@ impl YieldProtocol for CompoundV3Protocol {
 
         // Update simulated balance
         {
-            let mut balances = self.balances.write().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+            let mut balances = self.balances.write().await;
             if let Some(balance) = balances.get_mut(&token) {
                 *balance = balance.saturating_sub(amount);
             }
@@ -296,7 +296,7 @@ impl YieldProtocol for CompoundV3Protocol {
     }
 
     async fn balance(&self, token: Address) -> Result<U256> {
-        let balances = self.balances.read().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+        let balances = self.balances.read().await;
         Ok(*balances.get(&token).unwrap_or(&U256::zero()))
     }
 

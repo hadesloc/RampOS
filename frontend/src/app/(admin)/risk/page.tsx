@@ -126,7 +126,7 @@ export default function RiskPage() {
           title="Active Alerts"
           value={mockRiskStats.activeAlerts}
           icon={<AlertCircle className="h-4 w-4" />}
-          description="Requires attention"
+          subtitle="Requires attention"
           className={mockRiskStats.activeAlerts > 10 ? "border-orange-200 dark:border-orange-800" : ""}
         />
 
@@ -134,7 +134,7 @@ export default function RiskPage() {
           title="Total Exposure (VND)"
           value={mockRiskStats.totalExposure}
           icon={<DollarSign className="h-4 w-4" />}
-          description="Across all stablecoins"
+          subtitle="Across all stablecoins"
         />
       </div>
 

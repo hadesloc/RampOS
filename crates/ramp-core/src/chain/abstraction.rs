@@ -107,7 +107,7 @@ impl ChainAbstractionLayer {
     }
 
     /// Get balance on a specific chain
-    pub fn get_balance(&self, chain_id: ChainId, address: &str) -> Result<impl std::future::Future<Output = Result<Balance>> + '_> {
+    pub fn get_balance<'a>(&'a self, chain_id: ChainId, address: &'a str) -> Result<impl std::future::Future<Output = Result<Balance>> + 'a> {
         let chain = self.get_chain(chain_id)?;
         Ok(async move { chain.get_balance(address).await })
     }

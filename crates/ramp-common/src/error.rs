@@ -111,6 +111,12 @@ pub enum Error {
 
     #[error("Provider error: {0}")]
     Provider(String),
+
+    #[error("Authentication error: {0}")]
+    Authentication(String),
+
+    #[error("External error: {0}")]
+    External(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -190,13 +196,15 @@ impl Error {
             Error::Business(_) => "BUSINESS_ERROR",
             Error::NotImplemented(_) => "NOT_IMPLEMENTED",
             Error::Provider(_) => "PROVIDER_ERROR",
+            Error::Authentication(_) => "AUTHENTICATION_ERROR",
+            Error::External(_) => "EXTERNAL_ERROR",
         }
     }
 
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
-            Error::Database(_) | Error::ExternalService { .. } | Error::RailsProviderError { .. }
+            Error::Database(_) | Error::ExternalService { .. } | Error::RailsProviderError { .. } | Error::External(_)
         )
     }
 }

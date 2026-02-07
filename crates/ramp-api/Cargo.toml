@@ -9,7 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 ramp-common = { path = "../ramp-common" }
-ramp-core = { path = "../ramp-core" }
+ramp-core = { path = "../ramp-core", features = ["testing"] }
 ramp-compliance = { path = "../ramp-compliance" }
 ramp-aa = { path = "../ramp-aa" }
 

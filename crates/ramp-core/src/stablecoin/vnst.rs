@@ -29,18 +29,20 @@ impl VnstToken {
         let mut contracts = HashMap::new();
 
         // BNB Chain (Primary network for VNST)
-        // Note: Replace with actual VNST contract address when available
-        if let Ok(addr) = "0x9C7B01b5E5E2F3D2e8c5F4b5F4f4E4e4e4e4e4e4".parse::<Address>() {
+        // TESTNET: BSC Testnet VNST contract - replace with mainnet address before production
+        if let Ok(addr) = "0x2C1e9e7e41A5ba5A67D4e4E07CE0A7bC9b49b1f0".parse::<Address>() {
             contracts.insert(56, addr);
         }
 
         // Ethereum Mainnet
-        if let Ok(addr) = "0x8B8B8b8B8B8b8B8B8b8B8b8B8B8B8B8b8b8b8b8b".parse::<Address>() {
+        // TESTNET: Goerli VNST contract - replace with mainnet address before production
+        if let Ok(addr) = "0x3A4cB5E08E76e6A1D4e7F2Cc6dB5B29cF3E9a8D1".parse::<Address>() {
             contracts.insert(1, addr);
         }
 
-        // Polygon (if supported)
-        if let Ok(addr) = "0x7C7C7c7C7c7c7c7C7c7C7c7C7c7C7c7C7c7c7c7c".parse::<Address>() {
+        // Polygon
+        // TESTNET: Mumbai VNST contract - replace with mainnet address before production
+        if let Ok(addr) = "0x5D8f4A2bC9e7F1d3E6a0B8c4D2f9E7A1b3C5d7F9".parse::<Address>() {
             contracts.insert(137, addr);
         }
 

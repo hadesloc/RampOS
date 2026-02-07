@@ -104,6 +104,7 @@ pub struct QuoteResponse {
 
 impl From<BridgeQuote> for QuoteResponse {
     fn from(q: BridgeQuote) -> Self {
+        let total_fee = q.total_fee().to_string();
         Self {
             quote_id: q.id,
             bridge_name: q.bridge_name,
@@ -114,7 +115,7 @@ impl From<BridgeQuote> for QuoteResponse {
             amount_out: q.amount_out.to_string(),
             bridge_fee: q.bridge_fee.to_string(),
             gas_fee: q.gas_fee.to_string(),
-            total_fee: q.total_fee().to_string(),
+            total_fee,
             estimated_time_seconds: q.estimated_time_seconds,
             expires_at: q.expires_at.to_rfc3339(),
         }

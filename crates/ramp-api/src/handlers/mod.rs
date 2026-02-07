@@ -11,6 +11,7 @@ pub mod payout;
 pub mod portal;
 pub mod stablecoin;
 pub mod trade;
+pub mod auth;
 
 pub use aa::*;
 pub use admin::*;

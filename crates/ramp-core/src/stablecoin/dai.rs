@@ -27,18 +27,8 @@ impl DaiToken {
     pub fn new() -> Self {
         let mut contracts = HashMap::new();
 
-        // Ethereum Mainnet
-        if let Ok(addr) = "0x6B175474E89094C44Da98b954EesdfDCfE7E2aFce27".parse::<Address>() {
-            contracts.insert(1, addr);
-        } else if let Ok(addr) = "0x6B175474E89094C44Da98b954EesdfDCfE7E2aFce27"
-            .replace("sdf", "")
-            .parse::<Address>()
-        {
-            // Correct address: 0x6B175474E89094C44Da98b954EedfDCfE7E2aFce27
-            contracts.insert(1, addr);
-        }
-        // Use the correct Ethereum DAI address
-        if let Ok(addr) = "0x6B175474E89094C44Da98b954EedfDCfE7E2aFce27".parse() {
+        // Ethereum Mainnet - DAI (MakerDAO)
+        if let Ok(addr) = "0x6B175474E89094C44Da98b954EedeAC495271d0F".parse::<Address>() {
             contracts.insert(1, addr);
         }
 

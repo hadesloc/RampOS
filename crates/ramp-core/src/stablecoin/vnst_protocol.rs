@@ -584,7 +584,6 @@ impl VnstProtocolService {
 }
 
 /// Mock data provider for testing
-#[cfg(any(test, feature = "testing"))]
 pub struct MockVnstProtocolDataProvider {
     pub total_supply: std::sync::Mutex<U256>,
     pub vnd_reserves: std::sync::Mutex<Decimal>,
@@ -593,7 +592,6 @@ pub struct MockVnstProtocolDataProvider {
     pub burns: std::sync::Mutex<Vec<String>>,
 }
 
-#[cfg(any(test, feature = "testing"))]
 impl MockVnstProtocolDataProvider {
     pub fn new() -> Self {
         Self {
@@ -611,14 +609,12 @@ impl MockVnstProtocolDataProvider {
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
 impl Default for MockVnstProtocolDataProvider {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
 #[async_trait]
 impl VnstProtocolDataProvider for MockVnstProtocolDataProvider {
     async fn get_total_supply(&self, _chain_id: u64) -> Result<U256> {

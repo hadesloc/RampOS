@@ -230,8 +230,11 @@ impl SwapRouter {
             .unwrap_or(U256::one());
 
         // Output score (normalized 0-100)
+        // Use low_u128() which returns the low 128 bits without panicking.
+        // For swap amounts that fit in u128 this is exact; for astronomically
+        // large U256 values we still get a safe (truncated) ratio.
         let output_score = if max_output > U256::zero() {
-            (quote.to_amount.as_u128() as f64 / max_output.as_u128() as f64) * 100.0
+            (quote.to_amount.low_u128() as f64 / max_output.low_u128() as f64) * 100.0
         } else {
             0.0
         };
@@ -252,8 +255,8 @@ impl SwapRouter {
             .unwrap_or(U256::one());
 
         let gas_score = if max_gas > min_gas {
-            let range = (max_gas - min_gas).as_u128() as f64;
-            let from_max = (max_gas - quote.estimated_gas).as_u128() as f64;
+            let range = (max_gas - min_gas).low_u128() as f64;
+            let from_max = (max_gas - quote.estimated_gas).low_u128() as f64;
             (from_max / range) * 100.0
         } else {
             100.0 // All same gas
@@ -332,7 +335,7 @@ impl SwapRouter {
         let max = std::cmp::max(a, b);
         let min = std::cmp::min(a, b);
         let diff = max - min;
-        ((diff * U256::from(10000)) / max).as_u64() as u16
+        ((diff * U256::from(10000)) / max).low_u64() as u16
     }
 }
 

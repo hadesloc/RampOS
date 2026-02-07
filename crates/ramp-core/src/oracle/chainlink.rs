@@ -47,7 +47,7 @@ impl Default for ChainlinkFeedConfig {
 
         // DAI/USD
         if let (Ok(dai), Ok(feed)) = (
-            Address::from_str("0x6B175474E89094C44Da98b954EescdeCB5f5E3"),
+            Address::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F"),
             Address::from_str("0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9"),
         ) {
             eth_feeds.insert(dai, feed);

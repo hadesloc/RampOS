@@ -5,6 +5,7 @@ edition.workspace = true
 
 [features]
 default = []
+testing = []
 nats = ["async-nats"]
 # Enable full HTTP client for webhook delivery (requires gcc on Windows for rustls)
 # http-client = ["reqwest"]
@@ -41,6 +42,8 @@ reqwest = { version = "0.11", default-features = false, features = ["json", "rus
 sha2.workspace = true
 rand.workspace = true
 subtle = "2.5"
+base64 = { workspace = true }
+urlencoding = "2.1"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

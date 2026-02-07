@@ -11,6 +11,16 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [apiKey, setApiKey] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("whsec_*****************************");
+  const [enabledEvents, setEnabledEvents] = useState<Record<string, boolean>>({
+    "intent.payin.created": true,
+    "intent.payin.confirmed": true,
+    "intent.payout.created": true,
+    "intent.payout.completed": true,
+    "intent.trade.executed": true,
+    "case.created": true,
+    "case.resolved": true,
+  });
   const { toast } = useToast();
 
   const [settings, setSettings] = useState({
@@ -100,6 +110,9 @@ export default function SettingsPage() {
             title: "Success",
             description: "API Key regenerated. Copy it now, you won't see it again!",
         });
+        setTimeout(() => {
+            setApiKey(result.api_key.substring(0, 8) + "*****************************");
+        }, 3000);
     } catch (err: any) {
         toast({
             variant: "destructive",
@@ -107,6 +120,19 @@ export default function SettingsPage() {
             description: "Failed to regenerate API Key",
         });
     }
+  };
+
+  const handleRegenerateWebhookSecret = () => {
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const secret = "whsec_" + Array.from({ length: 32 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+    setWebhookSecret(secret);
+    toast({
+      title: "Success",
+      description: "Webhook secret regenerated. Copy it now!",
+    });
+    setTimeout(() => {
+      setWebhookSecret("whsec_*****************************");
+    }, 3000);
   };
 
   if (loading) {
@@ -165,10 +191,13 @@ export default function SettingsPage() {
             <input
               type="text"
               className="flex-1 rounded-md border bg-background px-3 py-2 text-sm font-mono bg-muted"
-              value="whsec_*****************************"
+              value={webhookSecret}
               readOnly
             />
-            <button className="px-4 py-2 text-sm border rounded-md hover:bg-muted bg-background">
+            <button
+              onClick={handleRegenerateWebhookSecret}
+              className="px-4 py-2 text-sm border rounded-md hover:bg-muted bg-background"
+            >
               Regenerate
             </button>
           </div>
@@ -209,7 +238,12 @@ export default function SettingsPage() {
               "case.resolved",
             ].map((event) => (
               <label key={event} className="flex items-center gap-2">
-                <input type="checkbox" defaultChecked className="rounded" />
+                <input
+                  type="checkbox"
+                  checked={enabledEvents[event] ?? false}
+                  onChange={(e) => setEnabledEvents(prev => ({ ...prev, [event]: e.target.checked }))}
+                  className="rounded"
+                />
                 <span className="text-sm font-mono">{event}</span>
               </label>
             ))}

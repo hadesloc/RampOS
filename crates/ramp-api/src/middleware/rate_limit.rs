@@ -361,6 +361,7 @@ pub async fn rate_limit_middleware(
     }
 
     // Check specific endpoint limit if configured
+    let path = req.uri().path().to_string();
     if let Some(&endpoint_limit) = limiter.config.endpoint_limits.get(&path) {
         let endpoint_key = format!("{}:{}", tenant_key, path);
         let endpoint_result = match limiter.check(&endpoint_key, endpoint_limit).await {

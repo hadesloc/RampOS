@@ -8,7 +8,7 @@ use ethers::abi::{encode, Token};
 use ethers::types::{Address, Bytes, H256, U256};
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
-use std::sync::RwLock;
+use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 use super::{ProtocolId, YieldProtocol};
@@ -115,7 +115,7 @@ impl AaveV3Protocol {
                 }
                 // DAI
                 if let (Ok(underlying), Ok(a_token)) = (
-                    "0x6B175474E89094C44Da98b954EescdeCB5BAe2D6f".parse::<Address>(),
+                    "0x6B175474E89094C44Da98b954EedeAC495271d0F".parse::<Address>(),
                     "0x018008bfb33d285247A21d44E50697654f754e63".parse::<Address>(),
                 ) {
                     tokens.insert(underlying, AaveTokenConfig {
@@ -270,7 +270,7 @@ impl YieldProtocol for AaveV3Protocol {
 
         // Update simulated balance
         {
-            let mut balances = self.balances.write().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+            let mut balances = self.balances.write().await;
             let balance = balances.entry(token).or_insert(U256::zero());
             *balance = balance.saturating_add(amount);
         }
@@ -311,7 +311,7 @@ impl YieldProtocol for AaveV3Protocol {
 
         // Update simulated balance
         {
-            let mut balances = self.balances.write().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+            let mut balances = self.balances.write().await;
             if let Some(balance) = balances.get_mut(&token) {
                 *balance = balance.saturating_sub(amount);
             }
@@ -327,7 +327,7 @@ impl YieldProtocol for AaveV3Protocol {
     }
 
     async fn balance(&self, token: Address) -> Result<U256> {
-        let balances = self.balances.read().map_err(|_| Error::Internal("Lock poisoned".to_string()))?;
+        let balances = self.balances.read().await;
         Ok(*balances.get(&token).unwrap_or(&U256::zero()))
     }
 

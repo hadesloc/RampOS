@@ -43,6 +43,13 @@ pub struct OidcConfig {
     pub name_claim: String,
     /// Additional parameters for authorization request
     pub extra_auth_params: HashMap<String, String>,
+    /// Default redirect URI for the OAuth callback.
+    /// Used during token exchange when the original redirect_uri is not
+    /// available from the callback state.
+    // SECURITY: TODO - The redirect_uri should be stored alongside the state parameter
+    // during the authorize step and retrieved during callback, rather than relying on
+    // a default. This prevents redirect_uri mismatch and open redirect attacks.
+    pub default_redirect_uri: String,
 }
 
 impl OidcConfig {
@@ -67,6 +74,8 @@ impl OidcConfig {
             email_claim: "email".to_string(),
             name_claim: "name".to_string(),
             extra_auth_params: HashMap::new(),
+            default_redirect_uri: std::env::var("OIDC_REDIRECT_URI")
+                .unwrap_or_else(|_| format!("https://{}/v1/auth/sso/okta/callback", okta_domain)),
         }
     }
 
@@ -108,6 +117,8 @@ impl OidcConfig {
             email_claim: "email".to_string(),
             name_claim: "name".to_string(),
             extra_auth_params: HashMap::new(),
+            default_redirect_uri: std::env::var("OIDC_REDIRECT_URI")
+                .unwrap_or_else(|_| "https://localhost/v1/auth/sso/azure/callback".to_string()),
         }
     }
 
@@ -135,6 +146,8 @@ impl OidcConfig {
                 params.insert("hd".to_string(), "*".to_string()); // Hosted domain hint
                 params
             },
+            default_redirect_uri: std::env::var("OIDC_REDIRECT_URI")
+                .unwrap_or_else(|_| "https://localhost/v1/auth/sso/google/callback".to_string()),
         }
     }
 
@@ -158,6 +171,8 @@ impl OidcConfig {
             email_claim: "email".to_string(),
             name_claim: "name".to_string(),
             extra_auth_params: HashMap::new(),
+            default_redirect_uri: std::env::var("OIDC_REDIRECT_URI")
+                .unwrap_or_else(|_| format!("https://{}/v1/auth/sso/auth0/callback", auth0_domain)),
         }
     }
 }
@@ -239,12 +254,12 @@ impl OidcProvider {
 
     /// Build authorization URL
     fn build_auth_url(&self, request: &SsoAuthRequest) -> String {
+        let default_auth_endpoint = format!("{}/authorize", self.config.issuer_url);
         let auth_endpoint = self
             .config
             .authorization_endpoint
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or(&format!("{}/authorize", self.config.issuer_url));
+            .as_deref()
+            .unwrap_or(&default_auth_endpoint);
 
         let scopes = self.config.scopes.join(" ");
 
@@ -279,12 +294,12 @@ impl OidcProvider {
         code: &str,
         redirect_uri: &str,
     ) -> Result<TokenResponse> {
+        let default_token_endpoint = format!("{}/token", self.config.issuer_url);
         let token_endpoint = self
             .config
             .token_endpoint
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or(&format!("{}/token", self.config.issuer_url));
+            .as_deref()
+            .unwrap_or(&default_token_endpoint);
 
         // Decrypt client secret (placeholder - implement actual decryption)
         let client_secret = String::from_utf8_lossy(&self.config.client_secret_encrypted).to_string();
@@ -320,6 +335,13 @@ impl OidcProvider {
     }
 
     /// Decode and validate ID token
+    ///
+    /// SECURITY WARNING: This method only decodes the JWT payload and checks
+    /// expiration/issuer claims. It does NOT verify the JWT cryptographic
+    /// signature. An attacker could forge tokens with arbitrary claims.
+    // SECURITY: TODO - JWKS-based JWT signature verification required before production use.
+    // The token signature MUST be verified against the IdP's public keys (JWKS)
+    // available at `self.config.jwks_uri` before trusting ANY claims.
     fn decode_id_token(&self, id_token: &str) -> Result<IdTokenClaims> {
         // Split JWT parts
         let parts: Vec<&str> = id_token.split('.').collect();
@@ -402,8 +424,11 @@ impl SsoProvider for OidcProvider {
             .ok_or_else(|| ramp_common::Error::Authentication("Missing authorization code".into()))?;
 
         // Exchange code for tokens
-        // Note: In production, redirect_uri should be stored with the state
-        let tokens = self.exchange_code(code, "").await?;
+        // SECURITY: TODO - The redirect_uri should be stored with the state parameter
+        // during the authorize step and retrieved here, rather than using a default.
+        // Using a static default is acceptable for MVP but does not fully protect
+        // against redirect_uri manipulation in a multi-origin deployment.
+        let tokens = self.exchange_code(code, &self.config.default_redirect_uri).await?;
 
         // Decode ID token
         let id_token = tokens
