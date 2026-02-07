@@ -2,16 +2,74 @@
 //!
 //! Implements yield protocol for Aave V3 lending pool.
 //! Supports supply/withdraw of stablecoins and reward claiming.
+//!
+//! When an RPC URL is configured, fetches real APY data from the Aave REST API
+//! (with on-chain `getReserveData()` fallback) and reads real on-chain balances.
+//! When no RPC URL is provided, falls back to simulated in-memory state for
+//! local development and testing.
 
 use async_trait::async_trait;
 use ethers::abi::{encode, Token};
+use ethers::providers::Middleware;
 use ethers::types::{Address, Bytes, H256, U256};
 use ramp_common::{Error, Result};
+use serde::Deserialize;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 
 use super::{ProtocolId, YieldProtocol};
+
+// ---------------------------------------------------------------------------
+// Aave REST API response types
+// ---------------------------------------------------------------------------
+
+/// Response entry from the Aave V2/V3 REST data API.
+/// The REST endpoint returns an array of market objects.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AaveMarketData {
+    /// The underlying asset address (checksummed hex)
+    #[serde(alias = "underlyingAsset")]
+    underlying_asset: Option<String>,
+    /// Supply APY as a decimal string (e.g. "0.045" = 4.5%)
+    /// Different API versions use different field names.
+    #[serde(alias = "liquidityRate")]
+    liquidity_rate: Option<String>,
+    /// Some API versions provide avg_supply_apy directly
+    #[serde(alias = "avg_supply_apy")]
+    avg_supply_apy: Option<f64>,
+    /// Or supply_apy
+    supply_apy: Option<f64>,
+}
+
+// ---------------------------------------------------------------------------
+// Aave V3 on-chain ABI fragments (ethers abigen style)
+// ---------------------------------------------------------------------------
+
+// getReserveData(address asset) returns a tuple; we only need
+// `currentLiquidityRate` which is the 4th element (index 3) - a ray (1e27).
+// We encode/decode manually to avoid a full abigen build step.
+
+/// Selector for `getReserveData(address)` on the Aave V3 Pool contract.
+const GET_RESERVE_DATA_SELECTOR: [u8; 4] = [0x35, 0xea, 0x6a, 0x75];
+
+/// Selector for `balanceOf(address)` on ERC-20 / aToken.
+const BALANCE_OF_SELECTOR: [u8; 4] = [0x70, 0xa0, 0x82, 0x31];
+
+/// Selector for `getUserAccountData(address)` on Aave V3 Pool.
+const GET_USER_ACCOUNT_DATA_SELECTOR: [u8; 4] = [0xbf, 0x92, 0x85, 0x7c];
+
+/// RAY = 1e27 -- Aave uses ray math for rates.
+const RAY: f64 = 1e27;
+
+/// Default Aave REST API URL for market data.
+const AAVE_API_URL: &str = "https://aave-api-v2.aave.com/data/markets-data";
+
+// ---------------------------------------------------------------------------
+// Contract addresses
+// ---------------------------------------------------------------------------
 
 /// Aave V3 contract addresses by chain
 #[derive(Debug, Clone)]
@@ -56,6 +114,10 @@ impl AaveV3Addresses {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Token config
+// ---------------------------------------------------------------------------
+
 /// Token configuration for Aave
 #[derive(Debug, Clone)]
 pub struct AaveTokenConfig {
@@ -64,27 +126,73 @@ pub struct AaveTokenConfig {
     pub decimals: u8,
 }
 
-/// Aave V3 Protocol implementation
+// ---------------------------------------------------------------------------
+// Protocol struct
+// ---------------------------------------------------------------------------
+
+/// Aave V3 Protocol implementation.
+///
+/// When `rpc_url` is `Some(...)`, the protocol uses real on-chain reads (via
+/// `eth_call`) and the Aave REST API for APY data.  When `rpc_url` is `None`,
+/// it falls back to simulated in-memory balances and hardcoded APY values so
+/// that local development / unit tests work without a network connection.
 #[allow(dead_code)]
 pub struct AaveV3Protocol {
     chain_id: u64,
     addresses: AaveV3Addresses,
     account: Address,
     supported_tokens: HashMap<Address, AaveTokenConfig>,
-    // In production, this would use actual RPC calls
-    // For now, using simulated state
+    /// Optional JSON-RPC provider for real on-chain reads.
+    provider: Option<Arc<ethers::providers::Provider<ethers::providers::Http>>>,
+    /// HTTP client for Aave REST API calls.
+    http: reqwest::Client,
+    // Simulated state -- used only when `provider` is `None`.
     balances: RwLock<HashMap<Address, U256>>,
+    /// Cached APY values from the last successful API/on-chain fetch.
+    /// Key is the underlying token address, value is the APY percentage.
+    apy_cache: RwLock<HashMap<Address, (f64, std::time::Instant)>>,
 }
 
+/// How long a cached APY value is considered fresh (5 minutes).
+const APY_CACHE_TTL_SECS: u64 = 300;
+
 impl AaveV3Protocol {
+    /// Create a new Aave V3 protocol instance **without** an RPC connection.
+    /// This uses simulated/fallback values for APY and balances.
     pub fn new(chain_id: u64, addresses: AaveV3Addresses, account: Address) -> Self {
         Self {
             chain_id,
             addresses,
             account,
             supported_tokens: Self::default_tokens(chain_id),
+            provider: None,
+            http: reqwest::Client::new(),
             balances: RwLock::new(HashMap::new()),
+            apy_cache: RwLock::new(HashMap::new()),
         }
+    }
+
+    /// Create a new Aave V3 protocol instance **with** an RPC connection.
+    /// This enables real on-chain reads and live APY data.
+    pub fn with_rpc(
+        chain_id: u64,
+        addresses: AaveV3Addresses,
+        account: Address,
+        rpc_url: &str,
+    ) -> Result<Self> {
+        let provider = ethers::providers::Provider::<ethers::providers::Http>::try_from(rpc_url)
+            .map_err(|e| Error::Internal(format!("Failed to create provider: {}", e)))?;
+
+        Ok(Self {
+            chain_id,
+            addresses,
+            account,
+            supported_tokens: Self::default_tokens(chain_id),
+            provider: Some(Arc::new(provider)),
+            http: reqwest::Client::new(),
+            balances: RwLock::new(HashMap::new()),
+            apy_cache: RwLock::new(HashMap::new()),
+        })
     }
 
     fn default_tokens(chain_id: u64) -> HashMap<Address, AaveTokenConfig> {
@@ -145,10 +253,329 @@ impl AaveV3Protocol {
         tokens
     }
 
+    // -----------------------------------------------------------------------
+    // APY fetching: REST API -> on-chain fallback -> hardcoded fallback
+    // -----------------------------------------------------------------------
+
+    /// Fetch the current supply APY for `token` using a tiered strategy:
+    /// 1. Check in-memory cache (TTL-based).
+    /// 2. Try the Aave REST API.
+    /// 3. Try on-chain `getReserveData()` via the configured RPC provider.
+    /// 4. Fall back to hardcoded values.
+    async fn fetch_apy(&self, token: Address) -> Result<f64> {
+        // 1. Check cache
+        {
+            let cache = self.apy_cache.read().await;
+            if let Some((apy, fetched_at)) = cache.get(&token) {
+                if fetched_at.elapsed().as_secs() < APY_CACHE_TTL_SECS {
+                    return Ok(*apy);
+                }
+            }
+        }
+
+        // 2. Try REST API
+        match self.fetch_apy_from_api(token).await {
+            Ok(apy) => {
+                self.cache_apy(token, apy).await;
+                return Ok(apy);
+            }
+            Err(e) => {
+                warn!(
+                    protocol = "Aave V3",
+                    error = %e,
+                    "REST API APY fetch failed, trying on-chain fallback"
+                );
+            }
+        }
+
+        // 3. Try on-chain getReserveData
+        if self.provider.is_some() {
+            match self.fetch_apy_onchain(token).await {
+                Ok(apy) => {
+                    self.cache_apy(token, apy).await;
+                    return Ok(apy);
+                }
+                Err(e) => {
+                    warn!(
+                        protocol = "Aave V3",
+                        error = %e,
+                        "On-chain APY fetch failed, using hardcoded fallback"
+                    );
+                }
+            }
+        }
+
+        // 4. Hardcoded fallback
+        let config = self.supported_tokens.get(&token);
+        let apy = match config.map(|c| c.decimals) {
+            Some(6) => 4.5,  // USDC/USDT typical range
+            Some(18) => 3.8, // DAI typical range
+            _ => 4.0,
+        };
+        Ok(apy)
+    }
+
+    /// Fetch APY from the Aave REST API (v2-compatible endpoint that also
+    /// serves V3 data for Ethereum mainnet).
+    async fn fetch_apy_from_api(&self, token: Address) -> Result<f64> {
+        let token_hex = format!("{:?}", token).to_lowercase();
+
+        let resp = self
+            .http
+            .get(AAVE_API_URL)
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .await
+            .map_err(|e| Error::ExternalService {
+                service: "Aave API".to_string(),
+                message: format!("HTTP request failed: {}", e),
+            })?;
+
+        if !resp.status().is_success() {
+            return Err(Error::ExternalService {
+                service: "Aave API".to_string(),
+                message: format!("HTTP status {}", resp.status()),
+            });
+        }
+
+        let markets: Vec<AaveMarketData> = resp
+            .json()
+            .await
+            .map_err(|e| Error::ExternalService {
+                service: "Aave API".to_string(),
+                message: format!("JSON parse error: {}", e),
+            })?;
+
+        // Find matching market by underlying asset address
+        for market in &markets {
+            let asset_addr = market
+                .underlying_asset
+                .as_deref()
+                .unwrap_or("")
+                .to_lowercase();
+
+            if asset_addr == token_hex || asset_addr == format!("0x{}", &token_hex[2..]) {
+                // Try various field names that different Aave API versions use
+                if let Some(apy) = market.supply_apy {
+                    // supply_apy is already a percentage
+                    let apy_pct = if apy < 1.0 { apy * 100.0 } else { apy };
+                    info!(
+                        protocol = "Aave V3",
+                        token = %token_hex,
+                        apy = apy_pct,
+                        source = "REST API (supply_apy)",
+                        "Fetched real APY"
+                    );
+                    return Ok(apy_pct);
+                }
+
+                if let Some(apy) = market.avg_supply_apy {
+                    let apy_pct = if apy < 1.0 { apy * 100.0 } else { apy };
+                    info!(
+                        protocol = "Aave V3",
+                        token = %token_hex,
+                        apy = apy_pct,
+                        source = "REST API (avg_supply_apy)",
+                        "Fetched real APY"
+                    );
+                    return Ok(apy_pct);
+                }
+
+                if let Some(ref rate_str) = market.liquidity_rate {
+                    // liquidityRate is a ray value as string
+                    if let Ok(rate) = rate_str.parse::<f64>() {
+                        let apy_pct = if rate > 1e20 {
+                            // It is a raw ray value (1e27 scale)
+                            (rate / RAY) * 100.0
+                        } else if rate < 1.0 {
+                            // It is a decimal fraction
+                            rate * 100.0
+                        } else {
+                            rate
+                        };
+                        info!(
+                            protocol = "Aave V3",
+                            token = %token_hex,
+                            apy = apy_pct,
+                            source = "REST API (liquidityRate)",
+                            "Fetched real APY"
+                        );
+                        return Ok(apy_pct);
+                    }
+                }
+            }
+        }
+
+        Err(Error::ExternalService {
+            service: "Aave API".to_string(),
+            message: format!("Token {} not found in Aave markets response", token_hex),
+        })
+    }
+
+    /// Fetch APY on-chain by calling `getReserveData(address)` on the Aave V3
+    /// Pool contract. The `currentLiquidityRate` field (index 2 in the returned
+    /// tuple for V3) is a ray-scaled value representing the current supply rate.
+    async fn fetch_apy_onchain(&self, token: Address) -> Result<f64> {
+        let provider = self.provider.as_ref().ok_or_else(|| {
+            Error::Internal("No RPC provider configured".to_string())
+        })?;
+
+        // Build calldata: getReserveData(address)
+        let mut calldata = Vec::with_capacity(36);
+        calldata.extend_from_slice(&GET_RESERVE_DATA_SELECTOR);
+        calldata.extend_from_slice(&encode(&[Token::Address(token)]));
+
+        let tx = ethers::types::TransactionRequest::new()
+            .to(self.addresses.pool)
+            .data(Bytes::from(calldata));
+
+        let result = provider
+            .call(&tx.into(), None)
+            .await
+            .map_err(|e| Error::ExternalService {
+                service: "Aave V3 on-chain".to_string(),
+                message: format!("eth_call getReserveData failed: {}", e),
+            })?;
+
+        // The return data is a packed struct of many uint256 fields.
+        // In Aave V3 Pool, getReserveData returns:
+        //   (ReserveConfigurationMap, uint128 liquidityIndex,
+        //    uint128 currentLiquidityRate, ...)
+        // The currentLiquidityRate starts at byte offset 64 (3rd 32-byte word
+        // if we account for the first word being the config bitmap and the
+        // second being liquidityIndex, both packed as uint256 on the ABI level).
+        //
+        // For a simpler approach we just index into the raw 32-byte words.
+        let data = result.to_vec();
+        if data.len() < 96 {
+            return Err(Error::ExternalService {
+                service: "Aave V3 on-chain".to_string(),
+                message: format!(
+                    "getReserveData response too short ({} bytes)",
+                    data.len()
+                ),
+            });
+        }
+
+        // currentLiquidityRate is the 3rd word (bytes 64..96) as uint256.
+        let rate_u256 = U256::from_big_endian(&data[64..96]);
+
+        // Convert ray to APY percentage.
+        // APY (simple) ~= rate / 1e27 * 100
+        // For compound APY: ((1 + rate/1e27/SECONDS_PER_YEAR)^SECONDS_PER_YEAR - 1) * 100
+        // We use the simple approximation which is standard for display.
+        let rate_f64 = rate_u256.as_u128() as f64;
+        let apy_pct = (rate_f64 / RAY) * 100.0;
+
+        info!(
+            protocol = "Aave V3",
+            token = ?token,
+            raw_rate = %rate_u256,
+            apy = apy_pct,
+            source = "on-chain getReserveData",
+            "Fetched real APY"
+        );
+
+        Ok(apy_pct)
+    }
+
+    /// Store an APY value in the in-memory cache.
+    async fn cache_apy(&self, token: Address, apy: f64) {
+        let mut cache = self.apy_cache.write().await;
+        cache.insert(token, (apy, std::time::Instant::now()));
+    }
+
+    // -----------------------------------------------------------------------
+    // On-chain balance reads
+    // -----------------------------------------------------------------------
+
+    /// Read the aToken balance for `self.account` on-chain.
+    async fn fetch_balance_onchain(&self, token: Address) -> Result<U256> {
+        let provider = self.provider.as_ref().ok_or_else(|| {
+            Error::Internal("No RPC provider configured".to_string())
+        })?;
+
+        let a_token = self.supported_tokens.get(&token)
+            .ok_or_else(|| Error::Business(format!("Token not supported: {:?}", token)))?
+            .a_token;
+
+        // balanceOf(address) -> uint256
+        let mut calldata = Vec::with_capacity(36);
+        calldata.extend_from_slice(&BALANCE_OF_SELECTOR);
+        calldata.extend_from_slice(&encode(&[Token::Address(self.account)]));
+
+        let tx = ethers::types::TransactionRequest::new()
+            .to(a_token)
+            .data(Bytes::from(calldata));
+
+        let result = provider
+            .call(&tx.into(), None)
+            .await
+            .map_err(|e| Error::ExternalService {
+                service: "Aave V3 on-chain".to_string(),
+                message: format!("eth_call balanceOf failed: {}", e),
+            })?;
+
+        let data = result.to_vec();
+        if data.len() < 32 {
+            return Ok(U256::zero());
+        }
+
+        Ok(U256::from_big_endian(&data[0..32]))
+    }
+
+    /// Read `getUserAccountData(address)` from the Aave V3 Pool to get the
+    /// health factor. Returns the health factor as a float (1e18 scaled on-chain).
+    async fn fetch_health_factor_onchain(&self) -> Result<f64> {
+        let provider = self.provider.as_ref().ok_or_else(|| {
+            Error::Internal("No RPC provider configured".to_string())
+        })?;
+
+        let mut calldata = Vec::with_capacity(36);
+        calldata.extend_from_slice(&GET_USER_ACCOUNT_DATA_SELECTOR);
+        calldata.extend_from_slice(&encode(&[Token::Address(self.account)]));
+
+        let tx = ethers::types::TransactionRequest::new()
+            .to(self.addresses.pool)
+            .data(Bytes::from(calldata));
+
+        let result = provider
+            .call(&tx.into(), None)
+            .await
+            .map_err(|e| Error::ExternalService {
+                service: "Aave V3 on-chain".to_string(),
+                message: format!("eth_call getUserAccountData failed: {}", e),
+            })?;
+
+        // getUserAccountData returns:
+        //   (uint256 totalCollateralBase, uint256 totalDebtBase,
+        //    uint256 availableBorrowsBase, uint256 currentLiquidationThreshold,
+        //    uint256 ltv, uint256 healthFactor)
+        // healthFactor is the 6th word (bytes 160..192), scaled by 1e18.
+        let data = result.to_vec();
+        if data.len() < 192 {
+            // If we cannot read it, assume infinite (supply-only, no debt).
+            return Ok(f64::INFINITY);
+        }
+
+        let hf_u256 = U256::from_big_endian(&data[160..192]);
+        if hf_u256 == U256::MAX {
+            // Aave returns type(uint256).max when there is no debt
+            return Ok(f64::INFINITY);
+        }
+
+        let hf = hf_u256.as_u128() as f64 / 1e18;
+        Ok(hf)
+    }
+
+    // -----------------------------------------------------------------------
+    // Calldata builders (unchanged from original)
+    // -----------------------------------------------------------------------
+
     /// Build supply call data for Aave Pool
     fn build_supply_calldata(&self, token: Address, amount: U256) -> Bytes {
         // supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)
-        let selector: [u8; 4] = [0x61, 0x7b, 0xa0, 0x37]; // keccak256("supply(address,uint256,address,uint16)")[:4]
+        let selector: [u8; 4] = [0x61, 0x7b, 0xa0, 0x37];
 
         let mut data = Vec::new();
         data.extend_from_slice(&selector);
@@ -167,7 +594,7 @@ impl AaveV3Protocol {
     /// Build withdraw call data for Aave Pool
     fn build_withdraw_calldata(&self, token: Address, amount: U256) -> Bytes {
         // withdraw(address asset, uint256 amount, address to)
-        let selector: [u8; 4] = [0x69, 0x32, 0x8d, 0xec]; // keccak256("withdraw(address,uint256,address)")[:4]
+        let selector: [u8; 4] = [0x69, 0x32, 0x8d, 0xec];
 
         let mut data = Vec::new();
         data.extend_from_slice(&selector);
@@ -185,7 +612,7 @@ impl AaveV3Protocol {
     /// Build claim rewards call data
     fn build_claim_rewards_calldata(&self, assets: Vec<Address>) -> Bytes {
         // claimAllRewards(address[] assets, address to)
-        let selector: [u8; 4] = [0xbb, 0x49, 0x2b, 0xf5]; // keccak256("claimAllRewards(address[],address)")[:4]
+        let selector: [u8; 4] = [0xbb, 0x49, 0x2b, 0xf5];
 
         let mut data = Vec::new();
         data.extend_from_slice(&selector);
@@ -205,19 +632,28 @@ impl AaveV3Protocol {
         self.supported_tokens.values().map(|t| t.a_token).collect()
     }
 
-    /// Simulate transaction (in production, would submit via bundler)
+    /// Simulate transaction (used when no provider, or as tx-building step).
+    /// In production with a provider, this would submit the real transaction
+    /// via the bundler / direct sendTransaction.
     async fn simulate_tx(&self, _calldata: Bytes) -> Result<H256> {
         // In production, this would:
         // 1. Build UserOperation with the calldata
         // 2. Estimate gas
         // 3. Submit to bundler
         // 4. Wait for confirmation
-
-        // For now, return a simulated tx hash
         let hash_bytes: [u8; 32] = rand::random();
         Ok(H256::from_slice(&hash_bytes))
     }
+
+    /// Returns `true` when the protocol is connected to a live RPC node.
+    pub fn is_live(&self) -> bool {
+        self.provider.is_some()
+    }
 }
+
+// ---------------------------------------------------------------------------
+// YieldProtocol trait implementation
+// ---------------------------------------------------------------------------
 
 #[async_trait]
 impl YieldProtocol for AaveV3Protocol {
@@ -234,21 +670,15 @@ impl YieldProtocol for AaveV3Protocol {
             return Err(Error::Business(format!("Token not supported: {:?}", token)));
         }
 
-        // In production, would query Aave's getReserveData
-        // For now, return simulated APY based on token
-        let config = self.supported_tokens.get(&token);
-        let apy = match config.map(|c| c.decimals) {
-            Some(6) => 4.5,  // USDC/USDT typical range
-            Some(18) => 3.8, // DAI typical range
-            _ => 4.0,
-        };
+        let apy = self.fetch_apy(token).await?;
 
         info!(
             protocol = "Aave V3",
             chain_id = self.chain_id,
             token = ?token,
             apy = apy,
-            "Fetched current APY"
+            live = self.is_live(),
+            "Current APY"
         );
 
         Ok(apy)
@@ -269,7 +699,7 @@ impl YieldProtocol for AaveV3Protocol {
         let calldata = self.build_supply_calldata(token, amount);
         let tx_hash = self.simulate_tx(calldata).await?;
 
-        // Update simulated balance
+        // Update simulated balance (always kept in sync for tracking)
         {
             let mut balances = self.balances.write().await;
             let balance = balances.entry(token).or_insert(U256::zero());
@@ -328,15 +758,30 @@ impl YieldProtocol for AaveV3Protocol {
     }
 
     async fn balance(&self, token: Address) -> Result<U256> {
+        // When a provider is available, read the real on-chain aToken balance.
+        if self.provider.is_some() {
+            match self.fetch_balance_onchain(token).await {
+                Ok(bal) => return Ok(bal),
+                Err(e) => {
+                    warn!(
+                        protocol = "Aave V3",
+                        error = %e,
+                        "On-chain balance read failed, using simulated state"
+                    );
+                }
+            }
+        }
+
+        // Fallback: simulated in-memory balance
         let balances = self.balances.read().await;
         Ok(*balances.get(&token).unwrap_or(&U256::zero()))
     }
 
     async fn accrued_yield(&self, token: Address) -> Result<U256> {
-        // In production, would calculate (current aToken balance - principal)
+        // In a live environment we could diff (aToken balance - tracked principal).
+        // For now we approximate with a small percentage of the current balance.
         let balance = self.balance(token).await?;
-        // Simulate ~0.01% yield accrued
-        let yield_amount = balance / U256::from(10000);
+        let yield_amount = balance / U256::from(10000); // ~0.01%
         Ok(yield_amount)
     }
 
@@ -367,12 +812,28 @@ impl YieldProtocol for AaveV3Protocol {
     }
 
     async fn health_factor(&self) -> Result<f64> {
-        // In production, would query getUserAccountData from Aave Pool
-        // Returns health factor (> 1.0 is safe, liquidation at 1.0)
+        // Try on-chain first
+        if self.provider.is_some() {
+            match self.fetch_health_factor_onchain().await {
+                Ok(hf) => return Ok(hf),
+                Err(e) => {
+                    warn!(
+                        protocol = "Aave V3",
+                        error = %e,
+                        "On-chain health factor read failed, returning infinite (supply-only)"
+                    );
+                }
+            }
+        }
+
         // For supply-only positions, health factor is infinite
         Ok(f64::INFINITY)
     }
 }
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -395,6 +856,7 @@ mod tests {
 
         assert_eq!(protocol.name(), "Aave V3");
         assert_eq!(protocol.protocol_id(), ProtocolId::AaveV3);
+        assert!(!protocol.is_live());
     }
 
     #[tokio::test]
@@ -404,5 +866,51 @@ mod tests {
 
         let hf = protocol.health_factor().await.unwrap();
         assert!(hf > 1.0);
+    }
+
+    #[tokio::test]
+    async fn test_simulated_apy_fallback() {
+        let addresses = AaveV3Addresses::ethereum_mainnet().unwrap();
+        let protocol = AaveV3Protocol::new(1, addresses, test_account());
+
+        let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse().unwrap();
+        // Without RPC/API, should return the hardcoded fallback
+        let apy = protocol.current_apy(usdc).await.unwrap();
+        assert!(apy > 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_deposit_withdraw_simulated() {
+        let addresses = AaveV3Addresses::ethereum_mainnet().unwrap();
+        let protocol = AaveV3Protocol::new(1, addresses, test_account());
+
+        let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse().unwrap();
+        let amount = U256::from(1000) * U256::exp10(6); // 1000 USDC
+
+        // Deposit
+        let tx = protocol.deposit(usdc, amount).await;
+        assert!(tx.is_ok());
+
+        // Check balance (simulated)
+        let balance = protocol.balance(usdc).await.unwrap();
+        assert_eq!(balance, amount);
+
+        // Withdraw half
+        let withdraw_amount = amount / 2;
+        let tx = protocol.withdraw(usdc, withdraw_amount).await;
+        assert!(tx.is_ok());
+
+        let balance = protocol.balance(usdc).await.unwrap();
+        assert_eq!(balance, amount - withdraw_amount);
+    }
+
+    #[test]
+    fn test_with_rpc_invalid_url() {
+        let addresses = AaveV3Addresses::ethereum_mainnet().unwrap();
+        // An invalid URL should still parse with ethers Http provider
+        // (it only fails on actual calls), so this should succeed.
+        let result = AaveV3Protocol::with_rpc(1, addresses, test_account(), "http://localhost:8545");
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_live());
     }
 }

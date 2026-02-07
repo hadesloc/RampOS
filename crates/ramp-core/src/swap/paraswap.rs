@@ -131,6 +131,49 @@ impl ParaSwapAggregator {
         U256::from_dec_str(s)
             .map_err(|e| Error::Validation(format!("Invalid amount: {}", e)))
     }
+
+    /// Return a mock quote for test/dev environments
+    fn mock_quote(
+        &self,
+        from: Token,
+        to: Token,
+        amount: U256,
+        slippage_bps: u16,
+        chain_id: u64,
+        now: u64,
+    ) -> Result<SwapQuote> {
+        // Mock: 0.25% fee (slightly better than 1inch for competition)
+        let output_amount = amount * U256::from(9975) / U256::from(10000);
+        let slippage_amount = output_amount * U256::from(slippage_bps) / U256::from(10000);
+        let min_output = output_amount - slippage_amount;
+
+        Ok(SwapQuote {
+            quote_id: format!("paraswap-{}-{}", chain_id, now),
+            aggregator: "ParaSwap".to_string(),
+            from_token: from.clone(),
+            to_token: to.clone(),
+            from_amount: amount,
+            to_amount: output_amount,
+            to_amount_min: min_output,
+            estimated_gas: U256::from(140_000),
+            gas_price: U256::from(30_000_000_000u64), // 30 gwei
+            price_impact_bps: 25, // 0.25%
+            slippage_bps,
+            route: vec![SwapRoute {
+                protocol: "ParaSwapPool".to_string(),
+                pool_address: Address::zero(),
+                from_token: from.address,
+                to_token: to.address,
+                portion_bps: 10000,
+            }],
+            swap_data: Bytes::default(),
+            swap_contract: "0xDEF171Fe48CF0115B1d80b88dc8eAB59176FEe57"
+                .parse()
+                .unwrap(), // ParaSwap Augustus
+            expires_at: now + 300, // 5 minutes
+            mev_protected: false,
+        })
+    }
 }
 
 #[async_trait]
@@ -184,17 +227,88 @@ impl DexAggregator for ParaSwapAggregator {
 
         tracing::debug!(url = %url, "Fetching ParaSwap quote");
 
-        // In production, make actual API call
-        // For now, return mock quote
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
-        // Mock: 0.25% fee (slightly better than 1inch for competition)
-        let output_amount = amount * U256::from(9975) / U256::from(10000);
-        let slippage_amount = output_amount * U256::from(slippage_bps) / U256::from(10000);
-        let min_output = output_amount - slippage_amount;
+        // Check if we should use mock mode (test environments or explicit override)
+        let use_mock = std::env::var("PARASWAP_MOCK").unwrap_or_default() == "true"
+            || (cfg!(test) && self.config.api_url.is_empty());
+
+        if use_mock {
+            tracing::warn!("ParaSwap mock mode active, returning mock quote");
+            return self.mock_quote(from, to, amount, slippage_bps, chain_id, now);
+        }
+
+        // Make real API call to ParaSwap
+        let mut request = self.http_client
+            .get(&url)
+            .header("Accept", "application/json")
+            .timeout(std::time::Duration::from_secs(self.config.timeout_secs));
+
+        // Add API key header if configured
+        if let Some(ref api_key) = self.config.api_key {
+            request = request.header("X-API-Key", api_key.as_str());
+        }
+
+        let response = request.send().await.map_err(|e| {
+            Error::ExternalService {
+                service: "ParaSwap".to_string(),
+                message: format!("Quote request failed: {}", e),
+            }
+        })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            tracing::error!(status = %status, body = %body, "ParaSwap quote API error");
+            return Err(Error::ExternalService {
+                service: "ParaSwap".to_string(),
+                message: format!("Quote API returned {}: {}", status, body),
+            });
+        }
+
+        let price_resp: ParaSwapPriceResponse = response.json().await.map_err(|e| {
+            Error::ExternalService {
+                service: "ParaSwap".to_string(),
+                message: format!("Failed to parse quote response: {}", e),
+            }
+        })?;
+
+        let dest_amount = Self::parse_amount(&price_resp.price_route.dest_amount)?;
+        let slippage_amount = dest_amount * U256::from(slippage_bps) / U256::from(10000);
+        let min_output = dest_amount - slippage_amount;
+
+        // Build route from best_route
+        let route: Vec<SwapRoute> = price_resp.price_route.best_route
+            .iter()
+            .flat_map(|route_info| {
+                let percent = route_info.percent;
+                route_info.swaps.iter().flat_map(move |swap| {
+                    swap.exchanges.iter().map(move |exchange| SwapRoute {
+                        protocol: exchange.exchange.clone(),
+                        pool_address: Address::zero(), // ParaSwap doesn't expose pool addresses in price
+                        from_token: swap.src_token.parse().unwrap_or(Address::zero()),
+                        to_token: swap.dest_token.parse().unwrap_or(Address::zero()),
+                        portion_bps: (percent * 100.0) as u16,
+                    })
+                })
+            })
+            .collect();
+
+        // Parse gas cost
+        let gas_cost = U256::from_dec_str(&price_resp.price_route.gas_cost)
+            .unwrap_or(U256::from(140_000));
+
+        // Calculate price impact in basis points
+        let from_amount_f = amount.as_u128() as f64;
+        let dest_amount_f = dest_amount.as_u128() as f64;
+        let from_decimals = price_resp.price_route.src_decimals;
+        let to_decimals = price_resp.price_route.dest_decimals;
+        let normalized_ratio = (dest_amount_f / 10f64.powi(to_decimals as i32))
+            / (from_amount_f / 10f64.powi(from_decimals as i32));
+        let price_impact_bps = ((1.0 - normalized_ratio) * 10000.0).max(0.0) as u16;
 
         Ok(SwapQuote {
             quote_id: format!("paraswap-{}-{}", chain_id, now),
@@ -202,19 +316,13 @@ impl DexAggregator for ParaSwapAggregator {
             from_token: from.clone(),
             to_token: to.clone(),
             from_amount: amount,
-            to_amount: output_amount,
+            to_amount: dest_amount,
             to_amount_min: min_output,
-            estimated_gas: U256::from(140_000), // Slightly more gas efficient
-            gas_price: U256::from(30_000_000_000u64), // 30 gwei
-            price_impact_bps: 25, // 0.25%
+            estimated_gas: gas_cost,
+            gas_price: U256::from(30_000_000_000u64), // Will be determined at tx time
+            price_impact_bps,
             slippage_bps,
-            route: vec![SwapRoute {
-                protocol: "ParaSwapPool".to_string(),
-                pool_address: Address::zero(),
-                from_token: from.address,
-                to_token: to.address,
-                portion_bps: 10000,
-            }],
+            route,
             swap_data: Bytes::default(),
             swap_contract: "0xDEF171Fe48CF0115B1d80b88dc8eAB59176FEe57"
                 .parse()
@@ -229,22 +337,108 @@ impl DexAggregator for ParaSwapAggregator {
         let network = Self::network_name(chain_id)
             .ok_or_else(|| Error::Validation(format!("Chain {} not supported", chain_id)))?;
 
-        // In production, call /transactions endpoint
         tracing::debug!(
             network = network,
             recipient = %recipient,
             "Building ParaSwap swap tx"
         );
 
+        // Check if we should use mock mode
+        let use_mock = std::env::var("PARASWAP_MOCK").unwrap_or_default() == "true"
+            || (cfg!(test) && self.config.api_url.is_empty());
+
+        if use_mock {
+            tracing::warn!("ParaSwap mock mode active, returning mock swap tx");
+            return Ok(SwapTxData {
+                to: quote.swap_contract,
+                data: quote.swap_data.clone(),
+                value: if quote.from_token.is_native() {
+                    quote.from_amount
+                } else {
+                    U256::zero()
+                },
+                gas_limit: quote.estimated_gas * U256::from(115) / U256::from(100),
+            });
+        }
+
+        // Build the transaction request body for ParaSwap /transactions endpoint
+        let tx_url = format!(
+            "{}/transactions/{}",
+            self.api_url(),
+            chain_id,
+        );
+
+        let tx_body = serde_json::json!({
+            "srcToken": Self::format_address(quote.from_token.address),
+            "destToken": Self::format_address(quote.to_token.address),
+            "srcAmount": quote.from_amount.to_string(),
+            "destAmount": quote.to_amount_min.to_string(),
+            "priceRoute": {},
+            "userAddress": Self::format_address(recipient),
+            "receiver": Self::format_address(recipient),
+            "partner": "rampos",
+            "srcDecimals": quote.from_token.decimals,
+            "destDecimals": quote.to_token.decimals,
+            "slippage": quote.slippage_bps,
+        });
+
+        let mut request = self.http_client
+            .post(&tx_url)
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .timeout(std::time::Duration::from_secs(self.config.timeout_secs))
+            .json(&tx_body);
+
+        if let Some(ref api_key) = self.config.api_key {
+            request = request.header("X-API-Key", api_key.as_str());
+        }
+
+        let response = request.send().await.map_err(|e| {
+            Error::ExternalService {
+                service: "ParaSwap".to_string(),
+                message: format!("Swap tx request failed: {}", e),
+            }
+        })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            tracing::error!(status = %status, body = %body, "ParaSwap swap tx API error");
+            return Err(Error::ExternalService {
+                service: "ParaSwap".to_string(),
+                message: format!("Swap tx API returned {}: {}", status, body),
+            });
+        }
+
+        let tx_resp: ParaSwapTxResponse = response.json().await.map_err(|e| {
+            Error::ExternalService {
+                service: "ParaSwap".to_string(),
+                message: format!("Failed to parse swap tx response: {}", e),
+            }
+        })?;
+
+        // Parse the transaction data from the response
+        let to_address: Address = tx_resp.to.parse().map_err(|e| {
+            Error::Validation(format!("Invalid contract address in response: {}", e))
+        })?;
+
+        let tx_data = Bytes::from(
+            hex::decode(tx_resp.data.trim_start_matches("0x")).map_err(|e| {
+                Error::Validation(format!("Invalid tx data hex: {}", e))
+            })?,
+        );
+
+        let value = Self::parse_amount(&tx_resp.value)?;
+        let _gas_price = Self::parse_amount(&tx_resp.gas_price).unwrap_or(U256::from(30_000_000_000u64));
+
+        // Estimate gas limit with 15% buffer
+        let estimated_gas = quote.estimated_gas * U256::from(115) / U256::from(100);
+
         Ok(SwapTxData {
-            to: quote.swap_contract,
-            data: quote.swap_data.clone(),
-            value: if quote.from_token.is_native() {
-                quote.from_amount
-            } else {
-                U256::zero()
-            },
-            gas_limit: quote.estimated_gas * U256::from(115) / U256::from(100), // 15% buffer
+            to: to_address,
+            data: tx_data,
+            value,
+            gas_limit: estimated_gas,
         })
     }
 }

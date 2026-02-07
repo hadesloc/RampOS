@@ -2,16 +2,28 @@
 //!
 //! Integrates with LayerZero's Stargate V2 for cross-chain stablecoin transfers.
 //! Stargate provides low-slippage, instant guaranteed finality transfers.
+//!
+//! This module makes real HTTP calls to the Stargate API for fee quotes
+//! and the LayerZero Scan API for status tracking, with fallback to
+//! hardcoded estimates when the APIs are unreachable.
 
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
 use ethers::types::{Address, U256};
 use ramp_common::{Error, Result};
+use serde::{Deserialize, Serialize};
+use tracing;
 use uuid::Uuid;
 
 use super::{
     BridgeConfig, BridgeQuote, BridgeStatus, BridgeToken, ChainId, CrossChainBridge, TxHash,
 };
+
+/// Stargate V2 API base URL
+const STARGATE_API_BASE: &str = "https://mainnet.stargate.finance/v1";
+
+/// LayerZero Scan API base URL for tracking cross-chain messages
+const LAYERZERO_SCAN_API: &str = "https://scan.layerzero-api.com/v1";
 
 /// Stargate V2 Pool IDs for tokens
 #[derive(Debug, Clone, Copy)]
@@ -60,14 +72,75 @@ impl LayerZeroEndpointId {
     }
 }
 
+/// Response from the Stargate quote API
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StargateQuoteResponse {
+    /// Estimated amount received on the destination chain (in token units)
+    #[serde(default)]
+    pub amount_received: String,
+    /// Stargate protocol fee (in token units)
+    #[serde(default)]
+    pub stargate_fee: String,
+    /// LayerZero messaging fee (in native gas token, wei)
+    #[serde(default)]
+    pub lz_fee: String,
+    /// Estimated delivery time in seconds
+    #[serde(default)]
+    pub estimated_time: u64,
+    /// Whether the route is available
+    #[serde(default = "default_true")]
+    pub available: bool,
+    /// Error message if route is unavailable
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Response from the LayerZero Scan API for message tracking
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LayerZeroMessageResponse {
+    /// Messages matching the query
+    #[serde(default)]
+    pub messages: Vec<LayerZeroMessage>,
+}
+
+/// A single LayerZero cross-chain message
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LayerZeroMessage {
+    /// Source transaction hash
+    #[serde(default)]
+    pub src_tx_hash: Option<String>,
+    /// Destination transaction hash (if delivered)
+    #[serde(default)]
+    pub dst_tx_hash: Option<String>,
+    /// Message status
+    #[serde(default)]
+    pub status: String,
+}
+
 /// Stargate V2 Bridge implementation
 pub struct StargateBridge {
     config: BridgeConfig,
+    http_client: reqwest::Client,
 }
 
 impl StargateBridge {
     pub fn new(config: BridgeConfig) -> Self {
-        Self { config }
+        let http_client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .build()
+            .unwrap_or_default();
+
+        Self {
+            config,
+            http_client,
+        }
     }
 
     /// Get router address for a chain
@@ -84,16 +157,94 @@ impl StargateBridge {
             .copied()
     }
 
-    /// Calculate bridge fee (mock implementation)
-    fn calculate_fee(&self, _from_chain: ChainId, _to_chain: ChainId, amount: U256) -> U256 {
+    /// Fetch a real fee quote from the Stargate API.
+    ///
+    /// Queries the Stargate V2 quote endpoint with route and amount parameters.
+    async fn fetch_quote(
+        &self,
+        from_chain: ChainId,
+        to_chain: ChainId,
+        token: BridgeToken,
+        amount: U256,
+        recipient: Address,
+    ) -> std::result::Result<StargateQuoteResponse, String> {
+        let src_eid = LayerZeroEndpointId::from_chain_id(from_chain)
+            .ok_or_else(|| format!("No LayerZero endpoint for chain {}", from_chain))?;
+        let dst_eid = LayerZeroEndpointId::from_chain_id(to_chain)
+            .ok_or_else(|| format!("No LayerZero endpoint for chain {}", to_chain))?;
+
+        let pool_id = StargatePoolId::from_token(token)
+            .ok_or_else(|| format!("No pool for token {:?}", token))?;
+
+        let url = format!("{}/quote", STARGATE_API_BASE);
+
+        let resp = self
+            .http_client
+            .get(&url)
+            .query(&[
+                ("srcEid", src_eid.id().to_string()),
+                ("dstEid", dst_eid.id().to_string()),
+                ("srcPoolId", pool_id.id().to_string()),
+                ("dstPoolId", pool_id.id().to_string()),
+                ("amount", amount.to_string()),
+                ("recipient", format!("{:?}", recipient)),
+            ])
+            .send()
+            .await
+            .map_err(|e| format!("Stargate API request failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "Stargate API returned HTTP {}: {}",
+                status, body
+            ));
+        }
+
+        resp.json::<StargateQuoteResponse>()
+            .await
+            .map_err(|e| format!("Failed to parse Stargate API response: {}", e))
+    }
+
+    /// Query LayerZero Scan API for cross-chain message status.
+    async fn fetch_message_status(
+        &self,
+        tx_hash: TxHash,
+    ) -> std::result::Result<LayerZeroMessageResponse, String> {
+        let url = format!("{}/messages/tx/{:?}", LAYERZERO_SCAN_API, tx_hash);
+
+        let resp = self
+            .http_client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("LayerZero Scan API request failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "LayerZero Scan API returned HTTP {}: {}",
+                status, body
+            ));
+        }
+
+        resp.json::<LayerZeroMessageResponse>()
+            .await
+            .map_err(|e| format!("Failed to parse LayerZero Scan response: {}", e))
+    }
+
+    /// Calculate bridge fee using hardcoded fallback values.
+    /// Used when the Stargate API is unreachable.
+    fn calculate_fee_fallback(&self, _from_chain: ChainId, _to_chain: ChainId, amount: U256) -> U256 {
         // Stargate typically charges ~0.06% fee
-        // For mock: 6 basis points
+        // For fallback: 6 basis points
         amount * U256::from(6) / U256::from(10000)
     }
 
-    /// Estimate gas cost (mock implementation)
-    fn estimate_gas(&self, from_chain: ChainId, to_chain: ChainId) -> U256 {
-        // Mock gas estimates in USD (6 decimals)
+    /// Estimate gas cost using hardcoded fallback values (in 6-decimal USD).
+    fn estimate_gas_fallback(&self, from_chain: ChainId, to_chain: ChainId) -> U256 {
         let base_gas = match from_chain {
             1 => U256::from(5_000_000u64),     // $5 on Ethereum
             42161 => U256::from(100_000u64),   // $0.10 on Arbitrum
@@ -172,31 +323,114 @@ impl CrossChainBridge for StargateBridge {
             )));
         }
 
-        // Calculate fees
-        let bridge_fee = self.calculate_fee(from_chain, to_chain, amount);
-        let gas_fee = self.estimate_gas(from_chain, to_chain);
-
-        // Calculate output amount (amount - bridge_fee)
-        let amount_out = if amount > bridge_fee {
-            amount - bridge_fee
-        } else {
-            return Err(Error::Validation("Amount too low to cover fees".to_string()));
-        };
-
         // Get LayerZero endpoint IDs for execution data
         let src_eid = LayerZeroEndpointId::from_chain_id(from_chain)
             .ok_or_else(|| Error::Validation("Source chain not supported".to_string()))?;
         let dst_eid = LayerZeroEndpointId::from_chain_id(to_chain)
             .ok_or_else(|| Error::Validation("Destination chain not supported".to_string()))?;
 
+        // Try to fetch real quote from the Stargate API, fall back to hardcoded values
+        let (bridge_fee, gas_fee, amount_out, estimated_time_secs) =
+            match self.fetch_quote(from_chain, to_chain, token, amount, recipient).await {
+                Ok(api_resp) => {
+                    tracing::info!(
+                        "Stargate API returned quote for {} -> {} (token {:?}, amount {})",
+                        from_chain,
+                        to_chain,
+                        token,
+                        amount,
+                    );
+
+                    if !api_resp.available {
+                        return Err(Error::Validation(format!(
+                            "Stargate route unavailable: {}",
+                            api_resp.error.unwrap_or_else(|| "unknown reason".to_string())
+                        )));
+                    }
+
+                    // Parse fees from the API response
+                    let stargate_fee =
+                        U256::from_dec_str(&api_resp.stargate_fee).unwrap_or_else(|_| {
+                            tracing::warn!(
+                                "Failed to parse Stargate fee '{}', using fallback",
+                                api_resp.stargate_fee
+                            );
+                            self.calculate_fee_fallback(from_chain, to_chain, amount)
+                        });
+
+                    // LZ messaging fee is in native gas, convert to approximate USD
+                    // For simplicity we treat it as a gas overhead estimate
+                    let lz_fee = U256::from_dec_str(&api_resp.lz_fee).unwrap_or_else(|_| {
+                        self.estimate_gas_fallback(from_chain, to_chain)
+                    });
+                    // Cap gas fee to a reasonable USD-denominated value (6 decimals)
+                    // If the raw value is in wei (18 decimals), scale down
+                    let gas_fee = if lz_fee > U256::from(100_000_000u64) {
+                        // Likely in wei -- use fallback since precise conversion
+                        // requires a price oracle
+                        self.estimate_gas_fallback(from_chain, to_chain)
+                    } else {
+                        lz_fee
+                    };
+
+                    // Parse amount received
+                    let amount_received =
+                        U256::from_dec_str(&api_resp.amount_received).unwrap_or_else(|_| {
+                            if amount > stargate_fee {
+                                amount - stargate_fee
+                            } else {
+                                U256::zero()
+                            }
+                        });
+
+                    let est_time = if api_resp.estimated_time > 0 {
+                        api_resp.estimated_time
+                    } else {
+                        self.estimated_time(from_chain, to_chain)
+                    };
+
+                    (stargate_fee, gas_fee, amount_received, est_time)
+                }
+                Err(api_err) => {
+                    tracing::warn!(
+                        "Stargate API call failed, using fallback fees: {}",
+                        api_err
+                    );
+
+                    let bridge_fee = self.calculate_fee_fallback(from_chain, to_chain, amount);
+                    let gas_fee = self.estimate_gas_fallback(from_chain, to_chain);
+                    let amount_out = if amount > bridge_fee {
+                        amount - bridge_fee
+                    } else {
+                        U256::zero()
+                    };
+
+                    (bridge_fee, gas_fee, amount_out, self.estimated_time(from_chain, to_chain))
+                }
+            };
+
+        // Ensure amount_out is positive
+        if amount_out.is_zero() {
+            return Err(Error::Validation("Amount too low to cover fees".to_string()));
+        }
+
         let execution_data = serde_json::json!({
-            "router": self.get_router(from_chain),
+            "router": self.get_router(from_chain).map(|a| format!("{:?}", a)),
             "srcPoolId": StargatePoolId::from_token(token).map(|p| p.id()),
             "dstPoolId": StargatePoolId::from_token(token).map(|p| p.id()),
             "srcEndpointId": src_eid.id(),
             "dstEndpointId": dst_eid.id(),
             "minAmountOut": amount_out.to_string(),
             "slippageBps": self.config.default_slippage_bps,
+            "sendParams": {
+                "dstEid": dst_eid.id(),
+                "to": format!("{:?}", recipient),
+                "amountLD": amount.to_string(),
+                "minAmountLD": amount_out.to_string(),
+                "extraOptions": "0x",
+                "composeMsg": "0x",
+                "oftCmd": "0x"
+            },
         });
 
         Ok(BridgeQuote {
@@ -210,7 +444,7 @@ impl CrossChainBridge for StargateBridge {
             amount_out,
             bridge_fee,
             gas_fee,
-            estimated_time_seconds: self.estimated_time(from_chain, to_chain),
+            estimated_time_seconds: estimated_time_secs,
             expires_at: Utc::now() + Duration::seconds(self.config.quote_validity_seconds as i64),
             recipient,
             execution_data,
@@ -228,30 +462,63 @@ impl CrossChainBridge for StargateBridge {
             return Err(Error::Validation("Quote is not from Stargate".to_string()));
         }
 
-        // In production, this would:
-        // 1. Check token approval for router
-        // 2. Call router.sendTokens() with the quote parameters
-        // 3. Return the transaction hash
-
-        // Mock implementation - return a placeholder hash
-        // In real implementation, this would interact with the blockchain
+        // The execution_data contains the full sendTokens parameters
+        // including the LayerZero sendParams. In a production system, the
+        // caller would use these parameters to:
+        // 1. Approve token spending for the Stargate router
+        // 2. Call router.sendTokens() with the provided parameters
+        // 3. Return the resulting transaction hash
+        //
+        // Since on-chain submission requires a wallet/signer (handled at
+        // a higher layer), we return a placeholder hash here.
         let mock_tx_hash = format!(
             "0x{:064x}",
             Uuid::new_v4().as_u128()
+        );
+
+        tracing::info!(
+            "Stargate bridge execution prepared for {} -> {} (amount: {})",
+            quote.from_chain,
+            quote.to_chain,
+            quote.amount,
         );
 
         Ok(mock_tx_hash.parse().map_err(|_| Error::Internal("Failed to create tx hash".to_string()))?)
     }
 
     async fn status(&self, tx_hash: TxHash) -> Result<BridgeStatus> {
-        // In production, this would:
-        // 1. Query LayerZero scan API for message status
-        // 2. Check destination chain for delivery
+        // Try to query the LayerZero Scan API for message status
+        match self.fetch_message_status(tx_hash).await {
+            Ok(resp) => {
+                if let Some(msg) = resp.messages.first() {
+                    let status = match msg.status.to_uppercase().as_str() {
+                        "DELIVERED" | "SUCCEEDED" => BridgeStatus::Completed,
+                        "INFLIGHT" | "CONFIRMING" => BridgeStatus::InProgress,
+                        "PENDING" | "CREATED" => BridgeStatus::Pending,
+                        "FAILED" | "BLOCKED" | "STORED" => {
+                            BridgeStatus::Failed(format!("LayerZero message status: {}", msg.status))
+                        }
+                        _ => BridgeStatus::InProgress,
+                    };
+                    return Ok(status);
+                }
 
-        // Mock implementation - always return InProgress
-        // Real implementation would track actual status
-        let _ = tx_hash;
-        Ok(BridgeStatus::InProgress)
+                // No messages found -- the tx may not have been indexed yet
+                tracing::debug!(
+                    "No LayerZero messages found for tx {:?}, returning Pending",
+                    tx_hash,
+                );
+                Ok(BridgeStatus::Pending)
+            }
+            Err(api_err) => {
+                tracing::warn!(
+                    "LayerZero Scan API unreachable for tx {:?}: {}",
+                    tx_hash,
+                    api_err,
+                );
+                Ok(BridgeStatus::InProgress)
+            }
+        }
     }
 
     fn estimated_time(&self, from_chain: ChainId, to_chain: ChainId) -> u64 {
@@ -314,5 +581,63 @@ mod tests {
 
         // From Ethereum should be slower
         assert!(bridge.estimated_time(1, 42161) > bridge.estimated_time(42161, 10));
+    }
+
+    #[test]
+    fn test_fee_fallback_calculation() {
+        let config = BridgeConfig::default();
+        let bridge = StargateBridge::new(config);
+
+        let amount = U256::from(1_000_000_000u64); // 1000 USDC
+        let fee = bridge.calculate_fee_fallback(1, 42161, amount);
+
+        // 6 bps of 1_000_000_000 = 600_000
+        assert_eq!(fee, U256::from(600_000u64));
+    }
+
+    #[test]
+    fn test_gas_fallback_estimation() {
+        let config = BridgeConfig::default();
+        let bridge = StargateBridge::new(config);
+
+        // Ethereum gas should be higher than L2
+        let eth_gas = bridge.estimate_gas_fallback(1, 42161);
+        let l2_gas = bridge.estimate_gas_fallback(42161, 10);
+
+        assert!(eth_gas > l2_gas);
+    }
+
+    #[test]
+    fn test_quote_response_deserialization() {
+        let json = r#"{
+            "amountReceived": "999400000",
+            "stargateFee": "600000",
+            "lzFee": "100000",
+            "estimatedTime": 60,
+            "available": true
+        }"#;
+
+        let resp: StargateQuoteResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.amount_received, "999400000");
+        assert_eq!(resp.stargate_fee, "600000");
+        assert!(resp.available);
+        assert_eq!(resp.estimated_time, 60);
+    }
+
+    #[test]
+    fn test_lz_message_response_deserialization() {
+        let json = r#"{
+            "messages": [
+                {
+                    "srcTxHash": "0xabc123",
+                    "dstTxHash": "0xdef456",
+                    "status": "DELIVERED"
+                }
+            ]
+        }"#;
+
+        let resp: LayerZeroMessageResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.messages.len(), 1);
+        assert_eq!(resp.messages[0].status, "DELIVERED");
     }
 }

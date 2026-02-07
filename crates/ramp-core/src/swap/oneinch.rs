@@ -113,6 +113,49 @@ impl OneInchAggregator {
             format!("{:?}", address)
         }
     }
+
+    /// Return a mock quote for test/dev environments without an API key
+    fn mock_quote(
+        &self,
+        from: Token,
+        to: Token,
+        amount: U256,
+        slippage_bps: u16,
+        chain_id: u64,
+        now: u64,
+    ) -> Result<SwapQuote> {
+        // Mock: 0.3% fee for stablecoin swaps
+        let output_amount = amount * U256::from(997) / U256::from(1000);
+        let slippage_amount = output_amount * U256::from(slippage_bps) / U256::from(10000);
+        let min_output = output_amount - slippage_amount;
+
+        Ok(SwapQuote {
+            quote_id: format!("1inch-{}-{}", chain_id, now),
+            aggregator: "1inch".to_string(),
+            from_token: from.clone(),
+            to_token: to.clone(),
+            from_amount: amount,
+            to_amount: output_amount,
+            to_amount_min: min_output,
+            estimated_gas: U256::from(150_000),
+            gas_price: U256::from(30_000_000_000u64), // 30 gwei
+            price_impact_bps: 30, // 0.3%
+            slippage_bps,
+            route: vec![SwapRoute {
+                protocol: "Uniswap V3".to_string(),
+                pool_address: Address::zero(),
+                from_token: from.address,
+                to_token: to.address,
+                portion_bps: 10000,
+            }],
+            swap_data: Bytes::default(),
+            swap_contract: "0x1111111254EEB25477B68fb85Ed929f73A960582"
+                .parse()
+                .unwrap(), // 1inch Router v6
+            expires_at: now + 300, // 5 minutes
+            mev_protected: true,
+        })
+    }
 }
 
 #[async_trait]
@@ -168,17 +211,79 @@ impl DexAggregator for OneInchAggregator {
 
         tracing::debug!(url = %url, "Fetching 1inch quote");
 
-        // In production, make actual API call
-        // For now, return mock quote
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
-        // Mock: 0.3% fee for stablecoin swaps
-        let output_amount = amount * U256::from(997) / U256::from(1000);
-        let slippage_amount = output_amount * U256::from(slippage_bps) / U256::from(10000);
-        let min_output = output_amount - slippage_amount;
+        // Check for API key from config or environment variable
+        let api_key = self.config.api_key.clone()
+            .or_else(|| std::env::var("ONEINCH_API_KEY").ok());
+
+        // If no API key is available, fall back to mock data (test/dev environments)
+        let api_key = match api_key {
+            Some(key) if !key.is_empty() => key,
+            _ => {
+                tracing::warn!("ONEINCH_API_KEY not set, returning mock quote");
+                return self.mock_quote(from, to, amount, slippage_bps, chain_id, now);
+            }
+        };
+
+        // Make real API call to 1inch
+        let response = self.http_client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Accept", "application/json")
+            .timeout(std::time::Duration::from_secs(self.config.timeout_secs))
+            .send()
+            .await
+            .map_err(|e| Error::ExternalService {
+                service: "1inch".to_string(),
+                message: format!("Quote request failed: {}", e),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            tracing::error!(status = %status, body = %body, "1inch quote API error");
+            return Err(Error::ExternalService {
+                service: "1inch".to_string(),
+                message: format!("Quote API returned {}: {}", status, body),
+            });
+        }
+
+        let quote_resp: OneInchQuoteResponse = response.json().await.map_err(|e| {
+            Error::ExternalService {
+                service: "1inch".to_string(),
+                message: format!("Failed to parse quote response: {}", e),
+            }
+        })?;
+
+        let to_amount = Self::parse_amount(&quote_resp.to_token_amount)?;
+        let slippage_amount = to_amount * U256::from(slippage_bps) / U256::from(10000);
+        let min_output = to_amount - slippage_amount;
+
+        // Build route from protocols
+        let route: Vec<SwapRoute> = quote_resp.protocols
+            .iter()
+            .flat_map(|routes| routes.iter().flat_map(|hops| hops.iter()))
+            .map(|proto| SwapRoute {
+                protocol: proto.name.clone(),
+                pool_address: Address::zero(), // 1inch doesn't expose pool addresses in quote
+                from_token: proto.from_token_address.parse().unwrap_or(Address::zero()),
+                to_token: proto.to_token_address.parse().unwrap_or(Address::zero()),
+                portion_bps: (proto.part * 100.0) as u16,
+            })
+            .collect();
+
+        // Calculate price impact in basis points
+        let from_amount_f = amount.as_u128() as f64;
+        let to_amount_f = to_amount.as_u128() as f64;
+        let from_decimals = quote_resp.from_token.decimals;
+        let to_decimals = quote_resp.to_token.decimals;
+        let normalized_ratio = (to_amount_f / 10f64.powi(to_decimals as i32))
+            / (from_amount_f / 10f64.powi(from_decimals as i32));
+        let price_impact_bps = ((1.0 - normalized_ratio) * 10000.0).max(0.0) as u16;
 
         Ok(SwapQuote {
             quote_id: format!("1inch-{}-{}", chain_id, now),
@@ -186,19 +291,13 @@ impl DexAggregator for OneInchAggregator {
             from_token: from.clone(),
             to_token: to.clone(),
             from_amount: amount,
-            to_amount: output_amount,
+            to_amount,
             to_amount_min: min_output,
-            estimated_gas: U256::from(150_000),
-            gas_price: U256::from(30_000_000_000u64), // 30 gwei
-            price_impact_bps: 30, // 0.3%
+            estimated_gas: U256::from(quote_resp.estimated_gas),
+            gas_price: U256::from(30_000_000_000u64), // Will be determined at tx time
+            price_impact_bps,
             slippage_bps,
-            route: vec![SwapRoute {
-                protocol: "Uniswap V3".to_string(),
-                pool_address: Address::zero(),
-                from_token: from.address,
-                to_token: to.address,
-                portion_bps: 10000,
-            }],
+            route,
             swap_data: Bytes::default(),
             swap_contract: "0x1111111254EEB25477B68fb85Ed929f73A960582"
                 .parse()
@@ -225,17 +324,76 @@ impl DexAggregator for OneInchAggregator {
 
         tracing::debug!(url = %url, "Building 1inch swap tx");
 
-        // In production, make actual API call
-        // For now, return mock tx data
+        // Check for API key from config or environment variable
+        let api_key = self.config.api_key.clone()
+            .or_else(|| std::env::var("ONEINCH_API_KEY").ok());
+
+        // If no API key is available, fall back to mock tx data
+        let api_key = match api_key {
+            Some(key) if !key.is_empty() => key,
+            _ => {
+                tracing::warn!("ONEINCH_API_KEY not set, returning mock swap tx");
+                return Ok(SwapTxData {
+                    to: quote.swap_contract,
+                    data: quote.swap_data.clone(),
+                    value: if quote.from_token.is_native() {
+                        quote.from_amount
+                    } else {
+                        U256::zero()
+                    },
+                    gas_limit: quote.estimated_gas * U256::from(120) / U256::from(100),
+                });
+            }
+        };
+
+        // Make real API call to 1inch
+        let response = self.http_client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Accept", "application/json")
+            .timeout(std::time::Duration::from_secs(self.config.timeout_secs))
+            .send()
+            .await
+            .map_err(|e| Error::ExternalService {
+                service: "1inch".to_string(),
+                message: format!("Swap tx request failed: {}", e),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            tracing::error!(status = %status, body = %body, "1inch swap API error");
+            return Err(Error::ExternalService {
+                service: "1inch".to_string(),
+                message: format!("Swap API returned {}: {}", status, body),
+            });
+        }
+
+        let swap_resp: OneInchSwapResponse = response.json().await.map_err(|e| {
+            Error::ExternalService {
+                service: "1inch".to_string(),
+                message: format!("Failed to parse swap response: {}", e),
+            }
+        })?;
+
+        // Parse the transaction data from the response
+        let to_address: Address = swap_resp.tx.to.parse().map_err(|e| {
+            Error::Validation(format!("Invalid contract address in response: {}", e))
+        })?;
+
+        let tx_data = Bytes::from(
+            hex::decode(swap_resp.tx.data.trim_start_matches("0x")).map_err(|e| {
+                Error::Validation(format!("Invalid tx data hex: {}", e))
+            })?,
+        );
+
+        let value = Self::parse_amount(&swap_resp.tx.value)?;
+
         Ok(SwapTxData {
-            to: quote.swap_contract,
-            data: quote.swap_data.clone(),
-            value: if quote.from_token.is_native() {
-                quote.from_amount
-            } else {
-                U256::zero()
-            },
-            gas_limit: quote.estimated_gas * U256::from(120) / U256::from(100), // 20% buffer
+            to: to_address,
+            data: tx_data,
+            value,
+            gas_limit: U256::from(swap_resp.tx.gas) * U256::from(120) / U256::from(100), // 20% buffer
         })
     }
 }
