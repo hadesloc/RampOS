@@ -4,7 +4,7 @@
 //! Known for gas efficiency and competitive rates.
 
 use async_trait::async_trait;
-use ethers::types::{Address, Bytes, U256};
+use alloy::primitives::{Address, Bytes, U256};
 use ramp_common::{Error, Result};
 use serde::Deserialize;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -119,7 +119,7 @@ impl ParaSwapAggregator {
 
     /// Format address for API
     fn format_address(address: Address) -> String {
-        if address == Address::zero() {
+        if address == Address::ZERO {
             "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE".to_string()
         } else {
             format!("{:?}", address)
@@ -128,7 +128,7 @@ impl ParaSwapAggregator {
 
     /// Parse amount string to U256
     fn parse_amount(s: &str) -> Result<U256> {
-        U256::from_dec_str(s)
+        s.parse::<U256>()
             .map_err(|e| Error::Validation(format!("Invalid amount: {}", e)))
     }
 
@@ -161,7 +161,7 @@ impl ParaSwapAggregator {
             slippage_bps,
             route: vec![SwapRoute {
                 protocol: "ParaSwapPool".to_string(),
-                pool_address: Address::zero(),
+                pool_address: Address::ZERO,
                 from_token: from.address,
                 to_token: to.address,
                 portion_bps: 10000,
@@ -288,9 +288,9 @@ impl DexAggregator for ParaSwapAggregator {
                 route_info.swaps.iter().flat_map(move |swap| {
                     swap.exchanges.iter().map(move |exchange| SwapRoute {
                         protocol: exchange.exchange.clone(),
-                        pool_address: Address::zero(), // ParaSwap doesn't expose pool addresses in price
-                        from_token: swap.src_token.parse().unwrap_or(Address::zero()),
-                        to_token: swap.dest_token.parse().unwrap_or(Address::zero()),
+                        pool_address: Address::ZERO, // ParaSwap doesn't expose pool addresses in price
+                        from_token: swap.src_token.parse().unwrap_or(Address::ZERO),
+                        to_token: swap.dest_token.parse().unwrap_or(Address::ZERO),
                         portion_bps: (percent * 100.0) as u16,
                     })
                 })
@@ -298,12 +298,12 @@ impl DexAggregator for ParaSwapAggregator {
             .collect();
 
         // Parse gas cost
-        let gas_cost = U256::from_dec_str(&price_resp.price_route.gas_cost)
+        let gas_cost = price_resp.price_route.gas_cost.parse::<U256>()
             .unwrap_or(U256::from(140_000));
 
         // Calculate price impact in basis points
-        let from_amount_f = amount.as_u128() as f64;
-        let dest_amount_f = dest_amount.as_u128() as f64;
+        let from_amount_f = u128::try_from(amount).unwrap_or(u128::MAX) as f64;
+        let dest_amount_f = u128::try_from(dest_amount).unwrap_or(u128::MAX) as f64;
         let from_decimals = price_resp.price_route.src_decimals;
         let to_decimals = price_resp.price_route.dest_decimals;
         let normalized_ratio = (dest_amount_f / 10f64.powi(to_decimals as i32))
@@ -355,7 +355,7 @@ impl DexAggregator for ParaSwapAggregator {
                 value: if quote.from_token.is_native() {
                     quote.from_amount
                 } else {
-                    U256::zero()
+                    U256::ZERO
                 },
                 gas_limit: quote.estimated_gas * U256::from(115) / U256::from(100),
             });
@@ -498,7 +498,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(quote.aggregator, "ParaSwap");
-        assert!(quote.to_amount > U256::zero());
+        assert!(quote.to_amount > U256::ZERO);
         // ParaSwap should give slightly better rate in mock
         assert!(quote.price_impact_bps == 25);
     }

@@ -8,7 +8,7 @@
 
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
-use ethers::types::{Address, U256};
+use alloy::primitives::{Address, U256};
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use tracing;
@@ -350,7 +350,7 @@ impl CrossChainBridge for AcrossBridge {
 
                     // Parse total relay fee from the API response
                     let total_fee_str = &api_resp.total_relay_fee.total;
-                    let bridge_fee = U256::from_dec_str(total_fee_str).unwrap_or_else(|_| {
+                    let bridge_fee = total_fee_str.parse::<U256>().unwrap_or_else(|_| {
                         tracing::warn!(
                             "Failed to parse Across totalRelayFee '{}', using fallback",
                             total_fee_str
@@ -362,7 +362,7 @@ impl CrossChainBridge for AcrossBridge {
 
                     // Gas fee from relay gas fee component
                     let gas_fee_str = &api_resp.relay_gas_fee.total;
-                    let gas_fee = U256::from_dec_str(gas_fee_str).unwrap_or_else(|_| {
+                    let gas_fee = gas_fee_str.parse::<U256>().unwrap_or_else(|_| {
                         self.estimate_gas_fallback(from_chain, to_chain)
                     });
 
@@ -378,7 +378,7 @@ impl CrossChainBridge for AcrossBridge {
                         .exclusive_relayer
                         .as_deref()
                         .and_then(|s| s.parse::<Address>().ok())
-                        .unwrap_or(Address::zero());
+                        .unwrap_or(Address::ZERO);
 
                     let eft = if api_resp.estimated_fill_time_secs > 0 {
                         api_resp.estimated_fill_time_secs
@@ -401,7 +401,7 @@ impl CrossChainBridge for AcrossBridge {
                     let ts = Utc::now().timestamp() as u64;
                     let fill_dl = (Utc::now() + Duration::hours(4)).timestamp() as u64;
 
-                    (bridge_fee, gas_fee, ts, fill_dl, 0u64, Address::zero(), None, self.estimated_time(from_chain, to_chain))
+                    (bridge_fee, gas_fee, ts, fill_dl, 0u64, Address::ZERO, None, self.estimated_time(from_chain, to_chain))
                 }
             };
 
@@ -623,17 +623,17 @@ mod tests {
         let bridge = AcrossBridge::new(config);
 
         let data = bridge.build_deposit_tx_data(
-            Address::zero(),
-            Address::zero(),
-            Address::zero(),
-            Address::zero(),
+            Address::ZERO,
+            Address::ZERO,
+            Address::ZERO,
+            Address::ZERO,
             U256::from(1_000_000u64),
             U256::from(999_000u64),
             42161,
             1700000000,
             1700014400,
             0,
-            Address::zero(),
+            Address::ZERO,
         );
 
         assert_eq!(data["method"], "depositV3");

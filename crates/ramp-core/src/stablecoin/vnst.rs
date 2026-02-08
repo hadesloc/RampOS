@@ -5,7 +5,7 @@
 //! Uses 18 decimals.
 
 use async_trait::async_trait;
-use ethers::types::{Address, U256};
+use alloy::primitives::{Address, U256};
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
 
@@ -70,7 +70,8 @@ impl VnstToken {
     /// Convert VNST base units to VND amount
     pub fn base_units_to_vnd(base_units: U256) -> u64 {
         let divisor = U256::from(10u64).pow(U256::from(18u64));
-        (base_units / divisor).as_u64()
+        let val: u64 = (base_units / divisor).try_into().unwrap_or(0u64);
+        val
     }
 }
 
@@ -120,7 +121,7 @@ impl Stablecoin for VnstToken {
             "Fetching VNST balance (mock)"
         );
 
-        Ok(U256::zero())
+        Ok(U256::ZERO)
     }
 
     async fn transfer(
@@ -165,7 +166,7 @@ impl Stablecoin for VnstToken {
             "Checking VNST allowance (mock)"
         );
 
-        Ok(U256::zero())
+        Ok(U256::ZERO)
     }
 
     async fn approve(

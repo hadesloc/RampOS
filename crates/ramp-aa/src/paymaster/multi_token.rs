@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use chrono::Utc;
-use ethers::types::{Address, Bytes, U256};
+use alloy::primitives::{Address, Bytes, U256};
 use ramp_common::{types::TenantId, Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -382,12 +382,12 @@ impl MultiTokenPaymaster {
 
         // In production, would query the token contract for allowance
         // For now, return a mock status
-        let current_allowance = U256::zero(); // Would be fetched from chain
+        let current_allowance = U256::ZERO; // Would be fetched from chain
 
         let token_address = self.config.supported_tokens.iter()
             .find(|t| t.token == token && t.chain_id == self.config.chain_id)
             .map(|t| t.token_address)
-            .unwrap_or(Address::zero());
+            .unwrap_or(Address::ZERO);
 
         Ok(TokenApprovalStatus {
             token,
@@ -414,11 +414,10 @@ impl MultiTokenPaymaster {
 
         // Encode spender address (32 bytes, left-padded)
         data.extend_from_slice(&[0u8; 12]);
-        data.extend_from_slice(self.config.paymaster_address.as_bytes());
+        data.extend_from_slice(self.config.paymaster_address.as_slice());
 
         // Encode amount (32 bytes)
-        let mut amount_bytes = [0u8; 32];
-        amount.to_big_endian(&mut amount_bytes);
+        let amount_bytes = amount.to_be_bytes::<32>();
         data.extend_from_slice(&amount_bytes);
 
         Ok(Bytes::from(data))
@@ -527,14 +526,13 @@ impl MultiTokenPaymaster {
         let mut data = Vec::with_capacity(149);
 
         // Paymaster address
-        data.extend_from_slice(self.config.paymaster_address.as_bytes());
+        data.extend_from_slice(self.config.paymaster_address.as_slice());
 
         // Token address
-        data.extend_from_slice(token_config.token_address.as_bytes());
+        data.extend_from_slice(token_config.token_address.as_slice());
 
         // Token amount (32 bytes)
-        let mut amount_bytes = [0u8; 32];
-        quote.token_gas_cost.to_big_endian(&mut amount_bytes);
+        let amount_bytes = quote.token_gas_cost.to_be_bytes::<32>();
         data.extend_from_slice(&amount_bytes);
 
         // Valid until (6 bytes)
@@ -663,7 +661,7 @@ mod tests {
 
         assert_eq!(quote.token, GasToken::USDT);
         assert_eq!(quote.chain_id, 1);
-        assert!(quote.token_gas_cost > U256::zero());
+        assert!(quote.token_gas_cost > U256::ZERO);
     }
 
     #[test]

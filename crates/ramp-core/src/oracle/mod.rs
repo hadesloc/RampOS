@@ -13,7 +13,7 @@ pub use fallback::CoinGeckoFallback;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ethers::types::Address;
+use alloy::primitives::Address;
 use ramp_common::Result;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -328,7 +328,7 @@ mod tests {
     #[test]
     fn test_price_age() {
         let mut price = Price::new(
-            Address::zero(),
+            Address::ZERO,
             1,
             dec!(1.0),
             PriceSource::Chainlink,

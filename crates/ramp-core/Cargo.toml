@@ -28,9 +28,10 @@ async-trait = { workspace = true }
 tracing = { workspace = true }
 config = { workspace = true }
 hex = { workspace = true }
+aes-gcm = { workspace = true }
 
-# Ethereum/EVM support for stablecoin module
-ethers = { workspace = true }
+# Ethereum/EVM support
+alloy = { workspace = true }
 
 sqlx = { workspace = true }
 redis = { workspace = true }
@@ -38,7 +39,7 @@ futures = "0.3"
 
 # Optional dependencies (require additional tooling on Windows)
 async-nats = { workspace = true, optional = true }
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 sha2.workspace = true
 rand.workspace = true
 subtle = "2.5"

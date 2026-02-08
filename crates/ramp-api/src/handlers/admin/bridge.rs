@@ -12,7 +12,7 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use ethers::types::{Address, U256};
+use alloy::primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
@@ -275,7 +275,7 @@ pub async fn get_quote(
         })?;
 
     // Parse amount
-    let amount = U256::from_dec_str(&request.amount)
+    let amount = request.amount.parse::<U256>()
         .map_err(|_| ApiError::BadRequest("Invalid amount".to_string()))?;
 
     // Parse recipient
@@ -349,7 +349,7 @@ pub async fn initiate_transfer(
         })?;
 
     // Parse amount
-    let amount = U256::from_dec_str(&request.amount)
+    let amount = request.amount.parse::<U256>()
         .map_err(|_| ApiError::BadRequest("Invalid amount".to_string()))?;
 
     // Parse recipient
@@ -410,7 +410,7 @@ pub async fn get_transfer_status(
         .ok_or_else(|| ApiError::BadRequest(format!("Unknown bridge: {}", bridge_name)))?;
 
     // Parse tx hash
-    let hash: ethers::types::H256 = tx_hash
+    let hash: alloy::primitives::B256 = tx_hash
         .parse()
         .map_err(|_| ApiError::BadRequest("Invalid transaction hash".to_string()))?;
 

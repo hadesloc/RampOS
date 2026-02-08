@@ -23,7 +23,7 @@ pub use strategy::{
 pub use types::*;
 
 use async_trait::async_trait;
-use ethers::types::{Address, H256, U256};
+use alloy::primitives::{Address, B256, U256};
 use ramp_common::Result;
 
 /// Yield protocol trait for DeFi integrations
@@ -39,10 +39,10 @@ pub trait YieldProtocol: Send + Sync {
     async fn current_apy(&self, token: Address) -> Result<f64>;
 
     /// Deposit tokens into the yield protocol
-    async fn deposit(&self, token: Address, amount: U256) -> Result<H256>;
+    async fn deposit(&self, token: Address, amount: U256) -> Result<B256>;
 
     /// Withdraw tokens from the yield protocol
-    async fn withdraw(&self, token: Address, amount: U256) -> Result<H256>;
+    async fn withdraw(&self, token: Address, amount: U256) -> Result<B256>;
 
     /// Get current balance in the protocol (including accrued yield)
     async fn balance(&self, token: Address) -> Result<U256>;
@@ -51,7 +51,7 @@ pub trait YieldProtocol: Send + Sync {
     async fn accrued_yield(&self, token: Address) -> Result<U256>;
 
     /// Claim any pending rewards (e.g., COMP, AAVE tokens)
-    async fn claim_rewards(&self) -> Result<Option<H256>>;
+    async fn claim_rewards(&self) -> Result<Option<B256>>;
 
     /// Check if the protocol supports a specific token
     fn supports_token(&self, token: Address) -> bool;

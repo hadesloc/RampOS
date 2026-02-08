@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use ethers::types::{Address, H256, U256};
+use alloy::primitives::{Address, B256, U256};
 use ramp_common::Result;
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -26,7 +26,7 @@ pub struct BundlerError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserOpReceipt {
-    pub user_op_hash: H256,
+    pub user_op_hash: B256,
     pub entry_point: Address,
     pub sender: Address,
     pub nonce: U256,
@@ -41,8 +41,8 @@ pub struct UserOpReceipt {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransactionReceipt {
-    pub transaction_hash: H256,
-    pub block_hash: H256,
+    pub transaction_hash: B256,
+    pub block_hash: B256,
     pub block_number: U256,
 }
 
@@ -54,7 +54,7 @@ pub trait Bundler: Send + Sync {
         &self,
         user_op: &UserOperation,
         entry_point: Address,
-    ) -> Result<H256>;
+    ) -> Result<B256>;
 
     /// Estimate gas for UserOperation
     async fn estimate_user_operation_gas(
@@ -64,10 +64,10 @@ pub trait Bundler: Send + Sync {
     ) -> Result<GasEstimation>;
 
     /// Get UserOperation by hash
-    async fn get_user_operation_by_hash(&self, hash: H256) -> Result<Option<UserOperation>>;
+    async fn get_user_operation_by_hash(&self, hash: B256) -> Result<Option<UserOperation>>;
 
     /// Get UserOperation receipt
-    async fn get_user_operation_receipt(&self, hash: H256) -> Result<Option<UserOpReceipt>>;
+    async fn get_user_operation_receipt(&self, hash: B256) -> Result<Option<UserOpReceipt>>;
 
     /// Get supported entry points
     async fn supported_entry_points(&self) -> Result<Vec<Address>>;
@@ -145,7 +145,7 @@ impl Bundler for BundlerClient {
         &self,
         user_op: &UserOperation,
         entry_point: Address,
-    ) -> Result<H256> {
+    ) -> Result<B256> {
         info!(
             sender = %user_op.sender,
             nonce = %user_op.nonce,
@@ -169,12 +169,12 @@ impl Bundler for BundlerClient {
         self.rpc_call("eth_estimateUserOperationGas", params).await
     }
 
-    async fn get_user_operation_by_hash(&self, hash: H256) -> Result<Option<UserOperation>> {
+    async fn get_user_operation_by_hash(&self, hash: B256) -> Result<Option<UserOperation>> {
         let params = serde_json::json!([hash]);
         self.rpc_call("eth_getUserOperationByHash", params).await
     }
 
-    async fn get_user_operation_receipt(&self, hash: H256) -> Result<Option<UserOpReceipt>> {
+    async fn get_user_operation_receipt(&self, hash: B256) -> Result<Option<UserOpReceipt>> {
         let params = serde_json::json!([hash]);
         self.rpc_call("eth_getUserOperationReceipt", params).await
     }

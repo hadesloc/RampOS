@@ -4,7 +4,7 @@
 //! Supports Ethereum, Polygon, BSC, Arbitrum, Optimism, and more.
 
 use async_trait::async_trait;
-use ethers::types::{Address, Bytes, U256};
+use alloy::primitives::{Address, Bytes, U256};
 use ramp_common::{Error, Result};
 use serde::Deserialize;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -101,13 +101,13 @@ impl OneInchAggregator {
 
     /// Parse amount string to U256
     fn parse_amount(s: &str) -> Result<U256> {
-        U256::from_dec_str(s)
+        s.parse::<U256>()
             .map_err(|e| Error::Validation(format!("Invalid amount: {}", e)))
     }
 
     /// Format address for API
     fn format_address(address: Address) -> String {
-        if address == Address::zero() {
+        if address == Address::ZERO {
             "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE".to_string()
         } else {
             format!("{:?}", address)
@@ -143,7 +143,7 @@ impl OneInchAggregator {
             slippage_bps,
             route: vec![SwapRoute {
                 protocol: "Uniswap V3".to_string(),
-                pool_address: Address::zero(),
+                pool_address: Address::ZERO,
                 from_token: from.address,
                 to_token: to.address,
                 portion_bps: 10000,
@@ -269,16 +269,16 @@ impl DexAggregator for OneInchAggregator {
             .flat_map(|routes| routes.iter().flat_map(|hops| hops.iter()))
             .map(|proto| SwapRoute {
                 protocol: proto.name.clone(),
-                pool_address: Address::zero(), // 1inch doesn't expose pool addresses in quote
-                from_token: proto.from_token_address.parse().unwrap_or(Address::zero()),
-                to_token: proto.to_token_address.parse().unwrap_or(Address::zero()),
+                pool_address: Address::ZERO, // 1inch doesn't expose pool addresses in quote
+                from_token: proto.from_token_address.parse().unwrap_or(Address::ZERO),
+                to_token: proto.to_token_address.parse().unwrap_or(Address::ZERO),
                 portion_bps: (proto.part * 100.0) as u16,
             })
             .collect();
 
         // Calculate price impact in basis points
-        let from_amount_f = amount.as_u128() as f64;
-        let to_amount_f = to_amount.as_u128() as f64;
+        let from_amount_f = u128::try_from(amount).unwrap_or(u128::MAX) as f64;
+        let to_amount_f = u128::try_from(to_amount).unwrap_or(u128::MAX) as f64;
         let from_decimals = quote_resp.from_token.decimals;
         let to_decimals = quote_resp.to_token.decimals;
         let normalized_ratio = (to_amount_f / 10f64.powi(to_decimals as i32))
@@ -339,7 +339,7 @@ impl DexAggregator for OneInchAggregator {
                     value: if quote.from_token.is_native() {
                         quote.from_amount
                     } else {
-                        U256::zero()
+                        U256::ZERO
                     },
                     gas_limit: quote.estimated_gas * U256::from(120) / U256::from(100),
                 });
@@ -451,7 +451,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(quote.aggregator, "1inch");
-        assert!(quote.to_amount > U256::zero());
+        assert!(quote.to_amount > U256::ZERO);
         assert!(quote.to_amount_min <= quote.to_amount);
         assert!(quote.mev_protected);
     }

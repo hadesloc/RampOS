@@ -3,7 +3,7 @@
 use crate::bridge::{
     BridgeQuote, BridgeRegistry, BridgeStatus, ChainId, TxHash,
 };
-use ethers::types::{Address, U256};
+use alloy::primitives::{Address, U256};
 use ramp_common::{Result, Error};
 use std::sync::Arc;
 
@@ -115,7 +115,7 @@ mod tests {
         assert!(quote_result.is_ok());
         let quote = quote_result.unwrap();
         assert_eq!(quote.token, BridgeToken::USDC);
-        assert!(quote.amount_out > U256::zero());
+        assert!(quote.amount_out > U256::ZERO);
 
         // 3. Execute bridge
         let tx_result = service.execute_bridge(quote.clone()).await;

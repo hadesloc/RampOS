@@ -995,4 +995,329 @@ mod tests {
         let result = xmldsig::canonicalize_exc_c14n(input);
         assert_eq!(result, "line1\nline2\nline3");
     }
+
+    // ---- SamlConfig ----
+
+    #[test]
+    fn test_saml_config_okta() {
+        let config = SamlConfig::okta(
+            "sp_entity".to_string(),
+            "https://idp.okta.com/metadata",
+            "CERT_DATA".to_string(),
+        );
+        assert_eq!(config.sp_entity_id, "sp_entity");
+        assert_eq!(config.idp_entity_id, "https://idp.okta.com/metadata");
+        assert_eq!(config.idp_sso_url, "https://idp.okta.com/sso");
+        assert_eq!(config.idp_certificate, "CERT_DATA");
+        assert!(config.allow_idp_initiated);
+        assert!(config.sign_requests);
+        assert!(config.sp_private_key.is_none());
+        assert!(config.attribute_mapping.contains_key("email"));
+        assert!(config.attribute_mapping.contains_key("groups"));
+    }
+
+    // ---- SamlProvider ----
+
+    #[test]
+    fn test_saml_provider_creation() {
+        let config = SamlConfig::okta(
+            "sp_test".to_string(),
+            "https://idp.test.com/metadata",
+            "CERT".to_string(),
+        );
+        let provider = SamlProvider::new(
+            SsoProviderType::Okta,
+            config,
+            vec![],
+            RampRole::Viewer,
+        ).unwrap();
+        assert_eq!(provider.provider_type(), SsoProviderType::Okta);
+        assert_eq!(provider.protocol(), SsoProtocol::Saml);
+    }
+
+    #[tokio::test]
+    async fn test_saml_authorize_generates_request() {
+        let config = SamlConfig::okta(
+            "sp_ent".to_string(),
+            "https://idp.example.com/metadata",
+            "CERT".to_string(),
+        );
+        let provider = SamlProvider::new(
+            SsoProviderType::Okta,
+            config,
+            vec![],
+            RampRole::Viewer,
+        ).unwrap();
+
+        let request = SsoAuthRequest {
+            tenant_id: ramp_common::types::TenantId::new("t1"),
+            redirect_uri: "https://app.example.com/sso/callback".to_string(),
+            state: "relay_state_123".to_string(),
+            nonce: None,
+        };
+
+        let response = provider.authorize(&request).await.unwrap();
+        assert_eq!(response.state, "relay_state_123");
+        assert!(response.auth_url.contains("SAMLRequest="));
+        assert!(response.auth_url.contains("RelayState="));
+        assert!(response.auth_url.starts_with("https://idp.example.com/sso?"));
+    }
+
+    #[tokio::test]
+    async fn test_saml_validate_session_returns_none() {
+        let config = SamlConfig::okta("sp".into(), "https://idp/m", "C".into());
+        let provider = SamlProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer).unwrap();
+        let result = provider.validate_session("token").await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_saml_logout_returns_none() {
+        let config = SamlConfig::okta("sp".into(), "https://idp/m", "C".into());
+        let provider = SamlProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer).unwrap();
+        let user = SsoUser {
+            idp_user_id: "u1".to_string(),
+            email: "u@test.com".to_string(),
+            name: None,
+            given_name: None,
+            family_name: None,
+            groups: vec![],
+            roles: vec![],
+            claims: HashMap::new(),
+            authenticated_at: Utc::now(),
+            expires_at: Utc::now(),
+        };
+        let result = provider.logout(&user).await.unwrap();
+        assert!(result.is_none()); // SAML SLO not implemented
+    }
+
+    // ---- XML helpers ----
+
+    #[test]
+    fn test_extract_tag_value_with_attributes() {
+        let xml = r#"<saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">admin@corp.com</saml:NameID>"#;
+        assert_eq!(
+            extract_tag_value(xml, "NameID"),
+            Some("admin@corp.com".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_tag_value_empty_content() {
+        let xml = r#"<NameID></NameID>"#;
+        assert_eq!(extract_tag_value(xml, "NameID"), None);
+    }
+
+    #[test]
+    fn test_extract_xml_attribute_double_quotes() {
+        let tag = r#"<Attribute Name="email" NameFormat="urn:oasis">"#;
+        assert_eq!(extract_xml_attribute(tag, "Name"), Some("email".to_string()));
+        assert_eq!(extract_xml_attribute(tag, "NameFormat"), Some("urn:oasis".to_string()));
+    }
+
+    #[test]
+    fn test_extract_xml_attribute_single_quotes() {
+        let tag = "<Attribute Name='groups'>";
+        assert_eq!(extract_xml_attribute(tag, "Name"), Some("groups".to_string()));
+    }
+
+    #[test]
+    fn test_extract_xml_attribute_missing() {
+        let tag = r#"<Attribute Name="email">"#;
+        assert_eq!(extract_xml_attribute(tag, "Missing"), None);
+    }
+
+    #[test]
+    fn test_extract_attribute_values_multiple() {
+        let block = r#"<saml:Attribute Name="groups"><saml:AttributeValue>Admin</saml:AttributeValue><saml:AttributeValue>Users</saml:AttributeValue></saml:Attribute>"#;
+        let values = extract_attribute_values(block);
+        assert_eq!(values, vec!["Admin".to_string(), "Users".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_attribute_values_no_namespace() {
+        let block = r#"<Attribute Name="role"><AttributeValue>Manager</AttributeValue></Attribute>"#;
+        let values = extract_attribute_values(block);
+        assert_eq!(values, vec!["Manager".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_saml_attributes_empty() {
+        let xml = r#"<saml:Assertion>no attributes here</saml:Assertion>"#;
+        let attrs = extract_saml_attributes(xml);
+        assert!(attrs.is_empty());
+    }
+
+    #[test]
+    fn test_find_attribute_element() {
+        let xml = r#"<saml:Attribute Name="email"><saml:AttributeValue>test</saml:AttributeValue></saml:Attribute>"#;
+        let pos = find_attribute_element(xml, 0);
+        assert!(pos.is_some());
+        assert_eq!(pos.unwrap(), 0);
+    }
+
+    #[test]
+    fn test_find_attribute_element_not_found() {
+        let xml = r#"<saml:Assertion>content</saml:Assertion>"#;
+        assert!(find_attribute_element(xml, 0).is_none());
+    }
+
+    // ---- xmldsig module ----
+
+    #[test]
+    fn test_extract_signature_block_ds_prefix() {
+        let xml = r#"<Response><ds:Signature><ds:SignedInfo/><ds:SignatureValue>abc</ds:SignatureValue></ds:Signature></Response>"#;
+        let sig = xmldsig::extract_signature_block(xml);
+        assert!(sig.is_some());
+        let block = sig.unwrap();
+        assert!(block.starts_with("<ds:Signature"));
+        assert!(block.ends_with("</ds:Signature>"));
+    }
+
+    #[test]
+    fn test_extract_signature_block_no_prefix() {
+        let xml = r#"<Response><Signature><SignedInfo/><SignatureValue>xyz</SignatureValue></Signature></Response>"#;
+        let sig = xmldsig::extract_signature_block(xml);
+        assert!(sig.is_some());
+    }
+
+    #[test]
+    fn test_extract_signature_block_dsig_prefix() {
+        let xml = r#"<Response><dsig:Signature><dsig:SignedInfo/></dsig:Signature></Response>"#;
+        let sig = xmldsig::extract_signature_block(xml);
+        assert!(sig.is_some());
+    }
+
+    #[test]
+    fn test_extract_signature_block_missing() {
+        let xml = r#"<Response><Assertion>data</Assertion></Response>"#;
+        assert!(xmldsig::extract_signature_block(xml).is_none());
+    }
+
+    #[test]
+    fn test_remove_signature_element_preserves_rest() {
+        let xml = r#"<Response>before<ds:Signature>sig_content</ds:Signature>after</Response>"#;
+        let result = xmldsig::remove_signature_element(xml);
+        assert_eq!(result, "<Response>beforeafter</Response>");
+    }
+
+    #[test]
+    fn test_remove_signature_element_no_signature() {
+        let xml = r#"<Response>content</Response>"#;
+        let result = xmldsig::remove_signature_element(xml);
+        assert_eq!(result, xml);
+    }
+
+    #[test]
+    fn test_canonicalize_collapses_whitespace() {
+        let input = "<tag  attr1=\"a\"   attr2=\"b\"  />";
+        let result = xmldsig::canonicalize_exc_c14n(input);
+        assert!(!result.contains("  ")); // no double spaces
+    }
+
+    #[test]
+    fn test_canonicalize_expands_self_closing() {
+        let input = "<EmptyElement/>";
+        let result = xmldsig::canonicalize_exc_c14n(input);
+        assert_eq!(result, "<EmptyElement></EmptyElement>");
+    }
+
+    #[test]
+    fn test_canonicalize_self_closing_with_attrs() {
+        let input = r#"<DigestMethod Algorithm="sha256"/>"#;
+        let result = xmldsig::canonicalize_exc_c14n(input);
+        assert!(result.contains("</DigestMethod>"));
+        assert!(!result.contains("/>"));
+    }
+
+    #[test]
+    fn test_decode_base64_multiline_with_whitespace() {
+        // Base64 of [0x01, 0x02, 0x03, 0x04, 0x05, 0x06]
+        let b64 = "AQID\n  BAUG\n";
+        let decoded = xmldsig::decode_base64_multiline(b64).unwrap();
+        assert_eq!(decoded, vec![1, 2, 3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn test_decode_base64_multiline_invalid() {
+        let result = xmldsig::decode_base64_multiline("!!!not_valid!!!");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_asn1_length_zero() {
+        let data = [0x00];
+        let (len, consumed) = xmldsig::parse_asn1_length(&data).unwrap();
+        assert_eq!(len, 0);
+        assert_eq!(consumed, 1);
+    }
+
+    #[test]
+    fn test_asn1_length_127() {
+        let data = [0x7F]; // max short form
+        let (len, consumed) = xmldsig::parse_asn1_length(&data).unwrap();
+        assert_eq!(len, 127);
+        assert_eq!(consumed, 1);
+    }
+
+    #[test]
+    fn test_asn1_length_long_one_byte() {
+        let data = [0x81, 0x80]; // length = 128
+        let (len, consumed) = xmldsig::parse_asn1_length(&data).unwrap();
+        assert_eq!(len, 128);
+        assert_eq!(consumed, 2);
+    }
+
+    #[test]
+    fn test_asn1_length_empty_input() {
+        let result = xmldsig::parse_asn1_length(&[]);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_asn1_length_long_insufficient_data() {
+        let data = [0x82, 0x01]; // claims 2 bytes of length but only 1 provided
+        let result = xmldsig::parse_asn1_length(&data);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_extract_element_text_with_namespace() {
+        let xml = r#"<ds:DigestValue>SGVsbG8=</ds:DigestValue>"#;
+        assert_eq!(
+            xmldsig::extract_element_text(xml, "DigestValue"),
+            Some("SGVsbG8=".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_element_text_empty() {
+        let xml = r#"<ds:DigestValue></ds:DigestValue>"#;
+        assert_eq!(xmldsig::extract_element_text(xml, "DigestValue"), None);
+    }
+
+    #[test]
+    fn test_extract_element_text_no_match() {
+        let xml = r#"<ds:OtherElement>content</ds:OtherElement>"#;
+        assert_eq!(xmldsig::extract_element_text(xml, "DigestValue"), None);
+    }
+
+    // ---- SamlProvider authenticate ----
+
+    #[tokio::test]
+    async fn test_saml_authenticate_missing_response() {
+        let config = SamlConfig::okta("sp".into(), "https://idp/m", "C".into());
+        let provider = SamlProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer).unwrap();
+
+        let callback = SsoCallback {
+            code: None,
+            state: "state".to_string(),
+            error: None,
+            error_description: None,
+            saml_response: None,
+        };
+
+        let result = provider.authenticate(&callback).await;
+        assert!(result.is_err());
+    }
 }

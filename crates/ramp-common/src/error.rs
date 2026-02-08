@@ -117,6 +117,9 @@ pub enum Error {
 
     #[error("External error: {0}")]
     External(String),
+
+    #[error("Encryption error: {0}")]
+    Encryption(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -198,6 +201,7 @@ impl Error {
             Error::Provider(_) => "PROVIDER_ERROR",
             Error::Authentication(_) => "AUTHENTICATION_ERROR",
             Error::External(_) => "EXTERNAL_ERROR",
+            Error::Encryption(_) => "ENCRYPTION_ERROR",
         }
     }
 

@@ -4,7 +4,7 @@
 //! Uses 18 decimals on all chains.
 
 use async_trait::async_trait;
-use ethers::types::{Address, U256};
+use alloy::primitives::{Address, U256};
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
 
@@ -116,7 +116,7 @@ impl Stablecoin for DaiToken {
             "Fetching DAI balance (mock)"
         );
 
-        Ok(U256::zero())
+        Ok(U256::ZERO)
     }
 
     async fn transfer(
@@ -161,7 +161,7 @@ impl Stablecoin for DaiToken {
             "Checking DAI allowance (mock)"
         );
 
-        Ok(U256::zero())
+        Ok(U256::ZERO)
     }
 
     async fn approve(

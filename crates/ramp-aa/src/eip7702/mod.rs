@@ -14,13 +14,13 @@ pub mod authorization;
 pub mod delegation;
 pub mod transaction;
 
-pub use authorization::{Authorization, AuthorizationList, SignedAuthorization};
+pub use authorization::{Authorization, AuthorizationList, Signature, SignedAuthorization};
 pub use delegation::{
     Delegation, DelegationManager, DelegationRegistry, DelegationStatus, SessionDelegation,
 };
 pub use transaction::{Eip7702Transaction, Eip7702TxBuilder};
 
-use ethers::types::{Address, U256};
+use alloy::primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
 
 /// EIP-7702 account type - hybrid EOA + Smart Account
@@ -53,7 +53,7 @@ impl Default for Eip7702Config {
     fn default() -> Self {
         Self {
             chain_id: U256::from(1),
-            default_delegate: Address::zero(),
+            default_delegate: Address::ZERO,
             max_delegation_duration: 86400 * 30, // 30 days
             allow_revocation: true,
         }

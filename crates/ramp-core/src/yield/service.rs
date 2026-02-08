@@ -7,7 +7,7 @@
 //! - Safety controls and emergency withdrawal
 
 use chrono::{DateTime, Utc};
-use ethers::types::{Address, H256, U256};
+use alloy::primitives::{Address, B256, U256};
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
@@ -56,7 +56,7 @@ impl YieldService {
         &self,
         token: Address,
         amount: U256,
-    ) -> Result<(ProtocolId, H256)> {
+    ) -> Result<(ProtocolId, B256)> {
         // Find best protocol by APY
         let best_protocol = self
             .registry
@@ -101,7 +101,7 @@ impl YieldService {
         protocol_id: ProtocolId,
         token: Address,
         amount: U256,
-    ) -> Result<H256> {
+    ) -> Result<B256> {
         let protocol = self
             .registry
             .get(protocol_id)
@@ -138,7 +138,7 @@ impl YieldService {
         protocol_id: ProtocolId,
         token: Address,
         amount: U256,
-    ) -> Result<H256> {
+    ) -> Result<B256> {
         let protocol = self
             .registry
             .get(protocol_id)
@@ -173,7 +173,7 @@ impl YieldService {
         &self,
         protocol_id: ProtocolId,
         token: Address,
-    ) -> Result<H256> {
+    ) -> Result<B256> {
         let protocol = self
             .registry
             .get(protocol_id)
@@ -206,7 +206,7 @@ impl YieldService {
     }
 
     /// Rebalance funds to the best protocol
-    pub async fn rebalance(&self, token: Address) -> Result<Vec<H256>> {
+    pub async fn rebalance(&self, token: Address) -> Result<Vec<B256>> {
         let mut transactions = Vec::new();
 
         // Get current APYs for all protocols
@@ -271,7 +271,7 @@ impl YieldService {
         &self,
         token: Address,
         targets: Vec<(ProtocolId, U256)>,
-    ) -> Result<Vec<H256>> {
+    ) -> Result<Vec<B256>> {
         let mut tx_hashes = Vec::new();
         let mut current_balances = HashMap::new();
 
@@ -290,7 +290,7 @@ impl YieldService {
 
         // 2. Execute Withdrawals (for protocols where current > target)
         for (pid, current) in &current_balances {
-            let target = target_map.get(pid).copied().unwrap_or(U256::zero());
+            let target = target_map.get(pid).copied().unwrap_or(U256::ZERO);
 
             if *current > target {
                 let withdraw_amount = *current - target;
@@ -308,7 +308,7 @@ impl YieldService {
 
         // 3. Execute Deposits (for protocols where target > current)
         for (pid, target) in &target_map {
-            let current = current_balances.get(pid).copied().unwrap_or(U256::zero());
+            let current = current_balances.get(pid).copied().unwrap_or(U256::ZERO);
 
             if *target > current {
                 let deposit_amount = *target - current;
@@ -328,7 +328,7 @@ impl YieldService {
     }
 
     /// Claim all pending rewards
-    pub async fn claim_all_rewards(&self) -> Result<Vec<H256>> {
+    pub async fn claim_all_rewards(&self) -> Result<Vec<B256>> {
         let mut tx_hashes = Vec::new();
 
         for protocol in self.registry.all() {
@@ -358,7 +358,7 @@ impl YieldService {
     }
 
     /// Monitor health factors and trigger emergency withdrawal if needed
-    pub async fn monitor_health(&self) -> Result<Vec<H256>> {
+    pub async fn monitor_health(&self) -> Result<Vec<B256>> {
         let mut emergency_txs = Vec::new();
 
         for protocol in self.registry.all() {
@@ -374,11 +374,18 @@ impl YieldService {
 
                 // Get all tokens and emergency withdraw
                 for token in self.get_protocol_tokens(protocol.protocol_id()) {
-                    if let Ok(tx) = self
+                    match self
                         .emergency_withdraw(protocol.protocol_id(), token)
                         .await
                     {
-                        emergency_txs.push(tx);
+                        Ok(tx) => emergency_txs.push(tx),
+                        Err(e) => {
+                            tracing::error!(
+                                protocol = %protocol.protocol_id(),
+                                error = %e,
+                                "Emergency withdraw failed during health check"
+                            );
+                        }
                     }
                 }
             }
@@ -396,9 +403,9 @@ impl YieldService {
         let positions = self.positions.read().await;
         let transactions = self.transactions.read().await;
 
-        let mut total_deposited = U256::zero();
-        let mut total_withdrawn = U256::zero();
-        let mut total_yield_earned = U256::zero();
+        let mut total_deposited = U256::ZERO;
+        let mut total_withdrawn = U256::ZERO;
+        let mut total_yield_earned = U256::ZERO;
         let mut position_reports = Vec::new();
 
         // Calculate totals from transactions
@@ -462,7 +469,7 @@ impl YieldService {
 
     /// Get total balance across all protocols for a token
     pub async fn total_balance(&self, token: Address) -> Result<U256> {
-        let mut total = U256::zero();
+        let mut total = U256::ZERO;
 
         for protocol in self.registry.all() {
             if protocol.supports_token(token) {
@@ -480,8 +487,15 @@ impl YieldService {
 
         for protocol in self.registry.all() {
             if protocol.supports_token(token) {
-                if let Ok(apy) = protocol.current_apy(token).await {
-                    apys.push((protocol.protocol_id(), apy));
+                match protocol.current_apy(token).await {
+                    Ok(apy) => apys.push((protocol.protocol_id(), apy)),
+                    Err(e) => {
+                        tracing::warn!(
+                            protocol = %protocol.protocol_id(),
+                            error = %e,
+                            "Failed to fetch APY for comparison, skipping"
+                        );
+                    }
                 }
             }
         }
@@ -521,7 +535,7 @@ impl YieldService {
 
     async fn record_transaction(
         &self,
-        tx_hash: H256,
+        tx_hash: B256,
         protocol: ProtocolId,
         token: Address,
         operation: YieldOperation,
@@ -543,7 +557,7 @@ impl YieldService {
 
     async fn update_allocation(&self, protocol: ProtocolId, amount: U256, is_deposit: bool) -> Result<()> {
         let mut allocations = self.allocations.write().await;
-        let current = allocations.entry(protocol).or_insert(U256::zero());
+        let current = allocations.entry(protocol).or_insert(U256::ZERO);
 
         if is_deposit {
             *current = current.saturating_add(amount);

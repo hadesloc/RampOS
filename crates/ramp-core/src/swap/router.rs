@@ -3,7 +3,7 @@
 //! Finds the optimal swap route by comparing quotes from multiple DEX aggregators.
 //! Considers output amount, gas costs, slippage, and MEV protection.
 
-use ethers::types::{Address, U256};
+use alloy::primitives::{Address, U256};
 use futures::future::join_all;
 use ramp_common::{Error, Result};
 use std::sync::Arc;
@@ -227,14 +227,16 @@ impl SwapRouter {
             .iter()
             .map(|q| q.to_amount)
             .max()
-            .unwrap_or(U256::one());
+            .unwrap_or(U256::from(1));
 
         // Output score (normalized 0-100)
         // Use low_u128() which returns the low 128 bits without panicking.
         // For swap amounts that fit in u128 this is exact; for astronomically
         // large U256 values we still get a safe (truncated) ratio.
-        let output_score = if max_output > U256::zero() {
-            (quote.to_amount.low_u128() as f64 / max_output.low_u128() as f64) * 100.0
+        let output_score = if max_output > U256::ZERO {
+            let to_amt: u128 = quote.to_amount.try_into().unwrap_or(u128::MAX);
+            let max_out: u128 = max_output.try_into().unwrap_or(u128::MAX);
+            (to_amt as f64 / max_out as f64) * 100.0
         } else {
             0.0
         };
@@ -247,17 +249,17 @@ impl SwapRouter {
             .iter()
             .map(|q| q.estimated_gas)
             .max()
-            .unwrap_or(U256::one());
+            .unwrap_or(U256::from(1));
         let min_gas = all_quotes
             .iter()
             .map(|q| q.estimated_gas)
             .min()
-            .unwrap_or(U256::one());
+            .unwrap_or(U256::from(1));
 
         let gas_score = if max_gas > min_gas {
-            let range = (max_gas - min_gas).low_u128() as f64;
-            let from_max = (max_gas - quote.estimated_gas).low_u128() as f64;
-            (from_max / range) * 100.0
+            let range: u128 = (max_gas - min_gas).try_into().unwrap_or(u128::MAX);
+            let from_max: u128 = (max_gas - quote.estimated_gas).try_into().unwrap_or(u128::MAX);
+            (from_max as f64 / range as f64) * 100.0
         } else {
             100.0 // All same gas
         };
@@ -335,7 +337,8 @@ impl SwapRouter {
         let max = std::cmp::max(a, b);
         let min = std::cmp::min(a, b);
         let diff = max - min;
-        ((diff * U256::from(10000)) / max).low_u64() as u16
+        let bps_val: u64 = ((diff * U256::from(10000)) / max).try_into().unwrap_or(0u64);
+        bps_val as u16
     }
 }
 
@@ -395,7 +398,7 @@ mod tests {
             .unwrap();
 
         assert!(!result.all_quotes.is_empty());
-        assert!(result.quote.to_amount > U256::zero());
+        assert!(result.quote.to_amount > U256::ZERO);
         assert!(!result.selection_reason.is_empty());
     }
 
@@ -433,7 +436,7 @@ mod tests {
             slippage_bps: 50,
             route: vec![],
             swap_data: Default::default(),
-            swap_contract: Address::zero(),
+            swap_contract: Address::ZERO,
             expires_at: 0,
             mev_protected: true,
         };

@@ -685,27 +685,15 @@ fn base64_url_encode(data: &[u8]) -> String {
 }
 
 fn generate_mock_jwt(user_id: &str) -> String {
-    // Use real JWT generation with proper signing
-    generate_real_jwt(user_id, "user@example.com", "access").unwrap_or_else(|_| {
-        // Fallback to mock JWT if signing fails
-        let header = base64_url_encode(b"{\"alg\":\"HS256\",\"typ\":\"JWT\"}");
-        let now = Utc::now().timestamp();
-        let payload = format!(
-            "{{\"sub\":\"{}\",\"iat\":{},\"exp\":{}}}",
-            user_id,
-            now,
-            now + 86400
-        );
-        let payload_b64 = base64_url_encode(payload.as_bytes());
-        let signature = base64_url_encode(b"mock_signature");
-        format!("{}.{}.{}", header, payload_b64, signature)
-    })
+    // Use real JWT generation with proper signing - no fallback to fake tokens
+    generate_real_jwt(user_id, "user@example.com", "access")
+        .expect("JWT encoding must succeed; ensure JWT_SECRET is set")
 }
 
 /// Get the JWT secret from environment
 fn get_jwt_secret() -> String {
     std::env::var("JWT_SECRET")
-        .unwrap_or_else(|_| "development-secret-change-in-production".to_string())
+        .expect("JWT_SECRET environment variable must be set")
 }
 
 /// Get the default tenant ID from environment

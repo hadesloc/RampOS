@@ -225,8 +225,8 @@ async fn setup_app() -> TestApp {
 
     // Setup middleware
     let rate_limiter = Some(Arc::new(RateLimiter::with_memory(RateLimitConfig {
-        global_max_requests: 100,
-        tenant_max_requests: 10,
+        global_max_requests: 10,
+        tenant_max_requests: 100,
         window_seconds: 1, // Short window for testing
         key_prefix: "test:ratelimit".to_string(),
         endpoint_limits: std::collections::HashMap::new(),
@@ -258,7 +258,12 @@ async fn setup_app() -> TestApp {
         rate_limiter,
         idempotency_handler,
         aa_service: None,
-        portal_auth_config: Arc::new(PortalAuthConfig::default()),
+        portal_auth_config: Arc::new(PortalAuthConfig {
+            jwt_secret: "test-secret-key-for-testing".to_string(),
+            issuer: None,
+            audience: None,
+            allow_missing_tenant: false,
+        }),
         bank_confirmation_repo: None,
         licensing_repo: None,
         compliance_audit_service: None,

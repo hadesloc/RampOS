@@ -119,7 +119,7 @@ impl PayinService {
                     intent_id: IntentId(existing.id),
                     reference_code: ReferenceCode(reference_code),
                     virtual_account,
-                    status: parse_payin_state(&existing.state),
+                    status: PayinState::from(existing.state.as_str()),
                     expires_at: Timestamp::from_datetime(existing.expires_at.unwrap_or(Utc::now())),
                     daily_limit,
                     daily_remaining,
@@ -194,10 +194,10 @@ impl PayinService {
             tenant_id: req.tenant_id.0.clone(),
             user_id: req.user_id.0.clone(),
             intent_type: "PAYIN_VND".to_string(),
-            state: "INSTRUCTION_ISSUED".to_string(),
+            state: PayinState::InstructionIssued.to_string(),
             state_history: serde_json::json!([{
                 "from": "CREATED",
-                "to": "INSTRUCTION_ISSUED",
+                "to": PayinState::InstructionIssued.to_string(),
                 "at": now
             }]),
             amount: req.amount_vnd.0,
@@ -255,10 +255,11 @@ impl PayinService {
         let intent_id = IntentId(intent.id.clone());
 
         // Validate state transition
-        if intent.state != "INSTRUCTION_ISSUED" && intent.state != "FUNDS_PENDING" {
+        let current_state = PayinState::from(intent.state.as_str());
+        if current_state != PayinState::InstructionIssued && current_state != PayinState::FundsPending {
             return Err(Error::InvalidStateTransition {
                 from: intent.state.clone(),
-                to: "FUNDS_CONFIRMED".to_string(),
+                to: PayinState::FundsConfirmed.to_string(),
             });
         }
 
@@ -276,7 +277,7 @@ impl PayinService {
 
             // Update to mismatched state
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, "MISMATCHED_AMOUNT")
+                .update_state(&req.tenant_id, &intent_id, &PayinState::MismatchedAmount.to_string())
                 .await?;
 
             // Still record the bank confirmation
@@ -286,7 +287,7 @@ impl PayinService {
 
             // Publish event for manual review
             self.event_publisher
-                .publish_intent_status_changed(&intent_id, &req.tenant_id, "MISMATCHED_AMOUNT")
+                .publish_intent_status_changed(&intent_id, &req.tenant_id, &PayinState::MismatchedAmount.to_string())
                 .await?;
 
             return Ok(intent_id);
@@ -298,7 +299,7 @@ impl PayinService {
             .await?;
 
         self.intent_repo
-            .update_state(&req.tenant_id, &intent_id, "FUNDS_CONFIRMED")
+            .update_state(&req.tenant_id, &intent_id, &PayinState::FundsConfirmed.to_string())
             .await?;
 
         // Create ledger entries
@@ -314,17 +315,17 @@ impl PayinService {
 
         // Update to VND_CREDITED
         self.intent_repo
-            .update_state(&req.tenant_id, &intent_id, "VND_CREDITED")
+            .update_state(&req.tenant_id, &intent_id, &PayinState::VndCredited.to_string())
             .await?;
 
         // Update to COMPLETED
         self.intent_repo
-            .update_state(&req.tenant_id, &intent_id, "COMPLETED")
+            .update_state(&req.tenant_id, &intent_id, &PayinState::Completed.to_string())
             .await?;
 
         // Publish events
         self.event_publisher
-            .publish_intent_status_changed(&intent_id, &req.tenant_id, "COMPLETED")
+            .publish_intent_status_changed(&intent_id, &req.tenant_id, &PayinState::Completed.to_string())
             .await?;
 
         info!(
@@ -335,23 +336,6 @@ impl PayinService {
         );
 
         Ok(intent_id)
-    }
-}
-
-fn parse_payin_state(state: &str) -> PayinState {
-    match state {
-        "CREATED" | "PAYIN_CREATED" => PayinState::Created,
-        "INSTRUCTION_ISSUED" => PayinState::InstructionIssued,
-        "FUNDS_PENDING" => PayinState::FundsPending,
-        "FUNDS_CONFIRMED" => PayinState::FundsConfirmed,
-        "VND_CREDITED" => PayinState::VndCredited,
-        "COMPLETED" => PayinState::Completed,
-        "EXPIRED" => PayinState::Expired,
-        "MISMATCHED_AMOUNT" => PayinState::MismatchedAmount,
-        "SUSPECTED_FRAUD" => PayinState::SuspectedFraud,
-        "MANUAL_REVIEW" => PayinState::ManualReview,
-        "CANCELLED" => PayinState::Cancelled,
-        _ => PayinState::Created,
     }
 }
 

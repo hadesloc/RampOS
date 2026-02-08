@@ -67,7 +67,7 @@ impl Default for PortalAuthConfig {
     fn default() -> Self {
         Self {
             jwt_secret: std::env::var("JWT_SECRET")
-                .unwrap_or_else(|_| "development-secret-change-in-production".to_string()),
+                .expect("JWT_SECRET environment variable must be set"),
             issuer: std::env::var("JWT_ISSUER").ok(),
             audience: std::env::var("JWT_AUDIENCE").ok(),
             allow_missing_tenant: false,

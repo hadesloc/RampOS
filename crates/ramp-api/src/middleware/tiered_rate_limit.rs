@@ -61,12 +61,42 @@ pub async fn tiered_rate_limit_middleware(
     req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    // 0. Check global rate limit first
+    let global_result = state
+        .limiter
+        .check("global", state.limiter.config.global_max_requests)
+        .await;
+
+    match global_result {
+        Ok(res) if !res.allowed => {
+            warn!("Global rate limit exceeded in tiered middleware");
+            let mut response = Response::builder()
+                .status(StatusCode::TOO_MANY_REQUESTS)
+                .body(axum::body::Body::empty())
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            response.headers_mut().insert(
+                "Retry-After",
+                res.reset_after_seconds
+                    .to_string()
+                    .parse()
+                    .unwrap_or(axum::http::HeaderValue::from_static("60")),
+            );
+            return Ok(response);
+        }
+        Err(e) => {
+            warn!(error = ?e, "Rate limiter error (global) in tiered middleware");
+            return Ok(Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .body(axum::body::Body::empty())
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?);
+        }
+        _ => {}
+    }
+
     // 1. Extract tenant context
     let (tenant_id, tier) = if let Some(ctx) = req.extensions().get::<TenantContext>() {
         (ctx.tenant_id.0.clone(), ctx.tier)
     } else {
-        // If no tenant context (e.g. public endpoint), we might skip or apply global fallback
-        // For now, let's skip strict tiered limiting and rely on the global limiter in rate_limit.rs
         return Ok(next.run(req).await);
     };
 

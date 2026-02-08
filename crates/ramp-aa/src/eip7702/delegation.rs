@@ -6,7 +6,7 @@
 //! - Delegation registry for tracking active delegations
 
 use chrono::{DateTime, Utc};
-use ethers::types::{Address, U256};
+use alloy::primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -287,7 +287,7 @@ impl DelegationRegistry {
             session.delegation.revoke();
             Ok(())
         } else {
-            Err(Eip7702Error::DelegationNotFound(Address::zero()))
+            Err(Eip7702Error::DelegationNotFound(Address::ZERO))
         }
     }
 
@@ -408,7 +408,7 @@ impl DelegationManager {
         let session = self
             .registry
             .get_session(session_id)
-            .ok_or(Eip7702Error::DelegationNotFound(Address::zero()))?;
+            .ok_or(Eip7702Error::DelegationNotFound(Address::ZERO))?;
 
         if !session.is_valid() {
             if session.is_expired() {

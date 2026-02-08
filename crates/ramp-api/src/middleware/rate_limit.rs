@@ -228,7 +228,7 @@ impl RateLimitStore for MemoryRateLimitStore {
 #[derive(Clone)]
 pub struct RateLimiter {
     store: Arc<dyn RateLimitStore>,
-    config: RateLimitConfig,
+    pub config: RateLimitConfig,
 }
 
 impl RateLimiter {

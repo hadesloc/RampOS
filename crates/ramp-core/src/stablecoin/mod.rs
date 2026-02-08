@@ -22,14 +22,14 @@ pub use vnst_protocol::{
 pub use vnst_protocol::MockVnstProtocolDataProvider;
 
 use async_trait::async_trait;
-use ethers::types::{Address, U256};
+use alloy::primitives::{Address, U256};
 use ramp_common::{types::TenantId, Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Transaction hash type alias
-pub type TxHash = ethers::types::H256;
+pub type TxHash = alloy::primitives::B256;
 
 /// Stablecoin metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]

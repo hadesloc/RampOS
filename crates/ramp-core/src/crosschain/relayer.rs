@@ -5,7 +5,7 @@
 use crate::bridge::{ChainId, TxHash};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ethers::types::{Address, Bytes, H256, U256};
+use alloy::primitives::{Address, Bytes, B256, U256};
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -40,7 +40,7 @@ impl Default for RelayerConfig {
 
         Self {
             rpc_endpoints,
-            relayer_address: Address::zero(),
+            relayer_address: Address::ZERO,
             min_confirmations: 12,
             max_gas_price_gwei: 100,
             retry_delay_secs: 30,
@@ -91,7 +91,7 @@ impl CrossChainMessage {
             sender,
             target,
             data,
-            value: U256::zero(),
+            value: U256::ZERO,
             nonce: 0,
             created_at: Utc::now(),
         }
@@ -102,13 +102,13 @@ impl CrossChainMessage {
         self
     }
 
-    pub fn message_hash(&self) -> H256 {
+    pub fn message_hash(&self) -> B256 {
         // In production, compute proper keccak256 hash
         let mut bytes = [0u8; 32];
         bytes[..8].copy_from_slice(&self.source_chain.to_be_bytes());
         bytes[8..16].copy_from_slice(&self.dest_chain.to_be_bytes());
         bytes[16..24].copy_from_slice(&self.nonce.to_be_bytes());
-        H256::from(bytes)
+        B256::from(bytes)
     }
 }
 
@@ -236,7 +236,7 @@ impl CrossChainRelayer {
         );
 
         // Mock successful relay
-        let tx_hash = TxHash::random();
+        let tx_hash = B256::from(rand::random::<[u8; 32]>());
         record.dest_tx_hash = Some(tx_hash);
         record.gas_used = Some(U256::from(100000u64));
         record.status = MessageStatus::Delivered;
@@ -368,7 +368,7 @@ impl Relayer for CrossChainRelayer {
 #[allow(dead_code)]
 pub struct ProofVerifier {
     /// Trusted block headers per chain
-    trusted_headers: RwLock<HashMap<ChainId, Vec<H256>>>,
+    trusted_headers: RwLock<HashMap<ChainId, Vec<B256>>>,
 }
 
 #[allow(dead_code)]
@@ -445,7 +445,7 @@ impl ProofVerifier {
     }
 
     /// Update trusted headers
-    pub async fn update_header(&self, chain_id: ChainId, header: H256) {
+    pub async fn update_header(&self, chain_id: ChainId, header: B256) {
         let mut headers = self.trusted_headers.write().await;
         headers.entry(chain_id).or_default().push(header);
 
@@ -481,9 +481,9 @@ mod tests {
         let message = CrossChainMessage::new(
             1,
             42161,
-            TxHash::random(),
-            Address::zero(),
-            Address::zero(),
+            B256::from(rand::random::<[u8; 32]>()),
+            Address::ZERO,
+            Address::ZERO,
             Bytes::new(),
         );
 
@@ -506,9 +506,9 @@ mod tests {
         let message = CrossChainMessage::new(
             1,
             42161,
-            TxHash::random(),
-            Address::zero(),
-            Address::zero(),
+            B256::from(rand::random::<[u8; 32]>()),
+            Address::ZERO,
+            Address::ZERO,
             Bytes::new(),
         );
 
@@ -526,9 +526,9 @@ mod tests {
         let message = CrossChainMessage::new(
             1,
             42161,
-            TxHash::random(),
-            Address::zero(),
-            Address::zero(),
+            B256::from(rand::random::<[u8; 32]>()),
+            Address::ZERO,
+            Address::ZERO,
             Bytes::new(),
         );
 
@@ -545,9 +545,9 @@ mod tests {
         let message = CrossChainMessage::new(
             1,
             42161,
-            TxHash::random(),
-            Address::zero(),
-            Address::zero(),
+            B256::from(rand::random::<[u8; 32]>()),
+            Address::ZERO,
+            Address::ZERO,
             Bytes::new(),
         );
 
@@ -569,5 +569,221 @@ mod tests {
         let valid_proof = vec![1u8; 64];
         let result = verifier.verify_proof(&message, &valid_proof).await.unwrap();
         assert!(result, "Valid-looking proof should pass placeholder verification");
+    }
+
+    #[test]
+    fn test_message_with_value() {
+        let message = CrossChainMessage::new(
+            1,
+            42161,
+            B256::from(rand::random::<[u8; 32]>()),
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
+        )
+        .with_value(U256::from(1000u64));
+
+        assert_eq!(message.value, U256::from(1000u64));
+    }
+
+    #[test]
+    fn test_message_hash_deterministic() {
+        let tx_hash = B256::from(rand::random::<[u8; 32]>());
+        let mut msg1 = CrossChainMessage::new(
+            1, 42161, tx_hash, Address::ZERO, Address::ZERO, Bytes::new(),
+        );
+        let mut msg2 = CrossChainMessage::new(
+            1, 42161, tx_hash, Address::ZERO, Address::ZERO, Bytes::new(),
+        );
+        msg1.nonce = 42;
+        msg2.nonce = 42;
+        assert_eq!(msg1.message_hash(), msg2.message_hash());
+    }
+
+    #[test]
+    fn test_message_hash_differs_by_nonce() {
+        let tx_hash = B256::from(rand::random::<[u8; 32]>());
+        let mut msg1 = CrossChainMessage::new(
+            1, 42161, tx_hash, Address::ZERO, Address::ZERO, Bytes::new(),
+        );
+        let mut msg2 = CrossChainMessage::new(
+            1, 42161, tx_hash, Address::ZERO, Address::ZERO, Bytes::new(),
+        );
+        msg1.nonce = 1;
+        msg2.nonce = 2;
+        assert_ne!(msg1.message_hash(), msg2.message_hash());
+    }
+
+    #[test]
+    fn test_message_hash_differs_by_chain() {
+        let tx_hash = B256::from(rand::random::<[u8; 32]>());
+        let msg1 = CrossChainMessage::new(
+            1, 42161, tx_hash, Address::ZERO, Address::ZERO, Bytes::new(),
+        );
+        let msg2 = CrossChainMessage::new(
+            10, 42161, tx_hash, Address::ZERO, Address::ZERO, Bytes::new(),
+        );
+        assert_ne!(msg1.message_hash(), msg2.message_hash());
+    }
+
+    #[test]
+    fn test_message_status_pending_not_final() {
+        assert!(!MessageStatus::PendingConfirmation.is_final());
+        assert!(!MessageStatus::ReadyToRelay.is_final());
+    }
+
+    #[test]
+    fn test_message_status_expired_is_final() {
+        assert!(MessageStatus::Expired.is_final());
+    }
+
+    #[test]
+    fn test_relay_record_new() {
+        let message = CrossChainMessage::new(
+            1, 42161, B256::from(rand::random::<[u8; 32]>()), Address::ZERO, Address::ZERO, Bytes::new(),
+        );
+        let record = RelayRecord::new(message);
+        assert_eq!(record.status, MessageStatus::PendingConfirmation);
+        assert_eq!(record.confirmations, 0);
+        assert_eq!(record.attempts, 0);
+        assert!(record.dest_tx_hash.is_none());
+        assert!(record.gas_used.is_none());
+        assert!(record.errors.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_retry_message() {
+        let relayer = CrossChainRelayer::with_default_config();
+
+        let message = CrossChainMessage::new(
+            1, 42161, B256::from(rand::random::<[u8; 32]>()), Address::ZERO, Address::ZERO, Bytes::new(),
+        );
+        let id = relayer.submit_message(message).await.unwrap();
+
+        // Retry should succeed (message is not final)
+        let result = relayer.retry(&id).await;
+        assert!(result.is_ok());
+
+        // Check status changed to ReadyToRelay
+        let record = relayer.get_status(&id).await.unwrap().unwrap();
+        assert_eq!(record.status, MessageStatus::ReadyToRelay);
+    }
+
+    #[tokio::test]
+    async fn test_retry_nonexistent_message() {
+        let relayer = CrossChainRelayer::with_default_config();
+        let result = relayer.retry("nonexistent").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_pending_wrong_chain() {
+        let relayer = CrossChainRelayer::with_default_config();
+
+        let message = CrossChainMessage::new(
+            1, 42161, B256::from(rand::random::<[u8; 32]>()), Address::ZERO, Address::ZERO, Bytes::new(),
+        );
+        relayer.submit_message(message).await.unwrap();
+
+        // Query a different destination chain
+        let pending = relayer.get_pending(10).await.unwrap();
+        assert_eq!(pending.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_status_nonexistent() {
+        let relayer = CrossChainRelayer::with_default_config();
+        let status = relayer.get_status("nonexistent").await.unwrap();
+        assert!(status.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_process_pending_delivers_messages() {
+        let relayer = CrossChainRelayer::with_default_config();
+
+        let message = CrossChainMessage::new(
+            1, 42161, B256::from(rand::random::<[u8; 32]>()), Address::ZERO, Address::ZERO, Bytes::new(),
+        );
+        let id = relayer.submit_message(message).await.unwrap();
+
+        // First process: PendingConfirmation -> ReadyToRelay
+        relayer.process_pending().await.unwrap();
+
+        // Second process: ReadyToRelay -> Delivered
+        let processed = relayer.process_pending().await.unwrap();
+        assert_eq!(processed, 1);
+
+        let record = relayer.get_status(&id).await.unwrap().unwrap();
+        assert_eq!(record.status, MessageStatus::Delivered);
+        assert!(record.dest_tx_hash.is_some());
+        assert!(record.gas_used.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_submit_multiple_messages() {
+        let relayer = CrossChainRelayer::with_default_config();
+
+        for _ in 0..5 {
+            let msg = CrossChainMessage::new(
+                1, 42161, B256::from(rand::random::<[u8; 32]>()), Address::ZERO, Address::ZERO, Bytes::new(),
+            );
+            relayer.submit_message(msg).await.unwrap();
+        }
+
+        let pending = relayer.get_pending(42161).await.unwrap();
+        assert_eq!(pending.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn test_proof_verifier_same_chain_rejected() {
+        let verifier = ProofVerifier::new();
+        let message = CrossChainMessage::new(
+            1, 1, B256::from(rand::random::<[u8; 32]>()), Address::ZERO, Address::ZERO, Bytes::new(),
+        );
+        let proof = vec![1u8; 64];
+        let result = verifier.verify_proof(&message, &proof).await;
+        assert!(result.is_err(), "Same chain message proof should be rejected");
+    }
+
+    #[tokio::test]
+    async fn test_proof_verifier_zero_chain_rejected() {
+        let verifier = ProofVerifier::new();
+        let message = CrossChainMessage::new(
+            0, 42161, B256::from(rand::random::<[u8; 32]>()), Address::ZERO, Address::ZERO, Bytes::new(),
+        );
+        let proof = vec![1u8; 64];
+        let result = verifier.verify_proof(&message, &proof).await;
+        assert!(result.is_err(), "Zero chain ID should be rejected");
+    }
+
+    #[tokio::test]
+    async fn test_proof_verifier_update_header() {
+        let verifier = ProofVerifier::new();
+        let header = B256::from(rand::random::<[u8; 32]>());
+        verifier.update_header(1, header).await;
+
+        // Verify header was stored (indirectly, by checking no panic)
+        let header2 = B256::from(rand::random::<[u8; 32]>());
+        verifier.update_header(1, header2).await;
+    }
+
+    #[test]
+    fn test_relayer_config_all_chains() {
+        let config = RelayerConfig::default();
+        assert!(config.rpc_endpoints.contains_key(&1));     // Ethereum
+        assert!(config.rpc_endpoints.contains_key(&42161)); // Arbitrum
+        assert!(config.rpc_endpoints.contains_key(&8453));  // Base
+        assert!(config.rpc_endpoints.contains_key(&10));    // Optimism
+        assert!(config.rpc_endpoints.contains_key(&137));   // Polygon
+        assert_eq!(config.max_gas_price_gwei, 100);
+        assert_eq!(config.retry_delay_secs, 30);
+        assert_eq!(config.max_retries, 5);
+    }
+
+    #[test]
+    fn test_proof_verifier_default() {
+        let verifier = ProofVerifier::default();
+        // Should be same as ProofVerifier::new()
+        drop(verifier);
     }
 }

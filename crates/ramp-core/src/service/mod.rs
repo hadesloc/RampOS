@@ -2,7 +2,9 @@
 
 pub mod bridge;
 pub mod compliance_audit;
+pub mod crypto;
 pub mod deposit;
+pub mod fees;
 pub mod ledger;
 pub mod license;
 pub mod onboarding;
@@ -31,3 +33,5 @@ pub use user::UserService;
 pub use webhook::WebhookService;
 pub use withdraw::WithdrawService;
 pub use withdraw_policy_provider::IntentBasedWithdrawPolicyDataProvider;
+pub use crypto::CryptoService;
+pub use fees::FeeCalculator;

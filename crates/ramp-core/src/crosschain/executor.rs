@@ -9,7 +9,7 @@ use super::{
 use crate::bridge::{BridgeRegistry, ChainId, TxHash};
 use async_trait::async_trait;
 use chrono::Utc;
-use ethers::types::U256;
+use alloy::primitives::{U256, B256};
 use ramp_common::{Error, Result};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -177,7 +177,7 @@ impl IntentExecutor {
                     "Executing approve step"
                 );
                 // Mock approval
-                step.tx_hash = Some(TxHash::random());
+                step.tx_hash = Some(B256::from(rand::random::<[u8; 32]>()));
                 step.gas_used = Some(U256::from(50000u64));
             }
             StepType::Bridge => {
@@ -220,7 +220,7 @@ impl IntentExecutor {
                     "Waiting for release on destination"
                 );
                 // This is handled by the bridge automatically
-                step.tx_hash = Some(TxHash::random());
+                step.tx_hash = Some(B256::from(rand::random::<[u8; 32]>()));
                 step.gas_used = Some(U256::from(100000u64));
             }
             StepType::Lock => {
@@ -229,7 +229,7 @@ impl IntentExecutor {
                     step = step.index,
                     "Executing lock step for atomic swap"
                 );
-                step.tx_hash = Some(TxHash::random());
+                step.tx_hash = Some(B256::from(rand::random::<[u8; 32]>()));
                 step.gas_used = Some(U256::from(80000u64));
             }
             StepType::Swap => {
@@ -238,7 +238,7 @@ impl IntentExecutor {
                     step = step.index,
                     "Executing swap on destination chain"
                 );
-                step.tx_hash = Some(TxHash::random());
+                step.tx_hash = Some(B256::from(rand::random::<[u8; 32]>()));
                 step.gas_used = Some(U256::from(150000u64));
             }
             StepType::Deposit => {
@@ -247,7 +247,7 @@ impl IntentExecutor {
                     step = step.index,
                     "Executing deposit into yield protocol"
                 );
-                step.tx_hash = Some(TxHash::random());
+                step.tx_hash = Some(B256::from(rand::random::<[u8; 32]>()));
                 step.gas_used = Some(U256::from(120000u64));
             }
             StepType::ContractCall => {
@@ -256,7 +256,7 @@ impl IntentExecutor {
                     step = step.index,
                     "Executing custom contract call"
                 );
-                step.tx_hash = Some(TxHash::random());
+                step.tx_hash = Some(B256::from(rand::random::<[u8; 32]>()));
                 step.gas_used = Some(U256::from(100000u64));
             }
             StepType::Refund => {
@@ -265,7 +265,7 @@ impl IntentExecutor {
                     step = step.index,
                     "Executing refund/rollback"
                 );
-                step.tx_hash = Some(TxHash::random());
+                step.tx_hash = Some(B256::from(rand::random::<[u8; 32]>()));
                 step.gas_used = Some(U256::from(60000u64));
             }
         }
@@ -431,8 +431,8 @@ impl CrossChainExecutor for IntentExecutor {
     async fn estimate_gas(&self, intent: &CrossChainIntent) -> Result<GasEstimate> {
         let plan = self.build_execution_plan(intent);
 
-        let mut source_gas = U256::zero();
-        let mut dest_gas = U256::zero();
+        let mut source_gas = U256::ZERO;
+        let mut dest_gas = U256::ZERO;
 
         for (step_type, chain_id, _) in plan {
             let gas = match step_type {
@@ -460,8 +460,10 @@ impl CrossChainExecutor for IntentExecutor {
         // Calculate USD cost (simplified)
         let source_cost = source_gas * source_gas_price;
         let dest_cost = dest_gas * dest_gas_price;
+        let source_val: u64 = source_cost.try_into().unwrap_or(0u64);
+        let dest_val: u64 = dest_cost.try_into().unwrap_or(0u64);
         let total_cost_usd = Decimal::new(
-            (source_cost.as_u64() + dest_cost.as_u64()) as i64,
+            (source_val + dest_val) as i64,
             9, // Convert from gwei to dollars roughly
         );
 
@@ -521,7 +523,7 @@ impl CrossChainExecutor for IntentExecutor {
 mod tests {
     use super::*;
     use crate::bridge::{BridgeConfig, BridgeToken};
-    use ethers::types::Address;
+    use alloy::primitives::Address;
 
     #[tokio::test]
     async fn test_executor_creation() {
@@ -534,8 +536,8 @@ mod tests {
             42161,
             BridgeToken::USDC,
             U256::from(1000000u64),
-            Address::zero(),
-            Address::zero(),
+            Address::ZERO,
+            Address::ZERO,
         );
 
         let plan = executor.build_execution_plan(&intent);
@@ -553,13 +555,13 @@ mod tests {
             42161,
             BridgeToken::USDC,
             U256::from(1000000u64),
-            Address::zero(),
-            Address::zero(),
+            Address::ZERO,
+            Address::ZERO,
         );
 
         let estimate = executor.estimate_gas(&intent).await.unwrap();
-        assert!(estimate.source_gas > U256::zero());
-        assert!(estimate.dest_gas > U256::zero());
+        assert!(estimate.source_gas > U256::ZERO);
+        assert!(estimate.dest_gas > U256::ZERO);
     }
 
     #[tokio::test]
@@ -567,5 +569,287 @@ mod tests {
         let config = ExecutionConfig::default();
         assert_eq!(config.max_step_retries, 3);
         assert!(config.auto_rollback);
+    }
+
+    // ---- ExecutionConfig ----
+
+    #[test]
+    fn test_execution_config_default_values() {
+        let config = ExecutionConfig::default();
+        assert_eq!(config.max_step_retries, 3);
+        assert_eq!(config.step_timeout_secs, 300);
+        assert_eq!(config.source_confirmations, 12);
+        assert_eq!(config.dest_confirmations, 12);
+        assert!(config.auto_rollback);
+        assert!((config.gas_price_multiplier - 1.1).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_execution_config_custom() {
+        let config = ExecutionConfig {
+            max_step_retries: 5,
+            step_timeout_secs: 600,
+            source_confirmations: 20,
+            dest_confirmations: 6,
+            auto_rollback: false,
+            gas_price_multiplier: 1.5,
+        };
+        assert_eq!(config.max_step_retries, 5);
+        assert!(!config.auto_rollback);
+    }
+
+    #[test]
+    fn test_execution_config_serialization() {
+        let config = ExecutionConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        let parsed: ExecutionConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.max_step_retries, config.max_step_retries);
+        assert_eq!(parsed.step_timeout_secs, config.step_timeout_secs);
+        assert!(parsed.auto_rollback);
+    }
+
+    // ---- build_execution_plan ----
+
+    #[tokio::test]
+    async fn test_plan_bridge_type() {
+        let registry = Arc::new(BridgeRegistry::new(BridgeConfig::default()));
+        let executor = IntentExecutor::with_default_config(registry);
+
+        let intent = CrossChainIntent::new(
+            IntentType::Bridge,
+            1, 42161,
+            BridgeToken::USDC,
+            U256::from(1_000_000u64),
+            Address::ZERO,
+            Address::ZERO,
+        );
+
+        let plan = executor.build_execution_plan(&intent);
+        assert_eq!(plan.len(), 3);
+        assert_eq!(plan[0].0, StepType::Approve);
+        assert_eq!(plan[1].0, StepType::Bridge);
+        assert_eq!(plan[2].0, StepType::Release);
+
+        // Verify chain assignments
+        assert_eq!(plan[0].1, 1); // source chain
+        assert_eq!(plan[1].1, 1); // source chain
+        assert_eq!(plan[2].1, 42161); // dest chain
+    }
+
+    #[tokio::test]
+    async fn test_plan_bridge_and_swap_type() {
+        let registry = Arc::new(BridgeRegistry::new(BridgeConfig::default()));
+        let executor = IntentExecutor::with_default_config(registry);
+
+        let intent = CrossChainIntent::new(
+            IntentType::BridgeAndSwap,
+            1, 10,
+            BridgeToken::USDC,
+            U256::from(500_000u64),
+            Address::ZERO,
+            Address::ZERO,
+        );
+
+        let plan = executor.build_execution_plan(&intent);
+        assert_eq!(plan.len(), 4);
+        assert_eq!(plan[0].0, StepType::Approve);
+        assert_eq!(plan[1].0, StepType::Bridge);
+        assert_eq!(plan[2].0, StepType::Release);
+        assert_eq!(plan[3].0, StepType::Swap);
+
+        // Swap should happen on dest chain
+        assert_eq!(plan[3].1, 10);
+    }
+
+    #[tokio::test]
+    async fn test_plan_bridge_and_deposit_type() {
+        let registry = Arc::new(BridgeRegistry::new(BridgeConfig::default()));
+        let executor = IntentExecutor::with_default_config(registry);
+
+        let intent = CrossChainIntent::new(
+            IntentType::BridgeAndDeposit,
+            1, 42161,
+            BridgeToken::USDC,
+            U256::from(1_000_000u64),
+            Address::ZERO,
+            Address::ZERO,
+        );
+
+        let plan = executor.build_execution_plan(&intent);
+        assert_eq!(plan.len(), 5);
+        assert_eq!(plan[0].0, StepType::Approve);
+        assert_eq!(plan[1].0, StepType::Bridge);
+        assert_eq!(plan[2].0, StepType::Release);
+        assert_eq!(plan[3].0, StepType::Approve); // 2nd approve for yield protocol
+        assert_eq!(plan[4].0, StepType::Deposit);
+
+        // Deposit steps on dest chain
+        assert_eq!(plan[3].1, 42161);
+        assert_eq!(plan[4].1, 42161);
+    }
+
+    #[tokio::test]
+    async fn test_plan_atomic_swap_type() {
+        let registry = Arc::new(BridgeRegistry::new(BridgeConfig::default()));
+        let executor = IntentExecutor::with_default_config(registry);
+
+        let intent = CrossChainIntent::new(
+            IntentType::AtomicSwap,
+            1, 137,
+            BridgeToken::USDC,
+            U256::from(1_000_000_000_000_000_000u64),
+            Address::ZERO,
+            Address::ZERO,
+        );
+
+        let plan = executor.build_execution_plan(&intent);
+        assert_eq!(plan.len(), 2);
+        assert_eq!(plan[0].0, StepType::Lock);
+        assert_eq!(plan[1].0, StepType::Release);
+
+        assert_eq!(plan[0].1, 1);   // lock on source
+        assert_eq!(plan[1].1, 137); // release on dest
+    }
+
+    #[tokio::test]
+    async fn test_plan_batch_operation_empty() {
+        let registry = Arc::new(BridgeRegistry::new(BridgeConfig::default()));
+        let executor = IntentExecutor::with_default_config(registry);
+
+        let intent = CrossChainIntent::new(
+            IntentType::BatchOperation,
+            1, 42161,
+            BridgeToken::USDC,
+            U256::from(100u64),
+            Address::ZERO,
+            Address::ZERO,
+        );
+        // No "steps" metadata -> empty plan
+        let plan = executor.build_execution_plan(&intent);
+        assert!(plan.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_plan_batch_operation_with_steps() {
+        let registry = Arc::new(BridgeRegistry::new(BridgeConfig::default()));
+        let executor = IntentExecutor::with_default_config(registry);
+
+        let mut intent = CrossChainIntent::new(
+            IntentType::BatchOperation,
+            1, 42161,
+            BridgeToken::USDC,
+            U256::from(100u64),
+            Address::ZERO,
+            Address::ZERO,
+        );
+        intent.metadata.insert("steps".to_string(), serde_json::json!([
+            { "type": "approve", "chain": 1 },
+            { "type": "bridge", "chain": 1 },
+            { "type": "swap", "chain": 42161 }
+        ]));
+
+        let plan = executor.build_execution_plan(&intent);
+        assert_eq!(plan.len(), 3);
+        assert_eq!(plan[0].0, StepType::Approve);
+        assert_eq!(plan[1].0, StepType::Bridge);
+        assert_eq!(plan[2].0, StepType::Swap);
+    }
+
+    // ---- Gas estimation ----
+
+    #[tokio::test]
+    async fn test_gas_estimation_bridge() {
+        let registry = Arc::new(BridgeRegistry::new(BridgeConfig::default()));
+        let executor = IntentExecutor::with_default_config(registry);
+
+        let intent = CrossChainIntent::new(
+            IntentType::Bridge,
+            1, 42161,
+            BridgeToken::USDC,
+            U256::from(1_000_000u64),
+            Address::ZERO,
+            Address::ZERO,
+        );
+
+        let estimate = executor.estimate_gas(&intent).await.unwrap();
+        // Bridge plan: Approve(50k) + Bridge(200k) on source, Release(100k) on dest
+        assert_eq!(estimate.source_gas, U256::from(250_000u64)); // 50k + 200k
+        assert_eq!(estimate.dest_gas, U256::from(100_000u64));   // 100k
+        assert!(estimate.total_cost_usd > Decimal::ZERO);
+    }
+
+    #[tokio::test]
+    async fn test_gas_estimation_atomic_swap() {
+        let registry = Arc::new(BridgeRegistry::new(BridgeConfig::default()));
+        let executor = IntentExecutor::with_default_config(registry);
+
+        let intent = CrossChainIntent::new(
+            IntentType::AtomicSwap,
+            1, 137,
+            BridgeToken::USDC,
+            U256::from(1_000_000u64),
+            Address::ZERO,
+            Address::ZERO,
+        );
+
+        let estimate = executor.estimate_gas(&intent).await.unwrap();
+        // AtomicSwap: Lock(80k) on source, Release(100k) on dest
+        assert_eq!(estimate.source_gas, U256::from(80_000u64));
+        assert_eq!(estimate.dest_gas, U256::from(100_000u64));
+    }
+
+    // ---- Executor get_status ----
+
+    #[tokio::test]
+    async fn test_get_status_nonexistent() {
+        let registry = Arc::new(BridgeRegistry::new(BridgeConfig::default()));
+        let executor = IntentExecutor::with_default_config(registry);
+
+        let result = executor.get_status("nonexistent_intent").await.unwrap();
+        assert!(result.is_none());
+    }
+
+    // ---- ExecutionResult ----
+
+    #[test]
+    fn test_execution_result_serialization() {
+        let result = ExecutionResult {
+            intent_id: "intent_123".to_string(),
+            status: IntentStatus::Completed,
+            source_tx: None,
+            dest_tx: None,
+            total_gas_used: U256::from(350_000u64),
+            execution_time_secs: 45,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("intent_123"));
+    }
+
+    // ---- IntentExecutor with custom config ----
+
+    #[tokio::test]
+    async fn test_executor_with_custom_config() {
+        let registry = Arc::new(BridgeRegistry::new(BridgeConfig::default()));
+        let config = ExecutionConfig {
+            max_step_retries: 5,
+            step_timeout_secs: 120,
+            source_confirmations: 6,
+            dest_confirmations: 3,
+            auto_rollback: false,
+            gas_price_multiplier: 2.0,
+        };
+        let executor = IntentExecutor::new(registry, config);
+
+        // Should still build plans correctly
+        let intent = CrossChainIntent::new(
+            IntentType::Bridge,
+            1, 10,
+            BridgeToken::USDC,
+            U256::from(1_000u64),
+            Address::ZERO,
+            Address::ZERO,
+        );
+        let plan = executor.build_execution_plan(&intent);
+        assert_eq!(plan.len(), 3);
     }
 }

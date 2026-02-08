@@ -109,38 +109,9 @@ async fn main() -> anyhow::Result<()> {
     let case_manager = Arc::new(CaseManager::new(case_store));
 
     // Create Redis connection and idempotency handler
-    let redis_client = if let Some(sentinel_urls) = &config.redis.sentinel_urls {
-        if let Some(master_name) = &config.redis.sentinel_master_name {
-            info!("Connecting to Redis Sentinel: master={}, sentinels={:?}", master_name, sentinel_urls);
-            // Construct sentinel connection string
-            // Format: redis+sentinel://:password@sentinel_host:port/service_name
-            // We use the first sentinel URL for the initial connection, but the client handles failover
-            // Note: The redis crate support for Sentinel is via the redis::Client::open with a special URL scheme
-            // or by using a specific ConnectionManager that supports Sentinel.
-            // For now, we'll construct a URL that might be supported or fallback to a standard connection if not directly supported by basic open string.
-            // Actually, the redis crate (0.24) has better support. Let's use the standard URL if provided, or construct one.
-
-            // If the URL in config.redis.url is already a sentinel URL, we use it.
-            // If not, and we have sentinel_urls, we might need to construct it.
-            // However, typical redis crate usage with sentinel often involves checking sentinels.
-            // Given the limitations of the simple Client::open, we will rely on the config.redis.url being correctly formatted
-            // or we just use the provided URL which might point to a HA proxy or a specific node if not using smart client.
-
-            // BUT, to support true HA in the client, we should use the sentinel features if available.
-            // Since we are using `redis::aio::ConnectionManager`, it wraps a client.
-
-            // Let's stick to the configured URL. If the user provides a sentinel URL in config.redis.url, it should work.
-            // We logged the intent above.
-            redis::Client::open(config.redis.url.as_str())
-                .map_err(|e| anyhow::anyhow!("Invalid Redis URL: {}", e))?
-        } else {
-             redis::Client::open(config.redis.url.as_str())
-                .map_err(|e| anyhow::anyhow!("Invalid Redis URL: {}", e))?
-        }
-    } else {
-        redis::Client::open(config.redis.url.as_str())
-            .map_err(|e| anyhow::anyhow!("Invalid Redis URL: {}", e))?
-    };
+    info!("Connecting to Redis: {}", config.redis.url);
+    let redis_client = redis::Client::open(config.redis.url.as_str())
+        .map_err(|e| anyhow::anyhow!("Invalid Redis URL: {}", e))?;
 
     let redis_manager = redis::aio::ConnectionManager::new(redis_client.clone())
         .await

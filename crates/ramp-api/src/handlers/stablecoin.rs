@@ -10,7 +10,7 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use ethers::types::{Address, U256};
+use alloy::primitives::{Address, U256};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use tracing::info;

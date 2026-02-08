@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use chrono::Utc;
-use ethers::types::{Address, Bytes, H256, U256};
+use alloy::primitives::{Address, Bytes, B256, U256, keccak256};
 use ramp_common::{types::TenantId, Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -221,7 +221,7 @@ impl LiquidityProvider for MockLiquidityProvider {
             .pools
             .get(&(chain, token))
             .copied()
-            .unwrap_or(U256::zero()))
+            .unwrap_or(U256::ZERO))
     }
 
     async fn reserve_liquidity(
@@ -376,7 +376,7 @@ impl CrossChainPaymaster {
             .await?;
 
         // Calculate exchange rate (how much source token per target native)
-        let exchange_rate = if source_token_price > U256::zero() {
+        let exchange_rate = if source_token_price > U256::ZERO {
             target_native_price * U256::from(10u64.pow(18)) / source_token_price
         } else {
             return Err(Error::Validation("Invalid exchange rate".to_string()));
@@ -466,8 +466,8 @@ impl CrossChainPaymaster {
         let mut payment_data = vec![0x47, 0xe7, 0xef, 0x24];
 
         // Quote ID as bytes32
-        let quote_hash = ethers::utils::keccak256(quote.quote_id.as_bytes());
-        payment_data.extend_from_slice(&quote_hash);
+        let quote_hash = keccak256(quote.quote_id.as_bytes());
+        payment_data.extend_from_slice(quote_hash.as_slice());
 
         // Token address (32 bytes)
         payment_data.extend_from_slice(&[0u8; 12]);
@@ -475,8 +475,7 @@ impl CrossChainPaymaster {
         payment_data.extend_from_slice(&[0x11u8; 20]);
 
         // Amount (32 bytes)
-        let mut amount_bytes = [0u8; 32];
-        quote.source_payment_amount.to_big_endian(&mut amount_bytes);
+        let amount_bytes = quote.source_payment_amount.to_be_bytes::<32>();
         payment_data.extend_from_slice(&amount_bytes);
 
         Ok(CrossChainPaymentInstruction {
@@ -563,7 +562,7 @@ impl CrossChainPaymaster {
         let mut data = Vec::with_capacity(134);
 
         // Paymaster address
-        data.extend_from_slice(paymaster_address.as_bytes());
+        data.extend_from_slice(paymaster_address.as_slice());
 
         // Mode: 0x02 = cross-chain
         data.push(0x02);
@@ -572,8 +571,8 @@ impl CrossChainPaymaster {
         data.extend_from_slice(&(quote.source_chain_id as u32).to_be_bytes());
 
         // Quote hash
-        let quote_hash = ethers::utils::keccak256(quote.quote_id.as_bytes());
-        data.extend_from_slice(&quote_hash);
+        let quote_hash = keccak256(quote.quote_id.as_bytes());
+        data.extend_from_slice(quote_hash.as_slice());
 
         // Valid until (6 bytes)
         data.extend_from_slice(&quote.valid_until.to_be_bytes()[2..8]);
@@ -594,7 +593,7 @@ impl CrossChainPaymaster {
     }
 
     /// Verify payment was received on source chain
-    pub async fn verify_payment(&self, quote_id: &str, payment_tx_hash: H256) -> Result<bool> {
+    pub async fn verify_payment(&self, quote_id: &str, payment_tx_hash: B256) -> Result<bool> {
         // In production, would verify the transaction on source chain
         // and confirm the payment amount matches the quote
 
@@ -714,7 +713,7 @@ mod tests {
 
         assert_eq!(quote.source_chain_id, 1);
         assert_eq!(quote.target_chain_id, 42161);
-        assert!(quote.source_payment_amount > U256::zero());
+        assert!(quote.source_payment_amount > U256::ZERO);
     }
 
     #[test]

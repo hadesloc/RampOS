@@ -186,6 +186,10 @@ pub fn create_router(state: AppState) -> Router {
         // Reconciliation
         .route("/recon/batches", get(handlers::list_recon_batches))
         .route("/recon/batches", post(handlers::create_recon_batch))
+        // VND Transaction Limits
+        .route("/limits/tiers", get(handlers::admin::get_tier_limits))
+        .route("/limits/config", get(handlers::admin::get_limit_config).put(handlers::admin::update_limit_config))
+        .route("/limits/user/:user_id", get(handlers::admin::get_user_limit_status).put(handlers::admin::set_user_limits).delete(handlers::admin::remove_user_limits))
         .with_state(state.clone());
 
     // Admin Reports - needs to be separated or use AppState if ReportGenerator is in AppState

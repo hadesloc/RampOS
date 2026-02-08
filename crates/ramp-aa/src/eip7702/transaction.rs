@@ -2,7 +2,7 @@
 //!
 //! Implements EIP-7702 transaction type (0x04) with authorization list.
 
-use ethers::types::{Address, Bytes, U256, U64};
+use alloy::primitives::{Address, Bytes, U256, U64, keccak256};
 use serde::{Deserialize, Serialize};
 
 use super::authorization::{AuthorizationList, SignedAuthorization};
@@ -45,11 +45,11 @@ impl Eip7702Transaction {
         Self {
             chain_id: U64::from(chain_id),
             nonce: U64::from(nonce),
-            max_priority_fee_per_gas: U256::zero(),
-            max_fee_per_gas: U256::zero(),
+            max_priority_fee_per_gas: U256::ZERO,
+            max_fee_per_gas: U256::ZERO,
             gas_limit: U64::from(21000),
             to: Some(to),
-            value: U256::zero(),
+            value: U256::ZERO,
             data: Bytes::default(),
             access_list: Vec::new(),
             authorization_list: AuthorizationList::new(),
@@ -58,13 +58,11 @@ impl Eip7702Transaction {
 
     /// RLP encode the transaction for signing
     pub fn signing_hash(&self) -> [u8; 32] {
-        use ethers::utils::keccak256;
-
         let encoded = self.rlp_encode_for_signing();
         let mut data = Vec::with_capacity(1 + encoded.len());
         data.push(EIP7702_TX_TYPE);
         data.extend_from_slice(&encoded);
-        keccak256(&data)
+        *keccak256(&data)
     }
 
     /// RLP encode for signing (without signature)
@@ -77,34 +75,31 @@ impl Eip7702Transaction {
         let mut stream = RlpStream::new_list(10);
 
         // chain_id
-        stream.append(&self.chain_id.as_u64());
+        stream.append(&self.chain_id.to::<u64>());
 
         // nonce
-        stream.append(&self.nonce.as_u64());
+        stream.append(&self.nonce.to::<u64>());
 
         // max_priority_fee_per_gas
-        let mut mpfpg = [0u8; 32];
-        self.max_priority_fee_per_gas.to_big_endian(&mut mpfpg);
+        let mpfpg = self.max_priority_fee_per_gas.to_be_bytes::<32>();
         stream.append(&trim_leading_zeros(&mpfpg).to_vec());
 
         // max_fee_per_gas
-        let mut mfpg = [0u8; 32];
-        self.max_fee_per_gas.to_big_endian(&mut mfpg);
+        let mfpg = self.max_fee_per_gas.to_be_bytes::<32>();
         stream.append(&trim_leading_zeros(&mfpg).to_vec());
 
         // gas_limit
-        stream.append(&self.gas_limit.as_u64());
+        stream.append(&self.gas_limit.to::<u64>());
 
         // to
         if let Some(to) = self.to {
-            stream.append(&to.as_bytes().to_vec());
+            stream.append(&to.as_slice().to_vec());
         } else {
             stream.append_empty_data();
         }
 
         // value
-        let mut value_bytes = [0u8; 32];
-        self.value.to_big_endian(&mut value_bytes);
+        let value_bytes = self.value.to_be_bytes::<32>();
         stream.append(&trim_leading_zeros(&value_bytes).to_vec());
 
         // data
@@ -114,11 +109,10 @@ impl Eip7702Transaction {
         let mut access_stream = RlpStream::new_list(self.access_list.len());
         for (addr, slots) in &self.access_list {
             let mut item = RlpStream::new_list(2);
-            item.append(&addr.as_bytes().to_vec());
+            item.append(&addr.as_slice().to_vec());
             let mut slots_stream = RlpStream::new_list(slots.len());
             for slot in slots {
-                let mut slot_bytes = [0u8; 32];
-                slot.to_big_endian(&mut slot_bytes);
+                let slot_bytes = slot.to_be_bytes::<32>();
                 slots_stream.append(&slot_bytes.to_vec());
             }
             item.append_raw(&slots_stream.out(), 1);
@@ -150,11 +144,11 @@ impl Eip7702TxBuilder {
             tx: Eip7702Transaction {
                 chain_id: U64::from(chain_id),
                 nonce: U64::from(nonce),
-                max_priority_fee_per_gas: U256::zero(),
-                max_fee_per_gas: U256::zero(),
+                max_priority_fee_per_gas: U256::ZERO,
+                max_fee_per_gas: U256::ZERO,
                 gas_limit: U64::from(21000),
                 to: None,
-                value: U256::zero(),
+                value: U256::ZERO,
                 data: Bytes::default(),
                 access_list: Vec::new(),
                 authorization_list: AuthorizationList::new(),
@@ -249,8 +243,7 @@ fn trim_leading_zeros(bytes: &[u8]) -> &[u8] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eip7702::authorization::Authorization;
-    use ethers::types::Signature;
+    use crate::eip7702::authorization::{Authorization, Signature};
 
     fn test_address() -> Address {
         "0x1234567890123456789012345678901234567890"

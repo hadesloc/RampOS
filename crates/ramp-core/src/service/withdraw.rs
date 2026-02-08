@@ -195,7 +195,7 @@ impl WithdrawService {
                 info!("Returning existing withdraw intent for idempotency key");
                 return Ok(CreateWithdrawResponse {
                     intent_id: IntentId(existing.id),
-                    status: parse_withdraw_state(&existing.state),
+                    status: WithdrawState::from(existing.state.as_str()),
                     estimated_gas: None,
                 });
             }
@@ -248,7 +248,7 @@ impl WithdrawService {
             tenant_id: req.tenant_id.0.clone(),
             user_id: req.user_id.0.clone(),
             intent_type: "WITHDRAW_ONCHAIN".to_string(),
-            state: "CREATED".to_string(),
+            state: WithdrawState::Created.to_string(),
             state_history: serde_json::json!([{
                 "from": null,
                 "to": "CREATED",
@@ -283,7 +283,7 @@ impl WithdrawService {
 
         if policy_approved {
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, "POLICY_APPROVED")
+                .update_state(&req.tenant_id, &intent_id, &WithdrawState::PolicyApproved.to_string())
                 .await?;
 
             // SECURITY FIX: Use atomic balance check and transaction recording
@@ -333,7 +333,7 @@ impl WithdrawService {
         } else if manual_review {
             // Requires manual review - hold for compliance
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, "MANUAL_REVIEW")
+                .update_state(&req.tenant_id, &intent_id, &WithdrawState::ManualReview.to_string())
                 .await?;
 
             self.event_publisher
@@ -341,7 +341,7 @@ impl WithdrawService {
                 .await?;
         } else {
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, "REJECTED_BY_POLICY")
+                .update_state(&req.tenant_id, &intent_id, &WithdrawState::RejectedByPolicy.to_string())
                 .await?;
         }
 
@@ -383,10 +383,11 @@ impl WithdrawService {
             .ok_or_else(|| Error::IntentNotFound(req.intent_id.0.clone()))?;
 
         // Validate state
-        if intent.state != "POLICY_APPROVED" {
+        let current_state = WithdrawState::from(intent.state.as_str());
+        if current_state != WithdrawState::PolicyApproved {
             return Err(Error::InvalidStateTransition {
                 from: intent.state,
-                to: "KYT_CHECKED".to_string(),
+                to: WithdrawState::KytChecked.to_string(),
             });
         }
 
@@ -401,7 +402,7 @@ impl WithdrawService {
             );
 
             self.intent_repo
-                .update_state(&req.tenant_id, &req.intent_id, "KYT_FLAGGED")
+                .update_state(&req.tenant_id, &req.intent_id, &WithdrawState::KytFlagged.to_string())
                 .await?;
 
             self.event_publisher
@@ -413,11 +414,11 @@ impl WithdrawService {
 
         // KYT passed
         self.intent_repo
-            .update_state(&req.tenant_id, &req.intent_id, "KYT_CHECKED")
+            .update_state(&req.tenant_id, &req.intent_id, &WithdrawState::KytChecked.to_string())
             .await?;
 
         self.event_publisher
-            .publish_intent_status_changed(&req.intent_id, &req.tenant_id, "KYT_CHECKED")
+            .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &WithdrawState::KytChecked.to_string())
             .await?;
 
         info!(
@@ -444,20 +445,21 @@ impl WithdrawService {
             .ok_or_else(|| Error::IntentNotFound(intent_id.0.clone()))?;
 
         // Validate state
-        if intent.state != "KYT_CHECKED" {
+        let current_state = WithdrawState::from(intent.state.as_str());
+        if current_state != WithdrawState::KytChecked {
             return Err(Error::InvalidStateTransition {
                 from: intent.state,
-                to: "SIGNED".to_string(),
+                to: WithdrawState::Signed.to_string(),
             });
         }
 
         // Update state
         self.intent_repo
-            .update_state(tenant_id, intent_id, "SIGNED")
+            .update_state(tenant_id, intent_id, &WithdrawState::Signed.to_string())
             .await?;
 
         self.event_publisher
-            .publish_intent_status_changed(intent_id, tenant_id, "SIGNED")
+            .publish_intent_status_changed(intent_id, tenant_id, &WithdrawState::Signed.to_string())
             .await?;
 
         info!(
@@ -479,20 +481,21 @@ impl WithdrawService {
             .ok_or_else(|| Error::IntentNotFound(req.intent_id.0.clone()))?;
 
         // Validate state
-        if intent.state != "SIGNED" {
+        let current_state = WithdrawState::from(intent.state.as_str());
+        if current_state != WithdrawState::Signed {
             return Err(Error::InvalidStateTransition {
                 from: intent.state,
-                to: "BROADCASTED".to_string(),
+                to: WithdrawState::Broadcasted.to_string(),
             });
         }
 
         // Update state to broadcasted
         self.intent_repo
-            .update_state(&req.tenant_id, &req.intent_id, "BROADCASTED")
+            .update_state(&req.tenant_id, &req.intent_id, &WithdrawState::Broadcasted.to_string())
             .await?;
 
         self.event_publisher
-            .publish_intent_status_changed(&req.intent_id, &req.tenant_id, "BROADCASTED")
+            .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &WithdrawState::Broadcasted.to_string())
             .await?;
 
         info!(
@@ -503,7 +506,7 @@ impl WithdrawService {
 
         // Move to confirming state
         self.intent_repo
-            .update_state(&req.tenant_id, &req.intent_id, "CONFIRMING")
+            .update_state(&req.tenant_id, &req.intent_id, &WithdrawState::Confirming.to_string())
             .await?;
 
         Ok(WithdrawState::Confirming)
@@ -519,10 +522,11 @@ impl WithdrawService {
             .ok_or_else(|| Error::IntentNotFound(req.intent_id.0.clone()))?;
 
         // Validate state
-        if intent.state != "CONFIRMING" && intent.state != "BROADCASTED" {
+        let current_state = WithdrawState::from(intent.state.as_str());
+        if current_state != WithdrawState::Confirming && current_state != WithdrawState::Broadcasted {
             return Err(Error::InvalidStateTransition {
                 from: intent.state,
-                to: "CONFIRMED".to_string(),
+                to: WithdrawState::Confirmed.to_string(),
             });
         }
 
@@ -531,7 +535,7 @@ impl WithdrawService {
         if req.success {
             // Update state to confirmed
             self.intent_repo
-                .update_state(&req.tenant_id, &req.intent_id, "CONFIRMED")
+                .update_state(&req.tenant_id, &req.intent_id, &WithdrawState::Confirmed.to_string())
                 .await?;
 
             // Complete clearing entries - finalize the withdraw
@@ -546,11 +550,11 @@ impl WithdrawService {
 
             // Mark as completed
             self.intent_repo
-                .update_state(&req.tenant_id, &req.intent_id, "COMPLETED")
+                .update_state(&req.tenant_id, &req.intent_id, &WithdrawState::Completed.to_string())
                 .await?;
 
             self.event_publisher
-                .publish_intent_status_changed(&req.intent_id, &req.tenant_id, "COMPLETED")
+                .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &WithdrawState::Completed.to_string())
                 .await?;
 
             info!(
@@ -574,11 +578,11 @@ impl WithdrawService {
             self.ledger_repo.record_transaction(tx).await?;
 
             self.intent_repo
-                .update_state(&req.tenant_id, &req.intent_id, "BROADCAST_FAILED")
+                .update_state(&req.tenant_id, &req.intent_id, &WithdrawState::BroadcastFailed.to_string())
                 .await?;
 
             self.event_publisher
-                .publish_intent_status_changed(&req.intent_id, &req.tenant_id, "BROADCAST_FAILED")
+                .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &WithdrawState::BroadcastFailed.to_string())
                 .await?;
 
             warn!(
@@ -601,23 +605,24 @@ impl WithdrawService {
             .ok_or_else(|| Error::IntentNotFound(intent_id.0.clone()))?;
 
         // Can only cancel if not yet broadcasted
+        let current_state = WithdrawState::from(intent.state.as_str());
         let cancellable_states = [
-            "CREATED",
-            "POLICY_APPROVED",
-            "KYT_CHECKED",
-            "SIGNED",
-            "KYT_FLAGGED",
+            WithdrawState::Created,
+            WithdrawState::PolicyApproved,
+            WithdrawState::KytChecked,
+            WithdrawState::Signed,
+            WithdrawState::KytFlagged,
         ];
 
-        if !cancellable_states.contains(&intent.state.as_str()) {
+        if !cancellable_states.contains(&current_state) {
             return Err(Error::InvalidStateTransition {
                 from: intent.state,
-                to: "CANCELLED".to_string(),
+                to: WithdrawState::Cancelled.to_string(),
             });
         }
 
         // If funds were held, return them
-        if intent.state != "CREATED" && intent.state != "REJECTED_BY_POLICY" {
+        if current_state != WithdrawState::Created && current_state != WithdrawState::RejectedByPolicy {
             let user_id = UserId::new(&intent.user_id);
             let crypto_currency = LedgerCurrency::from_symbol(&intent.currency);
 
@@ -634,11 +639,11 @@ impl WithdrawService {
 
         // Update state
         self.intent_repo
-            .update_state(tenant_id, intent_id, "CANCELLED")
+            .update_state(tenant_id, intent_id, &WithdrawState::Cancelled.to_string())
             .await?;
 
         self.event_publisher
-            .publish_intent_status_changed(intent_id, tenant_id, "CANCELLED")
+            .publish_intent_status_changed(intent_id, tenant_id, &WithdrawState::Cancelled.to_string())
             .await?;
 
         info!(intent_id = %intent_id, "Withdraw cancelled");
@@ -662,39 +667,17 @@ impl WithdrawService {
         &self,
         req: &CreateWithdrawRequest,
     ) -> Result<(bool, bool, Option<String>)> {
-        // If no policy engine is configured, log a security warning and deny
+        // If no policy engine is configured, deny all withdrawals (deny by default)
         let Some(ref policy_engine) = self.policy_engine else {
-            // SECURITY WARNING: Policy engine is not configured
-            // In production, withdrawals should ALWAYS go through policy checks
-            // including KYC tier limits, velocity checks, and sanctions screening.
-            //
-            // For backward compatibility in test environments, we check if this
-            // appears to be a test (user_id starts with test/mock patterns).
-            // Otherwise, we deny the withdrawal to prevent AML bypass.
-            let is_test_user = req.user_id.0.starts_with("user")
-                || req.user_id.0.starts_with("test")
-                || req.user_id.0.starts_with("mock");
-
-            if is_test_user {
-                warn!(
-                    user_id = %req.user_id,
-                    amount = %req.amount,
-                    "SECURITY WARNING: Withdraw policy engine not configured. \
-                    Approving withdrawal for test user. \
-                    This MUST NOT happen in production!"
-                );
-                return Ok((true, false, None));
-            } else {
-                warn!(
-                    user_id = %req.user_id,
-                    amount = %req.amount,
-                    to_address = %req.to_address,
-                    "SECURITY: Withdraw policy engine not configured. \
-                    Denying withdrawal to prevent AML/KYC bypass. \
-                    Configure WithdrawPolicyEngine for production use."
-                );
-                return Ok((false, false, None));
-            }
+            warn!(
+                user_id = %req.user_id,
+                amount = %req.amount,
+                to_address = %req.to_address,
+                "SECURITY: Withdraw policy engine not configured. \
+                Denying withdrawal to prevent AML/KYC bypass. \
+                Configure WithdrawPolicyEngine for production use."
+            );
+            return Ok((false, false, None));
         };
 
         // Get user info for policy check
@@ -772,25 +755,6 @@ impl WithdrawService {
     }
 }
 
-fn parse_withdraw_state(state: &str) -> WithdrawState {
-    match state {
-        "CREATED" => WithdrawState::Created,
-        "POLICY_APPROVED" => WithdrawState::PolicyApproved,
-        "KYT_CHECKED" => WithdrawState::KytChecked,
-        "SIGNED" => WithdrawState::Signed,
-        "BROADCASTED" => WithdrawState::Broadcasted,
-        "CONFIRMING" => WithdrawState::Confirming,
-        "CONFIRMED" => WithdrawState::Confirmed,
-        "COMPLETED" => WithdrawState::Completed,
-        "REJECTED_BY_POLICY" => WithdrawState::RejectedByPolicy,
-        "KYT_FLAGGED" => WithdrawState::KytFlagged,
-        "BROADCAST_FAILED" => WithdrawState::BroadcastFailed,
-        "MANUAL_REVIEW" => WithdrawState::ManualReview,
-        "CANCELLED" => WithdrawState::Cancelled,
-        _ => WithdrawState::Created,
-    }
-}
-
 fn symbol_to_ledger_currency(symbol: &CryptoSymbol) -> LedgerCurrency {
     match symbol {
         CryptoSymbol::BTC => LedgerCurrency::BTC,
@@ -807,6 +771,10 @@ mod tests {
     use crate::event::InMemoryEventPublisher;
     use crate::repository::user::UserRow;
     use crate::test_utils::{MockIntentRepository, MockLedgerRepository, MockUserRepository};
+    use ramp_compliance::{
+        InMemoryCaseStore, MockTransactionHistoryStore, MockWithdrawPolicyDataProvider,
+        WithdrawPolicyConfig,
+    };
     use rust_decimal_macros::dec;
 
     fn create_test_user() -> UserRow {
@@ -826,6 +794,28 @@ mod tests {
         }
     }
 
+    /// Create a permissive policy engine for tests that auto-approves within limits.
+    /// Uses Tier2 limits which are generous enough for most test amounts.
+    fn create_test_policy_engine() -> Arc<WithdrawPolicyEngine> {
+        let case_store = Arc::new(InMemoryCaseStore::new());
+        let case_manager = Arc::new(CaseManager::new(case_store));
+        let transaction_store: Arc<dyn TransactionHistoryStore> =
+            Arc::new(MockTransactionHistoryStore::new());
+        let data_provider: Arc<dyn WithdrawPolicyDataProvider> =
+            Arc::new(MockWithdrawPolicyDataProvider::new());
+
+        let config = WithdrawPolicyConfig {
+            require_address_cooling: false,
+            enable_aml_checks: false,
+            ..Default::default()
+        };
+
+        let engine = WithdrawPolicyEngine::new(config, case_manager, None, transaction_store)
+            .with_data_provider(data_provider);
+
+        Arc::new(engine)
+    }
+
     #[tokio::test]
     async fn test_create_withdraw() {
         let intent_repo = Arc::new(MockIntentRepository::new());
@@ -833,7 +823,9 @@ mod tests {
         let user_repo = Arc::new(MockUserRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
 
-        user_repo.add_user(create_test_user());
+        let mut user = create_test_user();
+        user.kyc_tier = 2;
+        user_repo.add_user(user);
 
         // Set up balance
         ledger_repo.set_balance(
@@ -849,14 +841,15 @@ mod tests {
             ledger_repo.clone(),
             user_repo.clone(),
             event_publisher.clone(),
-        );
+        )
+        .with_policy_engine(create_test_policy_engine());
 
         let req = CreateWithdrawRequest {
             tenant_id: TenantId::new("tenant1"),
             user_id: UserId::new("user1"),
             chain_id: ChainId::Ethereum,
             token_address: None,
-            amount: dec!(1.5),
+            amount: dec!(1.0),
             symbol: CryptoSymbol::ETH,
             to_address: WalletAddress::new("0x1234567890123456789012345678901234567890"),
             idempotency_key: None,
@@ -885,7 +878,9 @@ mod tests {
         let user_repo = Arc::new(MockUserRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
 
-        user_repo.add_user(create_test_user());
+        let mut user = create_test_user();
+        user.kyc_tier = 2;
+        user_repo.add_user(user);
 
         // No balance set - defaults to 0
 
@@ -894,7 +889,8 @@ mod tests {
             ledger_repo.clone(),
             user_repo.clone(),
             event_publisher.clone(),
-        );
+        )
+        .with_policy_engine(create_test_policy_engine());
 
         let req = CreateWithdrawRequest {
             tenant_id: TenantId::new("tenant1"),
@@ -924,7 +920,9 @@ mod tests {
         let user_repo = Arc::new(MockUserRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
 
-        user_repo.add_user(create_test_user());
+        let mut user = create_test_user();
+        user.kyc_tier = 2;
+        user_repo.add_user(user);
 
         ledger_repo.set_balance(
             &TenantId::new("tenant1"),
@@ -940,6 +938,7 @@ mod tests {
             user_repo.clone(),
             event_publisher.clone(),
         )
+        .with_policy_engine(create_test_policy_engine())
         .with_kyt_threshold(0.7);
 
         // Create withdraw
@@ -978,7 +977,9 @@ mod tests {
         let user_repo = Arc::new(MockUserRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
 
-        user_repo.add_user(create_test_user());
+        let mut user = create_test_user();
+        user.kyc_tier = 2;
+        user_repo.add_user(user);
 
         ledger_repo.set_balance(
             &TenantId::new("tenant1"),
@@ -994,15 +995,16 @@ mod tests {
             user_repo.clone(),
             event_publisher.clone(),
         )
+        .with_policy_engine(create_test_policy_engine())
         .with_kyt_threshold(0.7);
 
-        // Create withdraw
+        // Create withdraw with small amount to stay within Tier2 limits
         let create_req = CreateWithdrawRequest {
             tenant_id: TenantId::new("tenant1"),
             user_id: UserId::new("user1"),
             chain_id: ChainId::Ethereum,
             token_address: None,
-            amount: dec!(10.0),
+            amount: dec!(0.5),
             symbol: CryptoSymbol::ETH,
             to_address: WalletAddress::new("0x1111111111111111111111111111111111111111"),
             idempotency_key: None,
@@ -1032,7 +1034,9 @@ mod tests {
         let user_repo = Arc::new(MockUserRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
 
-        user_repo.add_user(create_test_user());
+        let mut user = create_test_user();
+        user.kyc_tier = 2;
+        user_repo.add_user(user);
 
         ledger_repo.set_balance(
             &TenantId::new("tenant1"),
@@ -1047,7 +1051,8 @@ mod tests {
             ledger_repo.clone(),
             user_repo.clone(),
             event_publisher.clone(),
-        );
+        )
+        .with_policy_engine(create_test_policy_engine());
 
         let tenant_id = TenantId::new("tenant1");
 
@@ -1118,7 +1123,9 @@ mod tests {
         let user_repo = Arc::new(MockUserRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
 
-        user_repo.add_user(create_test_user());
+        let mut user = create_test_user();
+        user.kyc_tier = 2;
+        user_repo.add_user(user);
 
         ledger_repo.set_balance(
             &TenantId::new("tenant1"),
@@ -1133,7 +1140,8 @@ mod tests {
             ledger_repo.clone(),
             user_repo.clone(),
             event_publisher.clone(),
-        );
+        )
+        .with_policy_engine(create_test_policy_engine());
 
         let tenant_id = TenantId::new("tenant1");
 
@@ -1143,7 +1151,7 @@ mod tests {
             user_id: UserId::new("user1"),
             chain_id: ChainId::Ethereum,
             token_address: None,
-            amount: dec!(2.0),
+            amount: dec!(1.0),
             symbol: CryptoSymbol::ETH,
             to_address: WalletAddress::new("0x4444444444444444444444444444444444444444"),
             idempotency_key: None,
@@ -1175,7 +1183,9 @@ mod tests {
         let user_repo = Arc::new(MockUserRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
 
-        user_repo.add_user(create_test_user());
+        let mut user = create_test_user();
+        user.kyc_tier = 2;
+        user_repo.add_user(user);
 
         ledger_repo.set_balance(
             &TenantId::new("tenant1"),
@@ -1190,7 +1200,8 @@ mod tests {
             ledger_repo.clone(),
             user_repo.clone(),
             event_publisher.clone(),
-        );
+        )
+        .with_policy_engine(create_test_policy_engine());
 
         let req = CreateWithdrawRequest {
             tenant_id: TenantId::new("tenant1"),
@@ -1225,7 +1236,9 @@ mod tests {
         let user_repo = Arc::new(MockUserRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
 
-        user_repo.add_user(create_test_user());
+        let mut user = create_test_user();
+        user.kyc_tier = 2;
+        user_repo.add_user(user);
 
         ledger_repo.set_balance(
             &TenantId::new("tenant1"),
@@ -1240,7 +1253,8 @@ mod tests {
             ledger_repo.clone(),
             user_repo.clone(),
             event_publisher.clone(),
-        );
+        )
+        .with_policy_engine(create_test_policy_engine());
 
         let req = CreateWithdrawRequest {
             tenant_id: TenantId::new("tenant1"),
@@ -1402,20 +1416,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_withdraw_denied_without_policy_engine_for_production_user() {
+    async fn test_withdraw_denied_without_policy_engine() {
         let intent_repo = Arc::new(MockIntentRepository::new());
         let ledger_repo = Arc::new(MockLedgerRepository::new());
         let user_repo = Arc::new(MockUserRepository::new());
         let event_publisher = Arc::new(InMemoryEventPublisher::new());
 
-        // Create a "production-like" user (doesn't start with test/mock/user)
-        let mut user = create_test_user();
-        user.id = "prod-user-12345".to_string();
-        user_repo.add_user(user);
+        user_repo.add_user(create_test_user());
 
         ledger_repo.set_balance(
             &TenantId::new("tenant1"),
-            Some(&UserId::new("prod-user-12345")),
+            Some(&UserId::new("user1")),
             &AccountType::LiabilityUserCrypto,
             &LedgerCurrency::ETH,
             dec!(10.0),
@@ -1431,7 +1442,7 @@ mod tests {
 
         let req = CreateWithdrawRequest {
             tenant_id: TenantId::new("tenant1"),
-            user_id: UserId::new("prod-user-12345"),
+            user_id: UserId::new("user1"),
             chain_id: ChainId::Ethereum,
             token_address: None,
             amount: dec!(1.0),
@@ -1444,7 +1455,7 @@ mod tests {
         let res = service.create_withdraw(req).await.unwrap();
 
         // Should be rejected because policy engine is not configured
-        // and user_id doesn't match test patterns
+        // ALL users are denied when no policy engine is present (deny by default)
         assert_eq!(res.status, WithdrawState::RejectedByPolicy);
     }
 }

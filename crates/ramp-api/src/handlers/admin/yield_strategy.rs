@@ -14,7 +14,7 @@ use axum::{
     Json,
 };
 use chrono::{Duration, Utc};
-use ethers::types::Address;
+use alloy::primitives::Address;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 

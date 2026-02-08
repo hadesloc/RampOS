@@ -1,5 +1,6 @@
 use crate::types::*;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 /// Intent types supported by RampOS
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -124,6 +125,36 @@ impl std::fmt::Display for PayinState {
     }
 }
 
+impl From<&str> for PayinState {
+    fn from(s: &str) -> Self {
+        match s {
+            "CREATED" | "PAYIN_CREATED" => PayinState::Created,
+            "INSTRUCTION_ISSUED" => PayinState::InstructionIssued,
+            "FUNDS_PENDING" => PayinState::FundsPending,
+            "FUNDS_CONFIRMED" => PayinState::FundsConfirmed,
+            "VND_CREDITED" => PayinState::VndCredited,
+            "COMPLETED" => PayinState::Completed,
+            "EXPIRED" => PayinState::Expired,
+            "MISMATCHED_AMOUNT" => PayinState::MismatchedAmount,
+            "SUSPECTED_FRAUD" => PayinState::SuspectedFraud,
+            "MANUAL_REVIEW" => PayinState::ManualReview,
+            "CANCELLED" => PayinState::Cancelled,
+            // Fallback: unknown strings default to Created to avoid breaking existing code,
+            // but we log a warning to surface potential data corruption
+            unknown => {
+                warn!(state = unknown, "Unknown PayinState string, defaulting to Created");
+                PayinState::Created
+            }
+        }
+    }
+}
+
+impl From<String> for PayinState {
+    fn from(s: String) -> Self {
+        PayinState::from(s.as_str())
+    }
+}
+
 // ============================================================================
 // Pay-out VND States
 // ============================================================================
@@ -228,6 +259,36 @@ impl std::fmt::Display for PayoutState {
             PayoutState::Cancelled => write!(f, "CANCELLED"),
             PayoutState::Reversed => write!(f, "REVERSED"),
         }
+    }
+}
+
+impl From<&str> for PayoutState {
+    fn from(s: &str) -> Self {
+        match s {
+            "CREATED" | "PAYOUT_CREATED" => PayoutState::Created,
+            "POLICY_APPROVED" => PayoutState::PolicyApproved,
+            "PAYOUT_SUBMITTED" | "SUBMITTED" => PayoutState::Submitted,
+            "PAYOUT_CONFIRMED" | "CONFIRMED" => PayoutState::Confirmed,
+            "COMPLETED" => PayoutState::Completed,
+            "REJECTED_BY_POLICY" => PayoutState::RejectedByPolicy,
+            "BANK_REJECTED" => PayoutState::BankRejected,
+            "TIMEOUT" => PayoutState::Timeout,
+            "MANUAL_REVIEW" => PayoutState::ManualReview,
+            "CANCELLED" => PayoutState::Cancelled,
+            "REVERSED" => PayoutState::Reversed,
+            // Fallback: unknown strings default to Created to avoid breaking existing code,
+            // but we log a warning to surface potential data corruption
+            unknown => {
+                warn!(state = unknown, "Unknown PayoutState string, defaulting to Created");
+                PayoutState::Created
+            }
+        }
+    }
+}
+
+impl From<String> for PayoutState {
+    fn from(s: String) -> Self {
+        PayoutState::from(s.as_str())
     }
 }
 
@@ -399,6 +460,59 @@ impl WithdrawState {
     }
 }
 
+impl std::fmt::Display for WithdrawState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WithdrawState::Created => write!(f, "CREATED"),
+            WithdrawState::PolicyApproved => write!(f, "POLICY_APPROVED"),
+            WithdrawState::KytChecked => write!(f, "KYT_CHECKED"),
+            WithdrawState::Signed => write!(f, "SIGNED"),
+            WithdrawState::Broadcasted => write!(f, "BROADCASTED"),
+            WithdrawState::Confirming => write!(f, "CONFIRMING"),
+            WithdrawState::Confirmed => write!(f, "CONFIRMED"),
+            WithdrawState::Completed => write!(f, "COMPLETED"),
+            WithdrawState::RejectedByPolicy => write!(f, "REJECTED_BY_POLICY"),
+            WithdrawState::KytFlagged => write!(f, "KYT_FLAGGED"),
+            WithdrawState::BroadcastFailed => write!(f, "BROADCAST_FAILED"),
+            WithdrawState::ManualReview => write!(f, "MANUAL_REVIEW"),
+            WithdrawState::Cancelled => write!(f, "CANCELLED"),
+        }
+    }
+}
+
+impl From<&str> for WithdrawState {
+    fn from(s: &str) -> Self {
+        match s {
+            "CREATED" => WithdrawState::Created,
+            "POLICY_APPROVED" => WithdrawState::PolicyApproved,
+            "KYT_CHECKED" => WithdrawState::KytChecked,
+            "SIGNED" => WithdrawState::Signed,
+            "BROADCASTED" => WithdrawState::Broadcasted,
+            "CONFIRMING" => WithdrawState::Confirming,
+            "CONFIRMED" => WithdrawState::Confirmed,
+            "COMPLETED" => WithdrawState::Completed,
+            "REJECTED_BY_POLICY" => WithdrawState::RejectedByPolicy,
+            "KYT_FLAGGED" => WithdrawState::KytFlagged,
+            "BROADCAST_FAILED" => WithdrawState::BroadcastFailed,
+            "MANUAL_REVIEW" => WithdrawState::ManualReview,
+            "CANCELLED" => WithdrawState::Cancelled,
+            "REJECTED_INSUFFICIENT_BALANCE" => WithdrawState::RejectedByPolicy,
+            // Fallback: unknown strings default to Created to avoid breaking existing code,
+            // but we log a warning to surface potential data corruption
+            unknown => {
+                warn!(state = unknown, "Unknown WithdrawState string, defaulting to Created");
+                WithdrawState::Created
+            }
+        }
+    }
+}
+
+impl From<String> for WithdrawState {
+    fn from(s: String) -> Self {
+        WithdrawState::from(s.as_str())
+    }
+}
+
 // ============================================================================
 // Unified Intent State
 // ============================================================================
@@ -440,7 +554,7 @@ impl IntentState {
             IntentState::Payout(s) => s.to_string(),
             IntentState::Trade(s) => format!("{:?}", s),
             IntentState::Deposit(s) => format!("{:?}", s),
-            IntentState::Withdraw(s) => format!("{:?}", s),
+            IntentState::Withdraw(s) => s.to_string(),
         }
     }
 }

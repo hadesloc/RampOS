@@ -1,4 +1,4 @@
-use ethers::types::{Address, U256};
+use alloy::primitives::{Address, U256};
 use ramp_common::{types::TenantId, Result};
 
 use crate::types::{PermissionRule, SessionKey, SessionPermission};
@@ -28,6 +28,7 @@ impl PolicyEngine {
         // Check value (if encoded in call_data)
         // In production, would decode and check
 
+        result.is_valid = result.violations.is_empty();
         Ok(result)
     }
 
@@ -94,6 +95,7 @@ impl PolicyEngine {
             }
         }
 
+        result.is_valid = result.violations.is_empty();
         Ok(result)
     }
 

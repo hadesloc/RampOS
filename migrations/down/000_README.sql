@@ -1,0 +1,47 @@
+-- ============================================================================
+-- RampOS Down Migrations - Usage Guide
+-- ============================================================================
+--
+-- These down migrations reverse the corresponding up migrations.
+-- They are organized in the migrations/down/ directory with matching names.
+--
+-- USAGE:
+--   To rollback a specific migration, run the corresponding down file:
+--     psql -f migrations/down/025_portal_kyc_cases_down.sql
+--
+--   To rollback ALL migrations (full reset), run them in REVERSE order:
+--     psql -f migrations/down/999_seed_data_down.sql
+--     psql -f migrations/down/025_portal_kyc_cases_down.sql
+--     psql -f migrations/down/024_refresh_tokens_down.sql
+--     psql -f migrations/down/023_webauthn_credentials_down.sql
+--     psql -f migrations/down/023_magic_link_tokens_down.sql
+--     psql -f migrations/down/023_encrypt_secrets_nonce_down.sql
+--     psql -f migrations/down/022_licensing_requirements_down.sql
+--     psql -f migrations/down/021_vnd_transaction_limits_down.sql
+--     psql -f migrations/down/020_compliance_audit_trail_down.sql
+--     psql -f migrations/down/019_usage_billing_down.sql
+--     psql -f migrations/down/018_enterprise_sso_down.sql
+--     psql -f migrations/down/017_custom_domains_down.sql
+--     psql -f migrations/down/016_multi_stablecoin_down.sql
+--     psql -f migrations/down/015_license_management_down.sql
+--     psql -f migrations/down/014_rls_fail_closed_down.sql
+--     psql -f migrations/down/013_compliance_integrity_down.sql
+--     psql -f migrations/down/012_bank_confirmations_down.sql
+--     psql -f migrations/down/011_add_api_secret_down.sql
+--     psql -f migrations/down/010_smart_accounts_down.sql
+--     psql -f migrations/down/009_add_webhook_secret_down.sql
+--     psql -f migrations/down/008_add_missing_rls_down.sql
+--     psql -f migrations/down/007_compliance_transactions_down.sql
+--     psql -f migrations/down/006_enable_rls_down.sql
+--     psql -f migrations/down/005_case_notes_down.sql
+--     psql -f migrations/down/004_score_history_down.sql
+--     psql -f migrations/down/003_rule_versions_down.sql
+--     psql -f migrations/down/002_seed_data_down.sql
+--     psql -f migrations/down/001_initial_schema_down.sql
+--
+-- IMPORTANT NOTES:
+-- 1. Seed data down migrations (002, 999) have production guards
+-- 2. Run down migrations in REVERSE numerical order
+-- 3. Some down migrations (like 014) recreate simpler policies
+-- 4. The 001 down migration drops ALL core tables - use with extreme caution
+-- ============================================================================

@@ -4,7 +4,7 @@ use axum::{
     extract::{Extension, Path, State},
     Json,
 };
-use ethers::types::{Address, Bytes, H256, U256};
+use alloy::primitives::{Address, Bytes, B256, U256};
 use std::sync::Arc;
 use tracing::{info, instrument, warn};
 
@@ -67,7 +67,7 @@ impl AAServiceState {
 
         // Create paymaster service with signer key from environment
         // SECURITY: In production, this should come from HSM/Vault
-        let paymaster_address = chain_config.paymaster_address.unwrap_or_else(Address::zero);
+        let paymaster_address = chain_config.paymaster_address.unwrap_or(Address::ZERO);
 
         // CRITICAL: PAYMASTER_SIGNER_KEY is always required - no fallback keys
         let signer_key = match std::env::var("PAYMASTER_SIGNER_KEY") {
@@ -137,7 +137,7 @@ impl AAServiceState {
             chain_config.entry_point_address,
         ));
 
-        let paymaster_address = chain_config.paymaster_address.unwrap_or_else(Address::zero);
+        let paymaster_address = chain_config.paymaster_address.unwrap_or(Address::ZERO);
 
         // Test-only key - the scalar 1, which is a valid secp256k1 private key
         let mut signer_key = vec![0u8; 32];
@@ -543,7 +543,7 @@ pub async fn get_user_operation(
     tracing::Span::current().record("hash", &hash);
 
     // Parse hash
-    let op_hash: H256 = hash
+    let op_hash: B256 = hash
         .parse()
         .map_err(|_| ApiError::BadRequest("Invalid UserOperation hash".to_string()))?;
 
@@ -595,7 +595,7 @@ pub async fn get_user_operation_receipt(
     tracing::Span::current().record("hash", &hash);
 
     // Parse hash
-    let op_hash: H256 = hash
+    let op_hash: B256 = hash
         .parse()
         .map_err(|_| ApiError::BadRequest("Invalid UserOperation hash".to_string()))?;
 
@@ -661,7 +661,7 @@ async fn verify_account_ownership(
     account_address: Address,
 ) -> bool {
     // Zero address is never authorized
-    if account_address == Address::zero() {
+    if account_address == Address::ZERO {
         return false;
     }
 
@@ -743,7 +743,7 @@ async fn verify_account_user_ownership(
     account_address: Address,
 ) -> bool {
     // Zero address is never authorized
-    if account_address == Address::zero() {
+    if account_address == Address::ZERO {
         return false;
     }
 
@@ -946,7 +946,7 @@ mod tests {
     #[test]
     fn test_convert_user_op_to_dto() {
         let op = UserOperation::new(
-            Address::zero(),
+            Address::ZERO,
             U256::from(1),
             Bytes::from(vec![0x12, 0x34]),
         );
@@ -963,7 +963,7 @@ mod tests {
         let chain_config = ChainConfig {
             chain_id: 1,
             name: "Ethereum Mainnet".to_string(),
-            entry_point_address: Address::zero(),
+            entry_point_address: Address::ZERO,
             bundler_url: "http://localhost:4337".to_string(),
             paymaster_address: None,
         };
@@ -1127,7 +1127,7 @@ mod tests {
         let chain_config = ChainConfig {
             chain_id: 1,
             name: "Ethereum Mainnet".to_string(),
-            entry_point_address: Address::zero(),
+            entry_point_address: Address::ZERO,
             bundler_url: "http://localhost:4337".to_string(),
             paymaster_address: None,
         };
@@ -1136,7 +1136,7 @@ mod tests {
         let tenant_id = TenantId::new("test_tenant");
 
         // Zero address should always return false
-        let result = verify_account_ownership(&state, &tenant_id, Address::zero()).await;
+        let result = verify_account_ownership(&state, &tenant_id, Address::ZERO).await;
         assert!(!result);
     }
 
@@ -1150,7 +1150,7 @@ mod tests {
         let chain_config = ChainConfig {
             chain_id: 1,
             name: "Ethereum Mainnet".to_string(),
-            entry_point_address: Address::zero(),
+            entry_point_address: Address::ZERO,
             bundler_url: "http://localhost:4337".to_string(),
             paymaster_address: None,
         };
@@ -1183,7 +1183,7 @@ mod tests {
         let chain_config = ChainConfig {
             chain_id: 1,
             name: "Ethereum Mainnet".to_string(),
-            entry_point_address: Address::zero(),
+            entry_point_address: Address::ZERO,
             bundler_url: "http://localhost:4337".to_string(),
             paymaster_address: None,
         };
@@ -1213,7 +1213,7 @@ mod tests {
         let chain_config = ChainConfig {
             chain_id: 137,
             name: "Polygon Mainnet".to_string(),
-            entry_point_address: Address::zero(),
+            entry_point_address: Address::ZERO,
             bundler_url: "http://localhost:4337".to_string(),
             paymaster_address: None,
         };
@@ -1240,7 +1240,7 @@ mod tests {
         let chain_config = ChainConfig {
             chain_id: 1,
             name: "Ethereum Mainnet".to_string(),
-            entry_point_address: Address::zero(),
+            entry_point_address: Address::ZERO,
             bundler_url: "http://localhost:4337".to_string(),
             paymaster_address: None,
         };
@@ -1250,7 +1250,7 @@ mod tests {
 
         // Zero address should always return false
         let result =
-            verify_account_user_ownership(&state, &tenant_id, "user_123", Address::zero()).await;
+            verify_account_user_ownership(&state, &tenant_id, "user_123", Address::ZERO).await;
         assert!(!result);
     }
 
@@ -1259,7 +1259,7 @@ mod tests {
         let chain_config = ChainConfig {
             chain_id: 1,
             name: "Ethereum Mainnet".to_string(),
-            entry_point_address: Address::zero(),
+            entry_point_address: Address::ZERO,
             bundler_url: "http://localhost:4337".to_string(),
             paymaster_address: None,
         };
@@ -1290,7 +1290,7 @@ mod tests {
         let chain_config = ChainConfig {
             chain_id: 1,
             name: "Ethereum Mainnet".to_string(),
-            entry_point_address: Address::zero(),
+            entry_point_address: Address::ZERO,
             bundler_url: "http://localhost:4337".to_string(),
             paymaster_address: None,
         };
@@ -1327,7 +1327,7 @@ mod tests {
         let chain_config = ChainConfig {
             chain_id: 1,
             name: "Ethereum Mainnet".to_string(),
-            entry_point_address: Address::zero(),
+            entry_point_address: Address::ZERO,
             bundler_url: "http://localhost:4337".to_string(),
             paymaster_address: None,
         };
@@ -1361,7 +1361,7 @@ mod tests {
         let chain_config = ChainConfig {
             chain_id: 137,
             name: "Polygon Mainnet".to_string(),
-            entry_point_address: Address::zero(),
+            entry_point_address: Address::ZERO,
             bundler_url: "http://localhost:4337".to_string(),
             paymaster_address: None,
         };
@@ -1389,7 +1389,7 @@ mod tests {
         let chain_config = ChainConfig {
             chain_id: 1,
             name: "Ethereum Mainnet".to_string(),
-            entry_point_address: Address::zero(),
+            entry_point_address: Address::ZERO,
             bundler_url: "http://localhost:4337".to_string(),
             paymaster_address: None,
         };

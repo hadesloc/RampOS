@@ -14,7 +14,7 @@ pub use paraswap::ParaSwapAggregator;
 pub use router::{SwapRouter, RouteResult};
 
 use async_trait::async_trait;
-use ethers::types::{Address, Bytes, U256};
+use alloy::primitives::{Address, Bytes, U256};
 use ramp_common::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -41,17 +41,17 @@ impl Token {
     /// Create native token (ETH, MATIC, BNB, etc.)
     pub fn native(chain_id: u64) -> Self {
         let (symbol, address) = match chain_id {
-            1 | 42161 | 10 | 8453 => ("ETH", Address::zero()),
-            137 => ("MATIC", Address::zero()),
-            56 => ("BNB", Address::zero()),
-            _ => ("ETH", Address::zero()),
+            1 | 42161 | 10 | 8453 => ("ETH", Address::ZERO),
+            137 => ("MATIC", Address::ZERO),
+            56 => ("BNB", Address::ZERO),
+            _ => ("ETH", Address::ZERO),
         };
         Self::new(symbol, address, 18, chain_id)
     }
 
     /// Check if token is native
     pub fn is_native(&self) -> bool {
-        self.address == Address::zero()
+        self.address == Address::ZERO
     }
 }
 
@@ -105,7 +105,7 @@ pub struct SwapRoute {
 /// Swap execution result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SwapResult {
-    pub tx_hash: ethers::types::H256,
+    pub tx_hash: alloy::primitives::B256,
     pub from_amount: U256,
     pub to_amount: U256,
     pub gas_used: U256,
@@ -129,9 +129,9 @@ impl Default for SwapRequest {
         Self {
             from_token: Token::native(1),
             to_token: Token::native(1),
-            amount: U256::zero(),
+            amount: U256::ZERO,
             slippage_bps: 50, // 0.5% default slippage
-            recipient: Address::zero(),
+            recipient: Address::ZERO,
             deadline: 0,
             mev_protection: true,
         }

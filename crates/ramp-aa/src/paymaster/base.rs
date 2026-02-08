@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use chrono::Utc;
-use ethers::types::{Address, Bytes, U256};
+use alloy::primitives::{Address, Bytes, U256, keccak256};
 use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
+use k256::ecdsa::signature::hazmat::PrehashVerifier;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use ramp_common::{types::TenantId, Result};
 use tracing::info;
@@ -87,7 +88,7 @@ impl PaymasterService {
     /// Check daily usage for a user
     async fn check_daily_usage(&self, _sender: Address) -> Result<(u32, U256)> {
         // In production, would query database
-        Ok((0, U256::zero()))
+        Ok((0, U256::ZERO))
     }
 
     /// Record usage
@@ -99,22 +100,19 @@ impl PaymasterService {
     /// Sign paymaster data using ECDSA (secp256k1)
     ///
     /// Returns Ethereum-compatible signature in (r, s, v) format (65 bytes total).
-    /// The signature is over keccak256(user_op_hash || valid_until || valid_after).
+    /// The signature is over keccak256(valid_until || valid_after).
     ///
     /// SECURITY: The recovery ID (v) is properly computed from the signature,
     /// ensuring the signature can be verified on-chain using ECDSA.recover().
     /// For Ethereum: v = 27 + recovery_id (where recovery_id is 0 or 1)
     fn sign_paymaster_data(
         &self,
-        user_op_hash: &[u8],
         valid_until: u64,
         valid_after: u64,
     ) -> Result<Vec<u8>> {
-        use ethers::utils::keccak256;
-
-        // Construct the message to sign
+        // Construct the message to sign: validUntil || validAfter
+        // Must match the message reconstructed in validate()
         let mut data = Vec::new();
-        data.extend_from_slice(user_op_hash);
         data.extend_from_slice(&valid_until.to_be_bytes());
         data.extend_from_slice(&valid_after.to_be_bytes());
 
@@ -124,14 +122,14 @@ impl PaymasterService {
         // Create Ethereum signed message hash (EIP-191)
         let eth_message = "\x19Ethereum Signed Message:\n32".to_string();
         let mut prefixed = eth_message.into_bytes();
-        prefixed.extend_from_slice(&message_hash);
+        prefixed.extend_from_slice(message_hash.as_slice());
         let eth_signed_hash = keccak256(&prefixed);
 
         // Sign using ECDSA with recoverable signature
         // sign_prehash_recoverable returns (Signature, RecoveryId)
         let (signature, recovery_id): (Signature, RecoveryId) = self
             .signing_key
-            .sign_prehash_recoverable(&eth_signed_hash)
+            .sign_prehash_recoverable(eth_signed_hash.as_slice())
             .map_err(|e| ramp_common::Error::Internal(format!("Signing failed: {}", e)))?;
 
         // Convert to Ethereum signature format (r || s || v)
@@ -158,7 +156,6 @@ impl PaymasterService {
         message_hash: &[u8; 32],
         signature: &[u8; 65],
     ) -> std::result::Result<Address, String> {
-        use ethers::utils::keccak256;
         use k256::PublicKey;
 
         // Extract r, s, v from signature
@@ -212,16 +209,13 @@ impl PaymasterService {
 
     /// Get the Ethereum address derived from the signing key
     pub fn signer_address(&self) -> Address {
-        use ethers::utils::keccak256;
         use k256::PublicKey;
 
         let verifying_key = self.signing_key.verifying_key();
         let public_key = PublicKey::from(verifying_key);
-        // Use uncompressed format (65 bytes: 0x04 || x || y)
-        let encoded_point = public_key.to_encoded_point(false); // false = uncompressed
+        let encoded_point = public_key.to_encoded_point(false);
         let public_key_bytes = encoded_point.as_bytes();
 
-        // Ethereum address is last 20 bytes of keccak256(uncompressed_pubkey[1..])
         let hash = keccak256(&public_key_bytes[1..]);
         let mut address_bytes = [0u8; 20];
         address_bytes.copy_from_slice(&hash[12..]);
@@ -280,12 +274,13 @@ impl Paymaster for PaymasterService {
         // Create paymaster data
         // Format: paymaster address (20) + validUntil (6) + validAfter (6) + signature
         let mut paymaster_and_data = Vec::with_capacity(32 + 65);
-        paymaster_and_data.extend_from_slice(self.paymaster_address.as_bytes());
+        paymaster_and_data.extend_from_slice(self.paymaster_address.as_slice());
         paymaster_and_data.extend_from_slice(&valid_until.to_be_bytes()[2..8]); // 6 bytes
         paymaster_and_data.extend_from_slice(&valid_after.to_be_bytes()[2..8]); // 6 bytes
 
-        // Sign (in production, would use proper signature)
-        let signature = self.sign_paymaster_data(&user_op.call_data, valid_until, valid_after)?;
+        // Sign using validUntil and validAfter only
+        // Must match the message reconstructed in validate()
+        let signature = self.sign_paymaster_data(valid_until, valid_after)?;
         paymaster_and_data.extend_from_slice(&signature);
 
         info!(
@@ -303,8 +298,8 @@ impl Paymaster for PaymasterService {
     }
 
     async fn validate(&self, paymaster_data: &PaymasterData) -> Result<bool> {
-        use ethers::utils::keccak256;
-        use k256::ecdsa::{signature::Verifier, Signature};
+        use k256::ecdsa::Signature;
+        use k256::ecdsa::signature::hazmat::PrehashVerifier;
 
         let now = Utc::now().timestamp() as u64;
 
@@ -357,7 +352,7 @@ impl Paymaster for PaymasterService {
         // Extract r, s from signature (first 64 bytes)
         let r = &sig_bytes[0..32];
         let s = &sig_bytes[32..64];
-        // v is sig_bytes[64] but not used for verification
+        // v is sig_bytes[64] but not used for direct verification
 
         // Reconstruct r || s for k256 Signature
         let mut rs_bytes = [0u8; 64];
@@ -372,9 +367,8 @@ impl Paymaster for PaymasterService {
             }
         };
 
-        // Reconstruct the signed message
-        // Note: We don't have access to the original user_op_hash here
-        // In a full implementation, we would need to pass it or reconstruct it
+        // Reconstruct the signed message: validUntil || validAfter
+        // Must match the message constructed in sign_paymaster_data()
         let mut verify_data = Vec::new();
         verify_data.extend_from_slice(&paymaster_data.valid_until.to_be_bytes());
         verify_data.extend_from_slice(&paymaster_data.valid_after.to_be_bytes());
@@ -385,12 +379,12 @@ impl Paymaster for PaymasterService {
         // Create Ethereum signed message hash (EIP-191)
         let eth_message = "\x19Ethereum Signed Message:\n32".to_string();
         let mut prefixed = eth_message.into_bytes();
-        prefixed.extend_from_slice(&message_hash);
+        prefixed.extend_from_slice(message_hash.as_slice());
         let eth_signed_hash = keccak256(&prefixed);
 
-        // Verify signature
+        // Verify signature using verify_prehash (matches sign_prehash_recoverable used in signing)
         let verifying_key = self.verifying_key();
-        if verifying_key.verify(&eth_signed_hash, &signature).is_err() {
+        if verifying_key.verify_prehash(eth_signed_hash.as_slice(), &signature).is_err() {
             info!("Paymaster ECDSA signature verification failed");
             return Ok(false);
         }
@@ -408,7 +402,7 @@ impl Paymaster for PaymasterService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ethers::utils::keccak256;
+    use alloy::primitives::keccak256;
 
     /// Generate a test signing key (deterministic for reproducible tests)
     fn test_signing_key() -> Vec<u8> {
@@ -432,12 +426,11 @@ mod tests {
         let expected_address = service.signer_address();
 
         // Sign some data
-        let user_op_hash = [0xab; 32];
         let valid_until = 1700000000u64;
         let valid_after = 1699999000u64;
 
         let signature = service
-            .sign_paymaster_data(&user_op_hash, valid_until, valid_after)
+            .sign_paymaster_data(valid_until, valid_after)
             .expect("Signing failed");
 
         // Verify signature length is 65 bytes (r=32 + s=32 + v=1)
@@ -447,9 +440,8 @@ mod tests {
         let v = signature[64];
         assert!(v == 27 || v == 28, "v should be 27 or 28, got {}", v);
 
-        // Reconstruct the message hash for recovery
+        // Reconstruct the message hash for recovery (must match sign_paymaster_data)
         let mut data = Vec::new();
-        data.extend_from_slice(&user_op_hash);
         data.extend_from_slice(&valid_until.to_be_bytes());
         data.extend_from_slice(&valid_after.to_be_bytes());
         let message_hash = keccak256(&data);
@@ -457,7 +449,7 @@ mod tests {
         // Create Ethereum signed message hash (EIP-191)
         let eth_message = format!("\x19Ethereum Signed Message:\n32");
         let mut prefixed = eth_message.into_bytes();
-        prefixed.extend_from_slice(&message_hash);
+        prefixed.extend_from_slice(message_hash.as_slice());
         let eth_signed_hash = keccak256(&prefixed);
 
         // Recover signer address from signature
@@ -483,12 +475,11 @@ mod tests {
 
         // Sign multiple different messages to test different recovery IDs
         for i in 0..20 {
-            let user_op_hash = [i as u8; 32];
             let valid_until = 1700000000u64 + i as u64;
             let valid_after = 1699999000u64;
 
             let signature = service
-                .sign_paymaster_data(&user_op_hash, valid_until, valid_after)
+                .sign_paymaster_data(valid_until, valid_after)
                 .expect("Signing failed");
             let v = signature[64];
 
@@ -500,16 +491,15 @@ mod tests {
                 v
             );
 
-            // Reconstruct the message hash for recovery
+            // Reconstruct the message hash for recovery (must match sign_paymaster_data)
             let mut data = Vec::new();
-            data.extend_from_slice(&user_op_hash);
             data.extend_from_slice(&valid_until.to_be_bytes());
             data.extend_from_slice(&valid_after.to_be_bytes());
             let message_hash = keccak256(&data);
 
             let eth_message = format!("\x19Ethereum Signed Message:\n32");
             let mut prefixed = eth_message.into_bytes();
-            prefixed.extend_from_slice(&message_hash);
+            prefixed.extend_from_slice(message_hash.as_slice());
             let eth_signed_hash = keccak256(&prefixed);
 
             // Recover and verify
@@ -535,7 +525,7 @@ mod tests {
         let address = service.signer_address();
 
         // The address should be non-zero
-        assert_ne!(address, Address::zero());
+        assert_ne!(address, Address::ZERO);
 
         // The address should be deterministic
         let service2 = PaymasterService::new(paymaster_address, test_signing_key())
@@ -569,12 +559,11 @@ mod tests {
         let service = PaymasterService::new(paymaster_address, test_signing_key())
             .expect("Failed to create PaymasterService");
 
-        let user_op_hash = [0xde; 32];
         let valid_until = 1700000000u64;
         let valid_after = 1699999000u64;
 
         let signature = service
-            .sign_paymaster_data(&user_op_hash, valid_until, valid_after)
+            .sign_paymaster_data(valid_until, valid_after)
             .expect("Signing failed");
 
         // Verify r is 32 bytes (first 32 bytes)
@@ -654,7 +643,7 @@ mod tests {
 
         // Verify the embedded address matches
         let embedded_address = &paymaster_data.paymaster_and_data[0..20];
-        assert_eq!(embedded_address, paymaster_address.as_bytes());
+        assert_eq!(embedded_address, paymaster_address.as_slice());
 
         // Verify the signature portion
         let sig_start = 32; // 20 + 6 + 6

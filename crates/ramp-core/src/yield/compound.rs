@@ -9,12 +9,10 @@
 //! local development and testing.
 
 use async_trait::async_trait;
-use ethers::abi::{encode, Token};
-use ethers::providers::Middleware;
-use ethers::types::{Address, Bytes, H256, U256};
+use alloy::primitives::{Address, Bytes, B256, U256};
+use alloy::providers::Provider;
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
@@ -129,7 +127,7 @@ pub struct CompoundV3Protocol {
     account: Address,
     supported_tokens: HashMap<Address, CompoundTokenConfig>,
     /// Optional JSON-RPC provider for on-chain reads.
-    provider: Option<Arc<ethers::providers::Provider<ethers::providers::Http>>>,
+    provider: Option<alloy::providers::RootProvider<alloy::transports::http::Http<reqwest::Client>>>,
     /// HTTP client for Compound V3 REST API calls.
     http: reqwest::Client,
     // Simulated state -- used only when provider is None.
@@ -165,15 +163,17 @@ impl CompoundV3Protocol {
         account: Address,
         rpc_url: &str,
     ) -> Result<Self> {
-        let provider = ethers::providers::Provider::<ethers::providers::Http>::try_from(rpc_url)
-            .map_err(|e| Error::Internal(format!("Failed to create provider: {}", e)))?;
+        let url: reqwest::Url = rpc_url.parse()
+            .map_err(|e| Error::Internal(format!("Invalid RPC URL: {}", e)))?;
+        let provider = alloy::providers::ProviderBuilder::new()
+            .on_http(url);
 
         Ok(Self {
             chain_id,
             addresses: addresses.clone(),
             account,
             supported_tokens: Self::default_tokens(chain_id, &addresses),
-            provider: Some(Arc::new(provider)),
+            provider: Some(provider),
             http: reqwest::Client::new(),
             balances: RwLock::new(HashMap::new()),
             apy_cache: RwLock::new(HashMap::new()),
@@ -395,6 +395,18 @@ impl CompoundV3Protocol {
         }
     }
 
+    /// ABI-encode an address as a 32-byte word (left-padded with zeros).
+    fn abi_encode_address(addr: Address) -> [u8; 32] {
+        let mut word = [0u8; 32];
+        word[12..32].copy_from_slice(addr.as_slice());
+        word
+    }
+
+    /// ABI-encode a U256 as a 32-byte big-endian word.
+    fn abi_encode_u256(val: U256) -> [u8; 32] {
+        val.to_be_bytes::<32>()
+    }
+
     /// Fetch APY on-chain by calling `getUtilization()` then
     /// `getSupplyRate(utilization)` on the Comet contract.
     ///
@@ -411,59 +423,59 @@ impl CompoundV3Protocol {
 
         // Step 1: getUtilization() -> uint256
         let utilization = {
-            let tx = ethers::types::TransactionRequest::new()
+            let tx = alloy::rpc::types::TransactionRequest::default()
                 .to(comet)
-                .data(Bytes::from(GET_UTILIZATION_SELECTOR.to_vec()));
+                .input(alloy::rpc::types::TransactionInput::new(Bytes::from(GET_UTILIZATION_SELECTOR.to_vec())));
 
             let result = provider
-                .call(&tx.into(), None)
+                .call(&tx)
                 .await
                 .map_err(|e| Error::ExternalService {
                     service: "Compound V3 on-chain".to_string(),
                     message: format!("eth_call getUtilization failed: {}", e),
                 })?;
 
-            let data = result.to_vec();
+            let data: &[u8] = result.as_ref();
             if data.len() < 32 {
                 return Err(Error::ExternalService {
                     service: "Compound V3 on-chain".to_string(),
                     message: "getUtilization response too short".to_string(),
                 });
             }
-            U256::from_big_endian(&data[0..32])
+            U256::from_be_slice(&data[0..32])
         };
 
         // Step 2: getSupplyRate(uint256 utilization) -> uint256
         let supply_rate = {
             let mut calldata = Vec::with_capacity(36);
             calldata.extend_from_slice(&GET_SUPPLY_RATE_SELECTOR);
-            calldata.extend_from_slice(&encode(&[Token::Uint(utilization)]));
+            calldata.extend_from_slice(&Self::abi_encode_u256(utilization));
 
-            let tx = ethers::types::TransactionRequest::new()
+            let tx = alloy::rpc::types::TransactionRequest::default()
                 .to(comet)
-                .data(Bytes::from(calldata));
+                .input(alloy::rpc::types::TransactionInput::new(Bytes::from(calldata)));
 
             let result = provider
-                .call(&tx.into(), None)
+                .call(&tx)
                 .await
                 .map_err(|e| Error::ExternalService {
                     service: "Compound V3 on-chain".to_string(),
                     message: format!("eth_call getSupplyRate failed: {}", e),
                 })?;
 
-            let data = result.to_vec();
+            let data: &[u8] = result.as_ref();
             if data.len() < 32 {
                 return Err(Error::ExternalService {
                     service: "Compound V3 on-chain".to_string(),
                     message: "getSupplyRate response too short".to_string(),
                 });
             }
-            U256::from_big_endian(&data[0..32])
+            U256::from_be_slice(&data[0..32])
         };
 
         // Convert per-second rate to APY percentage.
         // APY = supplyRate * SECONDS_PER_YEAR / 1e18 * 100
-        let rate_f64 = supply_rate.as_u128() as f64;
+        let rate_f64 = u128::try_from(supply_rate).unwrap_or(u128::MAX) as f64;
         let apy_pct = (rate_f64 / RATE_SCALE) * SECONDS_PER_YEAR * 100.0;
 
         info!(
@@ -502,26 +514,26 @@ impl CompoundV3Protocol {
         // balanceOf(address) -> uint256
         let mut calldata = Vec::with_capacity(36);
         calldata.extend_from_slice(&BALANCE_OF_SELECTOR);
-        calldata.extend_from_slice(&encode(&[Token::Address(self.account)]));
+        calldata.extend_from_slice(&Self::abi_encode_address(self.account));
 
-        let tx = ethers::types::TransactionRequest::new()
+        let tx = alloy::rpc::types::TransactionRequest::default()
             .to(comet)
-            .data(Bytes::from(calldata));
+            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(calldata)));
 
         let result = provider
-            .call(&tx.into(), None)
+            .call(&tx)
             .await
             .map_err(|e| Error::ExternalService {
                 service: "Compound V3 on-chain".to_string(),
                 message: format!("eth_call balanceOf failed: {}", e),
             })?;
 
-        let data = result.to_vec();
+        let data: &[u8] = result.as_ref();
         if data.len() < 32 {
-            return Ok(U256::zero());
+            return Ok(U256::ZERO);
         }
 
-        Ok(U256::from_big_endian(&data[0..32]))
+        Ok(U256::from_be_slice(&data[0..32]))
     }
 
     /// Check if the account is liquidatable on-chain.
@@ -536,27 +548,27 @@ impl CompoundV3Protocol {
         // isLiquidatable(address account) -> bool
         let mut calldata = Vec::with_capacity(36);
         calldata.extend_from_slice(&IS_LIQUIDATABLE_SELECTOR);
-        calldata.extend_from_slice(&encode(&[Token::Address(self.account)]));
+        calldata.extend_from_slice(&Self::abi_encode_address(self.account));
 
-        let tx = ethers::types::TransactionRequest::new()
+        let tx = alloy::rpc::types::TransactionRequest::default()
             .to(comet)
-            .data(Bytes::from(calldata));
+            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(calldata)));
 
         let result = provider
-            .call(&tx.into(), None)
+            .call(&tx)
             .await
             .map_err(|e| Error::ExternalService {
                 service: "Compound V3 on-chain".to_string(),
                 message: format!("eth_call isLiquidatable failed: {}", e),
             })?;
 
-        let data = result.to_vec();
+        let data: &[u8] = result.as_ref();
         if data.len() < 32 {
             return Ok(false);
         }
 
         // bool is encoded as uint256; non-zero = true
-        let val = U256::from_big_endian(&data[0..32]);
+        let val = U256::from_be_slice(&data[0..32]);
         Ok(!val.is_zero())
     }
 
@@ -569,14 +581,10 @@ impl CompoundV3Protocol {
         // supply(address asset, uint amount)
         let selector: [u8; 4] = [0xf2, 0xb9, 0xfa, 0xdb];
 
-        let mut data = Vec::new();
+        let mut data = Vec::with_capacity(4 + 64);
         data.extend_from_slice(&selector);
-
-        let params = encode(&[
-            Token::Address(token),
-            Token::Uint(amount),
-        ]);
-        data.extend_from_slice(&params);
+        data.extend_from_slice(&Self::abi_encode_address(token));
+        data.extend_from_slice(&Self::abi_encode_u256(amount));
 
         Bytes::from(data)
     }
@@ -586,14 +594,10 @@ impl CompoundV3Protocol {
         // withdraw(address asset, uint amount)
         let selector: [u8; 4] = [0xf3, 0xef, 0x3a, 0x3a];
 
-        let mut data = Vec::new();
+        let mut data = Vec::with_capacity(4 + 64);
         data.extend_from_slice(&selector);
-
-        let params = encode(&[
-            Token::Address(token),
-            Token::Uint(amount),
-        ]);
-        data.extend_from_slice(&params);
+        data.extend_from_slice(&Self::abi_encode_address(token));
+        data.extend_from_slice(&Self::abi_encode_u256(amount));
 
         Bytes::from(data)
     }
@@ -603,15 +607,11 @@ impl CompoundV3Protocol {
         // claim(address comet, address src, bool shouldAccrue)
         let selector: [u8; 4] = [0xb8, 0x8c, 0x91, 0x48];
 
-        let mut data = Vec::new();
+        let mut data = Vec::with_capacity(4 + 96);
         data.extend_from_slice(&selector);
-
-        let params = encode(&[
-            Token::Address(comet),
-            Token::Address(self.account),
-            Token::Bool(true),
-        ]);
-        data.extend_from_slice(&params);
+        data.extend_from_slice(&Self::abi_encode_address(comet));
+        data.extend_from_slice(&Self::abi_encode_address(self.account));
+        data.extend_from_slice(&Self::abi_encode_u256(U256::from(1))); // true
 
         Bytes::from(data)
     }
@@ -622,9 +622,9 @@ impl CompoundV3Protocol {
     }
 
     /// Simulate transaction
-    async fn simulate_tx(&self, _calldata: Bytes) -> Result<H256> {
+    async fn simulate_tx(&self, _calldata: Bytes) -> Result<B256> {
         let hash_bytes: [u8; 32] = rand::random();
-        Ok(H256::from_slice(&hash_bytes))
+        Ok(B256::from_slice(&hash_bytes))
     }
 
     /// Returns `true` when the protocol is connected to a live RPC node.
@@ -666,7 +666,7 @@ impl YieldProtocol for CompoundV3Protocol {
         Ok(apy)
     }
 
-    async fn deposit(&self, token: Address, amount: U256) -> Result<H256> {
+    async fn deposit(&self, token: Address, amount: U256) -> Result<B256> {
         if !self.supports_token(token) {
             return Err(Error::Business(format!("Token not supported: {:?}", token)));
         }
@@ -684,7 +684,7 @@ impl YieldProtocol for CompoundV3Protocol {
         // Update simulated balance
         {
             let mut balances = self.balances.write().await;
-            let balance = balances.entry(token).or_insert(U256::zero());
+            let balance = balances.entry(token).or_insert(U256::ZERO);
             *balance = balance.saturating_add(amount);
         }
 
@@ -697,7 +697,7 @@ impl YieldProtocol for CompoundV3Protocol {
         Ok(tx_hash)
     }
 
-    async fn withdraw(&self, token: Address, amount: U256) -> Result<H256> {
+    async fn withdraw(&self, token: Address, amount: U256) -> Result<B256> {
         if !self.supports_token(token) {
             return Err(Error::Business(format!("Token not supported: {:?}", token)));
         }
@@ -755,7 +755,7 @@ impl YieldProtocol for CompoundV3Protocol {
 
         // Fallback: simulated in-memory balance
         let balances = self.balances.read().await;
-        Ok(*balances.get(&token).unwrap_or(&U256::zero()))
+        Ok(*balances.get(&token).unwrap_or(&U256::ZERO))
     }
 
     async fn accrued_yield(&self, token: Address) -> Result<U256> {
@@ -765,7 +765,7 @@ impl YieldProtocol for CompoundV3Protocol {
         Ok(yield_amount)
     }
 
-    async fn claim_rewards(&self) -> Result<Option<H256>> {
+    async fn claim_rewards(&self) -> Result<Option<B256>> {
         let comets = self.get_comet_addresses();
         if comets.is_empty() {
             return Ok(None);
@@ -867,7 +867,7 @@ mod tests {
         let protocol = CompoundV3Protocol::new(1, addresses, test_account());
 
         let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse().unwrap();
-        let amount = U256::from(1000) * U256::exp10(6); // 1000 USDC
+        let amount = U256::from(1000) * U256::from(1_000_000u64); // 1000 USDC
 
         // Deposit
         let tx = protocol.deposit(usdc, amount).await;
@@ -878,7 +878,7 @@ mod tests {
         assert_eq!(balance, amount);
 
         // Withdraw half
-        let withdraw_amount = amount / 2;
+        let withdraw_amount = amount / U256::from(2);
         let tx = protocol.withdraw(usdc, withdraw_amount).await;
         assert!(tx.is_ok());
 

@@ -1,4 +1,4 @@
-use ethers::types::{Address, Bytes, U256};
+use alloy::primitives::{Address, Bytes, U256};
 use serde::{Deserialize, Serialize};
 
 /// Chain configuration for AA

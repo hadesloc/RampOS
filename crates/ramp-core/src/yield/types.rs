@@ -1,7 +1,7 @@
 //! Yield module types and data structures
 
 use chrono::{DateTime, Utc};
-use ethers::types::{Address, H256, U256};
+use alloy::primitives::{Address, B256, U256};
 use serde::{Deserialize, Serialize};
 
 /// Unique identifier for yield protocols
@@ -80,7 +80,7 @@ impl YieldPosition {
             token,
             principal,
             current_value: principal,
-            accrued_yield: U256::zero(),
+            accrued_yield: U256::ZERO,
             apy_at_deposit: apy,
             created_at: now,
             updated_at: now,
@@ -105,7 +105,7 @@ impl Default for YieldAllocationConfig {
     fn default() -> Self {
         Self {
             max_allocation_percent: 80,
-            max_per_protocol: U256::from(1_000_000) * U256::exp10(6), // 1M USDC
+            max_per_protocol: U256::from(1_000_000) * U256::from(1_000_000u64), // 1M USDC
             min_health_factor: 1.5,
             enabled_protocols: vec![ProtocolId::AaveV3, ProtocolId::CompoundV3],
         }
@@ -137,7 +137,7 @@ pub struct YieldPositionReport {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct YieldTransaction {
     pub id: String,
-    pub tx_hash: H256,
+    pub tx_hash: B256,
     pub protocol: ProtocolId,
     pub token: Address,
     pub operation: YieldOperation,

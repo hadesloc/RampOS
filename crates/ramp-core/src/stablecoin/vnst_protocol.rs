@@ -9,7 +9,7 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ethers::types::{Address, H256, U256};
+use alloy::primitives::{Address, B256, U256};
 use ramp_common::{
     types::{TenantId, UserId},
     Error, Result,
@@ -247,7 +247,7 @@ pub trait VnstProtocolDataProvider: Send + Sync {
         chain_id: u64,
         recipient: Address,
         amount: U256,
-    ) -> Result<H256>;
+    ) -> Result<B256>;
 
     /// Execute burn on chain
     async fn execute_burn(
@@ -255,7 +255,7 @@ pub trait VnstProtocolDataProvider: Send + Sync {
         chain_id: u64,
         from: Address,
         amount: U256,
-    ) -> Result<H256>;
+    ) -> Result<B256>;
 }
 
 /// VNST Protocol Service
@@ -283,7 +283,7 @@ impl VnstProtocolService {
     /// Convert VNST base units to VND
     pub fn vnst_to_vnd(&self, vnst_amount: U256) -> Decimal {
         let divisor = U256::from(10u64).pow(U256::from(18));
-        let vnd_u64 = (vnst_amount / divisor).as_u64();
+        let vnd_u64: u64 = (vnst_amount / divisor).try_into().unwrap_or(0u64);
         Decimal::from(vnd_u64)
     }
 
@@ -666,9 +666,9 @@ impl VnstProtocolDataProvider for MockVnstProtocolDataProvider {
         _chain_id: u64,
         _recipient: Address,
         _amount: U256,
-    ) -> Result<H256> {
+    ) -> Result<B256> {
         // Mock: Return a dummy tx hash
-        Ok(H256::zero())
+        Ok(B256::ZERO)
     }
 
     async fn execute_burn(
@@ -676,8 +676,8 @@ impl VnstProtocolDataProvider for MockVnstProtocolDataProvider {
         _chain_id: u64,
         _from: Address,
         _amount: U256,
-    ) -> Result<H256> {
-        Ok(H256::zero())
+    ) -> Result<B256> {
+        Ok(B256::ZERO)
     }
 }
 
@@ -828,7 +828,7 @@ mod tests {
 
         let reserves = service.get_reserves(&TenantId::new("tenant1")).await.unwrap();
 
-        assert!(reserves.total_supply > U256::zero());
+        assert!(reserves.total_supply > U256::ZERO);
         assert!(reserves.total_vnd_reserves > Decimal::ZERO);
         assert!(reserves.collateralization_ratio >= Decimal::from(100));
         assert!(reserves.peg_healthy);

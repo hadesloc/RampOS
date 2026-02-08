@@ -9,7 +9,7 @@
 
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
-use ethers::types::{Address, U256};
+use alloy::primitives::{Address, U256};
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use tracing;
@@ -350,7 +350,7 @@ impl CrossChainBridge for StargateBridge {
 
                     // Parse fees from the API response
                     let stargate_fee =
-                        U256::from_dec_str(&api_resp.stargate_fee).unwrap_or_else(|_| {
+                        api_resp.stargate_fee.parse::<U256>().unwrap_or_else(|_| {
                             tracing::warn!(
                                 "Failed to parse Stargate fee '{}', using fallback",
                                 api_resp.stargate_fee
@@ -360,7 +360,7 @@ impl CrossChainBridge for StargateBridge {
 
                     // LZ messaging fee is in native gas, convert to approximate USD
                     // For simplicity we treat it as a gas overhead estimate
-                    let lz_fee = U256::from_dec_str(&api_resp.lz_fee).unwrap_or_else(|_| {
+                    let lz_fee = api_resp.lz_fee.parse::<U256>().unwrap_or_else(|_| {
                         self.estimate_gas_fallback(from_chain, to_chain)
                     });
                     // Cap gas fee to a reasonable USD-denominated value (6 decimals)
@@ -375,11 +375,11 @@ impl CrossChainBridge for StargateBridge {
 
                     // Parse amount received
                     let amount_received =
-                        U256::from_dec_str(&api_resp.amount_received).unwrap_or_else(|_| {
+                        api_resp.amount_received.parse::<U256>().unwrap_or_else(|_| {
                             if amount > stargate_fee {
                                 amount - stargate_fee
                             } else {
-                                U256::zero()
+                                U256::ZERO
                             }
                         });
 
@@ -402,7 +402,7 @@ impl CrossChainBridge for StargateBridge {
                     let amount_out = if amount > bridge_fee {
                         amount - bridge_fee
                     } else {
-                        U256::zero()
+                        U256::ZERO
                     };
 
                     (bridge_fee, gas_fee, amount_out, self.estimated_time(from_chain, to_chain))

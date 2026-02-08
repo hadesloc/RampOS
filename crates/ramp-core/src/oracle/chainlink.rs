@@ -4,7 +4,7 @@
 
 use super::{Price, PriceOracle, PriceSource};
 use async_trait::async_trait;
-use ethers::types::Address;
+use alloy::primitives::Address;
 use ramp_common::{Error, Result};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -229,8 +229,8 @@ mod tests {
     #[test]
     fn test_add_feed() {
         let mut oracle = ChainlinkOracle::with_default_config();
-        let token = Address::zero();
-        let feed = Address::zero();
+        let token = Address::ZERO;
+        let feed = Address::ZERO;
 
         oracle.add_feed(56, token, feed); // BSC
 
@@ -257,7 +257,7 @@ mod tests {
     fn test_staleness_check() {
         let oracle = ChainlinkOracle::with_default_config();
 
-        let mut price = Price::new(Address::zero(), 1, Decimal::ONE, PriceSource::Chainlink);
+        let mut price = Price::new(Address::ZERO, 1, Decimal::ONE, PriceSource::Chainlink);
         assert!(!oracle.is_stale(&price));
 
         // Make price old

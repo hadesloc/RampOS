@@ -9,7 +9,7 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-use ethers::types::{Address, H256, U256};
+use alloy::primitives::{Address, B256, U256};
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -92,7 +92,7 @@ impl Default for StrategyConfig {
             allowed_protocols: vec![ProtocolId::AaveV3, ProtocolId::CompoundV3],
             rebalance_interval_secs: 3600, // 1 hour
             gas_aware_rebalancing: true,
-            min_rebalance_amount: U256::from(100) * U256::exp10(6), // 100 USDC
+            min_rebalance_amount: U256::from(100) * U256::from(1_000_000u64), // 100 USDC
         }
     }
 }
@@ -130,7 +130,7 @@ pub trait YieldStrategy: Send + Sync {
         &self,
         service: &YieldService,
         token: Address,
-    ) -> Result<Vec<H256>>;
+    ) -> Result<Vec<B256>>;
 
     /// Check if emergency exit is needed
     async fn check_emergency_exit(
@@ -164,7 +164,7 @@ impl ConservativeStrategy {
                 allowed_protocols: vec![ProtocolId::AaveV3], // Only Aave (more established)
                 rebalance_interval_secs: 86400, // Daily check
                 gas_aware_rebalancing: true,
-                min_rebalance_amount: U256::from(500) * U256::exp10(6), // 500 USDC min
+                min_rebalance_amount: U256::from(500) * U256::from(1_000_000u64), // 500 USDC min
             },
         }
     }
@@ -242,12 +242,17 @@ impl YieldStrategy for ConservativeStrategy {
                         best = Some((pid, apy));
                     }
                 }
+            } else {
+                tracing::warn!(
+                    protocol = %pid,
+                    "Failed to fetch APY for allocation, skipping protocol"
+                );
             }
         }
 
         match best {
             Some((protocol_id, _)) => Ok(vec![(protocol_id, amount)]),
-            None => Ok(vec![]), // No suitable protocol
+            None => Ok(vec![]),
         }
     }
 
@@ -255,7 +260,7 @@ impl YieldStrategy for ConservativeStrategy {
         &self,
         service: &YieldService,
         token: Address,
-    ) -> Result<Vec<H256>> {
+    ) -> Result<Vec<B256>> {
         info!(
             strategy = %self.config.name,
             "Executing conservative rebalance"
@@ -334,7 +339,7 @@ impl BalancedStrategy {
                 allowed_protocols: vec![ProtocolId::AaveV3, ProtocolId::CompoundV3],
                 rebalance_interval_secs: 3600, // Hourly
                 gas_aware_rebalancing: true,
-                min_rebalance_amount: U256::from(100) * U256::exp10(6),
+                min_rebalance_amount: U256::from(100) * U256::from(1_000_000u64),
             },
         }
     }
@@ -382,14 +387,16 @@ impl YieldStrategy for BalancedStrategy {
 
         // Check if highest APY protocol has less allocation than it should
         let best = &apys[0];
-        let total: U256 = apys.iter().map(|(_, _, a)| *a).fold(U256::zero(), |acc, a| acc + a);
+        let total: U256 = apys.iter().map(|(_, _, a)| *a).fold(U256::ZERO, |acc, a| acc + a);
 
         if total.is_zero() {
             return Ok(false);
         }
 
         // If best protocol has less than 60% and APY diff > threshold, rebalance
-        let best_allocation_pct = (best.2.as_u128() as f64 / total.as_u128() as f64) * 100.0;
+        let best_alloc: u128 = best.2.try_into().unwrap_or(u128::MAX);
+        let total_val: u128 = total.try_into().unwrap_or(u128::MAX);
+        let best_allocation_pct = (best_alloc as f64 / total_val as f64) * 100.0;
         let apy_diff = best.1 - apys.last().map(|(_, a, _)| *a).unwrap_or(0.0);
 
         Ok(best_allocation_pct < 60.0 && apy_diff > self.config.rebalance_apy_threshold)
@@ -416,6 +423,11 @@ impl YieldStrategy for BalancedStrategy {
                 if apy >= self.config.min_apy_threshold {
                     protocol_apys.push((pid, apy));
                 }
+            } else {
+                tracing::warn!(
+                    protocol = %pid,
+                    "Failed to fetch APY for balanced allocation, skipping"
+                );
             }
         }
 
@@ -445,7 +457,7 @@ impl YieldStrategy for BalancedStrategy {
         &self,
         service: &YieldService,
         token: Address,
-    ) -> Result<Vec<H256>> {
+    ) -> Result<Vec<B256>> {
         info!(
             strategy = %self.config.name,
             "Executing balanced rebalance"
@@ -514,7 +526,7 @@ impl AggressiveStrategy {
                 allowed_protocols: vec![ProtocolId::AaveV3, ProtocolId::CompoundV3],
                 rebalance_interval_secs: 1800, // Every 30 minutes
                 gas_aware_rebalancing: false, // Chase yield regardless of gas
-                min_rebalance_amount: U256::from(50) * U256::exp10(6), // Lower threshold
+                min_rebalance_amount: U256::from(50) * U256::from(1_000_000u64), // Lower threshold
             },
         }
     }
@@ -541,7 +553,7 @@ impl YieldStrategy for AggressiveStrategy {
         // Aggressive: rebalance on any meaningful APY difference
         let mut best_apy = 0.0f64;
         let mut current_weighted_apy = 0.0f64;
-        let mut total_allocation = U256::zero();
+        let mut total_allocation = U256::ZERO;
 
         for protocol in registry.all() {
             if !protocol.supports_token(token) {
@@ -558,7 +570,7 @@ impl YieldStrategy for AggressiveStrategy {
             }
 
             if !allocation.is_zero() {
-                current_weighted_apy += apy * allocation.as_u128() as f64;
+                current_weighted_apy += apy * u128::try_from(allocation).unwrap_or(u128::MAX) as f64;
                 total_allocation = total_allocation + allocation;
             }
         }
@@ -567,7 +579,7 @@ impl YieldStrategy for AggressiveStrategy {
             return Ok(false);
         }
 
-        current_weighted_apy /= total_allocation.as_u128() as f64;
+        current_weighted_apy /= u128::try_from(total_allocation).unwrap_or(u128::MAX) as f64;
 
         Ok(best_apy - current_weighted_apy > self.config.rebalance_apy_threshold)
     }
@@ -591,6 +603,11 @@ impl YieldStrategy for AggressiveStrategy {
                 if best.is_none() || apy > best.as_ref().map(|(_, a)| *a).unwrap_or(0.0) {
                     best = Some((pid, apy));
                 }
+            } else {
+                tracing::warn!(
+                    protocol = %pid,
+                    "Failed to fetch APY for aggressive allocation, skipping"
+                );
             }
         }
 
@@ -604,7 +621,7 @@ impl YieldStrategy for AggressiveStrategy {
         &self,
         service: &YieldService,
         token: Address,
-    ) -> Result<Vec<H256>> {
+    ) -> Result<Vec<B256>> {
         info!(
             strategy = %self.config.name,
             "Executing aggressive rebalance"
@@ -743,7 +760,7 @@ impl StrategyManager {
         registry: &ProtocolRegistry,
         token: Address,
         current_allocations: &HashMap<ProtocolId, U256>,
-    ) -> Result<Vec<H256>> {
+    ) -> Result<Vec<B256>> {
         // Check if rebalancing is due
         if !self.is_rebalance_due(token).await? {
             return Ok(vec![]);
@@ -787,7 +804,7 @@ impl StrategyManager {
         service: &YieldService,
         registry: &ProtocolRegistry,
         tokens: &[Address],
-    ) -> Result<Vec<H256>> {
+    ) -> Result<Vec<B256>> {
         let active_id = {
             let active = self.active_strategy.read().await;
             match *active {
@@ -804,8 +821,15 @@ impl StrategyManager {
         let mut txs = Vec::new();
         for protocol_id in exit_protocols {
             for token in tokens {
-                if let Ok(tx) = service.emergency_withdraw(protocol_id, *token).await {
-                    txs.push(tx);
+                match service.emergency_withdraw(protocol_id, *token).await {
+                    Ok(tx) => txs.push(tx),
+                    Err(e) => {
+                        tracing::error!(
+                            protocol = %protocol_id,
+                            error = %e,
+                            "Emergency withdraw failed for token"
+                        );
+                    }
                 }
             }
         }

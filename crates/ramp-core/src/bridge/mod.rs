@@ -11,7 +11,7 @@ pub use stargate::StargateBridge;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ethers::types::{Address, H256, U256};
+use alloy::primitives::{Address, B256, U256};
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -21,7 +21,7 @@ use std::sync::Arc;
 pub type ChainId = u64;
 
 /// Transaction hash
-pub type TxHash = H256;
+pub type TxHash = B256;
 
 /// Supported chains for bridging
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -360,8 +360,16 @@ impl BridgeRegistry {
         let mut quotes = Vec::new();
 
         for bridge in self.bridges.values() {
-            if let Ok(quote) = bridge.quote(from_chain, to_chain, token, amount, recipient).await {
-                quotes.push(quote);
+            match bridge.quote(from_chain, to_chain, token, amount, recipient).await {
+                Ok(quote) => quotes.push(quote),
+                Err(e) => {
+                    tracing::warn!(
+                        from_chain = from_chain,
+                        to_chain = to_chain,
+                        error = %e,
+                        "Bridge quote failed, skipping provider"
+                    );
+                }
             }
         }
 

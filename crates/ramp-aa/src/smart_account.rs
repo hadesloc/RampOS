@@ -1,5 +1,6 @@
 use async_trait::async_trait;
-use ethers::types::{Address, Bytes, U256};
+use alloy::primitives::{Address, Bytes, U256, keccak256};
+use alloy::dyn_abi::DynSolValue;
 use ramp_common::{
     types::{TenantId, UserId},
     Result,
@@ -77,35 +78,30 @@ impl SmartAccountService {
             owner,
             account_type: SmartAccountType::SimpleAccount,
             is_deployed,
-            nonce: U256::zero(),
+            nonce: U256::ZERO,
         })
     }
 
     /// Compute deterministic salt
     fn compute_salt(&self, tenant_id: &TenantId, user_id: &UserId) -> U256 {
-        use ethers::utils::keccak256;
-
         let data = format!("{}:{}", tenant_id.0, user_id.0);
         let hash = keccak256(data.as_bytes());
-        U256::from_big_endian(&hash)
+        U256::from_be_bytes(hash.0)
     }
 
     /// Compute counterfactual address using CREATE2
     fn compute_address(&self, _owner: Address, salt: U256) -> Result<Address> {
-        use ethers::utils::keccak256;
-
         // SimpleAccount init code hash (simplified)
         // In production, would use actual bytecode
-        let init_code_hash = keccak256([0u8; 32]);
+        let init_code_hash = keccak256(&[0u8; 32]);
 
         // CREATE2 address = keccak256(0xff ++ factory ++ salt ++ init_code_hash)[12:]
         let mut data = Vec::with_capacity(85);
         data.push(0xff);
-        data.extend_from_slice(self.factory_address.as_bytes());
-        let mut salt_bytes = [0u8; 32];
-        salt.to_big_endian(&mut salt_bytes);
+        data.extend_from_slice(self.factory_address.as_slice());
+        let salt_bytes = salt.to_be_bytes::<32>();
         data.extend_from_slice(&salt_bytes);
-        data.extend_from_slice(&init_code_hash);
+        data.extend_from_slice(init_code_hash.as_slice());
 
         let hash = keccak256(&data);
         Ok(Address::from_slice(&hash[12..]))
@@ -124,7 +120,7 @@ impl SmartAccountService {
         // Empty call data for creation-only op
         let call_data = Bytes::default();
 
-        let mut op = UserOperation::new(account.address, U256::zero(), call_data);
+        let mut op = UserOperation::new(account.address, U256::ZERO, call_data);
         op = op.with_init_code(init_code);
 
         Ok(op)
@@ -132,18 +128,19 @@ impl SmartAccountService {
 
     /// Build init code
     fn build_init_code(&self, owner: Address, salt: U256) -> Result<Bytes> {
-        use ethers::abi::{encode, Token};
-
         // Factory address + createAccount(owner, salt) call
         let mut data = Vec::new();
-        data.extend_from_slice(self.factory_address.as_bytes());
+        data.extend_from_slice(self.factory_address.as_slice());
 
         // Function selector for createAccount(address,uint256)
         let selector = [0x5f, 0xbf, 0xb9, 0xcf]; // keccak256("createAccount(address,uint256)")[:4]
         data.extend_from_slice(&selector);
 
-        // Encode parameters
-        let params = encode(&[Token::Address(owner), Token::Uint(salt)]);
+        // Encode parameters using alloy DynSolValue
+        let params = DynSolValue::Tuple(vec![
+            DynSolValue::Address(owner),
+            DynSolValue::Uint(salt, 256),
+        ]).abi_encode();
         data.extend_from_slice(&params);
 
         Ok(Bytes::from(data))
@@ -157,19 +154,17 @@ impl SmartAccountService {
         value: U256,
         data: Option<Bytes>,
     ) -> Result<UserOperation> {
-        use ethers::abi::{encode, Token};
-
         // Build execute(address,uint256,bytes) call
         let selector = [0xb6, 0x1d, 0x27, 0xf6]; // keccak256("execute(address,uint256,bytes)")[:4]
 
         let mut call_data = Vec::new();
         call_data.extend_from_slice(&selector);
 
-        let params = encode(&[
-            Token::Address(to),
-            Token::Uint(value),
-            Token::Bytes(data.unwrap_or_default().to_vec()),
-        ]);
+        let params = DynSolValue::Tuple(vec![
+            DynSolValue::Address(to),
+            DynSolValue::Uint(value, 256),
+            DynSolValue::Bytes(data.unwrap_or_default().to_vec()),
+        ]).abi_encode();
         call_data.extend_from_slice(&params);
 
         Ok(UserOperation::new(
@@ -185,26 +180,24 @@ impl SmartAccountService {
         account: &SmartAccount,
         calls: Vec<(Address, U256, Bytes)>,
     ) -> Result<UserOperation> {
-        use ethers::abi::{encode, Token};
-
         // Build executeBatch(address[],uint256[],bytes[]) call
         let selector = [0x34, 0xfc, 0xd5, 0xbe]; // keccak256("executeBatch(address[],uint256[],bytes[])")[:4]
 
-        let targets: Vec<Token> = calls.iter().map(|(t, _, _)| Token::Address(*t)).collect();
-        let values: Vec<Token> = calls.iter().map(|(_, v, _)| Token::Uint(*v)).collect();
-        let datas: Vec<Token> = calls
+        let targets: Vec<DynSolValue> = calls.iter().map(|(t, _, _)| DynSolValue::Address(*t)).collect();
+        let values: Vec<DynSolValue> = calls.iter().map(|(_, v, _)| DynSolValue::Uint(*v, 256)).collect();
+        let datas: Vec<DynSolValue> = calls
             .iter()
-            .map(|(_, _, d)| Token::Bytes(d.to_vec()))
+            .map(|(_, _, d)| DynSolValue::Bytes(d.to_vec()))
             .collect();
 
         let mut call_data = Vec::new();
         call_data.extend_from_slice(&selector);
 
-        let params = encode(&[
-            Token::Array(targets),
-            Token::Array(values),
-            Token::Array(datas),
-        ]);
+        let params = DynSolValue::Tuple(vec![
+            DynSolValue::Array(targets),
+            DynSolValue::Array(values),
+            DynSolValue::Array(datas),
+        ]).abi_encode();
         call_data.extend_from_slice(&params);
 
         Ok(UserOperation::new(

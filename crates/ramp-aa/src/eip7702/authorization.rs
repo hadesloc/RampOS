@@ -3,8 +3,7 @@
 //! Implements the authorization tuple format for EIP-7702:
 //! authorization = rlp([chain_id, address, nonce, y_parity, r, s])
 
-use ethers::types::{Address, Signature, U256};
-use ethers::utils::keccak256;
+use alloy::primitives::{Address, U256, keccak256};
 use serde::{Deserialize, Serialize};
 
 use super::{Eip7702Error, Result};
@@ -12,6 +11,47 @@ use super::{Eip7702Error, Result};
 /// Magic prefix for EIP-7702 authorization signing
 /// SET_CODE_TX_TYPE (0x04) as per the spec
 pub const EIP7702_AUTH_MAGIC: u8 = 0x04;
+
+/// ECDSA Signature (r, s, v)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Signature {
+    pub r: U256,
+    pub s: U256,
+    pub v: u64,
+}
+
+impl Signature {
+    /// Recover the signer address from the signature
+    pub fn recover(&self, message_hash: [u8; 32]) -> std::result::Result<Address, String> {
+        use k256::ecdsa::{RecoveryId, Signature as K256Signature, VerifyingKey};
+
+        let r_bytes = self.r.to_be_bytes::<32>();
+        let s_bytes = self.s.to_be_bytes::<32>();
+
+        let mut sig_bytes = [0u8; 64];
+        sig_bytes[..32].copy_from_slice(&r_bytes);
+        sig_bytes[32..].copy_from_slice(&s_bytes);
+
+        let signature = K256Signature::from_slice(&sig_bytes)
+            .map_err(|e| format!("Invalid signature: {}", e))?;
+
+        let recovery_id = RecoveryId::try_from((self.v % 2) as u8)
+            .map_err(|e| format!("Invalid recovery id: {}", e))?;
+
+        let verifying_key =
+            VerifyingKey::recover_from_prehash(&message_hash, &signature, recovery_id)
+                .map_err(|e| format!("Recovery failed: {}", e))?;
+
+        let public_key = verifying_key.to_encoded_point(false);
+        let public_key_bytes = public_key.as_bytes();
+
+        let hash = keccak256(&public_key_bytes[1..]);
+        let mut address = [0u8; 20];
+        address.copy_from_slice(&hash[12..]);
+
+        Ok(Address::from(address))
+    }
+}
 
 /// Raw authorization tuple (unsigned)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,7 +86,7 @@ impl Authorization {
         let mut data = Vec::with_capacity(1 + encoded.len());
         data.push(EIP7702_AUTH_MAGIC);
         data.extend_from_slice(&encoded);
-        keccak256(&data)
+        *keccak256(&data)
     }
 
     /// RLP encode the authorization tuple
@@ -56,13 +96,12 @@ impl Authorization {
         let mut stream = RlpStream::new_list(3);
 
         // chain_id as big-endian bytes
-        let mut chain_id_bytes = [0u8; 32];
-        self.chain_id.to_big_endian(&mut chain_id_bytes);
+        let chain_id_bytes = self.chain_id.to_be_bytes::<32>();
         let trimmed = trim_leading_zeros(&chain_id_bytes);
         stream.append(&trimmed);
 
         // address
-        stream.append(&self.address.as_bytes());
+        stream.append(&self.address.as_slice());
 
         // nonce
         stream.append(&self.nonce);
@@ -122,28 +161,25 @@ impl SignedAuthorization {
         let mut stream = RlpStream::new_list(6);
 
         // chain_id
-        let mut chain_id_bytes = [0u8; 32];
-        self.authorization.chain_id.to_big_endian(&mut chain_id_bytes);
+        let chain_id_bytes = self.authorization.chain_id.to_be_bytes::<32>();
         stream.append(&trim_leading_zeros(&chain_id_bytes).to_vec());
 
         // address
-        stream.append(&self.authorization.address.as_bytes().to_vec());
+        stream.append(&self.authorization.address.as_slice().to_vec());
 
         // nonce
         stream.append(&self.authorization.nonce);
 
-        // y_parity (0 or 1)
-        let y_parity = self.signature.v as u8 % 2;
+        // y_parity (0 or 1): v=27 -> y_parity=0, v=28 -> y_parity=1
+        let y_parity = (self.signature.v - 27) as u8;
         stream.append(&y_parity);
 
         // r
-        let mut r_bytes = [0u8; 32];
-        self.signature.r.to_big_endian(&mut r_bytes);
+        let r_bytes = self.signature.r.to_be_bytes::<32>();
         stream.append(&r_bytes.to_vec());
 
         // s
-        let mut s_bytes = [0u8; 32];
-        self.signature.s.to_big_endian(&mut s_bytes);
+        let s_bytes = self.signature.s.to_be_bytes::<32>();
         stream.append(&s_bytes.to_vec());
 
         stream.out().to_vec()
@@ -164,7 +200,7 @@ impl SignedAuthorization {
         let chain_id_bytes: Vec<u8> = rlp
             .val_at(0)
             .map_err(|e| Eip7702Error::EncodingError(e.to_string()))?;
-        let chain_id = U256::from_big_endian(&chain_id_bytes);
+        let chain_id = U256::from_be_slice(&chain_id_bytes);
 
         let address_bytes: Vec<u8> = rlp
             .val_at(1)
@@ -182,12 +218,12 @@ impl SignedAuthorization {
         let r_bytes: Vec<u8> = rlp
             .val_at(4)
             .map_err(|e| Eip7702Error::EncodingError(e.to_string()))?;
-        let r = U256::from_big_endian(&r_bytes);
+        let r = U256::from_be_slice(&r_bytes);
 
         let s_bytes: Vec<u8> = rlp
             .val_at(5)
             .map_err(|e| Eip7702Error::EncodingError(e.to_string()))?;
-        let s = U256::from_big_endian(&s_bytes);
+        let s = U256::from_be_slice(&s_bytes);
 
         let v = 27 + y_parity as u64;
         let signature = Signature { r, s, v };
@@ -312,7 +348,7 @@ mod tests {
         let mut list = AuthorizationList::new();
         assert!(list.is_empty());
 
-        let delegate = Address::zero();
+        let delegate = Address::ZERO;
         let auth = Authorization::for_chain(1, delegate, 0);
         let signed = SignedAuthorization::new(
             auth,

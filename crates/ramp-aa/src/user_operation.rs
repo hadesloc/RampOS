@@ -1,4 +1,5 @@
-use ethers::types::{Address, Bytes, H256, U256};
+use alloy::primitives::{Address, Bytes, B256, U256, keccak256};
+use alloy::dyn_abi::DynSolValue;
 use serde::{Deserialize, Serialize};
 
 /// ERC-4337 UserOperation
@@ -61,34 +62,31 @@ impl UserOperation {
     }
 
     /// Calculate the hash of the UserOperation for signing
-    pub fn hash(&self, entry_point: Address, chain_id: u64) -> H256 {
-        use ethers::abi::{encode, Token};
-        use ethers::utils::keccak256;
-
+    pub fn hash(&self, entry_point: Address, chain_id: u64) -> B256 {
         // Pack the UserOperation fields
-        let packed = encode(&[
-            Token::Address(self.sender),
-            Token::Uint(self.nonce),
-            Token::Bytes(keccak256(&self.init_code).to_vec()),
-            Token::Bytes(keccak256(&self.call_data).to_vec()),
-            Token::Uint(self.call_gas_limit),
-            Token::Uint(self.verification_gas_limit),
-            Token::Uint(self.pre_verification_gas),
-            Token::Uint(self.max_fee_per_gas),
-            Token::Uint(self.max_priority_fee_per_gas),
-            Token::Bytes(keccak256(&self.paymaster_and_data).to_vec()),
-        ]);
+        let packed = DynSolValue::Tuple(vec![
+            DynSolValue::Address(self.sender),
+            DynSolValue::Uint(self.nonce, 256),
+            DynSolValue::Bytes(keccak256(&self.init_code).as_slice().to_vec()),
+            DynSolValue::Bytes(keccak256(&self.call_data).as_slice().to_vec()),
+            DynSolValue::Uint(self.call_gas_limit, 256),
+            DynSolValue::Uint(self.verification_gas_limit, 256),
+            DynSolValue::Uint(self.pre_verification_gas, 256),
+            DynSolValue::Uint(self.max_fee_per_gas, 256),
+            DynSolValue::Uint(self.max_priority_fee_per_gas, 256),
+            DynSolValue::Bytes(keccak256(&self.paymaster_and_data).as_slice().to_vec()),
+        ]).abi_encode();
 
         let user_op_hash = keccak256(&packed);
 
         // Encode with entry point and chain ID
-        let final_hash = encode(&[
-            Token::FixedBytes(user_op_hash.to_vec()),
-            Token::Address(entry_point),
-            Token::Uint(U256::from(chain_id)),
-        ]);
+        let final_hash = DynSolValue::Tuple(vec![
+            DynSolValue::FixedBytes(user_op_hash, 32),
+            DynSolValue::Address(entry_point),
+            DynSolValue::Uint(U256::from(chain_id), 256),
+        ]).abi_encode();
 
-        H256::from_slice(&keccak256(&final_hash))
+        keccak256(&final_hash)
     }
 
     /// Check if this is an account creation operation

@@ -13,7 +13,7 @@ ramp-core = { path = "../ramp-core", features = ["testing"] }
 ramp-compliance = { path = "../ramp-compliance" }
 ramp-aa = { path = "../ramp-aa" }
 
-ethers = { workspace = true }
+alloy = { workspace = true }
 tokio = { workspace = true }
 axum = { workspace = true }
 axum-extra = { workspace = true }

@@ -112,7 +112,7 @@ impl PayoutService {
 
                 return Ok(CreatePayoutResponse {
                     intent_id: IntentId(existing.id),
-                    status: parse_payout_state(&existing.state),
+                    status: PayoutState::from(existing.state.as_str()),
                     daily_limit,
                     daily_remaining,
                 });
@@ -196,7 +196,7 @@ impl PayoutService {
             tenant_id: req.tenant_id.0.clone(),
             user_id: req.user_id.0.clone(),
             intent_type: "PAYOUT_VND".to_string(),
-            state: "PAYOUT_CREATED".to_string(),
+            state: PayoutState::Created.to_string(),
             state_history: serde_json::json!([]),
             amount: req.amount_vnd.0,
             currency: "VND".to_string(),
@@ -224,7 +224,7 @@ impl PayoutService {
 
         if policy_approved {
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, "POLICY_APPROVED")
+                .update_state(&req.tenant_id, &intent_id, &PayoutState::PolicyApproved.to_string())
                 .await?;
 
             // Create ledger entries to hold funds
@@ -239,11 +239,11 @@ impl PayoutService {
 
             // Submit to bank (in production would call rails adapter)
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, "PAYOUT_SUBMITTED")
+                .update_state(&req.tenant_id, &intent_id, &PayoutState::Submitted.to_string())
                 .await?;
         } else {
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, "REJECTED_BY_POLICY")
+                .update_state(&req.tenant_id, &intent_id, &PayoutState::RejectedByPolicy.to_string())
                 .await?;
         }
 
@@ -280,10 +280,11 @@ impl PayoutService {
             .ok_or_else(|| Error::IntentNotFound(req.intent_id.0.clone()))?;
 
         // Validate state
-        if intent.state != "PAYOUT_SUBMITTED" {
+        let current_state = PayoutState::from(intent.state.as_str());
+        if current_state != PayoutState::Submitted {
             return Err(Error::InvalidStateTransition {
                 from: intent.state,
-                to: "PAYOUT_CONFIRMED".to_string(),
+                to: PayoutState::Confirmed.to_string(),
             });
         }
 
@@ -291,7 +292,7 @@ impl PayoutService {
             PayoutBankStatus::Success => {
                 // Update state
                 self.intent_repo
-                    .update_state(&req.tenant_id, &req.intent_id, "PAYOUT_CONFIRMED")
+                    .update_state(&req.tenant_id, &req.intent_id, &PayoutState::Confirmed.to_string())
                     .await?;
 
                 // Complete clearing entries
@@ -305,11 +306,11 @@ impl PayoutService {
 
                 // Mark completed
                 self.intent_repo
-                    .update_state(&req.tenant_id, &req.intent_id, "COMPLETED")
+                    .update_state(&req.tenant_id, &req.intent_id, &PayoutState::Completed.to_string())
                     .await?;
 
                 self.event_publisher
-                    .publish_intent_status_changed(&req.intent_id, &req.tenant_id, "COMPLETED")
+                    .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &PayoutState::Completed.to_string())
                     .await?;
 
                 info!(
@@ -333,11 +334,11 @@ impl PayoutService {
 
                 // Update state to REVERSED (funds returned)
                 self.intent_repo
-                    .update_state(&req.tenant_id, &req.intent_id, "REVERSED")
+                    .update_state(&req.tenant_id, &req.intent_id, &PayoutState::Reversed.to_string())
                     .await?;
 
                 self.event_publisher
-                    .publish_intent_status_changed(&req.intent_id, &req.tenant_id, "REVERSED")
+                    .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &PayoutState::Reversed.to_string())
                     .await?;
 
                 self.event_publisher
@@ -368,22 +369,6 @@ impl PayoutService {
     }
 }
 
-fn parse_payout_state(state: &str) -> PayoutState {
-    match state {
-        "CREATED" | "PAYOUT_CREATED" => PayoutState::Created,
-        "POLICY_APPROVED" => PayoutState::PolicyApproved,
-        "PAYOUT_SUBMITTED" | "SUBMITTED" => PayoutState::Submitted,
-        "PAYOUT_CONFIRMED" | "CONFIRMED" => PayoutState::Confirmed,
-        "COMPLETED" => PayoutState::Completed,
-        "REJECTED_BY_POLICY" => PayoutState::RejectedByPolicy,
-        "BANK_REJECTED" => PayoutState::BankRejected,
-        "TIMEOUT" => PayoutState::Timeout,
-        "MANUAL_REVIEW" => PayoutState::ManualReview,
-        "CANCELLED" => PayoutState::Cancelled,
-        "REVERSED" => PayoutState::Reversed,
-        _ => PayoutState::Created,
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -454,7 +439,7 @@ mod tests {
 
         let intents = intent_repo.intents.lock().unwrap();
         assert_eq!(intents.len(), 1);
-        assert_eq!(intents[0].state, "PAYOUT_SUBMITTED");
+        assert_eq!(intents[0].state, PayoutState::Submitted.to_string());
 
         let txs = ledger_repo.transactions.lock().unwrap();
         assert_eq!(txs.len(), 1);
@@ -637,12 +622,12 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_payout_state_reversed() {
-        assert_eq!(parse_payout_state("REVERSED"), PayoutState::Reversed);
+    fn test_payout_state_from_str() {
+        assert_eq!(PayoutState::from("REVERSED"), PayoutState::Reversed);
         assert_eq!(
-            parse_payout_state("BANK_REJECTED"),
+            PayoutState::from("BANK_REJECTED"),
             PayoutState::BankRejected
         );
-        assert_eq!(parse_payout_state("TIMEOUT"), PayoutState::Timeout);
+        assert_eq!(PayoutState::from("TIMEOUT"), PayoutState::Timeout);
     }
 }

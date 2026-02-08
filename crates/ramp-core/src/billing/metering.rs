@@ -168,3 +168,183 @@ impl UsageMeter {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_record(tenant_id: &TenantId, meter_type: MeterType, value: MetricValue) -> UsageRecord {
+        UsageRecord {
+            id: format!("usage_{}", Utc::now().timestamp_nanos_opt().unwrap_or(0)),
+            tenant_id: tenant_id.clone(),
+            meter_type,
+            value,
+            recorded_at: Utc::now(),
+            synced_to_stripe: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_record_and_get_summary_api_calls() {
+        let meter = UsageMeter::new();
+        let tenant_id = TenantId::new("t1");
+
+        meter.record(make_record(&tenant_id, MeterType::ApiCalls, MetricValue::Count(50))).await.unwrap();
+        meter.record(make_record(&tenant_id, MeterType::ApiCalls, MetricValue::Count(30))).await.unwrap();
+
+        let summary = meter.get_summary(&tenant_id).await.unwrap();
+        assert_eq!(summary.api_calls, 80);
+    }
+
+    #[tokio::test]
+    async fn test_record_transaction_volume() {
+        let meter = UsageMeter::new();
+        let tenant_id = TenantId::new("t1");
+
+        meter.record(make_record(&tenant_id, MeterType::TransactionVolume, MetricValue::Volume(Decimal::from(1000)))).await.unwrap();
+        meter.record(make_record(&tenant_id, MeterType::TransactionVolume, MetricValue::Volume(Decimal::from(2000)))).await.unwrap();
+
+        let summary = meter.get_summary(&tenant_id).await.unwrap();
+        assert_eq!(summary.transaction_volume, Decimal::from(3000));
+    }
+
+    #[tokio::test]
+    async fn test_record_active_users() {
+        let meter = UsageMeter::new();
+        let tenant_id = TenantId::new("t1");
+
+        meter.record(make_record(&tenant_id, MeterType::ActiveUsers, MetricValue::Count(10))).await.unwrap();
+        meter.record(make_record(&tenant_id, MeterType::ActiveUsers, MetricValue::Count(5))).await.unwrap();
+
+        let summary = meter.get_summary(&tenant_id).await.unwrap();
+        assert_eq!(summary.active_users, 15);
+    }
+
+    #[tokio::test]
+    async fn test_record_storage_bytes_uses_max() {
+        let meter = UsageMeter::new();
+        let tenant_id = TenantId::new("t1");
+
+        meter.record(make_record(&tenant_id, MeterType::StorageBytes, MetricValue::Bytes(1000))).await.unwrap();
+        meter.record(make_record(&tenant_id, MeterType::StorageBytes, MetricValue::Bytes(5000))).await.unwrap();
+        meter.record(make_record(&tenant_id, MeterType::StorageBytes, MetricValue::Bytes(3000))).await.unwrap();
+
+        let summary = meter.get_summary(&tenant_id).await.unwrap();
+        assert_eq!(summary.storage_bytes, 5000);
+    }
+
+    #[tokio::test]
+    async fn test_get_summary_empty_tenant() {
+        let meter = UsageMeter::new();
+        let tenant_id = TenantId::new("nonexistent");
+
+        let summary = meter.get_summary(&tenant_id).await.unwrap();
+        assert_eq!(summary.api_calls, 0);
+        assert_eq!(summary.transaction_volume, Decimal::ZERO);
+        assert_eq!(summary.active_users, 0);
+        assert_eq!(summary.storage_bytes, 0);
+    }
+
+    #[tokio::test]
+    async fn test_mark_synced() {
+        let meter = UsageMeter::new();
+        let tenant_id = TenantId::new("t1");
+
+        meter.record(make_record(&tenant_id, MeterType::ApiCalls, MetricValue::Count(100))).await.unwrap();
+
+        let summary = meter.get_summary(&tenant_id).await.unwrap();
+        assert_eq!(summary.api_calls, 100);
+
+        meter.mark_synced(&tenant_id).await.unwrap();
+
+        // After syncing, get_summary should return 0 (skips synced records)
+        let summary = meter.get_summary(&tenant_id).await.unwrap();
+        assert_eq!(summary.api_calls, 0);
+    }
+
+    #[tokio::test]
+    async fn test_mark_synced_nonexistent_tenant() {
+        let meter = UsageMeter::new();
+        let tenant_id = TenantId::new("nonexistent");
+        // Should succeed silently
+        meter.mark_synced(&tenant_id).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_new_records_after_sync() {
+        let meter = UsageMeter::new();
+        let tenant_id = TenantId::new("t1");
+
+        meter.record(make_record(&tenant_id, MeterType::ApiCalls, MetricValue::Count(100))).await.unwrap();
+        meter.mark_synced(&tenant_id).await.unwrap();
+
+        // Record new usage after sync
+        meter.record(make_record(&tenant_id, MeterType::ApiCalls, MetricValue::Count(50))).await.unwrap();
+
+        let summary = meter.get_summary(&tenant_id).await.unwrap();
+        assert_eq!(summary.api_calls, 50);
+    }
+
+    #[tokio::test]
+    async fn test_multi_tenant_isolation() {
+        let meter = UsageMeter::new();
+        let t1 = TenantId::new("tenant1");
+        let t2 = TenantId::new("tenant2");
+
+        meter.record(make_record(&t1, MeterType::ApiCalls, MetricValue::Count(100))).await.unwrap();
+        meter.record(make_record(&t2, MeterType::ApiCalls, MetricValue::Count(200))).await.unwrap();
+
+        let s1 = meter.get_summary(&t1).await.unwrap();
+        let s2 = meter.get_summary(&t2).await.unwrap();
+
+        assert_eq!(s1.api_calls, 100);
+        assert_eq!(s2.api_calls, 200);
+    }
+
+    #[tokio::test]
+    async fn test_mismatched_metric_type_ignored() {
+        let meter = UsageMeter::new();
+        let tenant_id = TenantId::new("t1");
+
+        // Record Volume type with Count value (mismatched, will be ignored in aggregation)
+        meter.record(make_record(&tenant_id, MeterType::ApiCalls, MetricValue::Volume(Decimal::from(100)))).await.unwrap();
+
+        let summary = meter.get_summary(&tenant_id).await.unwrap();
+        // ApiCalls expects Count, not Volume, so it should be 0
+        assert_eq!(summary.api_calls, 0);
+    }
+
+    #[test]
+    fn test_usage_summary_default() {
+        let summary = UsageSummary::default();
+        assert_eq!(summary.api_calls, 0);
+        assert_eq!(summary.transaction_volume, Decimal::ZERO);
+        assert_eq!(summary.active_users, 0);
+        assert_eq!(summary.storage_bytes, 0);
+    }
+
+    #[test]
+    fn test_meter_type_serialization() {
+        let api = MeterType::ApiCalls;
+        let json = serde_json::to_string(&api).unwrap();
+        assert_eq!(json, "\"api_calls\"");
+
+        let parsed: MeterType = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, MeterType::ApiCalls);
+    }
+
+    #[test]
+    fn test_metric_value_count_serialization() {
+        let val = MetricValue::Count(42);
+        let json = serde_json::to_string(&val).unwrap();
+        let parsed: MetricValue = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, MetricValue::Count(42));
+    }
+
+    #[test]
+    fn test_usage_metrics_default() {
+        let metrics = UsageMetrics::default();
+        assert_eq!(metrics.api_calls, 0);
+        assert_eq!(metrics.storage_bytes, 0);
+    }
+}

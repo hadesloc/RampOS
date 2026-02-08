@@ -1,6 +1,7 @@
 use crate::event::EventPublisher;
 use crate::repository::intent::{IntentRepository, IntentRow};
 use ramp_common::{
+    intent::{PayinState, PayoutState},
     types::{IntentId, TenantId},
     Result,
 };
@@ -34,9 +35,9 @@ impl TimeoutService {
         let tenant_id = TenantId(intent.tenant_id.clone());
 
         let new_state = match intent.intent_type.as_str() {
-            "PAYIN_VND" => "EXPIRED",
-            "PAYOUT_VND" => "TIMEOUT",
-            "TRADE_EXECUTED" => "REJECTED",
+            "PAYIN_VND" => PayinState::Expired.to_string(),
+            "PAYOUT_VND" => PayoutState::Timeout.to_string(),
+            "TRADE_EXECUTED" => "REJECTED".to_string(),
             _ => {
                 // Try to infer from intent type if possible, or default to EXPIRED/TIMEOUT
                 // For now, log warning for unknown types
@@ -58,12 +59,12 @@ impl TimeoutService {
 
         // Update state in database
         self.intent_repo
-            .update_state(&tenant_id, &intent_id, new_state)
+            .update_state(&tenant_id, &intent_id, &new_state)
             .await?;
 
         // Send notification
         self.event_publisher
-            .publish_intent_status_changed(&intent_id, &tenant_id, new_state)
+            .publish_intent_status_changed(&intent_id, &tenant_id, &new_state)
             .await?;
 
         Ok(())

@@ -45,10 +45,8 @@ impl Default for DatabaseConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RedisConfig {
-    pub url: String, // Keep this for backward compatibility/single node
+    pub url: String,
     pub pool_size: u32,
-    pub sentinel_urls: Option<Vec<String>>,
-    pub sentinel_master_name: Option<String>,
 }
 
 impl Default for RedisConfig {
@@ -56,8 +54,6 @@ impl Default for RedisConfig {
         Self {
             url: "redis://:dev_redis_pass@localhost:6379".to_string(),
             pool_size: 20,
-            sentinel_urls: None,
-            sentinel_master_name: None,
         }
     }
 }

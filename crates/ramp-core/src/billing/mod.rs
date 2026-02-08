@@ -555,4 +555,180 @@ mod tests {
         assert!(plans.iter().any(|p| p.id == "plan_free"));
         assert!(plans.iter().any(|p| p.id == "plan_enterprise"));
     }
+
+    #[tokio::test]
+    async fn test_record_usage_transaction_volume() {
+        let service = create_test_service();
+        let tenant_id = TenantId::new("test_tenant");
+
+        service
+            .record_usage(
+                &tenant_id,
+                MeterType::TransactionVolume,
+                MetricValue::Volume(rust_decimal::Decimal::from(50_000_000)),
+            )
+            .await
+            .unwrap();
+
+        let usage = service.get_usage(&tenant_id).await.unwrap();
+        assert_eq!(usage.transaction_volume, rust_decimal::Decimal::from(50_000_000));
+    }
+
+    #[tokio::test]
+    async fn test_record_usage_storage_bytes() {
+        let service = create_test_service();
+        let tenant_id = TenantId::new("test_tenant");
+
+        service
+            .record_usage(&tenant_id, MeterType::StorageBytes, MetricValue::Bytes(1024 * 1024))
+            .await
+            .unwrap();
+
+        let usage = service.get_usage(&tenant_id).await.unwrap();
+        assert_eq!(usage.storage_bytes, 1024 * 1024);
+    }
+
+    #[tokio::test]
+    async fn test_check_free_tier_not_exceeded_initially() {
+        let service = create_test_service();
+        let tenant_id = TenantId::new("test_tenant");
+
+        let exceeded = service.check_free_tier_exceeded(&tenant_id).await.unwrap();
+        assert!(!exceeded);
+    }
+
+    #[tokio::test]
+    async fn test_check_free_tier_exceeded_by_volume() {
+        let service = create_test_service();
+        let tenant_id = TenantId::new("test_tenant");
+
+        service
+            .record_usage(
+                &tenant_id,
+                MeterType::TransactionVolume,
+                MetricValue::Volume(rust_decimal::Decimal::from(200_000_000)),
+            )
+            .await
+            .unwrap();
+
+        let exceeded = service.check_free_tier_exceeded(&tenant_id).await.unwrap();
+        assert!(exceeded);
+    }
+
+    #[tokio::test]
+    async fn test_billing_config_default() {
+        let config = BillingConfig::default();
+        assert!(config.metering_enabled);
+        assert_eq!(config.sync_interval_secs, 3600);
+        assert_eq!(config.default_plan_id, "plan_free");
+    }
+
+    #[tokio::test]
+    async fn test_free_tier_limits_default() {
+        let limits = FreeTierLimits::default();
+        assert_eq!(limits.api_calls_monthly, 10_000);
+        assert_eq!(limits.storage_bytes, 1_073_741_824);
+        assert_eq!(limits.active_users, 100);
+    }
+
+    #[tokio::test]
+    async fn test_billing_status_default_plan() {
+        let service = create_test_service();
+        let tenant_id = TenantId::new("new_tenant");
+
+        let status = service.get_billing_status(&tenant_id).await.unwrap();
+        assert_eq!(status.plan.id, "plan_free");
+        assert!(status.subscription.is_none());
+        assert!(!status.is_overdue);
+        assert_eq!(status.overage_charges, rust_decimal::Decimal::ZERO);
+    }
+
+    #[test]
+    fn test_billing_event_type_values() {
+        // Ensure all event types exist and are distinct
+        let types = vec![
+            BillingEventType::SubscriptionCreated,
+            BillingEventType::SubscriptionUpdated,
+            BillingEventType::SubscriptionCancelled,
+            BillingEventType::InvoiceCreated,
+            BillingEventType::InvoicePaid,
+            BillingEventType::InvoiceFailed,
+            BillingEventType::UsageRecorded,
+            BillingEventType::OverageTriggered,
+            BillingEventType::PlanUpgraded,
+            BillingEventType::PlanDowngraded,
+        ];
+        // Just ensure they're all constructed without panic
+        assert_eq!(types.len(), 10);
+    }
+
+    #[tokio::test]
+    async fn test_service_exposes_config() {
+        let service = create_test_service();
+        let config = service.get_config();
+        assert_eq!(config.default_plan_id, "plan_free");
+    }
+
+    #[tokio::test]
+    async fn test_service_exposes_stripe_client() {
+        let service = create_test_service();
+        let _client = service.stripe_client();
+        // Just ensure it doesn't panic
+    }
+
+    #[tokio::test]
+    async fn test_service_exposes_usage_meter() {
+        let service = create_test_service();
+        let _meter = service.usage_meter();
+    }
+
+    #[tokio::test]
+    async fn test_mock_provider_record_and_get_events() {
+        let provider = MockBillingDataProvider::new();
+        let tenant_id = TenantId::new("t1");
+
+        let event = BillingEvent {
+            id: "evt_1".to_string(),
+            tenant_id: tenant_id.clone(),
+            event_type: BillingEventType::UsageRecorded,
+            details: serde_json::json!({"calls": 100}),
+            created_at: Utc::now(),
+        };
+        provider.record_event(&event).await.unwrap();
+
+        let events = provider
+            .get_events(
+                &tenant_id,
+                Utc::now() - chrono::Duration::hours(1),
+                Utc::now() + chrono::Duration::hours(1),
+            )
+            .await
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].id, "evt_1");
+    }
+
+    #[tokio::test]
+    async fn test_mock_provider_store_and_get_billing() {
+        let provider = MockBillingDataProvider::new();
+        let tenant_id = TenantId::new("t1");
+        let now = Utc::now();
+
+        let status = TenantBillingStatus {
+            tenant_id: tenant_id.clone(),
+            plan: BillingPlan::starter(),
+            subscription: None,
+            current_usage: UsageSummary::default(),
+            overage_charges: rust_decimal::Decimal::ZERO,
+            billing_cycle_start: now,
+            billing_cycle_end: now + chrono::Duration::days(30),
+            is_overdue: false,
+            last_invoice: None,
+        };
+        provider.store_tenant_billing(&status).await.unwrap();
+
+        let retrieved = provider.get_tenant_billing(&tenant_id).await.unwrap();
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().plan.id, "plan_starter");
+    }
 }

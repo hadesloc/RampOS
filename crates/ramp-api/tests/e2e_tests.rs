@@ -224,7 +224,12 @@ async fn setup_test_app() -> TestContext {
         rate_limiter: None,
         idempotency_handler: None,
         aa_service: None,
-        portal_auth_config: Arc::new(PortalAuthConfig::default()),
+        portal_auth_config: Arc::new(PortalAuthConfig {
+            jwt_secret: "test-secret-key-for-testing".to_string(),
+            issuer: None,
+            audience: None,
+            allow_missing_tenant: false,
+        }),
         bank_confirmation_repo: None,
         licensing_repo: None,
         compliance_audit_service: None,

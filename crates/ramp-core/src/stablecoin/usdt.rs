@@ -4,7 +4,7 @@
 //! Uses 6 decimals on most chains.
 
 use async_trait::async_trait;
-use ethers::types::{Address, U256};
+use alloy::primitives::{Address, U256};
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
 
@@ -119,7 +119,7 @@ impl Stablecoin for UsdtToken {
         );
 
         // Mock: Return 0 balance
-        Ok(U256::zero())
+        Ok(U256::ZERO)
     }
 
     async fn transfer(
@@ -171,7 +171,7 @@ impl Stablecoin for UsdtToken {
             "Checking USDT allowance (mock)"
         );
 
-        Ok(U256::zero())
+        Ok(U256::ZERO)
     }
 
     async fn approve(

@@ -4,7 +4,7 @@
 
 use super::{Price, PriceOracle, PriceSource};
 use async_trait::async_trait;
-use ethers::types::Address;
+use alloy::primitives::Address;
 use ramp_common::{Error, Result};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn test_register_token() {
         let mut fallback = CoinGeckoFallback::with_default_config();
-        let token = Address::zero();
+        let token = Address::ZERO;
 
         fallback.register_token(token, "tether".to_string());
         assert_eq!(fallback.get_token_id(token), Some("tether".to_string()));
@@ -243,7 +243,7 @@ mod tests {
     #[test]
     fn test_register_by_symbol() {
         let mut fallback = CoinGeckoFallback::with_default_config();
-        let token = Address::zero();
+        let token = Address::ZERO;
 
         fallback.register_by_symbol(token, "USDC");
         assert_eq!(fallback.get_token_id(token), Some("usd-coin".to_string()));
@@ -267,7 +267,7 @@ mod tests {
     fn test_staleness() {
         let fallback = CoinGeckoFallback::with_default_config();
 
-        let mut price = Price::new(Address::zero(), 1, Decimal::ONE, PriceSource::CoinGecko);
+        let mut price = Price::new(Address::ZERO, 1, Decimal::ONE, PriceSource::CoinGecko);
         assert!(!fallback.is_stale(&price));
 
         // Make price old (6 minutes > 5 minutes max)
