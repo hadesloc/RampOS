@@ -43,7 +43,7 @@ struct AaveMarketData {
 }
 
 // ---------------------------------------------------------------------------
-// Aave V3 on-chain ABI fragments (ethers abigen style)
+// Aave V3 on-chain ABI fragments (alloy sol! style)
 // ---------------------------------------------------------------------------
 
 // getReserveData(address asset) returns a tuple; we only need
@@ -916,7 +916,7 @@ mod tests {
     #[test]
     fn test_with_rpc_invalid_url() {
         let addresses = AaveV3Addresses::ethereum_mainnet().unwrap();
-        // An invalid URL should still parse with ethers Http provider
+        // An invalid URL should still parse with alloy Http provider
         // (it only fails on actual calls), so this should succeed.
         let result = AaveV3Protocol::with_rpc(1, addresses, test_account(), "http://localhost:8545");
         assert!(result.is_ok());

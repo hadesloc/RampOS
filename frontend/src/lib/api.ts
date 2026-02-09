@@ -733,6 +733,89 @@ export const tenantsApi = {
       body: JSON.stringify({ status }),
     });
   },
+
+  updateConfig: async (id: string, config: Record<string, unknown>): Promise<Tenant> => {
+    return apiRequest<Tenant>(`/v1/admin/tenants/${id}/config`, {
+      method: 'PUT',
+      body: JSON.stringify({ config }),
+    });
+  },
+
+  regenerateWebhookSecret: async (id: string): Promise<{ webhook_secret: string }> => {
+    return apiRequest<{ webhook_secret: string }>(`/v1/admin/tenants/${id}/webhook-secret`, {
+      method: 'POST',
+    });
+  },
+};
+
+// Audit API
+export const auditApi = {
+  list: async (params?: {
+    limit?: number;
+    offset?: number;
+    eventType?: string;
+    actorId?: string;
+    resourceType?: string;
+    resourceId?: string;
+    fromDate?: string;
+    toDate?: string;
+  }): Promise<AuditListResponse> => {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) searchParams.set('limit', params.limit.toString());
+    if (params?.offset !== undefined) searchParams.set('offset', params.offset.toString());
+    if (params?.eventType) searchParams.set('eventType', params.eventType);
+    if (params?.actorId) searchParams.set('actorId', params.actorId);
+    if (params?.resourceType) searchParams.set('resourceType', params.resourceType);
+    if (params?.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params?.fromDate) searchParams.set('fromDate', params.fromDate);
+    if (params?.toDate) searchParams.set('toDate', params.toDate);
+
+    const query = searchParams.toString();
+    return apiRequest<AuditListResponse>(`/v1/admin/audit/compliance${query ? `?${query}` : ''}`);
+  },
+
+  verifyChain: async (): Promise<AuditVerifyResponse> => {
+    return apiRequest<AuditVerifyResponse>('/v1/admin/audit/verify');
+  },
+
+  exportCsv: async (params?: {
+    fromDate?: string;
+    toDate?: string;
+  }): Promise<Blob> => {
+    const searchParams = new URLSearchParams();
+    searchParams.set('format', 'csv');
+    if (params?.fromDate) searchParams.set('fromDate', params.fromDate);
+    if (params?.toDate) searchParams.set('toDate', params.toDate);
+
+    const url = `${API_BASE_URL}/v1/admin/audit/export?${searchParams.toString()}`;
+    let csrfToken = getCookie(CSRF_COOKIE_NAME);
+    if (!csrfToken && typeof window !== 'undefined') {
+      try {
+        const csrfResponse = await fetch('/api/csrf', { method: 'GET' });
+        if (csrfResponse.ok) {
+          const payload: { token?: string } | null = await csrfResponse.json().catch(() => null);
+          if (payload?.token && typeof payload.token === 'string') {
+            csrfToken = payload.token;
+          }
+        }
+      } catch {
+        // Best effort
+      }
+    }
+
+    const headers: HeadersInit = {
+      ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` }),
+      ...(csrfToken && { 'x-csrf-token': csrfToken }),
+    };
+
+    const response = await fetch(url, { headers });
+
+    if (!response.ok) {
+      throw new ApiError(response.status, 'EXPORT_FAILED', 'Failed to export audit log');
+    }
+
+    return response.blob();
+  },
 };
 
 // Reports API
@@ -935,8 +1018,29 @@ export const licensingApi = {
     formData.append('file', file);
     formData.append('requirement_id', requirementId);
 
+    let csrfToken = getCookie(CSRF_COOKIE_NAME);
+    if (!csrfToken && typeof window !== 'undefined') {
+      try {
+        const csrfResponse = await fetch('/api/csrf', { method: 'GET' });
+        if (csrfResponse.ok) {
+          const payload: { token?: string } | null = await csrfResponse.json().catch(() => null);
+          if (payload?.token && typeof payload.token === 'string') {
+            csrfToken = payload.token;
+          }
+        }
+      } catch {
+        // Best effort
+      }
+    }
+
+    const headers: HeadersInit = {
+      ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` }),
+      ...(csrfToken && { 'x-csrf-token': csrfToken }),
+    };
+
     const response = await fetch(`${API_BASE_URL}/v1/admin/licensing/upload`, {
       method: 'POST',
+      headers,
       body: formData,
     });
 
@@ -1134,6 +1238,39 @@ export const riskApi = {
     });
   },
 };
+
+// Audit Types
+export interface AuditEntry {
+  id: string;
+  tenantId: string;
+  eventType: string;
+  actorId: string | null;
+  actorType: string;
+  actionDetails: Record<string, unknown>;
+  resourceType: string | null;
+  resourceId: string | null;
+  sequenceNumber: number;
+  currentHash: string;
+  previousHash: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
+export interface AuditListResponse {
+  data: AuditEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AuditVerifyResponse {
+  isValid: boolean;
+  totalEntries: number;
+  verifiedEntries: number;
+  firstInvalidSequence: number | null;
+  errorMessage: string | null;
+  verifiedAt: string;
+}
 
 // SSO Types
 export interface SsoProvider {
@@ -1527,6 +1664,7 @@ export const api = {
   cases: casesApi,
   rules: rulesApi,
   tenants: tenantsApi,
+  audit: auditApi,
   reports: reportsApi,
   ledger: ledgerApi,
   webhooks: webhooksApi,

@@ -357,7 +357,9 @@ impl WalletAddress {
 
     #[must_use]
     pub fn is_valid_evm(&self) -> bool {
-        self.0.starts_with("0x") && self.0.len() == 42
+        self.0.starts_with("0x")
+            && self.0.len() == 42
+            && self.0[2..].chars().all(|c| c.is_ascii_hexdigit())
     }
 }
 

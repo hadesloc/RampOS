@@ -167,8 +167,7 @@ pub async fn get_limit_config(
         "Fetching VND limit configuration"
     );
 
-    // TODO: Load from database when repository is implemented
-    let config = VndLimitConfig::default();
+    let config = load_limit_config(&_app_state, &tenant_ctx.tenant_id.0).await;
 
     let custom_tier_limits: Vec<TierLimitsResponse> = config
         .tier_limits
@@ -205,8 +204,8 @@ pub async fn update_limit_config(
         "Updating VND limit configuration"
     );
 
-    // Build new config
-    let mut config = VndLimitConfig::default();
+    // Build new config from current state + updates
+    let mut config = load_limit_config(&_app_state, &tenant_ctx.tenant_id.0).await;
 
     if let Some(reset) = request.reset_at_vietnam_midnight {
         config.reset_at_vietnam_midnight = reset;
@@ -244,7 +243,8 @@ pub async fn update_limit_config(
         }
     }
 
-    // TODO: Save to database when repository is implemented
+    // Persist to database
+    save_limit_config(&_app_state, &tenant_ctx.tenant_id.0, &config).await?;
 
     let custom_tier_limits: Vec<TierLimitsResponse> = config
         .tier_limits
@@ -289,21 +289,35 @@ pub async fn get_user_limit_status(
     let tier = KycTier::from_i16(user.kyc_tier);
     let tier_limits = VndTierLimits::for_tier(tier);
 
-    // TODO: Get actual usage from database when repository is implemented
+    // Query actual daily/monthly usage from database
+    let (daily_used, monthly_used) = query_user_usage(&app_state, &tenant_ctx.tenant_id.0, &user_id).await;
+
+    let daily_remaining = if tier_limits.daily_limit > daily_used {
+        tier_limits.daily_limit - daily_used
+    } else {
+        Decimal::ZERO
+    };
+    let monthly_remaining = if tier_limits.monthly_limit > monthly_used {
+        tier_limits.monthly_limit - monthly_used
+    } else {
+        Decimal::ZERO
+    };
+
+    let now = chrono::Utc::now();
     let status = VndUserLimitStatus {
         user_id: user_id.clone(),
         tenant_id: tenant_ctx.tenant_id.0.clone(),
         tier,
-        daily_used: Decimal::ZERO,
-        monthly_used: Decimal::ZERO,
+        daily_used,
+        monthly_used,
         daily_limit: tier_limits.daily_limit,
         monthly_limit: tier_limits.monthly_limit,
-        daily_remaining: tier_limits.daily_limit,
-        monthly_remaining: tier_limits.monthly_limit,
-        daily_reset_at: chrono::Utc::now(),
-        monthly_reset_at: chrono::Utc::now(),
-        next_daily_reset: chrono::Utc::now(),
-        next_monthly_reset: chrono::Utc::now(),
+        daily_remaining,
+        monthly_remaining,
+        daily_reset_at: now,
+        monthly_reset_at: now,
+        next_daily_reset: now,
+        next_monthly_reset: now,
     };
 
     Ok(Json(map_user_limit_status(status, false)))
@@ -335,7 +349,14 @@ pub async fn set_user_limits(
         .await
         .map_err(ApiError::from)?;
 
-    // TODO: Save to database when repository is implemented
+    // Persist custom limits to database
+    save_user_custom_limits(
+        &app_state,
+        &tenant_ctx.tenant_id.0,
+        &user_id,
+        &request,
+        auth.user_id.as_deref(),
+    ).await?;
 
     let now = chrono::Utc::now();
     Ok(Json(SetUserLimitsResponse {
@@ -379,7 +400,8 @@ pub async fn remove_user_limits(
         .await
         .map_err(ApiError::from)?;
 
-    // TODO: Remove from database when repository is implemented
+    // Remove custom limits from database
+    remove_user_custom_limits(&app_state, &tenant_ctx.tenant_id.0, &user_id).await?;
 
     Ok(Json(serde_json::json!({
         "userId": user_id,
@@ -439,6 +461,168 @@ fn map_user_limit_status(status: VndUserLimitStatus, has_custom_limits: bool) ->
         next_monthly_reset: status.next_monthly_reset.to_rfc3339(),
         has_custom_limits,
     }
+}
+
+// ============================================================================
+// Database Persistence Helpers
+// ============================================================================
+
+/// Load limit config from database, falling back to defaults if no DB or no row found.
+async fn load_limit_config(app_state: &crate::router::AppState, tenant_id: &str) -> VndLimitConfig {
+    let Some(pool) = &app_state.db_pool else {
+        return VndLimitConfig::default();
+    };
+
+    let row: Option<(serde_json::Value, bool, bool, bool, String)> = sqlx::query_as(
+        "SELECT tier_limits, reset_at_vietnam_midnight, enforce_on_payin, enforce_on_payout, timezone FROM vnd_limit_config WHERE tenant_id = $1"
+    )
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None);
+
+    match row {
+        Some((tier_limits_json, reset, enforce_payin, enforce_payout, tz)) => {
+            let mut config = VndLimitConfig::default();
+            if let Ok(tier_limits) = serde_json::from_value(tier_limits_json) {
+                config.tier_limits = tier_limits;
+            }
+            config.reset_at_vietnam_midnight = reset;
+            config.enforce_on_payin = enforce_payin;
+            config.enforce_on_payout = enforce_payout;
+            config.timezone = tz;
+            config
+        }
+        None => VndLimitConfig::default(),
+    }
+}
+
+/// Save limit config to database using upsert.
+async fn save_limit_config(
+    app_state: &crate::router::AppState,
+    tenant_id: &str,
+    config: &VndLimitConfig,
+) -> Result<(), ApiError> {
+    let Some(pool) = &app_state.db_pool else {
+        // No DB pool -- silently succeed (development mode)
+        return Ok(());
+    };
+
+    let json = serde_json::to_value(&config.tier_limits)
+        .map_err(|e| ApiError::Internal(format!("Failed to serialize config: {}", e)))?;
+
+    sqlx::query(
+        "INSERT INTO vnd_limit_config (tenant_id, tier_limits, reset_at_vietnam_midnight, enforce_on_payin, enforce_on_payout, timezone, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())
+         ON CONFLICT (tenant_id) DO UPDATE SET tier_limits = $2, reset_at_vietnam_midnight = $3, enforce_on_payin = $4, enforce_on_payout = $5, timezone = $6, updated_at = NOW()"
+    )
+    .bind(tenant_id)
+    .bind(&json)
+    .bind(config.reset_at_vietnam_midnight)
+    .bind(config.enforce_on_payin)
+    .bind(config.enforce_on_payout)
+    .bind(&config.timezone)
+    .execute(pool)
+    .await
+    .map_err(|e| ApiError::Internal(format!("Failed to save limit config: {}", e)))?;
+
+    Ok(())
+}
+
+/// Query user's daily and monthly transaction usage from intents table.
+async fn query_user_usage(
+    app_state: &crate::router::AppState,
+    tenant_id: &str,
+    user_id: &str,
+) -> (Decimal, Decimal) {
+    let Some(pool) = &app_state.db_pool else {
+        return (Decimal::ZERO, Decimal::ZERO);
+    };
+
+    // Daily usage: sum of completed intent amounts today (UTC)
+    let daily: Option<(Option<Decimal>,)> = sqlx::query_as(
+        "SELECT COALESCE(SUM(amount), 0) FROM intents
+         WHERE tenant_id = $1 AND user_id = $2
+         AND state IN ('COMPLETED', 'SETTLED')
+         AND created_at >= CURRENT_DATE"
+    )
+    .bind(tenant_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None);
+
+    // Monthly usage: sum of completed intent amounts this month
+    let monthly: Option<(Option<Decimal>,)> = sqlx::query_as(
+        "SELECT COALESCE(SUM(amount), 0) FROM intents
+         WHERE tenant_id = $1 AND user_id = $2
+         AND state IN ('COMPLETED', 'SETTLED')
+         AND created_at >= DATE_TRUNC('month', CURRENT_DATE)"
+    )
+    .bind(tenant_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None);
+
+    let daily_used = daily.and_then(|r| r.0).unwrap_or(Decimal::ZERO);
+    let monthly_used = monthly.and_then(|r| r.0).unwrap_or(Decimal::ZERO);
+
+    (daily_used, monthly_used)
+}
+
+/// Save custom user limits to database.
+async fn save_user_custom_limits(
+    app_state: &crate::router::AppState,
+    tenant_id: &str,
+    user_id: &str,
+    request: &SetUserLimitsRequest,
+    approved_by: Option<&str>,
+) -> Result<(), ApiError> {
+    let Some(pool) = &app_state.db_pool else {
+        return Ok(());
+    };
+
+    sqlx::query(
+        "INSERT INTO user_transaction_limits (tenant_id, user_id, custom_single_limit_vnd, custom_daily_limit_vnd, custom_monthly_limit_vnd, custom_manual_approval_threshold, custom_limit_reason, custom_limit_approved_by, custom_limit_approved_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+         ON CONFLICT ON CONSTRAINT user_limits_unique DO UPDATE SET custom_single_limit_vnd = $3, custom_daily_limit_vnd = $4, custom_monthly_limit_vnd = $5, custom_manual_approval_threshold = $6, custom_limit_reason = $7, custom_limit_approved_by = $8, custom_limit_approved_at = NOW(), updated_at = NOW()"
+    )
+    .bind(tenant_id)
+    .bind(user_id)
+    .bind(request.single_transaction_limit_vnd.map(rust_decimal::Decimal::from))
+    .bind(request.daily_limit_vnd.map(rust_decimal::Decimal::from))
+    .bind(request.monthly_limit_vnd.map(rust_decimal::Decimal::from))
+    .bind(request.manual_approval_threshold.map(rust_decimal::Decimal::from))
+    .bind(&request.reason)
+    .bind(approved_by)
+    .execute(pool)
+    .await
+    .map_err(|e| ApiError::Internal(format!("Failed to save user limits: {}", e)))?;
+
+    Ok(())
+}
+
+/// Remove custom user limits from database.
+async fn remove_user_custom_limits(
+    app_state: &crate::router::AppState,
+    tenant_id: &str,
+    user_id: &str,
+) -> Result<(), ApiError> {
+    let Some(pool) = &app_state.db_pool else {
+        return Ok(());
+    };
+
+    sqlx::query(
+        "DELETE FROM user_transaction_limits WHERE tenant_id = $1 AND user_id = $2"
+    )
+    .bind(tenant_id)
+    .bind(user_id)
+    .execute(pool)
+    .await
+    .map_err(|e| ApiError::Internal(format!("Failed to remove user limits: {}", e)))?;
+
+    Ok(())
 }
 
 #[cfg(test)]

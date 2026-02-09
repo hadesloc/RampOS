@@ -31,6 +31,7 @@ pub mod sso;
 pub mod state_machine;
 pub mod swap;
 pub mod temporal_worker;
+pub mod workflow_engine;
 pub mod workflows;
 pub mod r#yield;
 
@@ -39,6 +40,11 @@ pub mod test_utils;
 pub use config::Config;
 pub use stablecoin::{Stablecoin, StablecoinRegistry, TenantTokenConfig};
 pub use temporal_worker::{TemporalWorker, TemporalWorkerConfig, WorkflowClient};
+pub use workflow_engine::{
+    WorkflowEngine, InProcessEngine, TemporalEngine,
+    WorkflowStateRepository, WorkflowState,
+    create_workflow_engine,
+};
 pub use r#yield::{YieldProtocol, YieldService, ProtocolRegistry, ProtocolId};
 pub use bridge::{
     CrossChainBridge, BridgeRegistry, BridgeConfig, BridgeQuote, BridgeStatus,

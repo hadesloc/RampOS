@@ -1,6 +1,86 @@
 {
-  "generated_at": "2026-02-06T22:32:53.096393",
+  "generated_at": "2026-02-09T11:48:46.681984",
   "enabled_plugins": [
+    [
+      "superpowers",
+      "claude-plugins-official"
+    ],
+    [
+      "burpsuite-project-parser",
+      "trailofbits"
+    ],
+    [
+      "plugin-super-factory",
+      "hades-local"
+    ],
+    [
+      "example-skills",
+      "anthropic-agent-skills"
+    ],
+    [
+      "document-skills",
+      "anthropic-agent-skills"
+    ],
+    [
+      "ask-questions-if-underspecified",
+      "trailofbits"
+    ],
+    [
+      "claude-md-management",
+      "claude-plugins-official"
+    ],
+    [
+      "rust-analyzer-lsp",
+      "claude-plugins-official"
+    ],
+    [
+      "pyright-lsp",
+      "claude-plugins-official"
+    ],
+    [
+      "differential-review",
+      "trailofbits"
+    ],
+    [
+      "fix-review",
+      "trailofbits"
+    ],
+    [
+      "context7",
+      "claude-plugins-official"
+    ],
+    [
+      "coderabbit",
+      "claude-plugins-official"
+    ],
+    [
+      "security-guidance",
+      "claude-plugins-official"
+    ],
+    [
+      "plugin-factory",
+      "ultimate-workflow-local"
+    ],
+    [
+      "plugin-factory",
+      "trailofbits"
+    ],
+    [
+      "plugin-dev",
+      "claude-plugins-official"
+    ],
+    [
+      "variant-analysis",
+      "trailofbits"
+    ],
+    [
+      "ai-generation-skills",
+      "baoyu-skills"
+    ],
+    [
+      "local-plugin-installer",
+      "trailofbits"
+    ],
     [
       "static-analysis",
       "trailofbits"
@@ -10,11 +90,15 @@
       "ultimate-workflow-local"
     ],
     [
-      "plugin-factory",
-      "trailofbits"
+      "frontend-design",
+      "claude-plugins-official"
     ],
     [
-      "differential-review",
+      "ui-ux-pro-max",
+      "ui-ux-pro-max-skill"
+    ],
+    [
+      "entry-point-analyzer",
       "trailofbits"
     ],
     [
@@ -22,11 +106,11 @@
       "claude-plugins-official"
     ],
     [
-      "plugin-super-factory",
-      "hades-local"
+      "rlm-agent",
+      "rlm-local"
     ],
     [
-      "coderabbit",
+      "code-simplifier",
       "claude-plugins-official"
     ],
     [
@@ -34,39 +118,35 @@
       "trailofbits"
     ],
     [
-      "property-based-testing",
+      "culture-index",
       "trailofbits"
     ],
     [
-      "example-skills",
-      "anthropic-agent-skills"
-    ],
-    [
-      "plugin-factory",
-      "ultimate-workflow-local"
+      "sharp-edges",
+      "trailofbits"
     ],
     [
       "super-meta-factory",
       "trailofbits"
     ],
     [
-      "culture-index",
-      "trailofbits"
-    ],
-    [
-      "testing-handbook-skills",
-      "trailofbits"
-    ],
-    [
-      "typescript-lsp",
+      "code-review",
       "claude-plugins-official"
     ],
     [
-      "fix-review",
+      "semgrep-rule-variant-creator",
       "trailofbits"
     ],
     [
-      "semgrep-rule-creator",
+      "building-secure-contracts",
+      "trailofbits"
+    ],
+    [
+      "property-based-testing",
+      "trailofbits"
+    ],
+    [
+      "spec-to-code-compliance",
       "trailofbits"
     ],
     [
@@ -74,40 +154,16 @@
       "claude-plugins-official"
     ],
     [
-      "entry-point-analyzer",
-      "trailofbits"
-    ],
-    [
-      "ui-ux-pro-max",
-      "ui-ux-pro-max-skill"
-    ],
-    [
-      "building-secure-contracts",
-      "trailofbits"
-    ],
-    [
-      "claude-md-management",
-      "claude-plugins-official"
-    ],
-    [
-      "pyright-lsp",
-      "claude-plugins-official"
-    ],
-    [
-      "local-plugin-installer",
-      "trailofbits"
-    ],
-    [
       "constant-time-analysis",
       "trailofbits"
     ],
     [
-      "content-skills",
-      "baoyu-skills"
+      "semgrep-rule-creator",
+      "trailofbits"
     ],
     [
-      "ask-questions-if-underspecified",
-      "trailofbits"
+      "typescript-lsp",
+      "claude-plugins-official"
     ],
     [
       "audit-context-building",
@@ -118,72 +174,16 @@
       "baoyu-skills"
     ],
     [
-      "rlm-agent",
-      "rlm-local"
-    ],
-    [
-      "plugin-dev",
-      "claude-plugins-official"
-    ],
-    [
-      "rust-analyzer-lsp",
-      "claude-plugins-official"
-    ],
-    [
-      "spec-to-code-compliance",
-      "trailofbits"
-    ],
-    [
-      "variant-analysis",
-      "trailofbits"
-    ],
-    [
-      "semgrep-rule-variant-creator",
-      "trailofbits"
-    ],
-    [
-      "security-guidance",
-      "claude-plugins-official"
-    ],
-    [
-      "frontend-design",
-      "claude-plugins-official"
-    ],
-    [
-      "document-skills",
-      "anthropic-agent-skills"
-    ],
-    [
-      "burpsuite-project-parser",
-      "trailofbits"
-    ],
-    [
       "playwright",
       "claude-plugins-official"
     ],
     [
-      "sharp-edges",
+      "testing-handbook-skills",
       "trailofbits"
     ],
     [
-      "ai-generation-skills",
+      "content-skills",
       "baoyu-skills"
-    ],
-    [
-      "superpowers",
-      "claude-plugins-official"
-    ],
-    [
-      "code-review",
-      "claude-plugins-official"
-    ],
-    [
-      "code-simplifier",
-      "claude-plugins-official"
-    ],
-    [
-      "context7",
-      "claude-plugins-official"
     ]
   ],
   "plugins": [
@@ -1327,7 +1327,7 @@
     },
     {
       "name": "codeql",
-      "description": "Run CodeQL static analysis for security vulnerability detection, taint tracking, and data flow analysis. Use when asked to analyze code with CodeQL, create CodeQL databases, write custom QL queries, perform security audits, or set up CodeQL in CI/CD pipelines.",
+      "description": ">-",
       "plugin": "static-analysis",
       "marketplace": "trailofbits",
       "user_invocable": false,
@@ -1343,7 +1343,7 @@
     },
     {
       "name": "semgrep",
-      "description": "Run Semgrep static analysis for fast security scanning and pattern matching. Use when asked to scan code with Semgrep, write custom YAML rules, find vulnerabilities quickly, use taint mode, or set up Semgrep in CI/CD pipelines.",
+      "description": "Run Semgrep static analysis scan on a codebase using parallel subagents. Automatically",
       "plugin": "static-analysis",
       "marketplace": "trailofbits",
       "user_invocable": false,
@@ -1388,14 +1388,6 @@
       "marketplace": "trailofbits",
       "user_invocable": false,
       "invoke": "Skill tool: cargo-fuzz"
-    },
-    {
-      "name": "codeql",
-      "description": ">",
-      "plugin": "testing-handbook-skills",
-      "marketplace": "trailofbits",
-      "user_invocable": false,
-      "invoke": "Skill tool: codeql"
     },
     {
       "name": "constant-time-testing",
@@ -1468,14 +1460,6 @@
       "marketplace": "trailofbits",
       "user_invocable": false,
       "invoke": "Skill tool: ruzzy"
-    },
-    {
-      "name": "semgrep",
-      "description": ">",
-      "plugin": "testing-handbook-skills",
-      "marketplace": "trailofbits",
-      "user_invocable": false,
-      "invoke": "Skill tool: semgrep"
     },
     {
       "name": "testing-handbook-generator",

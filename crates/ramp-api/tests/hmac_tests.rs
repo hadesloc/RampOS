@@ -158,6 +158,9 @@ async fn setup_app_with_hmac() -> TestAppWithHmac {
             ramp_core::stablecoin::VnstProtocolConfig::default(),
             Arc::new(ramp_core::stablecoin::MockVnstProtocolDataProvider::new()),
         )),
+        db_pool: None,
+        ctr_service: None,
+        ws_state: None,
     };
 
     let router = create_router(app_state);

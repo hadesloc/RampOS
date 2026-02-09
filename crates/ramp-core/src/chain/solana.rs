@@ -94,6 +94,57 @@ struct TransactionMeta {
     fee: Option<u64>,
 }
 
+/// Response from getTokenAccountsByOwner
+#[derive(Deserialize)]
+struct TokenAccountsResult {
+    value: Vec<TokenAccountInfo>,
+}
+
+#[derive(Deserialize)]
+struct TokenAccountInfo {
+    account: TokenAccountData,
+}
+
+#[derive(Deserialize)]
+struct TokenAccountData {
+    data: TokenAccountParsed,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum TokenAccountParsed {
+    Parsed(TokenAccountParsedInner),
+    #[allow(dead_code)]
+    Raw(Vec<String>),
+}
+
+#[derive(Deserialize)]
+struct TokenAccountParsedInner {
+    parsed: TokenAccountParsedInfo,
+}
+
+#[derive(Deserialize)]
+struct TokenAccountParsedInfo {
+    info: TokenAccountInfoDetails,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+struct TokenAccountInfoDetails {
+    mint: String,
+    token_amount: TokenAmount,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+struct TokenAmount {
+    amount: String,
+    decimals: u8,
+    ui_amount_string: Option<String>,
+}
+
 /// Solana Chain implementation using JSON-RPC via reqwest
 pub struct SolanaChain {
     config: SolanaChainConfig,
@@ -318,10 +369,56 @@ impl Chain for SolanaChain {
         Self::validate_solana_address(address)?;
         Self::validate_solana_address(token_address)?;
 
-        // SPL token balance requires getTokenAccountsByOwner - simplified for now
-        Err(ChainError::NotSupported(
-            "SPL token balance query requires associated token account lookup".to_string(),
-        ))
+        // Query SPL token accounts owned by `address` filtered by mint `token_address`
+        // using getTokenAccountsByOwner with jsonParsed encoding
+        let params = serde_json::json!([
+            address,
+            { "mint": token_address },
+            { "encoding": "jsonParsed" }
+        ]);
+
+        match self
+            .rpc_call::<TokenAccountsResult>("getTokenAccountsByOwner", params)
+            .await
+        {
+            Ok(result) => {
+                if result.value.is_empty() {
+                    // No token account found -- balance is zero
+                    return Ok(TokenBalance {
+                        balance: "0".to_string(),
+                        symbol: "SPL".to_string(),
+                        decimals: 0,
+                        contract_address: token_address.to_string(),
+                    });
+                }
+
+                // Use the first matching token account
+                let account = &result.value[0];
+                match &account.account.data {
+                    TokenAccountParsed::Parsed(parsed) => {
+                        let info = &parsed.parsed.info;
+                        Ok(TokenBalance {
+                            balance: info.token_amount.amount.clone(),
+                            symbol: "SPL".to_string(),
+                            decimals: info.token_amount.decimals,
+                            contract_address: info.mint.clone(),
+                        })
+                    }
+                    TokenAccountParsed::Raw(_) => {
+                        Err(ChainError::RpcError(
+                            "Unexpected raw encoding in token account response".to_string(),
+                        ))
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Solana RPC getTokenAccountsByOwner failed: {}", e);
+                Err(ChainError::RpcError(format!(
+                    "Failed to get SPL token balance: {}",
+                    e
+                )))
+            }
+        }
     }
 
     async fn send_transaction(&self, tx: Transaction) -> Result<TxHash> {

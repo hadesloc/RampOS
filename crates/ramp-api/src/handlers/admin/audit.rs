@@ -41,6 +41,8 @@ fn default_limit() -> i64 {
     50
 }
 
+const MAX_LIMIT: i64 = 100;
+
 /// Query parameters for export
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -110,9 +112,11 @@ pub async fn list_compliance_audit(
     Query(query): Query<ListAuditQuery>,
 ) -> Result<Json<ListAuditResponse>, ApiError> {
     super::tier::check_admin_key(&headers)?;
+
+    let limit = query.limit.min(MAX_LIMIT);
     info!(
         tenant = %tenant_ctx.tenant_id.0,
-        limit = query.limit,
+        limit = limit,
         offset = query.offset,
         "Listing compliance audit entries"
     );
@@ -129,7 +133,7 @@ pub async fn list_compliance_audit(
         resource_id: query.resource_id,
         from_date: query.from_date,
         to_date: query.to_date,
-        limit: query.limit,
+        limit,
         offset: query.offset,
     };
 
@@ -161,7 +165,7 @@ pub async fn list_compliance_audit(
     Ok(Json(ListAuditResponse {
         data,
         total,
-        limit: query.limit,
+        limit,
         offset: query.offset,
     }))
 }

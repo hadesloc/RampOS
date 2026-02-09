@@ -63,6 +63,15 @@ pub struct PaginationParams {
     pub offset: i64,
 }
 
+impl PaginationParams {
+    /// Return limit capped to MAX_PAGINATION_LIMIT (100)
+    pub fn capped_limit(&self) -> i64 {
+        self.limit.min(MAX_PAGINATION_LIMIT)
+    }
+}
+
+const MAX_PAGINATION_LIMIT: i64 = 100;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CaseResponse {

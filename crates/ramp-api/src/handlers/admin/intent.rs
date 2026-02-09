@@ -18,22 +18,29 @@ pub async fn cancel_intent(
     Extension(tenant_ctx): Extension<TenantContext>,
     Path(id): Path<String>,
 ) -> Result<Json<IntentResponse>, ApiError> {
-    super::tier::check_admin_key(&headers)?;
+    super::tier::check_admin_key_operator(&headers)?;
     info!(tenant = %tenant_ctx.tenant_id, intent_id = %id, "Admin canceling intent");
 
     let intent_id = IntentId::new(&id);
 
     // Verify intent exists
-    let _intent = state
+    let intent = state
         .intent_repo
         .get_by_id(&tenant_ctx.tenant_id, &intent_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or_else(|| ApiError::NotFound(format!("Intent {} not found", id)))?;
 
+    // Check if intent is already in a terminal state
+    let terminal_states = ["COMPLETED", "CANCELLED", "SETTLED", "REFUNDED"];
+    if terminal_states.contains(&intent.state.as_str()) {
+        return Err(ApiError::BadRequest(format!(
+            "Intent {} is already in terminal state '{}'",
+            id, intent.state
+        )));
+    }
+
     // Update state to CANCELLED
-    // Note: In a real system we should check if it's already in a terminal state
-    // and perhaps handle refunds if funds were moved.
     state
         .intent_repo
         .update_state(&tenant_ctx.tenant_id, &intent_id, "CANCELLED")
@@ -59,7 +66,7 @@ pub async fn retry_intent(
     Extension(tenant_ctx): Extension<TenantContext>,
     Path(id): Path<String>,
 ) -> Result<Json<IntentResponse>, ApiError> {
-    super::tier::check_admin_key(&headers)?;
+    super::tier::check_admin_key_operator(&headers)?;
     info!(tenant = %tenant_ctx.tenant_id, intent_id = %id, "Admin retrying intent");
 
     let intent_id = IntentId::new(&id);

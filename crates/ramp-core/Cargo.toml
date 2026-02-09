@@ -5,14 +5,13 @@ edition.workspace = true
 
 [features]
 default = []
-testing = []
 nats = ["async-nats"]
 # Enable full HTTP client for webhook delivery (requires gcc on Windows for rustls)
 http-client = []
 
 [dependencies]
 ramp-common = { path = "../ramp-common" }
-ramp-compliance = { path = "../ramp-compliance", features = ["testing"] }
+ramp-compliance = { path = "../ramp-compliance" }
 ramp-adapter = { path = "../ramp-adapter" }
 ramp-ledger = { path = "../ramp-ledger" }
 

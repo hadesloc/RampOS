@@ -7,7 +7,7 @@ pub mod mock;
 pub mod s3;
 
 pub use mock::MockDocumentStorage;
-pub use s3::S3DocumentStorage;
+pub use s3::{LocalFilesystemStorage, S3DocumentStorage};
 
 #[derive(Debug, Error)]
 pub enum StorageError {

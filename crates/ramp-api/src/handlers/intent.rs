@@ -111,6 +111,8 @@ fn default_limit() -> i64 {
     20
 }
 
+const MAX_LIMIT: i64 = 100;
+
 /// List intents response
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -195,9 +197,12 @@ pub async fn list_intents(
     Extension(tenant_ctx): Extension<TenantContext>,
     axum::extract::Query(query): axum::extract::Query<ListIntentsQuery>,
 ) -> Result<Json<ListIntentsResponse>, ApiError> {
+    // Cap limit to prevent excessive queries
+    let limit = query.limit.min(MAX_LIMIT);
+
     info!(
         tenant = %tenant_ctx.tenant_id.0,
-        limit = query.limit,
+        limit = limit,
         offset = query.offset,
         "Listing intents"
     );
@@ -211,23 +216,23 @@ pub async fn list_intents(
         .list_by_user(
             &tenant_ctx.tenant_id,
             &ramp_common::types::UserId::new(&user_id),
-            query.limit + 1, // Fetch one extra to check if there are more
+            limit + 1, // Fetch one extra to check if there are more
             query.offset,
         )
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let has_more = intents.len() > query.limit as usize;
+    let has_more = intents.len() > limit as usize;
     let intents: Vec<_> = intents
         .into_iter()
-        .take(query.limit as usize)
+        .take(limit as usize)
         .map(IntentResponse::from)
         .collect();
 
     Ok(Json(ListIntentsResponse {
         data: intents,
         pagination: PaginationInfo {
-            limit: query.limit,
+            limit,
             offset: query.offset,
             has_more,
         },

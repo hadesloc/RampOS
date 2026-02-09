@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import "@account-abstraction/contracts/accounts/Simple7702Account.sol";
 import "@account-abstraction/contracts/core/Helpers.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import "./EIP7702Auth.sol";
 
 /**
@@ -42,7 +43,10 @@ contract EIP7702Delegation is Simple7702Account, EIP7702Auth {
      * @notice Revokes a delegate.
      */
     function revokeDelegate(address delegate) external {
-        require(msg.sender == address(this) || isDelegate[msg.sender], "Not authorized");
+        require(
+            msg.sender == address(this) || msg.sender == delegate,
+            "Only owner or self-revoke"
+        );
         isDelegate[delegate] = false;
     }
 
@@ -66,7 +70,8 @@ contract EIP7702Delegation is Simple7702Account, EIP7702Auth {
      * @dev Internal check for signature validity (owner or delegate).
      */
     function _checkSignatureDelegated(bytes32 hash, bytes memory signature) internal view returns (bool) {
-        address signer = ECDSA.recover(hash, signature);
+        bytes32 ethHash = MessageHashUtils.toEthSignedMessageHash(hash);
+        address signer = ECDSA.recover(ethHash, signature);
         return signer == address(this) || isDelegate[signer];
     }
 

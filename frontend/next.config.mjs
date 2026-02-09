@@ -1,3 +1,7 @@
+import createNextIntlPlugin from 'next-intl/plugin';
+
+const withNextIntl = createNextIntlPlugin();
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async headers() {
@@ -19,13 +23,18 @@ const nextConfig = {
     }];
   },
   async rewrites() {
+    // Portal API routes only - admin routes MUST go through /api/proxy for auth
     return [
       {
-        source: '/api/v1/:path*',
-        destination: 'http://localhost:8080/api/v1/:path*',
+        source: '/api/v1/auth/:path*',
+        destination: 'http://localhost:8080/api/v1/auth/:path*',
+      },
+      {
+        source: '/api/v1/portal/:path*',
+        destination: 'http://localhost:8080/api/v1/portal/:path*',
       },
     ]
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

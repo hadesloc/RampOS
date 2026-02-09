@@ -32,6 +32,7 @@ use ramp_core::sso::SsoService;
 use crate::handlers;
 use crate::handlers::aa::AAServiceState;
 use crate::handlers::bank_webhooks::BankWebhookState;
+use crate::handlers::ws::WsState;
 use crate::middleware::{
     auth_middleware, billing::usage_metering_middleware, idempotency_middleware,
     portal_auth_middleware, rate_limit_middleware, request_id_middleware,
@@ -41,6 +42,7 @@ use crate::middleware::{
 use crate::openapi::ApiDoc;
 
 use ramp_compliance::case::CaseManager;
+use ramp_compliance::reports::ctr::CtrService;
 use ramp_compliance::reports::ReportGenerator;
 use ramp_compliance::rules::RuleCacheManager;
 
@@ -69,6 +71,9 @@ pub struct AppState {
     pub sso_service: Arc<SsoService>,
     pub billing_service: Arc<BillingService>,
     pub vnst_protocol: Arc<VnstProtocolService>,
+    pub db_pool: Option<sqlx::PgPool>,
+    pub ctr_service: Option<Arc<CtrService>>,
+    pub ws_state: Option<Arc<WsState>>,
 }
 
 /// Create the API router with full middleware stack
@@ -170,6 +175,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/webhooks", get(handlers::admin::list_webhooks))
         .route("/webhooks/:id", get(handlers::admin::get_webhook))
         .route("/webhooks/:id/retry", post(handlers::admin::retry_webhook))
+        .route("/webhooks/configs/:id/deliveries", get(handlers::admin::list_webhook_deliveries))
         // Cases
         .route("/cases", get(handlers::list_cases))
         .route("/cases/stats", get(handlers::get_case_stats))
@@ -439,6 +445,15 @@ pub fn create_router(state: AppState) -> Router {
         ));
     }
 
+    // WebSocket route for real-time updates (no portal middleware - does its own JWT auth)
+    let ws_routes = if let Some(ref ws_state) = state.ws_state {
+        Router::new()
+            .route("/ws", get(handlers::ws::ws_handler))
+            .with_state(ws_state.clone())
+    } else {
+        Router::new()
+    };
+
     // Combine all routes
     // Note: More specific routes should be registered first to ensure proper matching
     Router::new()
@@ -460,6 +475,8 @@ pub fn create_router(state: AppState) -> Router {
         // Bank webhook routes (no auth required - uses signature verification)
         .nest("/v1/webhooks/bank", bank_webhook_routes)
         .nest("/v1/auth/sso", sso_routes)
+        // WebSocket endpoint for real-time updates (JWT auth via query param)
+        .nest("/v1/portal", ws_routes)
         .layer(middleware::from_fn(request_id_middleware))
         .layer({
             let request_headers = Arc::new([

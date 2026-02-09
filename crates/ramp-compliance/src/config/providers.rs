@@ -110,4 +110,5 @@ impl Default for DocumentStorageConfig {
 pub enum DocumentStorageType {
     Mock,
     S3,
+    Local,
 }

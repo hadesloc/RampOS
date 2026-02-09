@@ -8,13 +8,14 @@ use ramp_aa::types::ChainConfig;
 use ramp_api::{
     create_router,
     handlers::aa::AAServiceState,
+    handlers::ws::WsState,
     middleware::{IdempotencyConfig, IdempotencyHandler, PortalAuthConfig},
+    providers,
     router::AppState,
 };
 use ramp_common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig};
 use ramp_core::{
     config::Config,
-    event::InMemoryEventPublisher,
     jobs::intent_timeout::IntentTimeoutJob,
     repository::{
         intent::PgIntentRepository, ledger::PgLedgerRepository, tenant::PgTenantRepository,
@@ -50,6 +51,12 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Connected to database");
 
+    // Validate providers for production safety.
+    // In production (RUST_ENV=production or RAMPOS_ENV=production) this will
+    // reject mock/in-memory providers and fail fast with a clear error message.
+    // In development mode, mock providers are allowed with a warning.
+    providers::validate_production_providers()?;
+
     // Run migrations
     sqlx::migrate!("../../migrations").run(&pool).await?;
 
@@ -60,8 +67,14 @@ async fn main() -> anyhow::Result<()> {
     let user_repo = Arc::new(PgUserRepository::new(pool.clone()));
     let webhook_repo = Arc::new(PgWebhookRepository::new(pool.clone()));
 
-    // Create event publisher (in production, would use NATS)
-    let event_publisher = Arc::new(InMemoryEventPublisher::new());
+    // Create event publisher via config-driven factory.
+    // Respects EVENT_PUBLISHER env var (accepted: "nats", "memory").
+    // Rejects in-memory publisher when running in production mode.
+    let event_publisher = providers::build_event_publisher(
+        &config.nats.url,
+        &config.nats.stream_name,
+    )
+    .await?;
 
     // Create services
     let payin_service = Arc::new(PayinService::new(
@@ -182,6 +195,9 @@ async fn main() -> anyhow::Result<()> {
     // Create portal auth configuration
     let portal_auth_config = Arc::new(PortalAuthConfig::default());
 
+    // Create WebSocket state for real-time updates
+    let ws_state = Arc::new(WsState::new(portal_auth_config.jwt_secret.clone()));
+
     // Create application state
     let app_state = AppState {
         payin_service,
@@ -204,14 +220,17 @@ async fn main() -> anyhow::Result<()> {
         licensing_repo: None,
         compliance_audit_service: None,
         sso_service: Arc::new(ramp_core::sso::SsoService::new()),
-        billing_service: Arc::new(ramp_core::billing::BillingService::new(
-            ramp_core::billing::BillingConfig::default(),
-            Arc::new(ramp_core::billing::mock::MockBillingDataProvider::new()),
-        )),
-        vnst_protocol: Arc::new(ramp_core::stablecoin::VnstProtocolService::new(
-            ramp_core::stablecoin::VnstProtocolConfig::default(),
-            Arc::new(ramp_core::stablecoin::MockVnstProtocolDataProvider::new()),
-        )),
+        // Build billing service via config-driven provider selection.
+        // Respects BILLING_PROVIDER env var (accepted: "postgres", "mock").
+        // Rejects mock provider when running in production mode.
+        billing_service: Arc::new(providers::build_billing_service()?),
+        // Build VNST protocol service via config-driven provider selection.
+        // Respects VNST_PROVIDER env var (accepted: "live", "mock").
+        // Rejects mock provider when running in production mode.
+        vnst_protocol: Arc::new(providers::build_vnst_protocol_service()?),
+        db_pool: Some(pool.clone()),
+        ctr_service: None,
+        ws_state: Some(ws_state),
     };
 
     // Create router

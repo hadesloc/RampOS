@@ -41,6 +41,8 @@ fn default_limit() -> i64 {
     20
 }
 
+const MAX_LIMIT: i64 = 100;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LicenseRequirementResponse {
@@ -162,14 +164,16 @@ pub async fn list_requirements(
     Query(query): Query<ListRequirementsQuery>,
 ) -> Result<Json<ListRequirementsResponse>, ApiError> {
     super::tier::check_admin_key(&headers)?;
+
+    let limit = query.limit.min(MAX_LIMIT);
     info!(
-        limit = query.limit,
+        limit = limit,
         offset = query.offset,
         "Listing licensing requirements"
     );
 
     let requirements = licensing_repo
-        .list_requirements(query.limit, query.offset)
+        .list_requirements(limit, query.offset)
         .await
         .map_err(ApiError::from)?;
 
@@ -202,7 +206,7 @@ pub async fn list_requirements(
     Ok(Json(ListRequirementsResponse {
         data,
         total,
-        limit: query.limit,
+        limit,
         offset: query.offset,
     }))
 }

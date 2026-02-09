@@ -242,6 +242,9 @@ async fn setup_test_app() -> TestContext {
             ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
             Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
         )),
+        db_pool: None,
+        ctr_service: None,
+        ws_state: None,
     };
 
     let app = create_router(app_state);

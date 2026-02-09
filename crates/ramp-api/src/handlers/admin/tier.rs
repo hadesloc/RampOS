@@ -130,16 +130,13 @@ pub(crate) fn check_admin_key_with_role(
     }
 
     // Extract role from header or default to Viewer
+    // SECURITY: Role is embedded in the admin key value (key:role format).
+    // Do NOT accept role from a separate header to prevent privilege escalation.
     let role = if parts.len() > 1 {
         AdminRole::from_str(parts[1])
             .ok_or_else(|| ApiError::Forbidden(format!("Invalid role: {}", parts[1])))?
     } else {
-        // Check for role in separate header
-        headers
-            .get("X-Admin-Role")
-            .and_then(|v| v.to_str().ok())
-            .and_then(AdminRole::from_str)
-            .unwrap_or(AdminRole::Viewer)
+        AdminRole::Viewer
     };
 
     // Verify role meets requirement
@@ -282,7 +279,7 @@ pub async fn upgrade_user_tier(
     State(app_state): State<crate::router::AppState>,
     ValidatedJson(request): ValidatedJson<TierChangeRequest>,
 ) -> Result<Json<UserTierInfo>, ApiError> {
-    check_admin_key(&headers)?;
+    check_admin_key_operator(&headers)?;
 
     info!(
         tenant = %tenant_ctx.tenant_id.0,
@@ -338,7 +335,7 @@ pub async fn downgrade_user_tier(
     State(app_state): State<crate::router::AppState>,
     ValidatedJson(request): ValidatedJson<TierChangeRequest>,
 ) -> Result<Json<UserTierInfo>, ApiError> {
-    check_admin_key(&headers)?;
+    check_admin_key_operator(&headers)?;
 
     info!(
         tenant = %tenant_ctx.tenant_id.0,

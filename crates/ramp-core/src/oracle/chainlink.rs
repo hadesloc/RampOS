@@ -157,7 +157,7 @@ impl ChainlinkOracle {
         })?;
 
         // In production, this would:
-        // 1. Create ethers Provider from RPC endpoint
+        // 1. Create alloy Provider from RPC endpoint
         // 2. Create contract instance for AggregatorV3Interface
         // 3. Call latestRoundData()
         // 4. Parse answer and updatedAt

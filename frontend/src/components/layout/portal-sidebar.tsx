@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link, usePathname } from "@/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -27,66 +26,70 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/auth-context";
-
-const sidebarSections = [
-  {
-    title: "Overview",
-    items: [
-      {
-        title: "Dashboard",
-        href: "/portal",
-        icon: LayoutDashboard,
-      },
-    ],
-  },
-  {
-    title: "Finance",
-    items: [
-      {
-        title: "Assets",
-        href: "/portal/assets",
-        icon: Wallet,
-      },
-      {
-        title: "Deposit",
-        href: "/portal/deposit",
-        icon: ArrowDownToLine,
-      },
-      {
-        title: "Withdraw",
-        href: "/portal/withdraw",
-        icon: ArrowUpFromLine,
-      },
-      {
-        title: "Transactions",
-        href: "/portal/transactions",
-        icon: History,
-      },
-    ],
-  },
-  {
-    title: "Account",
-    items: [
-      {
-        title: "Settings",
-        href: "/portal/settings",
-        icon: Settings,
-      },
-    ],
-  },
-];
+import { useTranslations } from "next-intl";
+import { LocaleSwitcher } from "@/components/locale-switcher";
 
 export function PortalSidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { user, logout } = useAuth();
+  const t = useTranslations('Navigation');
+  const tPortal = useTranslations('Portal.dashboard');
+
+  const sidebarSections = [
+    {
+      title: t('overview'),
+      items: [
+        {
+          title: t('dashboard'),
+          href: "/portal",
+          icon: LayoutDashboard,
+        },
+      ],
+    },
+    {
+      title: t('finance'),
+      items: [
+        {
+          title: t('assets'),
+          href: "/portal/assets",
+          icon: Wallet,
+        },
+        {
+          title: t('deposit'),
+          href: "/portal/deposit",
+          icon: ArrowDownToLine,
+        },
+        {
+          title: t('withdraw'),
+          href: "/portal/withdraw",
+          icon: ArrowUpFromLine,
+        },
+        {
+          title: t('transactions'),
+          href: "/portal/transactions",
+          icon: History,
+        },
+      ],
+    },
+    {
+      title: t('account'),
+      items: [
+        {
+          title: t('settings'),
+          href: "/portal/settings",
+          icon: Settings,
+        },
+      ],
+    },
+  ];
 
   return (
     <TooltipProvider delayDuration={0}>
       {/* Mobile Toggle */}
       <div className="md:hidden fixed top-4 left-4 z-50">
-        <Button variant="outline" size="icon" onClick={() => setIsOpen(!isOpen)}>
+        <Button variant="outline" size="icon" onClick={() => setIsOpen(!isOpen)} aria-label="Toggle navigation menu">
           <Menu className="h-4 w-4" />
         </Button>
       </div>
@@ -118,6 +121,7 @@ export function PortalSidebar() {
                 size="icon"
                 className="md:hidden"
                 onClick={() => setIsOpen(false)}
+                aria-label="Close navigation menu"
             >
                 <X className="h-4 w-4" />
             </Button>
@@ -126,6 +130,7 @@ export function PortalSidebar() {
                 size="icon"
                 className={cn("hidden md:flex h-8 w-8 text-muted-foreground hover:text-foreground", isCollapsed && "h-8 w-8")}
                 onClick={() => setIsCollapsed(!isCollapsed)}
+                aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
                 {isCollapsed ? (
                 <ChevronRight className="h-4 w-4" />
@@ -219,25 +224,28 @@ export function PortalSidebar() {
                             onClick={() => logout()}
                         >
                             <LogOut className="h-4 w-4" />
-                            <span className="sr-only">Logout</span>
+                            <span className="sr-only">{t('logout')}</span>
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent side="right">
-                         <p>Logout {user?.email}</p>
+                         <p>{t('logout')} {user?.email}</p>
                     </TooltipContent>
                 </Tooltip>
             </div>
 
              {/* Standard Footer */}
              <div className={cn("flex flex-col gap-4", isCollapsed && "md:hidden")}>
-                <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary ring-2 ring-background">
-                        {user?.email?.[0].toUpperCase() || "U"}
-                    </div>
-                    <div className="flex flex-col overflow-hidden">
-                        <p className="text-sm font-medium truncate text-foreground">My Account</p>
-                        <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-                    </div>
+                <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary ring-2 ring-background">
+                          {user?.email?.[0].toUpperCase() || "U"}
+                      </div>
+                      <div className="flex flex-col overflow-hidden">
+                          <p className="text-sm font-medium truncate text-foreground">My Account</p>
+                          <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                      </div>
+                   </div>
+                   <LocaleSwitcher />
                 </div>
                  <Button
                     variant="outline"
@@ -245,7 +253,7 @@ export function PortalSidebar() {
                     onClick={() => logout()}
                 >
                     <LogOut className="h-4 w-4" />
-                    Logout
+                    {t('logout')}
                 </Button>
             </div>
         </div>

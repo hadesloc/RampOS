@@ -737,6 +737,215 @@ impl SslProvider for MockSslProvider {
     }
 }
 
+/// Certificate storage trait for persisting SSL certificates
+///
+/// Implementations can store certificates in a database, filesystem, or cloud KMS.
+#[async_trait]
+pub trait CertificateStore: Send + Sync {
+    /// Store a certificate
+    async fn store(&self, cert: &SslCertificate) -> Result<()>;
+
+    /// Retrieve a certificate by domain
+    async fn get_by_domain(&self, domain: &str) -> Result<Option<SslCertificate>>;
+
+    /// Retrieve a certificate by ID
+    async fn get_by_id(&self, certificate_id: &str) -> Result<Option<SslCertificate>>;
+
+    /// List all certificates expiring within the given number of days
+    async fn list_expiring(&self, days: i64) -> Result<Vec<SslCertificate>>;
+
+    /// Delete a certificate
+    async fn delete(&self, certificate_id: &str) -> Result<()>;
+}
+
+/// In-memory certificate store (for development and testing)
+pub struct InMemoryCertificateStore {
+    certificates: Arc<RwLock<HashMap<String, SslCertificate>>>,
+}
+
+impl InMemoryCertificateStore {
+    pub fn new() -> Self {
+        Self {
+            certificates: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+}
+
+impl Default for InMemoryCertificateStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl CertificateStore for InMemoryCertificateStore {
+    async fn store(&self, cert: &SslCertificate) -> Result<()> {
+        self.certificates
+            .write()
+            .await
+            .insert(cert.certificate_id.clone(), cert.clone());
+        Ok(())
+    }
+
+    async fn get_by_domain(&self, domain: &str) -> Result<Option<SslCertificate>> {
+        let certs = self.certificates.read().await;
+        Ok(certs.values().find(|c| c.domain == domain).cloned())
+    }
+
+    async fn get_by_id(&self, certificate_id: &str) -> Result<Option<SslCertificate>> {
+        Ok(self.certificates.read().await.get(certificate_id).cloned())
+    }
+
+    async fn list_expiring(&self, days: i64) -> Result<Vec<SslCertificate>> {
+        let threshold = Utc::now() + Duration::days(days);
+        let certs = self.certificates.read().await;
+        Ok(certs
+            .values()
+            .filter(|c| c.valid_until <= threshold)
+            .cloned()
+            .collect())
+    }
+
+    async fn delete(&self, certificate_id: &str) -> Result<()> {
+        self.certificates.write().await.remove(certificate_id);
+        Ok(())
+    }
+}
+
+/// Certificate renewal manager that checks for and renews expiring certificates.
+///
+/// Runs as a background task to automatically renew certificates that are
+/// within the renewal window (default: 30 days before expiry).
+pub struct CertificateRenewalManager<P: SslProvider> {
+    provider: Arc<P>,
+    store: Arc<dyn CertificateStore>,
+    /// Renew certificates expiring within this many days
+    renewal_threshold_days: i64,
+    /// Email for ACME account
+    acme_email: String,
+}
+
+impl<P: SslProvider + 'static> CertificateRenewalManager<P> {
+    pub fn new(
+        provider: Arc<P>,
+        store: Arc<dyn CertificateStore>,
+        renewal_threshold_days: i64,
+        acme_email: String,
+    ) -> Self {
+        Self {
+            provider,
+            store,
+            renewal_threshold_days,
+            acme_email,
+        }
+    }
+
+    /// Check for and renew expiring certificates. Returns the list of renewed certificate IDs.
+    pub async fn process_renewals(&self) -> Result<Vec<String>> {
+        let expiring = self.store.list_expiring(self.renewal_threshold_days).await?;
+
+        if expiring.is_empty() {
+            debug!("No certificates need renewal");
+            return Ok(Vec::new());
+        }
+
+        info!(
+            count = expiring.len(),
+            threshold_days = self.renewal_threshold_days,
+            "Found certificates needing renewal"
+        );
+
+        let mut renewed = Vec::new();
+
+        for cert in expiring {
+            match self.provider.renew(&cert.domain, &self.acme_email).await {
+                Ok(new_cert) => {
+                    // Store the new certificate
+                    if let Err(e) = self.store.store(&new_cert).await {
+                        warn!(
+                            domain = %cert.domain,
+                            error = %e,
+                            "Failed to store renewed certificate"
+                        );
+                        continue;
+                    }
+
+                    // Remove old certificate
+                    if let Err(e) = self.store.delete(&cert.certificate_id).await {
+                        warn!(
+                            old_cert_id = %cert.certificate_id,
+                            error = %e,
+                            "Failed to delete old certificate"
+                        );
+                    }
+
+                    info!(
+                        domain = %cert.domain,
+                        old_cert_id = %cert.certificate_id,
+                        new_cert_id = %new_cert.certificate_id,
+                        new_expiry = %new_cert.valid_until,
+                        "Certificate renewed successfully"
+                    );
+                    renewed.push(new_cert.certificate_id);
+                }
+                Err(e) => {
+                    warn!(
+                        domain = %cert.domain,
+                        error = %e,
+                        "Failed to renew certificate"
+                    );
+                }
+            }
+        }
+
+        info!(
+            renewed_count = renewed.len(),
+            "Certificate renewal processing complete"
+        );
+
+        Ok(renewed)
+    }
+
+    /// Run the renewal manager as a periodic background task.
+    /// Checks for expiring certificates every `check_interval`.
+    pub async fn run_periodic(self: Arc<Self>, check_interval: std::time::Duration) {
+        info!(
+            interval_secs = check_interval.as_secs(),
+            threshold_days = self.renewal_threshold_days,
+            "Starting certificate renewal manager"
+        );
+
+        loop {
+            match self.process_renewals().await {
+                Ok(renewed) => {
+                    if !renewed.is_empty() {
+                        info!(renewed = renewed.len(), "Renewed certificates in this cycle");
+                    }
+                }
+                Err(e) => {
+                    warn!(error = %e, "Error during certificate renewal check");
+                }
+            }
+
+            tokio::time::sleep(check_interval).await;
+        }
+    }
+}
+
+/// Create a Let's Encrypt SSL provider from environment configuration.
+///
+/// Reads:
+/// - `ACME_STAGING` (bool, default: true) - use Let's Encrypt staging
+/// - `ACME_ACCOUNT_EMAIL` - account email for ACME registration
+/// - `ACME_DIRECTORY_URL` - custom ACME directory URL (optional)
+pub fn create_ssl_provider() -> LetsEncryptProvider {
+    let staging = std::env::var("ACME_STAGING")
+        .map(|v| v != "false" && v != "0")
+        .unwrap_or(true);
+
+    LetsEncryptProvider::new(staging)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -789,5 +998,140 @@ mod tests {
 
         assert!(http_challenge.http_path.is_some());
         assert!(http_challenge.dns_record_name.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_certificate_store() {
+        let store = InMemoryCertificateStore::new();
+        let now = Utc::now();
+
+        let cert = SslCertificate {
+            certificate_id: "test_cert_1".to_string(),
+            domain: "example.com".to_string(),
+            issuer: "Test CA".to_string(),
+            certificate_pem: "CERT_PEM".to_string(),
+            private_key_pem: "KEY_PEM".to_string(),
+            chain_pem: "CHAIN_PEM".to_string(),
+            fullchain_pem: "FULL_PEM".to_string(),
+            valid_from: now,
+            valid_until: now + Duration::days(90),
+            created_at: now,
+        };
+
+        // Store
+        store.store(&cert).await.unwrap();
+
+        // Get by ID
+        let retrieved = store.get_by_id("test_cert_1").await.unwrap();
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().domain, "example.com");
+
+        // Get by domain
+        let retrieved = store.get_by_domain("example.com").await.unwrap();
+        assert!(retrieved.is_some());
+
+        // Not found
+        let not_found = store.get_by_domain("notfound.com").await.unwrap();
+        assert!(not_found.is_none());
+
+        // Delete
+        store.delete("test_cert_1").await.unwrap();
+        let deleted = store.get_by_id("test_cert_1").await.unwrap();
+        assert!(deleted.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_certificate_store_list_expiring() {
+        let store = InMemoryCertificateStore::new();
+        let now = Utc::now();
+
+        // Certificate expiring in 10 days
+        let cert_expiring = SslCertificate {
+            certificate_id: "expiring".to_string(),
+            domain: "expiring.example.com".to_string(),
+            issuer: "Test CA".to_string(),
+            certificate_pem: "PEM".to_string(),
+            private_key_pem: "KEY".to_string(),
+            chain_pem: "CHAIN".to_string(),
+            fullchain_pem: "FULL".to_string(),
+            valid_from: now - Duration::days(80),
+            valid_until: now + Duration::days(10),
+            created_at: now - Duration::days(80),
+        };
+
+        // Certificate expiring in 60 days
+        let cert_ok = SslCertificate {
+            certificate_id: "ok".to_string(),
+            domain: "ok.example.com".to_string(),
+            issuer: "Test CA".to_string(),
+            certificate_pem: "PEM".to_string(),
+            private_key_pem: "KEY".to_string(),
+            chain_pem: "CHAIN".to_string(),
+            fullchain_pem: "FULL".to_string(),
+            valid_from: now - Duration::days(30),
+            valid_until: now + Duration::days(60),
+            created_at: now - Duration::days(30),
+        };
+
+        store.store(&cert_expiring).await.unwrap();
+        store.store(&cert_ok).await.unwrap();
+
+        // List certificates expiring within 30 days
+        let expiring = store.list_expiring(30).await.unwrap();
+        assert_eq!(expiring.len(), 1);
+        assert_eq!(expiring[0].domain, "expiring.example.com");
+
+        // List certificates expiring within 90 days (both)
+        let expiring = store.list_expiring(90).await.unwrap();
+        assert_eq!(expiring.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_renewal_manager_process() {
+        let provider = Arc::new(MockSslProvider::new());
+        let store: Arc<dyn CertificateStore> = Arc::new(InMemoryCertificateStore::new());
+        let now = Utc::now();
+
+        // Add an expiring certificate
+        let cert = SslCertificate {
+            certificate_id: "old_cert".to_string(),
+            domain: "renew.example.com".to_string(),
+            issuer: "Test CA".to_string(),
+            certificate_pem: "PEM".to_string(),
+            private_key_pem: "KEY".to_string(),
+            chain_pem: "CHAIN".to_string(),
+            fullchain_pem: "FULL".to_string(),
+            valid_from: now - Duration::days(80),
+            valid_until: now + Duration::days(5), // Expiring in 5 days
+            created_at: now - Duration::days(80),
+        };
+        store.store(&cert).await.unwrap();
+
+        let manager = CertificateRenewalManager::new(
+            provider,
+            store.clone(),
+            30, // Renew within 30 days of expiry
+            "test@example.com".to_string(),
+        );
+
+        let renewed = manager.process_renewals().await.unwrap();
+        assert_eq!(renewed.len(), 1);
+
+        // The new certificate should be in the store
+        let new_cert = store.get_by_domain("renew.example.com").await.unwrap();
+        assert!(new_cert.is_some());
+        let new_cert = new_cert.unwrap();
+        assert!(new_cert.certificate_id.starts_with("mock_"));
+
+        // Old certificate should be deleted
+        let old = store.get_by_id("old_cert").await.unwrap();
+        assert!(old.is_none());
+    }
+
+    #[test]
+    fn test_create_ssl_provider() {
+        // Without ACME_STAGING set, defaults to staging
+        let provider = create_ssl_provider();
+        assert_eq!(provider.name(), "Let's Encrypt (Staging)");
     }
 }

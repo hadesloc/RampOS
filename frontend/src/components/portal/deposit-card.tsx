@@ -46,7 +46,7 @@ export function DepositCard({
              setTimeout(() => setCopied(false), 2000);
         }
         return (
-            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={handleCopy}>
+            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={handleCopy} aria-label="Copy to clipboard">
                 {copied ? <span className="text-green-500 dark:text-green-400 text-xs font-bold">✓</span> : <Copy className="h-3 w-3" />}
                 <span className="sr-only">Copy</span>
             </Button>

@@ -404,7 +404,140 @@ mod tests {
         let s = String::from("COMPLETED");
         assert_eq!(PayinState::from(s.clone()), PayinState::Completed);
         assert_eq!(PayoutState::from(s.clone()), PayoutState::Completed);
-        assert_eq!(WithdrawState::from(s), WithdrawState::Completed);
+        assert_eq!(WithdrawState::from(s.clone()), WithdrawState::Completed);
+        assert_eq!(TradeState::from(s.clone()), TradeState::Completed);
+        assert_eq!(DepositState::from(s), DepositState::Completed);
+    }
+
+    // ============================================================================
+    // TradeState Roundtrip Tests
+    // ============================================================================
+
+    #[test]
+    fn test_trade_state_roundtrip() {
+        let states = vec![
+            TradeState::Recorded, TradeState::PostTradeChecked, TradeState::SettledLedger,
+            TradeState::Completed, TradeState::ComplianceHold, TradeState::ManualReview,
+            TradeState::Rejected,
+        ];
+        for state in states {
+            let s = state.to_string();
+            let roundtripped = TradeState::from(s.as_str());
+            assert_eq!(state, roundtripped, "Roundtrip failed for {:?} -> {} -> {:?}", state, s, roundtripped);
+        }
+    }
+
+    #[test]
+    fn test_trade_state_from_str() {
+        assert_eq!(TradeState::from("RECORDED"), TradeState::Recorded);
+        assert_eq!(TradeState::from("POST_TRADE_CHECKED"), TradeState::PostTradeChecked);
+        assert_eq!(TradeState::from("SETTLED_LEDGER"), TradeState::SettledLedger);
+        assert_eq!(TradeState::from("COMPLETED"), TradeState::Completed);
+        assert_eq!(TradeState::from("COMPLIANCE_HOLD"), TradeState::ComplianceHold);
+        assert_eq!(TradeState::from("MANUAL_REVIEW"), TradeState::ManualReview);
+        assert_eq!(TradeState::from("REJECTED"), TradeState::Rejected);
+        assert_eq!(TradeState::from("UNKNOWN"), TradeState::Recorded);
+    }
+
+    // ============================================================================
+    // DepositState Roundtrip Tests
+    // ============================================================================
+
+    #[test]
+    fn test_deposit_state_roundtrip() {
+        let states = vec![
+            DepositState::Detected, DepositState::Confirming, DepositState::Confirmed,
+            DepositState::KytChecked, DepositState::Credited, DepositState::Completed,
+            DepositState::KytFlagged, DepositState::ManualReview, DepositState::Rejected,
+        ];
+        for state in states {
+            let s = state.to_string();
+            let roundtripped = DepositState::from(s.as_str());
+            assert_eq!(state, roundtripped, "Roundtrip failed for {:?} -> {} -> {:?}", state, s, roundtripped);
+        }
+    }
+
+    #[test]
+    fn test_deposit_state_from_str() {
+        assert_eq!(DepositState::from("DETECTED"), DepositState::Detected);
+        assert_eq!(DepositState::from("CONFIRMING"), DepositState::Confirming);
+        assert_eq!(DepositState::from("CONFIRMED"), DepositState::Confirmed);
+        assert_eq!(DepositState::from("KYT_CHECKED"), DepositState::KytChecked);
+        assert_eq!(DepositState::from("CREDITED"), DepositState::Credited);
+        assert_eq!(DepositState::from("COMPLETED"), DepositState::Completed);
+        assert_eq!(DepositState::from("KYT_FLAGGED"), DepositState::KytFlagged);
+        assert_eq!(DepositState::from("MANUAL_REVIEW"), DepositState::ManualReview);
+        assert_eq!(DepositState::from("REJECTED"), DepositState::Rejected);
+        assert_eq!(DepositState::from("UNKNOWN"), DepositState::Detected);
+    }
+
+    // ============================================================================
+    // FromStr (Result-returning) Tests
+    // ============================================================================
+
+    #[test]
+    fn test_payin_state_parse_valid() {
+        assert_eq!("COMPLETED".parse::<PayinState>().unwrap(), PayinState::Completed);
+        assert_eq!("PAYIN_CREATED".parse::<PayinState>().unwrap(), PayinState::Created);
+        assert_eq!("CREATED".parse::<PayinState>().unwrap(), PayinState::Created);
+        assert_eq!("INSTRUCTION_ISSUED".parse::<PayinState>().unwrap(), PayinState::InstructionIssued);
+    }
+
+    #[test]
+    fn test_payin_state_parse_invalid() {
+        let err = "INVALID_STATE".parse::<PayinState>().unwrap_err();
+        assert_eq!(err.state_type, "PayinState");
+        assert_eq!(err.value, "INVALID_STATE");
+        assert!(err.to_string().contains("PayinState"));
+    }
+
+    #[test]
+    fn test_payout_state_parse_valid() {
+        assert_eq!("COMPLETED".parse::<PayoutState>().unwrap(), PayoutState::Completed);
+        assert_eq!("PAYOUT_CREATED".parse::<PayoutState>().unwrap(), PayoutState::Created);
+        assert_eq!("REVERSED".parse::<PayoutState>().unwrap(), PayoutState::Reversed);
+    }
+
+    #[test]
+    fn test_payout_state_parse_invalid() {
+        let err = "INVALID_STATE".parse::<PayoutState>().unwrap_err();
+        assert_eq!(err.state_type, "PayoutState");
+    }
+
+    #[test]
+    fn test_trade_state_parse_valid() {
+        assert_eq!("RECORDED".parse::<TradeState>().unwrap(), TradeState::Recorded);
+        assert_eq!("COMPLIANCE_HOLD".parse::<TradeState>().unwrap(), TradeState::ComplianceHold);
+    }
+
+    #[test]
+    fn test_trade_state_parse_invalid() {
+        let err = "INVALID_STATE".parse::<TradeState>().unwrap_err();
+        assert_eq!(err.state_type, "TradeState");
+    }
+
+    #[test]
+    fn test_deposit_state_parse_valid() {
+        assert_eq!("DETECTED".parse::<DepositState>().unwrap(), DepositState::Detected);
+        assert_eq!("KYT_CHECKED".parse::<DepositState>().unwrap(), DepositState::KytChecked);
+    }
+
+    #[test]
+    fn test_deposit_state_parse_invalid() {
+        let err = "INVALID_STATE".parse::<DepositState>().unwrap_err();
+        assert_eq!(err.state_type, "DepositState");
+    }
+
+    #[test]
+    fn test_withdraw_state_parse_valid() {
+        assert_eq!("CREATED".parse::<WithdrawState>().unwrap(), WithdrawState::Created);
+        assert_eq!("REJECTED_INSUFFICIENT_BALANCE".parse::<WithdrawState>().unwrap(), WithdrawState::RejectedByPolicy);
+    }
+
+    #[test]
+    fn test_withdraw_state_parse_invalid() {
+        let err = "INVALID_STATE".parse::<WithdrawState>().unwrap_err();
+        assert_eq!(err.state_type, "WithdrawState");
     }
 
     // ============================================================================
@@ -426,14 +559,23 @@ mod tests {
         let trade = IntentState::Trade(TradeState::Completed);
         assert!(trade.is_terminal());
         assert!(!trade.is_error());
+        assert_eq!(trade.as_string(), "COMPLETED");
+
+        let trade_recorded = IntentState::Trade(TradeState::ComplianceHold);
+        assert_eq!(trade_recorded.as_string(), "COMPLIANCE_HOLD");
 
         let deposit = IntentState::Deposit(DepositState::Completed);
         assert!(deposit.is_terminal());
         assert!(!deposit.is_error());
+        assert_eq!(deposit.as_string(), "COMPLETED");
+
+        let deposit_detected = IntentState::Deposit(DepositState::Detected);
+        assert_eq!(deposit_detected.as_string(), "DETECTED");
 
         let withdraw = IntentState::Withdraw(WithdrawState::Completed);
         assert!(withdraw.is_terminal());
         assert!(!withdraw.is_error());
+        assert_eq!(withdraw.as_string(), "COMPLETED");
 
         // Test error delegation
         let error_payin = IntentState::Payin(PayinState::Expired);

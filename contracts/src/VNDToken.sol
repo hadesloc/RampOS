@@ -27,6 +27,9 @@ contract VNDToken is ERC20, ERC20Burnable, ERC20Permit, Ownable {
     /// @notice Decimals - VND typically has 0 decimals but we use 0 for simplicity
     uint8 private constant _decimals = 0;
 
+    /// @notice Maximum supply cap: 1 billion VND tokens (0 decimals)
+    uint256 public constant MAX_SUPPLY = 1_000_000_000;
+
     /// @notice Minter role - addresses that can mint new tokens
     mapping(address => bool) public minters;
 
@@ -40,6 +43,7 @@ contract VNDToken is ERC20, ERC20Burnable, ERC20Permit, Ownable {
     error NotMinter();
     error ZeroAddress();
     error ZeroAmount();
+    error SupplyCapExceeded();
 
     modifier onlyMinter() {
         if (!minters[msg.sender] && msg.sender != owner()) {
@@ -85,6 +89,7 @@ contract VNDToken is ERC20, ERC20Burnable, ERC20Permit, Ownable {
     function mint(address to, uint256 amount) external onlyMinter {
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
+        if (totalSupply() + amount > MAX_SUPPLY) revert SupplyCapExceeded();
         _mint(to, amount);
         emit Mint(to, amount, "");
     }
@@ -100,6 +105,7 @@ contract VNDToken is ERC20, ERC20Burnable, ERC20Permit, Ownable {
     ) external onlyMinter {
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
+        if (totalSupply() + amount > MAX_SUPPLY) revert SupplyCapExceeded();
         _mint(to, amount);
         emit Mint(to, amount, referenceCode);
     }

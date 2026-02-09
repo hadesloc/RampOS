@@ -390,6 +390,7 @@ export function ThemeCustomizer() {
               size="icon"
               className="h-8 w-8"
               onClick={() => setPreviewMode("light")}
+              aria-label="Switch to light mode"
             >
               <Sun className="h-4 w-4" />
             </Button>
@@ -398,6 +399,7 @@ export function ThemeCustomizer() {
               size="icon"
               className="h-8 w-8"
               onClick={() => setPreviewMode("dark")}
+              aria-label="Switch to dark mode"
             >
               <Moon className="h-4 w-4" />
             </Button>

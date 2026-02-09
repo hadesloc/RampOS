@@ -83,7 +83,7 @@ impl TradeService {
             tenant_id: req.tenant_id.0.clone(),
             user_id: req.user_id.0.clone(),
             intent_type: "TRADE_EXECUTED".to_string(),
-            state: "TRADE_RECORDED".to_string(),
+            state: TradeState::Recorded.to_string(),
             state_history: serde_json::json!([]),
             amount: req.vnd_delta.0.abs(),
             currency: "VND".to_string(),
@@ -119,11 +119,11 @@ impl TradeService {
 
         if compliance_ok {
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, "POST_TRADE_CHECKED")
+                .update_state(&req.tenant_id, &intent_id, &TradeState::PostTradeChecked.to_string())
                 .await?;
         } else {
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, "COMPLIANCE_HOLD")
+                .update_state(&req.tenant_id, &intent_id, &TradeState::ComplianceHold.to_string())
                 .await?;
 
             self.event_publisher
@@ -158,17 +158,17 @@ impl TradeService {
 
         // Update to settled
         self.intent_repo
-            .update_state(&req.tenant_id, &intent_id, "SETTLED_LEDGER")
+            .update_state(&req.tenant_id, &intent_id, &TradeState::SettledLedger.to_string())
             .await?;
 
         // Mark completed
         self.intent_repo
-            .update_state(&req.tenant_id, &intent_id, "COMPLETED")
+            .update_state(&req.tenant_id, &intent_id, &TradeState::Completed.to_string())
             .await?;
 
         // Publish event
         self.event_publisher
-            .publish_intent_status_changed(&intent_id, &req.tenant_id, "COMPLETED")
+            .publish_intent_status_changed(&intent_id, &req.tenant_id, &TradeState::Completed.to_string())
             .await?;
 
         info!(

@@ -10,5 +10,4 @@ pub use vnd_limits::{
     VndUserLimitStatus,
 };
 
-#[cfg(any(test, feature = "testing"))]
 pub use vnd_limits::MockVndLimitDataProvider;

@@ -755,7 +755,7 @@ impl WithdrawPolicyEngine {
 }
 
 /// Mock data provider for testing
-#[cfg(any(test, feature = "testing"))]
+
 pub struct MockWithdrawPolicyDataProvider {
     pub daily_amount: std::sync::Mutex<Decimal>,
     pub monthly_amount: std::sync::Mutex<Decimal>,
@@ -764,7 +764,7 @@ pub struct MockWithdrawPolicyDataProvider {
     pub last_withdraw_time: std::sync::Mutex<Option<chrono::DateTime<Utc>>>,
 }
 
-#[cfg(any(test, feature = "testing"))]
+
 impl MockWithdrawPolicyDataProvider {
     pub fn new() -> Self {
         Self {
@@ -802,14 +802,14 @@ impl MockWithdrawPolicyDataProvider {
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
+
 impl Default for MockWithdrawPolicyDataProvider {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
+
 #[async_trait]
 impl WithdrawPolicyDataProvider for MockWithdrawPolicyDataProvider {
     async fn get_daily_withdraw_amount(

@@ -146,7 +146,16 @@ pub async fn confirm_payin(
         .get("X-Internal-Secret")
         .and_then(|v| v.to_str().ok());
 
-    if provided_secret != Some(&internal_secret) {
+    // Use constant-time comparison to prevent timing attacks
+    let secrets_match = match provided_secret {
+        Some(provided) => {
+            use subtle::ConstantTimeEq;
+            provided.as_bytes().ct_eq(internal_secret.as_bytes()).into()
+        }
+        None => false,
+    };
+
+    if !secrets_match {
         return Err(ApiError::Forbidden(
             "Missing or invalid internal secret".to_string(),
         ));

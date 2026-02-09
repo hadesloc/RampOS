@@ -15,7 +15,7 @@ pub struct GasEstimate {
 }
 
 /// Provider abstraction for gas estimation
-/// Replaces direct ethers::providers::Middleware dependency
+/// Replaces direct provider middleware dependency (uses alloy::providers)
 #[async_trait]
 pub trait GasProvider: Send + Sync {
     /// Get current gas price

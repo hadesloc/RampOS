@@ -37,7 +37,7 @@ pub async fn create_tenant(
     State(onboarding_service): State<Arc<OnboardingService>>,
     ValidatedJson(request): ValidatedJson<CreateTenantRequest>,
 ) -> Result<Json<TenantResponse>, ApiError> {
-    super::tier::check_admin_key(&headers)?;
+    super::tier::check_admin_key_operator(&headers)?;
     info!(name = %request.name, "Creating new tenant");
 
     let tenant = onboarding_service
@@ -60,7 +60,7 @@ pub async fn generate_api_keys(
     State(onboarding_service): State<Arc<OnboardingService>>,
     Path(tenant_id): Path<String>,
 ) -> Result<Json<ApiCredentials>, ApiError> {
-    super::tier::check_admin_key(&headers)?;
+    super::tier::check_admin_key_operator(&headers)?;
     info!(tenant_id = %tenant_id, "Generating API credentials");
 
     let credentials = onboarding_service
@@ -77,7 +77,7 @@ pub async fn activate_tenant(
     State(onboarding_service): State<Arc<OnboardingService>>,
     Path(tenant_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    super::tier::check_admin_key(&headers)?;
+    super::tier::check_admin_key_operator(&headers)?;
     info!(tenant_id = %tenant_id, "Activating tenant");
 
     onboarding_service
@@ -95,7 +95,7 @@ pub async fn suspend_tenant(
     Path(tenant_id): Path<String>,
     ValidatedJson(request): ValidatedJson<SuspendTenantRequest>,
 ) -> Result<StatusCode, ApiError> {
-    super::tier::check_admin_key(&headers)?;
+    super::tier::check_admin_key_operator(&headers)?;
     info!(tenant_id = %tenant_id, reason = %request.reason, "Suspending tenant");
 
     onboarding_service

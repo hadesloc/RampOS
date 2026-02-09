@@ -442,12 +442,105 @@ export const transactionApi = {
   },
 };
 
+// Settings Types
+export interface UserProfile {
+  fullName: string;
+  email: string;
+  phone: string | null;
+  avatarUrl: string | null;
+}
+
+export interface UpdateProfileRequest {
+  fullName?: string;
+  phone?: string;
+  avatarUrl?: string;
+}
+
+export interface UpdateProfileResponse {
+  success: boolean;
+  profile: UserProfile;
+}
+
+export interface WebAuthnCredentialInfo {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export interface SecuritySettings {
+  twoFactorEnabled: boolean;
+  webauthnCredentials: WebAuthnCredentialInfo[];
+  lastPasswordChange: string | null;
+}
+
+export interface UpdatePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface UpdateSecurityResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface NotificationPreferences {
+  emailNotifications: boolean;
+  smsNotifications: boolean;
+  pushNotifications: boolean;
+}
+
+export interface UpdateNotificationsResponse {
+  success: boolean;
+  preferences: NotificationPreferences;
+}
+
+// Settings API
+export const settingsApi = {
+  // Profile
+  getProfile: async (): Promise<UserProfile> => {
+    return portalRequest<UserProfile>('/v1/portal/settings/profile');
+  },
+
+  updateProfile: async (data: UpdateProfileRequest): Promise<UpdateProfileResponse> => {
+    return portalRequest<UpdateProfileResponse>('/v1/portal/settings/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Security
+  getSecurity: async (): Promise<SecuritySettings> => {
+    return portalRequest<SecuritySettings>('/v1/portal/settings/security');
+  },
+
+  updatePassword: async (data: UpdatePasswordRequest): Promise<UpdateSecurityResponse> => {
+    return portalRequest<UpdateSecurityResponse>('/v1/portal/settings/security', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Notifications
+  getNotifications: async (): Promise<NotificationPreferences> => {
+    return portalRequest<NotificationPreferences>('/v1/portal/settings/notifications');
+  },
+
+  updateNotifications: async (prefs: NotificationPreferences): Promise<UpdateNotificationsResponse> => {
+    return portalRequest<UpdateNotificationsResponse>('/v1/portal/settings/notifications', {
+      method: 'PUT',
+      body: JSON.stringify(prefs),
+    });
+  },
+};
+
 // Export all APIs
 export const portalApi = {
   auth: authApi,
   kyc: kycApi,
   wallet: walletApi,
   transaction: transactionApi,
+  settings: settingsApi,
 };
 
 export default portalApi;

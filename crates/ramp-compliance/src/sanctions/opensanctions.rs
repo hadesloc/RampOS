@@ -23,10 +23,16 @@ struct OpenSanctionsMatch {
 
 impl OpenSanctionsProvider {
     pub fn new(api_key: String, base_url: Option<String>) -> Self {
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .build()
+            .unwrap_or_else(|_| Client::new());
+
         Self {
             api_key,
             base_url: base_url.unwrap_or_else(|| "https://api.opensanctions.org".to_string()),
-            client: Client::new(),
+            client,
             fuzzy_threshold: 70.0, // Default to 70% match
         }
     }

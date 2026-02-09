@@ -318,7 +318,17 @@ impl VndLimitChecker {
         amount_vnd: Decimal,
         transaction_type: &str,
     ) -> Result<VndLimitResult> {
-        // Skip enforcement based on config
+        // Always check tier first - Tier0 users cannot transact regardless of config
+        let tier = self.data_provider.get_user_tier(tenant_id, user_id).await?;
+
+        if tier == KycTier::Tier0 {
+            return Ok(VndLimitResult::TierNotAllowed {
+                tier,
+                reason: "Tier 0 users are not allowed to perform transactions. Please complete KYC verification.".to_string(),
+            });
+        }
+
+        // Skip enforcement based on config (only after tier check)
         match transaction_type {
             "PAYIN" | "PAYIN_VND" if !self.config.enforce_on_payin => {
                 return Ok(VndLimitResult::Approved {
@@ -333,17 +343,6 @@ impl VndLimitChecker {
                 });
             }
             _ => {}
-        }
-
-        // Get user's tier
-        let tier = self.data_provider.get_user_tier(tenant_id, user_id).await?;
-
-        // Check if tier allows transactions
-        if tier == KycTier::Tier0 {
-            return Ok(VndLimitResult::TierNotAllowed {
-                tier,
-                reason: "Tier 0 users are not allowed to perform transactions. Please complete KYC verification.".to_string(),
-            });
         }
 
         // Get limits (check for user override first)
@@ -527,7 +526,7 @@ impl VndLimitChecker {
 }
 
 /// Mock data provider for testing
-#[cfg(any(test, feature = "testing"))]
+
 pub struct MockVndLimitDataProvider {
     pub daily_used: std::sync::Mutex<Decimal>,
     pub monthly_used: std::sync::Mutex<Decimal>,
@@ -536,7 +535,7 @@ pub struct MockVndLimitDataProvider {
     pub recorded_transactions: std::sync::Mutex<Vec<(String, Decimal, String)>>,
 }
 
-#[cfg(any(test, feature = "testing"))]
+
 impl MockVndLimitDataProvider {
     pub fn new() -> Self {
         Self {
@@ -569,14 +568,14 @@ impl MockVndLimitDataProvider {
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
+
 impl Default for MockVndLimitDataProvider {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
+
 #[async_trait]
 impl VndLimitDataProvider for MockVndLimitDataProvider {
     async fn get_daily_used(

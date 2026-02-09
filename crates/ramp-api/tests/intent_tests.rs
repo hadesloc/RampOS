@@ -156,6 +156,9 @@ async fn test_get_intent_endpoint() {
             ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
             Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
         )),
+        db_pool: None,
+        ctr_service: None,
+        ws_state: None,
     };
 
     let app = create_router(app_state);
@@ -287,6 +290,9 @@ async fn test_get_intent_not_found() {
             ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
             Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
         )),
+        db_pool: None,
+        ctr_service: None,
+        ws_state: None,
     };
 
     let app = create_router(app_state);
@@ -457,6 +463,9 @@ async fn test_get_intent_wrong_tenant() {
             ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
             Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
         )),
+        db_pool: None,
+        ctr_service: None,
+        ws_state: None,
     };
 
     let app = create_router(app_state);

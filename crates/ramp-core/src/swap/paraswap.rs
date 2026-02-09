@@ -6,6 +6,8 @@
 use async_trait::async_trait;
 use alloy::primitives::{Address, Bytes, U256};
 use ramp_common::{Error, Result};
+#[allow(unused_imports)]
+use ramp_common::resilience::ResilientClient;
 use serde::Deserialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -73,6 +75,7 @@ struct ParaSwapTxResponse {
 pub struct ParaSwapAggregator {
     config: AggregatorConfig,
     http_client: reqwest::Client,
+    resilient: ResilientClient,
 }
 
 impl ParaSwapAggregator {
@@ -81,6 +84,7 @@ impl ParaSwapAggregator {
         Self {
             config,
             http_client: reqwest::Client::new(),
+            resilient: ResilientClient::new("paraswap"),
         }
     }
 
@@ -232,49 +236,74 @@ impl DexAggregator for ParaSwapAggregator {
             .unwrap()
             .as_secs();
 
+        // Check for API key from config or environment variable
+        let api_key = self.config.api_key.clone()
+            .or_else(|| std::env::var("PARASWAP_API_KEY").ok());
+
         // Check if we should use mock mode (test environments or explicit override)
         let use_mock = std::env::var("PARASWAP_MOCK").unwrap_or_default() == "true"
-            || (cfg!(test) && self.config.api_url.is_empty());
+            || (cfg!(test) && self.config.api_url.is_empty() && api_key.is_none());
 
         if use_mock {
-            tracing::warn!("ParaSwap mock mode active, returning mock quote");
+            tracing::warn!("ParaSwap mock mode active (no PARASWAP_API_KEY set), returning mock quote");
             return self.mock_quote(from, to, amount, slippage_bps, chain_id, now);
         }
 
-        // Make real API call to ParaSwap
-        let mut request = self.http_client
-            .get(&url)
-            .header("Accept", "application/json")
-            .timeout(std::time::Duration::from_secs(self.config.timeout_secs));
+        // Make real API call to ParaSwap (with circuit breaker)
+        let http_client = self.http_client.clone();
+        let timeout_secs = self.config.timeout_secs;
+        let url_clone = url.clone();
+        let api_key_clone = api_key.clone();
 
-        // Add API key header if configured
-        if let Some(ref api_key) = self.config.api_key {
-            request = request.header("X-API-Key", api_key.as_str());
-        }
+        let price_resp: ParaSwapPriceResponse = self
+            .resilient
+            .execute(|| {
+                let http_client = http_client.clone();
+                let url = url_clone.clone();
+                let api_key = api_key_clone.clone();
+                async move {
+                    let mut request = http_client
+                        .get(&url)
+                        .header("Accept", "application/json")
+                        .timeout(std::time::Duration::from_secs(timeout_secs));
 
-        let response = request.send().await.map_err(|e| {
-            Error::ExternalService {
+                    // Add API key header if configured (from config or env var)
+                    if let Some(ref key) = api_key {
+                        request = request.header("X-API-Key", key.as_str());
+                    }
+
+                    let response = request.send().await.map_err(|e| {
+                        Error::ExternalService {
+                            service: "ParaSwap".to_string(),
+                            message: format!("Quote request failed: {}", e),
+                        }
+                    })?;
+
+                    if !response.status().is_success() {
+                        let status = response.status();
+                        let body = response.text().await.unwrap_or_default();
+                        tracing::error!(status = %status, body = %body, "ParaSwap quote API error");
+                        return Err(Error::ExternalService {
+                            service: "ParaSwap".to_string(),
+                            message: format!("Quote API returned {}: {}", status, body),
+                        });
+                    }
+
+                    let price_resp: ParaSwapPriceResponse = response.json().await.map_err(|e| {
+                        Error::ExternalService {
+                            service: "ParaSwap".to_string(),
+                            message: format!("Failed to parse quote response: {}", e),
+                        }
+                    })?;
+
+                    Ok(price_resp)
+                }
+            })
+            .await
+            .map_err(|e| Error::ExternalService {
                 service: "ParaSwap".to_string(),
-                message: format!("Quote request failed: {}", e),
-            }
-        })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            tracing::error!(status = %status, body = %body, "ParaSwap quote API error");
-            return Err(Error::ExternalService {
-                service: "ParaSwap".to_string(),
-                message: format!("Quote API returned {}: {}", status, body),
-            });
-        }
-
-        let price_resp: ParaSwapPriceResponse = response.json().await.map_err(|e| {
-            Error::ExternalService {
-                service: "ParaSwap".to_string(),
-                message: format!("Failed to parse quote response: {}", e),
-            }
-        })?;
+                message: format!("{}", e),
+            })?;
 
         let dest_amount = Self::parse_amount(&price_resp.price_route.dest_amount)?;
         let slippage_amount = dest_amount * U256::from(slippage_bps) / U256::from(10000);
@@ -343,12 +372,16 @@ impl DexAggregator for ParaSwapAggregator {
             "Building ParaSwap swap tx"
         );
 
+        // Check for API key from config or environment variable
+        let api_key = self.config.api_key.clone()
+            .or_else(|| std::env::var("PARASWAP_API_KEY").ok());
+
         // Check if we should use mock mode
         let use_mock = std::env::var("PARASWAP_MOCK").unwrap_or_default() == "true"
-            || (cfg!(test) && self.config.api_url.is_empty());
+            || (cfg!(test) && self.config.api_url.is_empty() && api_key.is_none());
 
         if use_mock {
-            tracing::warn!("ParaSwap mock mode active, returning mock swap tx");
+            tracing::warn!("ParaSwap mock mode active (no PARASWAP_API_KEY set), returning mock swap tx");
             return Ok(SwapTxData {
                 to: quote.swap_contract,
                 data: quote.swap_data.clone(),
@@ -382,40 +415,62 @@ impl DexAggregator for ParaSwapAggregator {
             "slippage": quote.slippage_bps,
         });
 
-        let mut request = self.http_client
-            .post(&tx_url)
-            .header("Accept", "application/json")
-            .header("Content-Type", "application/json")
-            .timeout(std::time::Duration::from_secs(self.config.timeout_secs))
-            .json(&tx_body);
+        // Build swap tx (with circuit breaker)
+        let http_client = self.http_client.clone();
+        let timeout_secs = self.config.timeout_secs;
+        let api_key_clone = api_key.clone();
 
-        if let Some(ref api_key) = self.config.api_key {
-            request = request.header("X-API-Key", api_key.as_str());
-        }
+        let tx_resp: ParaSwapTxResponse = self
+            .resilient
+            .execute(|| {
+                let http_client = http_client.clone();
+                let tx_url = tx_url.clone();
+                let tx_body = tx_body.clone();
+                let api_key = api_key_clone.clone();
+                async move {
+                    let mut request = http_client
+                        .post(&tx_url)
+                        .header("Accept", "application/json")
+                        .header("Content-Type", "application/json")
+                        .timeout(std::time::Duration::from_secs(timeout_secs))
+                        .json(&tx_body);
 
-        let response = request.send().await.map_err(|e| {
-            Error::ExternalService {
+                    if let Some(ref key) = api_key {
+                        request = request.header("X-API-Key", key.as_str());
+                    }
+
+                    let response = request.send().await.map_err(|e| {
+                        Error::ExternalService {
+                            service: "ParaSwap".to_string(),
+                            message: format!("Swap tx request failed: {}", e),
+                        }
+                    })?;
+
+                    if !response.status().is_success() {
+                        let status = response.status();
+                        let body = response.text().await.unwrap_or_default();
+                        tracing::error!(status = %status, body = %body, "ParaSwap swap tx API error");
+                        return Err(Error::ExternalService {
+                            service: "ParaSwap".to_string(),
+                            message: format!("Swap tx API returned {}: {}", status, body),
+                        });
+                    }
+
+                    let tx_resp: ParaSwapTxResponse = response.json().await.map_err(|e| {
+                        Error::ExternalService {
+                            service: "ParaSwap".to_string(),
+                            message: format!("Failed to parse swap tx response: {}", e),
+                        }
+                    })?;
+
+                    Ok(tx_resp)
+                }
+            })
+            .await
+            .map_err(|e| Error::ExternalService {
                 service: "ParaSwap".to_string(),
-                message: format!("Swap tx request failed: {}", e),
-            }
-        })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            tracing::error!(status = %status, body = %body, "ParaSwap swap tx API error");
-            return Err(Error::ExternalService {
-                service: "ParaSwap".to_string(),
-                message: format!("Swap tx API returned {}: {}", status, body),
-            });
-        }
-
-        let tx_resp: ParaSwapTxResponse = response.json().await.map_err(|e| {
-            Error::ExternalService {
-                service: "ParaSwap".to_string(),
-                message: format!("Failed to parse swap tx response: {}", e),
-            }
-        })?;
+                message: format!("{}", e),
+            })?;
 
         // Parse the transaction data from the response
         let to_address: Address = tx_resp.to.parse().map_err(|e| {

@@ -38,8 +38,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-pub use dns::{DnsProvider, DnsRecord, DnsRecordType, DnsVerification, DnsVerificationStatus};
-pub use ssl::{SslCertificate, SslProvider, SslProvisioningStatus, LetsEncryptProvider};
+pub use dns::{DnsProvider, DnsRecord, DnsRecordType, DnsVerification, DnsVerificationStatus, CloudflareDnsProvider, create_dns_provider};
+pub use ssl::{SslCertificate, SslProvider, SslProvisioningStatus, LetsEncryptProvider, CertificateStore, InMemoryCertificateStore, CertificateRenewalManager, create_ssl_provider};
 
 /// Domain status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

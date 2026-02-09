@@ -1,5 +1,6 @@
 pub mod ekyc;
 pub mod mock;
+pub mod onfido;
 pub mod tier;
 pub mod workflow;
 
@@ -8,6 +9,7 @@ pub use ekyc::{
     TenantEkycConfig, UserProvidedData,
 };
 pub use mock::{KycWorkflowState, MockKycConfig, MockKycProvider};
+pub use onfido::OnfidoKycProvider;
 pub use tier::{TierDataProvider, TierManager, UserKycInfo};
 
 use async_trait::async_trait;
@@ -92,7 +94,10 @@ impl KycService {
         url: &str,
         expiry: std::time::Duration,
     ) -> StorageResult<String> {
-        self.storage.generate_presigned_url(url, expiry).await
+        // Cap presigned URL expiry to 1 hour maximum to limit exposure
+        const MAX_EXPIRY: std::time::Duration = std::time::Duration::from_secs(3600);
+        let capped_expiry = if expiry > MAX_EXPIRY { MAX_EXPIRY } else { expiry };
+        self.storage.generate_presigned_url(url, capped_expiry).await
     }
 
     /// Submit KYC verification

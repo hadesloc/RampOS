@@ -28,21 +28,62 @@ fn is_production() -> bool {
 
 /// Build the event publisher based on `EVENT_PUBLISHER` env var.
 ///
-/// Accepted values:
-/// - `"nats"` – requires `RAMPOS__NATS__URL` (feature `nats` must be compiled in)
+/// Selection logic:
+/// 1. If `EVENT_PUBLISHER` is explicitly set, use that value.
+/// 2. If `EVENT_PUBLISHER` is absent but `NATS_URL` (or `RAMPOS__NATS__URL` via
+///    the config) is available, auto-select `"nats"`.
+/// 3. Otherwise, fall back to `"memory"`.
+///
+/// Accepted values for `EVENT_PUBLISHER`:
+/// - `"nats"` – connects to NATS at the provided URL (feature `nats` must be compiled in)
 /// - `"memory"` / absent – uses `InMemoryEventPublisher` (rejected in production)
+///
+/// In production (`RAMPOS_ENV=production` or `RUST_ENV=production`) the process
+/// will fail fast if no NATS URL is configured.
+#[allow(unused_variables)] // `nats_stream` and `effective_nats_url` are used only with feature `nats`
 pub async fn build_event_publisher(
     nats_url: &str,
     nats_stream: &str,
 ) -> anyhow::Result<Arc<dyn EventPublisher>> {
-    let kind = std::env::var("EVENT_PUBLISHER").unwrap_or_else(|_| "memory".to_string());
+    // Check for NATS_URL env var directly (takes precedence over config default)
+    let nats_url_from_env = std::env::var("NATS_URL")
+        .or_else(|_| std::env::var("RAMPOS__NATS__URL"))
+        .ok();
+
+    // Resolve the effective NATS URL: env var first, then config value.
+    // When the `nats` feature is disabled this variable is unused, which is expected.
+    let effective_nats_url = nats_url_from_env
+        .as_deref()
+        .unwrap_or(nats_url);
+
+    // Determine publisher kind with auto-detection
+    let kind = match std::env::var("EVENT_PUBLISHER") {
+        Ok(v) => v,
+        Err(_) => {
+            // Auto-detect: if a real NATS URL is available, prefer nats
+            let has_nats = nats_url_from_env.is_some()
+                || (!nats_url.is_empty() && nats_url != "nats://localhost:4222");
+            if has_nats {
+                info!("EVENT_PUBLISHER not set; auto-selecting 'nats' (NATS URL available)");
+                "nats".to_string()
+            } else {
+                "memory".to_string()
+            }
+        }
+    };
 
     match kind.to_lowercase().as_str() {
         #[cfg(feature = "nats")]
         "nats" => {
-            info!("Connecting to NATS event publisher at {}", nats_url);
+            if effective_nats_url.is_empty() {
+                anyhow::bail!(
+                    "EVENT_PUBLISHER=nats but no NATS URL configured. \
+                     Set NATS_URL or RAMPOS__NATS__URL."
+                );
+            }
+            info!("Connecting to NATS event publisher at {}", effective_nats_url);
             let publisher =
-                ramp_core::event::NatsEventPublisher::new(nats_url, nats_stream).await?;
+                ramp_core::event::NatsEventPublisher::new(effective_nats_url, nats_stream).await?;
             Ok(Arc::new(publisher))
         }
         #[cfg(not(feature = "nats"))]
@@ -55,7 +96,7 @@ pub async fn build_event_publisher(
             if is_production() {
                 anyhow::bail!(
                     "InMemoryEventPublisher is not allowed in production. \
-                     Set EVENT_PUBLISHER=nats and provide RAMPOS__NATS__URL."
+                     Set EVENT_PUBLISHER=nats and provide NATS_URL or RAMPOS__NATS__URL."
                 );
             }
             warn!("Using InMemoryEventPublisher – NOT suitable for production");
@@ -222,101 +263,119 @@ pub fn validate_production_providers() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// All tests in this module mutate process-wide environment variables.
+    /// This mutex serializes them so parallel test threads don't interfere.
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    /// Helper: clear all provider-related env vars to a known baseline.
+    fn clear_env() {
+        std::env::remove_var("RUST_ENV");
+        std::env::remove_var("RAMPOS_ENV");
+        std::env::remove_var("EVENT_PUBLISHER");
+        std::env::remove_var("BILLING_PROVIDER");
+        std::env::remove_var("VNST_PROVIDER");
+    }
 
     #[test]
     fn test_is_production_false_by_default() {
-        // In test environment, RUST_ENV is typically not set
-        std::env::remove_var("RUST_ENV");
-        std::env::remove_var("RAMPOS_ENV");
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         assert!(!is_production());
     }
 
     #[test]
     fn test_is_production_true() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         std::env::set_var("RUST_ENV", "production");
         assert!(is_production());
-        std::env::remove_var("RUST_ENV");
+        clear_env();
     }
 
     #[test]
     fn test_is_production_case_insensitive() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         std::env::set_var("RUST_ENV", "Production");
         assert!(is_production());
-        std::env::remove_var("RUST_ENV");
+        clear_env();
     }
 
     #[test]
     fn test_production_rejects_mock_billing() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         std::env::set_var("RUST_ENV", "production");
         std::env::set_var("BILLING_PROVIDER", "mock");
         let result = build_billing_provider();
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("not allowed in production"));
-        std::env::remove_var("RUST_ENV");
-        std::env::remove_var("BILLING_PROVIDER");
+        let err_msg = result.err().unwrap().to_string();
+        assert!(err_msg.contains("not allowed in production"));
+        clear_env();
     }
 
     #[test]
     fn test_production_rejects_default_billing() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         std::env::set_var("RUST_ENV", "production");
-        std::env::remove_var("BILLING_PROVIDER");
         let result = build_billing_provider();
         assert!(result.is_err());
-        std::env::remove_var("RUST_ENV");
+        clear_env();
     }
 
     #[test]
     fn test_production_rejects_mock_vnst() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         std::env::set_var("RUST_ENV", "production");
         std::env::set_var("VNST_PROVIDER", "mock");
         let result = build_vnst_provider();
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("not allowed in production"));
-        std::env::remove_var("RUST_ENV");
-        std::env::remove_var("VNST_PROVIDER");
+        let err_msg = result.err().unwrap().to_string();
+        assert!(err_msg.contains("not allowed in production"));
+        clear_env();
     }
 
     #[test]
     fn test_dev_allows_mock_billing() {
-        std::env::remove_var("RUST_ENV");
-        std::env::remove_var("RAMPOS_ENV");
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         std::env::set_var("BILLING_PROVIDER", "mock");
         let result = build_billing_provider();
         assert!(result.is_ok());
-        std::env::remove_var("BILLING_PROVIDER");
+        clear_env();
     }
 
     #[test]
     fn test_dev_allows_mock_vnst() {
-        std::env::remove_var("RUST_ENV");
-        std::env::remove_var("RAMPOS_ENV");
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         std::env::set_var("VNST_PROVIDER", "mock");
         let result = build_vnst_provider();
         assert!(result.is_ok());
-        std::env::remove_var("VNST_PROVIDER");
+        clear_env();
     }
 
     #[test]
     fn test_unknown_provider_rejected() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         std::env::set_var("BILLING_PROVIDER", "invalid");
         let result = build_billing_provider();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Unknown"));
-        std::env::remove_var("BILLING_PROVIDER");
+        let err_msg = result.err().unwrap().to_string();
+        assert!(err_msg.contains("Unknown"));
+        clear_env();
     }
 
     #[test]
     fn test_validate_production_providers_fails_with_defaults() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         std::env::set_var("RUST_ENV", "production");
-        std::env::remove_var("EVENT_PUBLISHER");
-        std::env::remove_var("BILLING_PROVIDER");
-        std::env::remove_var("VNST_PROVIDER");
 
         let result = validate_production_providers();
         assert!(result.is_err());
@@ -325,11 +384,13 @@ mod tests {
         assert!(err_msg.contains("BILLING_PROVIDER"));
         assert!(err_msg.contains("VNST_PROVIDER"));
 
-        std::env::remove_var("RUST_ENV");
+        clear_env();
     }
 
     #[test]
     fn test_validate_production_providers_passes_with_real_providers() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         std::env::set_var("RUST_ENV", "production");
         std::env::set_var("EVENT_PUBLISHER", "nats");
         std::env::set_var("BILLING_PROVIDER", "postgres");
@@ -338,17 +399,13 @@ mod tests {
         let result = validate_production_providers();
         assert!(result.is_ok());
 
-        std::env::remove_var("RUST_ENV");
-        std::env::remove_var("EVENT_PUBLISHER");
-        std::env::remove_var("BILLING_PROVIDER");
-        std::env::remove_var("VNST_PROVIDER");
+        clear_env();
     }
 
     #[test]
     fn test_validate_skips_in_dev() {
-        std::env::remove_var("RUST_ENV");
-        std::env::remove_var("RAMPOS_ENV");
-        // Even with no providers set, dev should pass
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         let result = validate_production_providers();
         assert!(result.is_ok());
     }

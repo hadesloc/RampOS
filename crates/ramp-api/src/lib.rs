@@ -6,6 +6,7 @@ pub mod extract;
 pub mod handlers;
 pub mod middleware;
 pub mod openapi;
+pub mod providers;
 pub mod router;
 
 pub use error::ApiError;

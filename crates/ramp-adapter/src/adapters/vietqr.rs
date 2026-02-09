@@ -453,7 +453,8 @@ impl RailsAdapter for VietQRAdapter {
             .or_else(|| data.get("description"))
             .or_else(|| data.get("reference_code"))
             .and_then(|v| v.as_str())
-            .unwrap_or("")
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| Error::Validation("Missing or empty reference_code in VietQR webhook".to_string()))?
             .to_string();
 
         let bank_tx_id = data
@@ -461,7 +462,8 @@ impl RailsAdapter for VietQRAdapter {
             .or_else(|| data.get("bank_tx_id"))
             .or_else(|| data.get("ftCode"))
             .and_then(|v| v.as_str())
-            .unwrap_or("")
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| Error::Validation("Missing or empty bank_tx_id in VietQR webhook".to_string()))?
             .to_string();
 
         let amount = data
@@ -469,6 +471,10 @@ impl RailsAdapter for VietQRAdapter {
             .or_else(|| data.get("creditAmount"))
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
+
+        if amount <= 0 {
+            return Err(Error::Validation("VietQR webhook amount must be positive".to_string()));
+        }
 
         info!(
             reference = %reference_code,

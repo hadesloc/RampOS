@@ -29,8 +29,9 @@ pub use case::CaseManager;
 pub use config::{SanctionsConfig, ThresholdAction, ThresholdConfig, ThresholdManager};
 pub use history::{ScoreHistory, ScoreHistoryManager, ScoreTrend};
 pub use kyc::KycService;
-pub use kyc::{KycWorkflowState, MockKycConfig, MockKycProvider};
+pub use kyc::{KycWorkflowState, MockKycConfig, MockKycProvider, OnfidoKycProvider};
 pub use kyt::KytService;
+pub use kyt::ChainalysisKytProvider;
 pub use reconciliation::{Discrepancy, ReconBatch, ReconConfig, ReconEngine, ReconMatch};
 pub use reports::{AmlReport, DailyReport, KycReport, ReportGenerator, ReportType, SarReport};
 pub use documents::{
@@ -59,8 +60,6 @@ pub use limits::{
     VndTierLimits, VndUserLimitStatus,
 };
 
-#[cfg(any(test, feature = "testing"))]
 pub use withdraw_policy::MockWithdrawPolicyDataProvider;
 
-#[cfg(any(test, feature = "testing"))]
 pub use limits::MockVndLimitDataProvider;

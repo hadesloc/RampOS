@@ -1,6 +1,6 @@
 # Installed Claude Code Resources
 
-Generated: 2026-02-06T22:32:53.094173
+Generated: 2026-02-09T11:48:46.680921
 
 **This list shows ONLY resources that are currently ENABLED in Claude Code settings.**
 
@@ -53,7 +53,7 @@ Generated: 2026-02-06T22:32:53.094173
 - **utility-skills** (baoyu-skills): Utility tools for content processing
 - **variant-analysis** (trailofbits): Find similar vulnerabilities and bugs across codebases using pattern-based analysis
 
-## Skills (150)
+## Skills (148)
 
 ### Internal Skills (use Skill tool)
 - **Agent Development**: This skill should be used when the user asks to "create an agent", "add an agent", "write a subagent", "agent frontmatter", "when to use description", "agent examples", "agent tools", "agent colors", "autonomous agent", or needs guidance on agent structure, system prompts, triggering conditions, or agent development best practices for Claude Code plugins.
@@ -216,10 +216,8 @@ Generated: 2026-02-06T22:32:53.094173
   - Plugin: claude-md-management (claude-plugins-official)
 - **code-maturity-assessor**: Systematic code maturity assessment using Trail of Bits' 9-category framework. Analyzes codebase for arithmetic safety, auditing practices, access controls, complexity, decentralization, documentation, MEV risks, low-level code, and testing. Produces professional scorecard with evidence-based ratings and actionable recommendations.
   - Plugin: building-secure-contracts (trailofbits)
-- **codeql**: Run CodeQL static analysis for security vulnerability detection, taint tracking, and data flow analysis. Use when asked to analyze code with CodeQL, create CodeQL databases, write custom QL queries, perform security audits, or set up CodeQL in CI/CD pipelines.
+- **codeql**: >-
   - Plugin: static-analysis (trailofbits)
-- **codeql**: >
-  - Plugin: testing-handbook-skills (trailofbits)
 - **command-development**: This skill should be used when the user asks to "create a slash command", "add a command", "write a custom command", "define command arguments", "use command frontmatter", "organize commands", "create command with file references", "interactive command", "use AskUserQuestion in command", or needs guidance on slash command structure, YAML frontmatter fields, dynamic arguments, bash execution in commands, user interaction patterns, or command development best practices for Claude Code.
   - Plugin: plugin-dev (claude-plugins-official)
 - **constant-time-analysis**: Detects timing side-channel vulnerabilities in cryptographic code. Use when implementing or reviewing crypto code, encountering division on secrets, secret-dependent branches, or constant-time programming questions in C, C++, Go, Rust, Swift, Java, Kotlin, C#, PHP, JavaScript, TypeScript, Python, or Ruby.
@@ -304,10 +302,8 @@ Generated: 2026-02-06T22:32:53.094173
   - Plugin: static-analysis (trailofbits)
 - **secure-workflow-guide**: Guides through Trail of Bits' 5-step secure development workflow. Runs Slither scans, checks special features (upgradeability/ERC conformance/token integration), generates visual security diagrams, helps document security properties for fuzzing/verification, and reviews manual security areas.
   - Plugin: building-secure-contracts (trailofbits)
-- **semgrep**: Run Semgrep static analysis for fast security scanning and pattern matching. Use when asked to scan code with Semgrep, write custom YAML rules, find vulnerabilities quickly, use taint mode, or set up Semgrep in CI/CD pipelines.
+- **semgrep**: Run Semgrep static analysis scan on a codebase using parallel subagents. Automatically
   - Plugin: static-analysis (trailofbits)
-- **semgrep**: >
-  - Plugin: testing-handbook-skills (trailofbits)
 - **semgrep-rule-creator**: Creates custom Semgrep rules for detecting security vulnerabilities, bug patterns, and code patterns. Use when writing Semgrep rules or building custom static analysis detections.
   - Plugin: semgrep-rule-creator (trailofbits)
 - **semgrep-rule-variant-creator**: Creates language variants of existing Semgrep rules. Use when porting a Semgrep rule to specified target languages. Takes an existing rule and target languages as input, produces independent rule+test directories for each language.

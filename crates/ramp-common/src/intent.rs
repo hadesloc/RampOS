@@ -1,6 +1,22 @@
 use crate::types::*;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use std::str::FromStr;
+use tracing::{error, warn};
+
+/// Error type for invalid state string parsing
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidStateError {
+    pub state_type: &'static str,
+    pub value: String,
+}
+
+impl std::fmt::Display for InvalidStateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid {} value: '{}'", self.state_type, self.value)
+    }
+}
+
+impl std::error::Error for InvalidStateError {}
 
 /// Intent types supported by RampOS
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -125,27 +141,36 @@ impl std::fmt::Display for PayinState {
     }
 }
 
+impl FromStr for PayinState {
+    type Err = InvalidStateError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "CREATED" | "PAYIN_CREATED" => Ok(PayinState::Created),
+            "INSTRUCTION_ISSUED" => Ok(PayinState::InstructionIssued),
+            "FUNDS_PENDING" => Ok(PayinState::FundsPending),
+            "FUNDS_CONFIRMED" => Ok(PayinState::FundsConfirmed),
+            "VND_CREDITED" => Ok(PayinState::VndCredited),
+            "COMPLETED" => Ok(PayinState::Completed),
+            "EXPIRED" => Ok(PayinState::Expired),
+            "MISMATCHED_AMOUNT" => Ok(PayinState::MismatchedAmount),
+            "SUSPECTED_FRAUD" => Ok(PayinState::SuspectedFraud),
+            "MANUAL_REVIEW" => Ok(PayinState::ManualReview),
+            "CANCELLED" => Ok(PayinState::Cancelled),
+            _ => Err(InvalidStateError {
+                state_type: "PayinState",
+                value: s.to_string(),
+            }),
+        }
+    }
+}
+
 impl From<&str> for PayinState {
     fn from(s: &str) -> Self {
-        match s {
-            "CREATED" | "PAYIN_CREATED" => PayinState::Created,
-            "INSTRUCTION_ISSUED" => PayinState::InstructionIssued,
-            "FUNDS_PENDING" => PayinState::FundsPending,
-            "FUNDS_CONFIRMED" => PayinState::FundsConfirmed,
-            "VND_CREDITED" => PayinState::VndCredited,
-            "COMPLETED" => PayinState::Completed,
-            "EXPIRED" => PayinState::Expired,
-            "MISMATCHED_AMOUNT" => PayinState::MismatchedAmount,
-            "SUSPECTED_FRAUD" => PayinState::SuspectedFraud,
-            "MANUAL_REVIEW" => PayinState::ManualReview,
-            "CANCELLED" => PayinState::Cancelled,
-            // Fallback: unknown strings default to Created to avoid breaking existing code,
-            // but we log a warning to surface potential data corruption
-            unknown => {
-                warn!(state = unknown, "Unknown PayinState string, defaulting to Created");
-                PayinState::Created
-            }
-        }
+        s.parse().unwrap_or_else(|_| {
+            error!(state = s, "Unknown PayinState string, defaulting to Created - this may indicate data corruption");
+            PayinState::Created
+        })
     }
 }
 
@@ -262,27 +287,36 @@ impl std::fmt::Display for PayoutState {
     }
 }
 
+impl FromStr for PayoutState {
+    type Err = InvalidStateError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "CREATED" | "PAYOUT_CREATED" => Ok(PayoutState::Created),
+            "POLICY_APPROVED" => Ok(PayoutState::PolicyApproved),
+            "PAYOUT_SUBMITTED" | "SUBMITTED" => Ok(PayoutState::Submitted),
+            "PAYOUT_CONFIRMED" | "CONFIRMED" => Ok(PayoutState::Confirmed),
+            "COMPLETED" => Ok(PayoutState::Completed),
+            "REJECTED_BY_POLICY" => Ok(PayoutState::RejectedByPolicy),
+            "BANK_REJECTED" => Ok(PayoutState::BankRejected),
+            "TIMEOUT" => Ok(PayoutState::Timeout),
+            "MANUAL_REVIEW" => Ok(PayoutState::ManualReview),
+            "CANCELLED" => Ok(PayoutState::Cancelled),
+            "REVERSED" => Ok(PayoutState::Reversed),
+            _ => Err(InvalidStateError {
+                state_type: "PayoutState",
+                value: s.to_string(),
+            }),
+        }
+    }
+}
+
 impl From<&str> for PayoutState {
     fn from(s: &str) -> Self {
-        match s {
-            "CREATED" | "PAYOUT_CREATED" => PayoutState::Created,
-            "POLICY_APPROVED" => PayoutState::PolicyApproved,
-            "PAYOUT_SUBMITTED" | "SUBMITTED" => PayoutState::Submitted,
-            "PAYOUT_CONFIRMED" | "CONFIRMED" => PayoutState::Confirmed,
-            "COMPLETED" => PayoutState::Completed,
-            "REJECTED_BY_POLICY" => PayoutState::RejectedByPolicy,
-            "BANK_REJECTED" => PayoutState::BankRejected,
-            "TIMEOUT" => PayoutState::Timeout,
-            "MANUAL_REVIEW" => PayoutState::ManualReview,
-            "CANCELLED" => PayoutState::Cancelled,
-            "REVERSED" => PayoutState::Reversed,
-            // Fallback: unknown strings default to Created to avoid breaking existing code,
-            // but we log a warning to surface potential data corruption
-            unknown => {
-                warn!(state = unknown, "Unknown PayoutState string, defaulting to Created");
-                PayoutState::Created
-            }
-        }
+        s.parse().unwrap_or_else(|_| {
+            error!(state = s, "Unknown PayoutState string, defaulting to Created - this may indicate data corruption");
+            PayoutState::Created
+        })
     }
 }
 
@@ -336,6 +370,55 @@ impl TradeState {
     }
 }
 
+impl std::fmt::Display for TradeState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TradeState::Recorded => write!(f, "RECORDED"),
+            TradeState::PostTradeChecked => write!(f, "POST_TRADE_CHECKED"),
+            TradeState::SettledLedger => write!(f, "SETTLED_LEDGER"),
+            TradeState::Completed => write!(f, "COMPLETED"),
+            TradeState::ComplianceHold => write!(f, "COMPLIANCE_HOLD"),
+            TradeState::ManualReview => write!(f, "MANUAL_REVIEW"),
+            TradeState::Rejected => write!(f, "REJECTED"),
+        }
+    }
+}
+
+impl FromStr for TradeState {
+    type Err = InvalidStateError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "RECORDED" => Ok(TradeState::Recorded),
+            "POST_TRADE_CHECKED" => Ok(TradeState::PostTradeChecked),
+            "SETTLED_LEDGER" => Ok(TradeState::SettledLedger),
+            "COMPLETED" => Ok(TradeState::Completed),
+            "COMPLIANCE_HOLD" => Ok(TradeState::ComplianceHold),
+            "MANUAL_REVIEW" => Ok(TradeState::ManualReview),
+            "REJECTED" => Ok(TradeState::Rejected),
+            _ => Err(InvalidStateError {
+                state_type: "TradeState",
+                value: s.to_string(),
+            }),
+        }
+    }
+}
+
+impl From<&str> for TradeState {
+    fn from(s: &str) -> Self {
+        s.parse().unwrap_or_else(|_| {
+            error!(state = s, "Unknown TradeState string, defaulting to Recorded - this may indicate data corruption");
+            TradeState::Recorded
+        })
+    }
+}
+
+impl From<String> for TradeState {
+    fn from(s: String) -> Self {
+        TradeState::from(s.as_str())
+    }
+}
+
 // ============================================================================
 // On-chain Deposit States
 // ============================================================================
@@ -379,6 +462,59 @@ impl DepositState {
 
     pub fn can_transition_to(&self, target: DepositState) -> bool {
         self.allowed_transitions().contains(&target)
+    }
+}
+
+impl std::fmt::Display for DepositState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DepositState::Detected => write!(f, "DETECTED"),
+            DepositState::Confirming => write!(f, "CONFIRMING"),
+            DepositState::Confirmed => write!(f, "CONFIRMED"),
+            DepositState::KytChecked => write!(f, "KYT_CHECKED"),
+            DepositState::Credited => write!(f, "CREDITED"),
+            DepositState::Completed => write!(f, "COMPLETED"),
+            DepositState::KytFlagged => write!(f, "KYT_FLAGGED"),
+            DepositState::ManualReview => write!(f, "MANUAL_REVIEW"),
+            DepositState::Rejected => write!(f, "REJECTED"),
+        }
+    }
+}
+
+impl FromStr for DepositState {
+    type Err = InvalidStateError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "DETECTED" => Ok(DepositState::Detected),
+            "CONFIRMING" => Ok(DepositState::Confirming),
+            "CONFIRMED" => Ok(DepositState::Confirmed),
+            "KYT_CHECKED" => Ok(DepositState::KytChecked),
+            "CREDITED" => Ok(DepositState::Credited),
+            "COMPLETED" => Ok(DepositState::Completed),
+            "KYT_FLAGGED" => Ok(DepositState::KytFlagged),
+            "MANUAL_REVIEW" => Ok(DepositState::ManualReview),
+            "REJECTED" => Ok(DepositState::Rejected),
+            _ => Err(InvalidStateError {
+                state_type: "DepositState",
+                value: s.to_string(),
+            }),
+        }
+    }
+}
+
+impl From<&str> for DepositState {
+    fn from(s: &str) -> Self {
+        s.parse().unwrap_or_else(|_| {
+            error!(state = s, "Unknown DepositState string, defaulting to Detected - this may indicate data corruption");
+            DepositState::Detected
+        })
+    }
+}
+
+impl From<String> for DepositState {
+    fn from(s: String) -> Self {
+        DepositState::from(s.as_str())
     }
 }
 
@@ -480,30 +616,39 @@ impl std::fmt::Display for WithdrawState {
     }
 }
 
+impl FromStr for WithdrawState {
+    type Err = InvalidStateError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "CREATED" => Ok(WithdrawState::Created),
+            "POLICY_APPROVED" => Ok(WithdrawState::PolicyApproved),
+            "KYT_CHECKED" => Ok(WithdrawState::KytChecked),
+            "SIGNED" => Ok(WithdrawState::Signed),
+            "BROADCASTED" => Ok(WithdrawState::Broadcasted),
+            "CONFIRMING" => Ok(WithdrawState::Confirming),
+            "CONFIRMED" => Ok(WithdrawState::Confirmed),
+            "COMPLETED" => Ok(WithdrawState::Completed),
+            "REJECTED_BY_POLICY" => Ok(WithdrawState::RejectedByPolicy),
+            "KYT_FLAGGED" => Ok(WithdrawState::KytFlagged),
+            "BROADCAST_FAILED" => Ok(WithdrawState::BroadcastFailed),
+            "MANUAL_REVIEW" => Ok(WithdrawState::ManualReview),
+            "CANCELLED" => Ok(WithdrawState::Cancelled),
+            "REJECTED_INSUFFICIENT_BALANCE" => Ok(WithdrawState::RejectedByPolicy),
+            _ => Err(InvalidStateError {
+                state_type: "WithdrawState",
+                value: s.to_string(),
+            }),
+        }
+    }
+}
+
 impl From<&str> for WithdrawState {
     fn from(s: &str) -> Self {
-        match s {
-            "CREATED" => WithdrawState::Created,
-            "POLICY_APPROVED" => WithdrawState::PolicyApproved,
-            "KYT_CHECKED" => WithdrawState::KytChecked,
-            "SIGNED" => WithdrawState::Signed,
-            "BROADCASTED" => WithdrawState::Broadcasted,
-            "CONFIRMING" => WithdrawState::Confirming,
-            "CONFIRMED" => WithdrawState::Confirmed,
-            "COMPLETED" => WithdrawState::Completed,
-            "REJECTED_BY_POLICY" => WithdrawState::RejectedByPolicy,
-            "KYT_FLAGGED" => WithdrawState::KytFlagged,
-            "BROADCAST_FAILED" => WithdrawState::BroadcastFailed,
-            "MANUAL_REVIEW" => WithdrawState::ManualReview,
-            "CANCELLED" => WithdrawState::Cancelled,
-            "REJECTED_INSUFFICIENT_BALANCE" => WithdrawState::RejectedByPolicy,
-            // Fallback: unknown strings default to Created to avoid breaking existing code,
-            // but we log a warning to surface potential data corruption
-            unknown => {
-                warn!(state = unknown, "Unknown WithdrawState string, defaulting to Created");
-                WithdrawState::Created
-            }
-        }
+        s.parse().unwrap_or_else(|_| {
+            error!(state = s, "Unknown WithdrawState string, defaulting to Created - this may indicate data corruption");
+            WithdrawState::Created
+        })
     }
 }
 
@@ -552,8 +697,8 @@ impl IntentState {
         match self {
             IntentState::Payin(s) => s.to_string(),
             IntentState::Payout(s) => s.to_string(),
-            IntentState::Trade(s) => format!("{:?}", s),
-            IntentState::Deposit(s) => format!("{:?}", s),
+            IntentState::Trade(s) => s.to_string(),
+            IntentState::Deposit(s) => s.to_string(),
             IntentState::Withdraw(s) => s.to_string(),
         }
     }

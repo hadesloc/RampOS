@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname } from "@/navigation";
+import { Link } from "@/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -28,90 +28,94 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-
-const sidebarSections = [
-  {
-    title: "Overview",
-    items: [
-      {
-        title: "Dashboard",
-        href: "/",
-        icon: LayoutDashboard,
-      },
-    ],
-  },
-  {
-    title: "Operations",
-    items: [
-      {
-        title: "Intents",
-        href: "/intents",
-        icon: ArrowLeftRight,
-      },
-      {
-        title: "Users",
-        href: "/users",
-        icon: Users,
-      },
-      {
-        title: "Compliance",
-        href: "/compliance",
-        icon: ShieldAlert,
-      },
-      {
-        title: "Ledger",
-        href: "/ledger",
-        icon: BookOpen,
-      },
-    ],
-  },
-  {
-    title: "DeFi",
-    items: [
-      {
-        title: "Swap",
-        href: "/swap",
-        icon: RefreshCw,
-      },
-      {
-        title: "Bridge",
-        href: "/bridge",
-        icon: Network,
-      },
-      {
-        title: "Yield",
-        href: "/yield",
-        icon: TrendingUp,
-      },
-    ],
-  },
-  {
-    title: "System",
-    items: [
-      {
-        title: "Webhooks",
-        href: "/webhooks",
-        icon: Webhook,
-      },
-      {
-        title: "Settings",
-        href: "/settings",
-        icon: Settings,
-      },
-    ],
-  },
-];
+import { useTranslations } from "next-intl";
+import LocaleSwitcher from "@/components/locale-switcher";
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const t = useTranslations('Navigation');
+  const tDashboard = useTranslations('Dashboard');
+
+  const sidebarSections = [
+    {
+      title: "Overview",
+      items: [
+        {
+          title: t('dashboard'),
+          href: "/",
+          icon: LayoutDashboard,
+        },
+      ],
+    },
+    {
+      title: "Operations",
+      items: [
+        {
+          title: "Intents",
+          href: "/intents",
+          icon: ArrowLeftRight,
+        },
+        {
+          title: t('users'),
+          href: "/users",
+          icon: Users,
+        },
+        {
+          title: t('compliance'),
+          href: "/compliance",
+          icon: ShieldAlert,
+        },
+        {
+          title: "Ledger",
+          href: "/ledger",
+          icon: BookOpen,
+        },
+      ],
+    },
+    {
+      title: "DeFi",
+      items: [
+        {
+          title: "Swap",
+          href: "/swap",
+          icon: RefreshCw,
+        },
+        {
+          title: "Bridge",
+          href: "/bridge",
+          icon: Network,
+        },
+        {
+          title: "Yield",
+          href: "/yield",
+          icon: TrendingUp,
+        },
+      ],
+    },
+    {
+      title: "System",
+      items: [
+        {
+          title: "Webhooks",
+          href: "/webhooks",
+          icon: Webhook,
+        },
+        {
+          title: t('settings'),
+          href: "/settings",
+          icon: Settings,
+        },
+      ],
+    },
+  ];
 
   return (
     <TooltipProvider delayDuration={0}>
        {/* Mobile Toggle */}
        <div className="md:hidden fixed top-4 left-4 z-50">
-        <Button variant="outline" size="icon" onClick={() => setIsOpen(!isOpen)}>
+        <Button variant="outline" size="icon" onClick={() => setIsOpen(!isOpen)} aria-label="Toggle navigation menu">
           <Menu className="h-4 w-4" />
         </Button>
       </div>
@@ -142,6 +146,7 @@ export default function Sidebar() {
                 size="icon"
                 className="md:hidden"
                 onClick={() => setIsOpen(false)}
+                aria-label="Close navigation menu"
             >
                 <X className="h-4 w-4" />
             </Button>
@@ -150,6 +155,7 @@ export default function Sidebar() {
                 size="icon"
                 className={cn("hidden md:flex h-8 w-8 text-muted-foreground hover:text-foreground", isCollapsed && "h-8 w-8")}
                 onClick={() => setIsCollapsed(!isCollapsed)}
+                aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
                 {isCollapsed ? (
                 <ChevronRight className="h-4 w-4" />
@@ -248,14 +254,17 @@ export default function Sidebar() {
              </div>
 
              {/* Standard Footer */}
-              <div className={cn("flex items-center gap-3", isCollapsed && "md:hidden")}>
-              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary ring-2 ring-background">
-                A
-              </div>
-              <div className="flex flex-col overflow-hidden">
-                <p className="text-sm font-medium truncate text-foreground">Administrator</p>
-                <p className="text-xs text-muted-foreground truncate">admin@rampos.io</p>
-              </div>
+              <div className={cn("flex flex-col gap-3", isCollapsed && "md:hidden")}>
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary ring-2 ring-background">
+                    A
+                  </div>
+                  <div className="flex flex-col overflow-hidden">
+                    <p className="text-sm font-medium truncate text-foreground">Administrator</p>
+                    <p className="text-xs text-muted-foreground truncate">admin@rampos.io</p>
+                  </div>
+                </div>
+                <LocaleSwitcher />
             </div>
         </div>
       </aside>

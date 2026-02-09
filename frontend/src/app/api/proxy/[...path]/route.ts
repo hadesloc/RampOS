@@ -29,14 +29,18 @@ async function handleRequest(req: NextRequest, props: { params: Promise<{ path: 
   const cleanApiUrl = API_URL.replace(/\/$/, '');
   const url = `${cleanApiUrl}/${path}${searchParams ? `?${searchParams}` : ''}`;
 
-  const headers = new Headers(req.headers);
+  const headers = new Headers();
   headers.set('Authorization', `Bearer ${API_KEY}`);
   headers.set('X-Admin-Key', ADMIN_KEY);
-
-  // Clean up headers that might cause issues
-  headers.delete('host');
-  headers.delete('content-length');
-  headers.delete('connection');
+  // Only forward content-type, not all request headers
+  const contentType = req.headers.get('content-type');
+  if (contentType) {
+    headers.set('Content-Type', contentType);
+  }
+  const accept = req.headers.get('accept');
+  if (accept) {
+    headers.set('Accept', accept);
+  }
 
   try {
     const body = req.body;

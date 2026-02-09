@@ -66,6 +66,8 @@ fn default_limit() -> i64 {
     20
 }
 
+const MAX_LIMIT: i64 = 100;
+
 /// Response for listing documents
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -218,9 +220,10 @@ pub async fn list_documents(
 ) -> Result<Json<ListDocumentsResponse>, ApiError> {
     super::tier::check_admin_key(&headers)?;
 
+    let limit = query.limit.min(MAX_LIMIT);
     info!(
         tenant = %tenant_ctx.tenant_id.0,
-        limit = query.limit,
+        limit = limit,
         offset = query.offset,
         "Listing documents"
     );
@@ -230,7 +233,7 @@ pub async fn list_documents(
     Ok(Json(ListDocumentsResponse {
         documents: vec![],
         total: 0,
-        limit: query.limit,
+        limit,
         offset: query.offset,
     }))
 }

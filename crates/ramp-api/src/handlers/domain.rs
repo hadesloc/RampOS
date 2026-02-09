@@ -151,7 +151,7 @@ pub async fn create_domain(
     State(_app_state): State<crate::router::AppState>,
     Json(request): Json<CreateDomainRequest>,
 ) -> Result<Json<DomainResponse>, ApiError> {
-    crate::handlers::admin::tier::check_admin_key(&headers)?;
+    crate::handlers::admin::tier::check_admin_key_operator(&headers)?;
 
     info!(
         tenant = %tenant_ctx.tenant_id.0,
@@ -239,7 +239,7 @@ pub async fn delete_domain(
     State(_app_state): State<crate::router::AppState>,
     Path(domain_id): Path<String>,
 ) -> Result<Json<DeleteDomainResponse>, ApiError> {
-    crate::handlers::admin::tier::check_admin_key(&headers)?;
+    crate::handlers::admin::tier::check_admin_key_operator(&headers)?;
 
     info!(
         tenant = %tenant_ctx.tenant_id.0,

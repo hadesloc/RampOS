@@ -10,6 +10,7 @@
 pub mod auth;
 pub mod intents;
 pub mod kyc;
+pub mod settings;
 pub mod transactions;
 pub mod wallet;
 
@@ -24,4 +25,5 @@ pub fn router() -> Router<AppState> {
         .nest("/wallet", wallet::router())
         .nest("/transactions", transactions::router())
         .nest("/intents", intents::router())
+        .nest("/settings", settings::router())
 }

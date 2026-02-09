@@ -165,7 +165,7 @@ impl DepositService {
             tenant_id: req.tenant_id.0.clone(),
             user_id: req.user_id.0.clone(),
             intent_type: "DEPOSIT_ONCHAIN".to_string(),
-            state: "DETECTED".to_string(),
+            state: DepositState::Detected.to_string(),
             state_history: serde_json::json!([{
                 "from": null,
                 "to": "DETECTED",
@@ -247,22 +247,22 @@ impl DepositService {
         // Update to confirming state if not already
         if current_state == DepositState::Detected {
             self.intent_repo
-                .update_state(&req.tenant_id, &req.intent_id, "CONFIRMING")
+                .update_state(&req.tenant_id, &req.intent_id, &DepositState::Confirming.to_string())
                 .await?;
 
             self.event_publisher
-                .publish_intent_status_changed(&req.intent_id, &req.tenant_id, "CONFIRMING")
+                .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &DepositState::Confirming.to_string())
                 .await?;
         }
 
         // Check if we have enough confirmations
         if req.confirmations >= required_confirmations {
             self.intent_repo
-                .update_state(&req.tenant_id, &req.intent_id, "CONFIRMED")
+                .update_state(&req.tenant_id, &req.intent_id, &DepositState::Confirmed.to_string())
                 .await?;
 
             self.event_publisher
-                .publish_intent_status_changed(&req.intent_id, &req.tenant_id, "CONFIRMED")
+                .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &DepositState::Confirmed.to_string())
                 .await?;
 
             info!(
@@ -288,10 +288,10 @@ impl DepositService {
             .ok_or_else(|| Error::IntentNotFound(req.intent_id.0.clone()))?;
 
         // Validate state
-        if intent.state != "CONFIRMED" {
+        if parse_deposit_state(&intent.state) != DepositState::Confirmed {
             return Err(Error::InvalidStateTransition {
                 from: intent.state,
-                to: "KYT_CHECKED".to_string(),
+                to: DepositState::KytChecked.to_string(),
             });
         }
 
@@ -306,7 +306,7 @@ impl DepositService {
             );
 
             self.intent_repo
-                .update_state(&req.tenant_id, &req.intent_id, "KYT_FLAGGED")
+                .update_state(&req.tenant_id, &req.intent_id, &DepositState::KytFlagged.to_string())
                 .await?;
 
             self.event_publisher
@@ -318,11 +318,11 @@ impl DepositService {
 
         // KYT passed
         self.intent_repo
-            .update_state(&req.tenant_id, &req.intent_id, "KYT_CHECKED")
+            .update_state(&req.tenant_id, &req.intent_id, &DepositState::KytChecked.to_string())
             .await?;
 
         self.event_publisher
-            .publish_intent_status_changed(&req.intent_id, &req.tenant_id, "KYT_CHECKED")
+            .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &DepositState::KytChecked.to_string())
             .await?;
 
         info!(
@@ -344,10 +344,10 @@ impl DepositService {
             .ok_or_else(|| Error::IntentNotFound(intent_id.0.clone()))?;
 
         // Validate state
-        if intent.state != "KYT_CHECKED" {
+        if parse_deposit_state(&intent.state) != DepositState::KytChecked {
             return Err(Error::InvalidStateTransition {
                 from: intent.state,
-                to: "CREDITED".to_string(),
+                to: DepositState::Credited.to_string(),
             });
         }
 
@@ -367,11 +367,11 @@ impl DepositService {
 
         // Update state to credited
         self.intent_repo
-            .update_state(tenant_id, intent_id, "CREDITED")
+            .update_state(tenant_id, intent_id, &DepositState::Credited.to_string())
             .await?;
 
         self.event_publisher
-            .publish_intent_status_changed(intent_id, tenant_id, "CREDITED")
+            .publish_intent_status_changed(intent_id, tenant_id, &DepositState::Credited.to_string())
             .await?;
 
         info!(
@@ -394,20 +394,20 @@ impl DepositService {
             .ok_or_else(|| Error::IntentNotFound(intent_id.0.clone()))?;
 
         // Validate state
-        if intent.state != "CREDITED" {
+        if parse_deposit_state(&intent.state) != DepositState::Credited {
             return Err(Error::InvalidStateTransition {
                 from: intent.state,
-                to: "COMPLETED".to_string(),
+                to: DepositState::Completed.to_string(),
             });
         }
 
         // Update to completed
         self.intent_repo
-            .update_state(tenant_id, intent_id, "COMPLETED")
+            .update_state(tenant_id, intent_id, &DepositState::Completed.to_string())
             .await?;
 
         self.event_publisher
-            .publish_intent_status_changed(intent_id, tenant_id, "COMPLETED")
+            .publish_intent_status_changed(intent_id, tenant_id, &DepositState::Completed.to_string())
             .await?;
 
         info!(intent_id = %intent_id, "Deposit completed");
@@ -451,18 +451,7 @@ impl DepositService {
 }
 
 fn parse_deposit_state(state: &str) -> DepositState {
-    match state {
-        "DETECTED" => DepositState::Detected,
-        "CONFIRMING" => DepositState::Confirming,
-        "CONFIRMED" => DepositState::Confirmed,
-        "KYT_CHECKED" => DepositState::KytChecked,
-        "CREDITED" => DepositState::Credited,
-        "COMPLETED" => DepositState::Completed,
-        "KYT_FLAGGED" => DepositState::KytFlagged,
-        "MANUAL_REVIEW" => DepositState::ManualReview,
-        "REJECTED" => DepositState::Rejected,
-        _ => DepositState::Detected,
-    }
+    DepositState::from(state)
 }
 
 #[cfg(test)]

@@ -10,6 +10,10 @@ pub mod types;
 mod tests;
 
 pub use generator::{ReportGenerator, ReportType};
+pub use ctr::{
+    CtrFilingStatus, CtrRecord, CtrService, GenerateCtrReportRequest, GeneratedCtrReport,
+    CTR_THRESHOLD_VND,
+};
 pub use templates::{AmlReport, DailyReport, KycReport, SarReport};
 pub use types::{
     AmlReport as AmlReportType,

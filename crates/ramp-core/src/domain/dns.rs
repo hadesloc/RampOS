@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// DNS record type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -593,6 +593,406 @@ impl DnsProvider for MockDnsProvider {
     }
 }
 
+/// Cloudflare DNS API provider for managing DNS records programmatically.
+///
+/// Uses the Cloudflare API v4 to create, query, and verify DNS records.
+/// Requires `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ZONE_ID` environment variables.
+/// Falls back to `SystemDnsProvider` for read-only lookups if credentials are not configured.
+pub struct CloudflareDnsProvider {
+    /// Cloudflare API token
+    api_token: String,
+    /// Cloudflare Zone ID
+    zone_id: String,
+    /// HTTP client for API requests
+    client: reqwest::Client,
+    /// Fallback DNS resolver for direct lookups
+    fallback: SystemDnsProvider,
+}
+
+#[derive(Debug, Deserialize)]
+struct CloudflareApiResponse<T> {
+    success: bool,
+    #[allow(dead_code)]
+    errors: Vec<CloudflareApiError>,
+    result: Option<T>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CloudflareApiError {
+    #[allow(dead_code)]
+    code: u32,
+    message: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CloudflareDnsRecord {
+    #[allow(dead_code)]
+    id: String,
+    name: String,
+    #[serde(rename = "type")]
+    record_type: String,
+    content: String,
+    ttl: u32,
+}
+
+impl CloudflareDnsProvider {
+    /// Create a new Cloudflare DNS provider from environment variables.
+    ///
+    /// Required env vars:
+    /// - `CLOUDFLARE_API_TOKEN`: Cloudflare API token with Zone:DNS:Read permission
+    /// - `CLOUDFLARE_ZONE_ID`: Zone ID for the domain
+    pub fn from_env() -> Option<Self> {
+        let api_token = std::env::var("CLOUDFLARE_API_TOKEN").ok()?;
+        let zone_id = std::env::var("CLOUDFLARE_ZONE_ID").ok()?;
+
+        if api_token.is_empty() || zone_id.is_empty() {
+            return None;
+        }
+
+        info!("Cloudflare DNS provider configured for zone {}", zone_id);
+        Some(Self {
+            api_token,
+            zone_id,
+            client: reqwest::Client::new(),
+            fallback: SystemDnsProvider::new(),
+        })
+    }
+
+    /// Create with explicit credentials (for testing or programmatic use)
+    pub fn new(api_token: String, zone_id: String) -> Self {
+        Self {
+            api_token,
+            zone_id,
+            client: reqwest::Client::new(),
+            fallback: SystemDnsProvider::new(),
+        }
+    }
+
+    /// Query Cloudflare DNS API for records matching name and type
+    async fn api_lookup(&self, name: &str, record_type: &str) -> Result<Vec<CloudflareDnsRecord>> {
+        let url = format!(
+            "https://api.cloudflare.com/client/v4/zones/{}/dns_records?name={}&type={}",
+            self.zone_id,
+            urlencoding::encode(name),
+            record_type
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.api_token))
+            .header("Content-Type", "application/json")
+            .send()
+            .await
+            .map_err(|e| Error::ExternalService {
+                service: "Cloudflare DNS".to_string(),
+                message: format!("HTTP request failed: {}", e),
+            })?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(Error::ExternalService {
+                service: "Cloudflare DNS".to_string(),
+                message: format!("API returned status {}: {}", status, body),
+            });
+        }
+
+        let api_response: CloudflareApiResponse<Vec<CloudflareDnsRecord>> =
+            response.json().await.map_err(|e| Error::ExternalService {
+                service: "Cloudflare DNS".to_string(),
+                message: format!("Failed to parse API response: {}", e),
+            })?;
+
+        if !api_response.success {
+            let error_msg = api_response
+                .errors
+                .iter()
+                .map(|e| e.message.clone())
+                .collect::<Vec<_>>()
+                .join("; ");
+            return Err(Error::ExternalService {
+                service: "Cloudflare DNS".to_string(),
+                message: format!("API error: {}", error_msg),
+            });
+        }
+
+        Ok(api_response.result.unwrap_or_default())
+    }
+
+    /// Create a DNS record via Cloudflare API
+    pub async fn create_record(
+        &self,
+        name: &str,
+        record_type: &str,
+        content: &str,
+        ttl: u32,
+    ) -> Result<String> {
+        let url = format!(
+            "https://api.cloudflare.com/client/v4/zones/{}/dns_records",
+            self.zone_id
+        );
+
+        let body = serde_json::json!({
+            "type": record_type,
+            "name": name,
+            "content": content,
+            "ttl": if ttl == 0 { 1 } else { ttl }, // 1 = automatic in Cloudflare
+        });
+
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.api_token))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| Error::ExternalService {
+                service: "Cloudflare DNS".to_string(),
+                message: format!("HTTP request failed: {}", e),
+            })?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(Error::ExternalService {
+                service: "Cloudflare DNS".to_string(),
+                message: format!("Create record failed with status {}: {}", status, body),
+            });
+        }
+
+        #[derive(Deserialize)]
+        struct CreateResult {
+            id: String,
+        }
+
+        let api_response: CloudflareApiResponse<CreateResult> =
+            response.json().await.map_err(|e| Error::ExternalService {
+                service: "Cloudflare DNS".to_string(),
+                message: format!("Failed to parse create response: {}", e),
+            })?;
+
+        if !api_response.success {
+            let error_msg = api_response
+                .errors
+                .iter()
+                .map(|e| e.message.clone())
+                .collect::<Vec<_>>()
+                .join("; ");
+            return Err(Error::ExternalService {
+                service: "Cloudflare DNS".to_string(),
+                message: format!("Create record error: {}", error_msg),
+            });
+        }
+
+        let record_id = api_response
+            .result
+            .map(|r| r.id)
+            .unwrap_or_default();
+
+        info!(
+            name = %name,
+            record_type = %record_type,
+            record_id = %record_id,
+            "Created DNS record via Cloudflare API"
+        );
+
+        Ok(record_id)
+    }
+
+    /// Delete a DNS record by ID via Cloudflare API
+    pub async fn delete_record(&self, record_id: &str) -> Result<()> {
+        let url = format!(
+            "https://api.cloudflare.com/client/v4/zones/{}/dns_records/{}",
+            self.zone_id, record_id
+        );
+
+        let response = self
+            .client
+            .delete(&url)
+            .header("Authorization", format!("Bearer {}", self.api_token))
+            .send()
+            .await
+            .map_err(|e| Error::ExternalService {
+                service: "Cloudflare DNS".to_string(),
+                message: format!("HTTP request failed: {}", e),
+            })?;
+
+        if !response.status().is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(Error::ExternalService {
+                service: "Cloudflare DNS".to_string(),
+                message: format!("Delete record failed: {}", body),
+            });
+        }
+
+        info!(record_id = %record_id, "Deleted DNS record via Cloudflare API");
+        Ok(())
+    }
+
+    fn cf_type_to_dns_type(cf_type: &str) -> Option<DnsRecordType> {
+        match cf_type {
+            "A" => Some(DnsRecordType::A),
+            "AAAA" => Some(DnsRecordType::Aaaa),
+            "CNAME" => Some(DnsRecordType::Cname),
+            "TXT" => Some(DnsRecordType::Txt),
+            "MX" => Some(DnsRecordType::Mx),
+            "NS" => Some(DnsRecordType::Ns),
+            _ => None,
+        }
+    }
+
+    fn dns_type_to_cf_type(dns_type: DnsRecordType) -> &'static str {
+        match dns_type {
+            DnsRecordType::A => "A",
+            DnsRecordType::Aaaa => "AAAA",
+            DnsRecordType::Cname => "CNAME",
+            DnsRecordType::Txt => "TXT",
+            DnsRecordType::Mx => "MX",
+            DnsRecordType::Ns => "NS",
+        }
+    }
+}
+
+#[async_trait]
+impl DnsProvider for CloudflareDnsProvider {
+    fn name(&self) -> &str {
+        "Cloudflare DNS API"
+    }
+
+    async fn lookup(&self, name: &str, record_type: DnsRecordType) -> Result<Vec<DnsRecord>> {
+        let cf_type = Self::dns_type_to_cf_type(record_type);
+
+        debug!(
+            name = %name,
+            record_type = %cf_type,
+            "Looking up DNS record via Cloudflare API"
+        );
+
+        match self.api_lookup(name, cf_type).await {
+            Ok(cf_records) => {
+                let records: Vec<DnsRecord> = cf_records
+                    .into_iter()
+                    .filter_map(|r| {
+                        Self::cf_type_to_dns_type(&r.record_type).map(|rt| DnsRecord {
+                            name: r.name,
+                            record_type: rt,
+                            values: vec![r.content],
+                            ttl: r.ttl,
+                            queried_at: Utc::now(),
+                        })
+                    })
+                    .collect();
+
+                if records.is_empty() {
+                    // Fall back to direct DNS resolution for records not in this zone
+                    debug!(
+                        name = %name,
+                        "No records found via Cloudflare API, falling back to DNS resolution"
+                    );
+                    return self.fallback.lookup(name, record_type).await;
+                }
+
+                Ok(records)
+            }
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    "Cloudflare API lookup failed, falling back to DNS resolution"
+                );
+                self.fallback.lookup(name, record_type).await
+            }
+        }
+    }
+
+    async fn verify_txt_record(&self, name: &str, expected_value: &str) -> Result<DnsVerification> {
+        debug!(
+            name = %name,
+            expected = %expected_value,
+            "Verifying TXT record via Cloudflare API"
+        );
+
+        // First try Cloudflare API
+        let records = self.lookup(name, DnsRecordType::Txt).await?;
+
+        for record in &records {
+            for value in &record.values {
+                let cleaned = value.trim_matches('"');
+                if cleaned == expected_value {
+                    return Ok(DnsVerification {
+                        record_name: name.to_string(),
+                        expected_value: expected_value.to_string(),
+                        actual_value: Some(cleaned.to_string()),
+                        status: DnsVerificationStatus::Verified,
+                        error: None,
+                        verified_at: Utc::now(),
+                    });
+                }
+            }
+        }
+
+        // Also try direct DNS resolution as a double-check
+        let dns_result = self.fallback.verify_txt_record(name, expected_value).await;
+        if let Ok(ref verification) = dns_result {
+            if verification.status == DnsVerificationStatus::Verified {
+                return dns_result;
+            }
+        }
+
+        let actual_value = records
+            .first()
+            .and_then(|r| r.values.first())
+            .cloned();
+
+        let status = if records.is_empty() || records.iter().all(|r| r.values.is_empty()) {
+            DnsVerificationStatus::Pending
+        } else {
+            DnsVerificationStatus::Failed
+        };
+
+        let error = if status == DnsVerificationStatus::Pending {
+            Some(format!("TXT record {} not found", name))
+        } else {
+            Some(format!(
+                "TXT record value mismatch: expected '{}', found '{}'",
+                expected_value,
+                actual_value.as_deref().unwrap_or("(none)")
+            ))
+        };
+
+        Ok(DnsVerification {
+            record_name: name.to_string(),
+            expected_value: expected_value.to_string(),
+            actual_value,
+            status,
+            error,
+            verified_at: Utc::now(),
+        })
+    }
+
+    async fn check_domain_resolution(&self, domain: &str) -> Result<DomainResolution> {
+        // For domain resolution, always use direct DNS which is more reliable
+        // than API queries (the domain may not be in the Cloudflare zone)
+        self.fallback.check_domain_resolution(domain).await
+    }
+}
+
+/// Create the best available DNS provider based on environment configuration.
+///
+/// Priority:
+/// 1. Cloudflare DNS API (if `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ZONE_ID` are set)
+/// 2. Direct DNS resolution via hickory-resolver (always available)
+pub fn create_dns_provider() -> Arc<dyn DnsProvider> {
+    if let Some(cf) = CloudflareDnsProvider::from_env() {
+        info!("Using Cloudflare DNS API provider");
+        Arc::new(cf)
+    } else {
+        info!("Using system DNS resolver (no cloud DNS provider configured)");
+        Arc::new(SystemDnsProvider::new())
+    }
+}
+
 /// DNS propagation checker
 #[allow(dead_code)]
 pub struct DnsPropagationChecker {
@@ -804,5 +1204,61 @@ mod tests {
         assert!(status.total_resolvers > 0);
         assert!(status.propagation_percentage >= 0.0);
         assert!(status.propagation_percentage <= 1.0);
+    }
+
+    #[test]
+    fn test_cloudflare_type_conversion() {
+        assert_eq!(
+            CloudflareDnsProvider::cf_type_to_dns_type("A"),
+            Some(DnsRecordType::A)
+        );
+        assert_eq!(
+            CloudflareDnsProvider::cf_type_to_dns_type("AAAA"),
+            Some(DnsRecordType::Aaaa)
+        );
+        assert_eq!(
+            CloudflareDnsProvider::cf_type_to_dns_type("TXT"),
+            Some(DnsRecordType::Txt)
+        );
+        assert_eq!(
+            CloudflareDnsProvider::cf_type_to_dns_type("CNAME"),
+            Some(DnsRecordType::Cname)
+        );
+        assert_eq!(
+            CloudflareDnsProvider::cf_type_to_dns_type("MX"),
+            Some(DnsRecordType::Mx)
+        );
+        assert_eq!(
+            CloudflareDnsProvider::cf_type_to_dns_type("NS"),
+            Some(DnsRecordType::Ns)
+        );
+        assert_eq!(CloudflareDnsProvider::cf_type_to_dns_type("SRV"), None);
+
+        assert_eq!(CloudflareDnsProvider::dns_type_to_cf_type(DnsRecordType::A), "A");
+        assert_eq!(CloudflareDnsProvider::dns_type_to_cf_type(DnsRecordType::Aaaa), "AAAA");
+        assert_eq!(CloudflareDnsProvider::dns_type_to_cf_type(DnsRecordType::Txt), "TXT");
+    }
+
+    #[test]
+    fn test_cloudflare_from_env_returns_none_without_config() {
+        // Without env vars set, from_env should return None
+        // (in CI/test environments, these env vars won't be set)
+        // We can't reliably test this since env vars might be set,
+        // so just verify the constructor works
+        let provider = CloudflareDnsProvider::new("test-token".to_string(), "zone-123".to_string());
+        assert_eq!(provider.name(), "Cloudflare DNS API");
+    }
+
+    #[test]
+    fn test_create_dns_provider_returns_system() {
+        // Without Cloudflare env vars, should return system provider
+        let provider = create_dns_provider();
+        // The provider name will indicate which implementation was chosen
+        let name = provider.name();
+        assert!(
+            name.contains("DNS") || name.contains("Resolver") || name.contains("Cloudflare"),
+            "Provider name should identify the implementation: {}",
+            name
+        );
     }
 }

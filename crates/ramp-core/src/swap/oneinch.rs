@@ -6,6 +6,7 @@
 use async_trait::async_trait;
 use alloy::primitives::{Address, Bytes, U256};
 use ramp_common::{Error, Result};
+use ramp_common::resilience::ResilientClient;
 use serde::Deserialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -67,6 +68,7 @@ struct OneInchTx {
 pub struct OneInchAggregator {
     config: AggregatorConfig,
     http_client: reqwest::Client,
+    resilient: ResilientClient,
 }
 
 impl OneInchAggregator {
@@ -75,6 +77,7 @@ impl OneInchAggregator {
         Self {
             config,
             http_client: reqwest::Client::new(),
+            resilient: ResilientClient::new("1inch"),
         }
     }
 
@@ -229,35 +232,56 @@ impl DexAggregator for OneInchAggregator {
             }
         };
 
-        // Make real API call to 1inch
-        let response = self.http_client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Accept", "application/json")
-            .timeout(std::time::Duration::from_secs(self.config.timeout_secs))
-            .send()
+        // Make real API call to 1inch (with circuit breaker)
+        let http_client = self.http_client.clone();
+        let timeout_secs = self.config.timeout_secs;
+        let url_clone = url.clone();
+        let api_key_clone = api_key.clone();
+
+        let quote_resp: OneInchQuoteResponse = self
+            .resilient
+            .execute::<_, _, OneInchQuoteResponse, Error>(|| {
+                let http_client = http_client.clone();
+                let url = url_clone.clone();
+                let api_key = api_key_clone.clone();
+                async move {
+                    let response = http_client
+                        .get(&url)
+                        .header("Authorization", format!("Bearer {}", api_key))
+                        .header("Accept", "application/json")
+                        .timeout(std::time::Duration::from_secs(timeout_secs))
+                        .send()
+                        .await
+                        .map_err(|e| Error::ExternalService {
+                            service: "1inch".to_string(),
+                            message: format!("Quote request failed: {}", e),
+                        })?;
+
+                    if !response.status().is_success() {
+                        let status = response.status();
+                        let body = response.text().await.unwrap_or_default();
+                        tracing::error!(status = %status, body = %body, "1inch quote API error");
+                        return Err(Error::ExternalService {
+                            service: "1inch".to_string(),
+                            message: format!("Quote API returned {}: {}", status, body),
+                        });
+                    }
+
+                    let quote_resp: OneInchQuoteResponse = response.json().await.map_err(|e| {
+                        Error::ExternalService {
+                            service: "1inch".to_string(),
+                            message: format!("Failed to parse quote response: {}", e),
+                        }
+                    })?;
+
+                    Ok(quote_resp)
+                }
+            })
             .await
             .map_err(|e| Error::ExternalService {
                 service: "1inch".to_string(),
-                message: format!("Quote request failed: {}", e),
+                message: format!("{}", e),
             })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            tracing::error!(status = %status, body = %body, "1inch quote API error");
-            return Err(Error::ExternalService {
-                service: "1inch".to_string(),
-                message: format!("Quote API returned {}: {}", status, body),
-            });
-        }
-
-        let quote_resp: OneInchQuoteResponse = response.json().await.map_err(|e| {
-            Error::ExternalService {
-                service: "1inch".to_string(),
-                message: format!("Failed to parse quote response: {}", e),
-            }
-        })?;
 
         let to_amount = Self::parse_amount(&quote_resp.to_token_amount)?;
         let slippage_amount = to_amount * U256::from(slippage_bps) / U256::from(10000);
@@ -346,35 +370,56 @@ impl DexAggregator for OneInchAggregator {
             }
         };
 
-        // Make real API call to 1inch
-        let response = self.http_client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Accept", "application/json")
-            .timeout(std::time::Duration::from_secs(self.config.timeout_secs))
-            .send()
+        // Make real API call to 1inch (with circuit breaker)
+        let http_client = self.http_client.clone();
+        let timeout_secs = self.config.timeout_secs;
+        let url_clone = url.clone();
+        let api_key_clone = api_key.clone();
+
+        let swap_resp: OneInchSwapResponse = self
+            .resilient
+            .execute::<_, _, OneInchSwapResponse, Error>(|| {
+                let http_client = http_client.clone();
+                let url = url_clone.clone();
+                let api_key = api_key_clone.clone();
+                async move {
+                    let response = http_client
+                        .get(&url)
+                        .header("Authorization", format!("Bearer {}", api_key))
+                        .header("Accept", "application/json")
+                        .timeout(std::time::Duration::from_secs(timeout_secs))
+                        .send()
+                        .await
+                        .map_err(|e| Error::ExternalService {
+                            service: "1inch".to_string(),
+                            message: format!("Swap tx request failed: {}", e),
+                        })?;
+
+                    if !response.status().is_success() {
+                        let status = response.status();
+                        let body = response.text().await.unwrap_or_default();
+                        tracing::error!(status = %status, body = %body, "1inch swap API error");
+                        return Err(Error::ExternalService {
+                            service: "1inch".to_string(),
+                            message: format!("Swap API returned {}: {}", status, body),
+                        });
+                    }
+
+                    let swap_resp: OneInchSwapResponse = response.json().await.map_err(|e| {
+                        Error::ExternalService {
+                            service: "1inch".to_string(),
+                            message: format!("Failed to parse swap response: {}", e),
+                        }
+                    })?;
+
+                    Ok(swap_resp)
+                }
+            })
             .await
             .map_err(|e| Error::ExternalService {
                 service: "1inch".to_string(),
-                message: format!("Swap tx request failed: {}", e),
+                message: format!("{}", e),
             })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            tracing::error!(status = %status, body = %body, "1inch swap API error");
-            return Err(Error::ExternalService {
-                service: "1inch".to_string(),
-                message: format!("Swap API returned {}: {}", status, body),
-            });
-        }
-
-        let swap_resp: OneInchSwapResponse = response.json().await.map_err(|e| {
-            Error::ExternalService {
-                service: "1inch".to_string(),
-                message: format!("Failed to parse swap response: {}", e),
-            }
-        })?;
 
         // Parse the transaction data from the response
         let to_address: Address = swap_resp.tx.to.parse().map_err(|e| {

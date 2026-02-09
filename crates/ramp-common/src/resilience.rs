@@ -291,6 +291,158 @@ fn fastrand_u64() -> u64 {
     x.wrapping_mul(0x2545F4914F6CDD1D)
 }
 
+// ---------------------------------------------------------------------------
+// Resilient execution: CircuitBreaker + RetryPolicy combined
+// ---------------------------------------------------------------------------
+
+/// Error returned when a resilient operation fails after all retries.
+#[derive(Debug)]
+pub enum ResilientError<E> {
+    /// Circuit breaker is open; request was never attempted.
+    CircuitOpen(CircuitBreakerError),
+    /// Operation failed after exhausting retries.
+    OperationFailed(E),
+}
+
+impl<E: std::fmt::Display> std::fmt::Display for ResilientError<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResilientError::CircuitOpen(e) => write!(f, "Circuit open: {}", e),
+            ResilientError::OperationFailed(e) => write!(f, "Operation failed: {}", e),
+        }
+    }
+}
+
+impl<E: std::fmt::Debug + std::fmt::Display> std::error::Error for ResilientError<E> {}
+
+/// Execute an async operation with circuit breaker protection and retry with
+/// exponential backoff.
+///
+/// The circuit breaker prevents sending requests to a service that is known to
+/// be down. When the circuit is open, `ResilientError::CircuitOpen` is returned
+/// immediately without invoking the operation.
+///
+/// If the circuit is closed (or half-open), the operation is attempted up to
+/// `retry_policy.max_retries + 1` times. Each failure is recorded on the
+/// circuit breaker and a backoff delay is applied before the next attempt.
+///
+/// # Example
+///
+/// ```ignore
+/// use ramp_common::resilience::*;
+///
+/// let breaker = CircuitBreaker::with_defaults("my-service");
+/// let policy = RetryPolicy::default();
+///
+/// let result = with_circuit_breaker(&breaker, &policy, || async {
+///     // your HTTP call here
+///     Ok::<_, anyhow::Error>("response")
+/// }).await;
+/// ```
+pub async fn with_circuit_breaker<F, Fut, T, E>(
+    breaker: &CircuitBreaker,
+    retry_policy: &RetryPolicy,
+    mut operation: F,
+) -> Result<T, ResilientError<E>>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T, E>>,
+    E: std::fmt::Debug,
+{
+    // Check circuit breaker first
+    breaker
+        .allow_request()
+        .map_err(ResilientError::CircuitOpen)?;
+
+    let mut last_error: Option<E> = None;
+
+    for attempt in 0..=retry_policy.max_retries {
+        // Re-check circuit on retries (it may have opened during the loop)
+        if attempt > 0 {
+            if let Err(e) = breaker.allow_request() {
+                return Err(ResilientError::CircuitOpen(e));
+            }
+        }
+
+        match operation().await {
+            Ok(value) => {
+                breaker.record_success();
+                return Ok(value);
+            }
+            Err(e) => {
+                breaker.record_failure();
+                tracing::warn!(
+                    attempt = attempt,
+                    max_retries = retry_policy.max_retries,
+                    error = ?e,
+                    "Resilient operation failed, will {}",
+                    if retry_policy.should_retry(attempt) { "retry" } else { "give up" }
+                );
+                last_error = Some(e);
+
+                if retry_policy.should_retry(attempt) {
+                    let delay = retry_policy.delay_for_attempt(attempt);
+                    tokio::time::sleep(delay).await;
+                }
+            }
+        }
+    }
+
+    Err(ResilientError::OperationFailed(
+        last_error.expect("at least one attempt was made"),
+    ))
+}
+
+/// A resilient HTTP client wrapper that holds a circuit breaker + retry policy
+/// for a specific external service. Thread-safe and designed to be shared via
+/// `Arc` or stored in application state.
+pub struct ResilientClient {
+    /// Circuit breaker for the service
+    pub breaker: CircuitBreaker,
+    /// Retry policy for the service
+    pub retry_policy: RetryPolicy,
+}
+
+impl ResilientClient {
+    /// Create a resilient client with default settings for a named service.
+    pub fn new(service_name: impl Into<String>) -> Self {
+        Self {
+            breaker: CircuitBreaker::with_defaults(service_name),
+            retry_policy: RetryPolicy::default(),
+        }
+    }
+
+    /// Create a resilient client with custom configuration.
+    pub fn with_config(
+        service_name: impl Into<String>,
+        cb_config: CircuitBreakerConfig,
+        retry_policy: RetryPolicy,
+    ) -> Self {
+        Self {
+            breaker: CircuitBreaker::new(service_name, cb_config),
+            retry_policy,
+        }
+    }
+
+    /// Execute an operation with circuit breaker + retry protection.
+    pub async fn execute<F, Fut, T, E>(
+        &self,
+        operation: F,
+    ) -> Result<T, ResilientError<E>>
+    where
+        F: FnMut() -> Fut,
+        Fut: std::future::Future<Output = Result<T, E>>,
+        E: std::fmt::Debug,
+    {
+        with_circuit_breaker(&self.breaker, &self.retry_policy, operation).await
+    }
+
+    /// Get the current circuit breaker state.
+    pub fn state(&self) -> CircuitState {
+        self.breaker.state()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -509,5 +661,108 @@ mod tests {
     fn retry_policy_without_jitter_builder() {
         let policy = RetryPolicy::default().without_jitter();
         assert!(!policy.use_jitter);
+    }
+
+    // -----------------------------------------------------------------------
+    // with_circuit_breaker tests
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn resilient_succeeds_on_first_attempt() {
+        let cb = CircuitBreaker::with_defaults("test");
+        let policy = RetryPolicy::default().without_jitter();
+
+        let result = with_circuit_breaker(&cb, &policy, || async {
+            Ok::<_, String>("ok")
+        })
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "ok");
+        assert_eq!(cb.state(), CircuitState::Closed);
+    }
+
+    #[tokio::test]
+    async fn resilient_retries_then_succeeds() {
+        let cb = CircuitBreaker::with_defaults("test");
+        let policy = RetryPolicy::new(
+            3,
+            Duration::from_millis(1),
+            Duration::from_millis(10),
+        ).without_jitter();
+
+        let counter = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let counter_clone = counter.clone();
+
+        let result = with_circuit_breaker(&cb, &policy, || {
+            let c = counter_clone.clone();
+            async move {
+                let attempt = c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if attempt < 2 {
+                    Err("transient failure".to_string())
+                } else {
+                    Ok("recovered")
+                }
+            }
+        })
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "recovered");
+        assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 3);
+    }
+
+    #[tokio::test]
+    async fn resilient_fails_after_max_retries() {
+        let cb = CircuitBreaker::new(
+            "test",
+            CircuitBreakerConfig {
+                failure_threshold: 10, // high so it doesn't open
+                reset_timeout: Duration::from_secs(60),
+                success_threshold: 1,
+            },
+        );
+        let policy = RetryPolicy::new(
+            2,
+            Duration::from_millis(1),
+            Duration::from_millis(10),
+        ).without_jitter();
+
+        let result = with_circuit_breaker(&cb, &policy, || async {
+            Err::<(), _>("always fails")
+        })
+        .await;
+
+        assert!(matches!(result, Err(ResilientError::OperationFailed(_))));
+    }
+
+    #[tokio::test]
+    async fn resilient_returns_circuit_open_when_tripped() {
+        let cb = CircuitBreaker::new(
+            "test",
+            CircuitBreakerConfig {
+                failure_threshold: 1,
+                reset_timeout: Duration::from_secs(60),
+                success_threshold: 1,
+            },
+        );
+        let policy = RetryPolicy::default();
+
+        // Trip the breaker manually
+        cb.record_failure();
+        assert_eq!(cb.state(), CircuitState::Open);
+
+        let result = with_circuit_breaker(&cb, &policy, || async {
+            Ok::<_, String>("should not be called")
+        })
+        .await;
+
+        assert!(matches!(result, Err(ResilientError::CircuitOpen(_))));
+    }
+
+    #[test]
+    fn resilient_client_default_construction() {
+        let client = ResilientClient::new("my-service");
+        assert_eq!(client.state(), CircuitState::Closed);
     }
 }
