@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useTranslations } from "next-intl";
 import LocaleSwitcher from "@/components/locale-switcher";
+import { NotificationCenter } from "@/components/layout/notification-center";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -114,10 +115,13 @@ export default function Sidebar() {
   return (
     <TooltipProvider delayDuration={0}>
        {/* Mobile Toggle */}
-       <div className="md:hidden fixed top-4 left-4 z-50">
+       <div className="md:hidden fixed top-4 left-4 z-50 flex items-center gap-2">
         <Button variant="outline" size="icon" onClick={() => setIsOpen(!isOpen)} aria-label="Toggle navigation menu">
           <Menu className="h-4 w-4" />
         </Button>
+        <div className="bg-background/80 backdrop-blur-sm rounded-md border shadow-sm p-0.5">
+          <NotificationCenter />
+        </div>
       </div>
 
       {/* Mobile Overlay */}
@@ -238,6 +242,7 @@ export default function Sidebar() {
         <div className="border-t p-4 bg-muted/20">
              {/* Desktop Collapsed Footer */}
              <div className={cn("hidden md:flex flex-col items-center gap-4", !isCollapsed && "hidden")}>
+                 <NotificationCenter />
                  <Tooltip>
                     <TooltipTrigger asChild>
                         <div className="flex justify-center cursor-pointer">
@@ -255,14 +260,17 @@ export default function Sidebar() {
 
              {/* Standard Footer */}
               <div className={cn("flex flex-col gap-3", isCollapsed && "md:hidden")}>
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary ring-2 ring-background">
-                    A
-                  </div>
-                  <div className="flex flex-col overflow-hidden">
-                    <p className="text-sm font-medium truncate text-foreground">Administrator</p>
-                    <p className="text-xs text-muted-foreground truncate">admin@rampos.io</p>
-                  </div>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary ring-2 ring-background">
+                        A
+                    </div>
+                    <div className="flex flex-col overflow-hidden">
+                        <p className="text-sm font-medium truncate text-foreground">Administrator</p>
+                        <p className="text-xs text-muted-foreground truncate">admin@rampos.io</p>
+                    </div>
+                    </div>
+                    <NotificationCenter />
                 </div>
                 <LocaleSwitcher />
             </div>

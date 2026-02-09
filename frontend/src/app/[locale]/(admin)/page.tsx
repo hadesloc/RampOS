@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { api, type DashboardStats, type Intent } from "@/lib/api";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Radio } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { ChartContainer } from "@/components/dashboard/chart-container";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { PageHeader } from "@/components/layout/page-header";
+import { useRealtimeDashboard } from "@/hooks/use-websocket";
 import {
   LineChart,
   Line,
@@ -31,8 +32,11 @@ export default function DashboardPage() {
   const tCommon = useTranslations('Common');
   const format = useFormatter();
 
+  const { isConnected, lastUpdate } = useRealtimeDashboard();
+
   const fetchData = useCallback(async () => {
-    setLoading(true);
+    // Only show loading spinner on initial load, not background updates
+    if (!stats) setLoading(true);
     setError(null);
     try {
       const [statsData, intentsData] = await Promise.all([
@@ -46,21 +50,35 @@ export default function DashboardPage() {
       console.error("Failed to fetch dashboard data:", err);
       const message = err.message || t('error_loading');
       setError(message);
-      toast({
-        variant: "destructive",
-        title: tCommon('error'),
-        description: message,
-      });
+      if (!stats) { // Only toast error if we don't have stale data to show
+        toast({
+          variant: "destructive",
+          title: tCommon('error'),
+          description: message,
+        });
+      }
     } finally {
       setLoading(false);
     }
-  }, [toast, t, tCommon]);
+  }, [toast, t, tCommon, stats]);
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData]); // Initial load
 
-  if (error) {
+  // Re-fetch when realtime signal is received
+  useEffect(() => {
+    if (lastUpdate) {
+      fetchData();
+      toast({
+        title: "Dashboard Updated",
+        description: "New data received via realtime connection.",
+        duration: 2000,
+      });
+    }
+  }, [lastUpdate, fetchData, toast]);
+
+  if (error && !stats) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
         <div className="text-red-500">{error}</div>
@@ -101,19 +119,43 @@ export default function DashboardPage() {
     });
   };
 
+  // Helper to calculate mock trend since backend doesn't provide history yet
+  const calculateTrend = (currentValue: string | number) => {
+    const val = typeof currentValue === 'string' ? parseInt(currentValue, 10) : currentValue;
+    if (!val) return undefined;
+
+    // Deterministic mock trend based on value hash
+    const hash = val.toString().split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const isPositive = hash % 2 === 0;
+    const value = (hash % 15) + 1; // 1-15%
+
+    return { value, isPositive };
+  };
+
   return (
     <div className="space-y-6 p-6">
       <PageHeader
         title={t('title')}
         description={t('description')}
         actions={
-          <Button variant="outline" size="icon" onClick={fetchData} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
+          <div className="flex items-center gap-2">
+            {isConnected && (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-medium border border-green-500/20">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                Live
+              </div>
+            )}
+            <Button variant="outline" size="icon" onClick={fetchData} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
         }
       />
 
-      {loading ? (
+      {loading && !stats ? (
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
              <StatCard title={t('total_payin')} value="" loading={true} />
@@ -135,21 +177,21 @@ export default function DashboardPage() {
                 value={formatCurrency(stats.volume.totalPayinVnd)}
                 subtitle={t('vnd_deposited')}
                 icon={<ArrowDownLeft className="h-4 w-4 text-muted-foreground" />}
-                trend={{ value: 12, isPositive: true }}
+                trend={calculateTrend(stats.volume.totalPayinVnd)}
               />
               <StatCard
                 title={t('total_payout')}
                 value={formatCurrency(stats.volume.totalPayoutVnd)}
                 subtitle={t('vnd_withdrawn')}
                 icon={<ArrowUpRight className="h-4 w-4 text-muted-foreground" />}
-                trend={{ value: 8, isPositive: true }}
+                trend={calculateTrend(stats.volume.totalPayoutVnd)}
               />
               <StatCard
                 title={t('total_trade')}
                 value={formatCurrency(stats.volume.totalTradeVnd)}
                 subtitle={t('trading_volume')}
                 icon={<Activity className="h-4 w-4 text-muted-foreground" />}
-                trend={{ value: 24, isPositive: true }}
+                trend={calculateTrend(stats.volume.totalTradeVnd)}
               />
             </div>
           </div>

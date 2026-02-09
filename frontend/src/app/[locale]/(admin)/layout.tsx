@@ -4,6 +4,7 @@ import { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "@/navigation";
 import { ADMIN_SESSION_COOKIE, isAdminSessionTokenValid } from "@/lib/admin-auth";
+import { CommandPalette } from "@/components/ui/command-palette";
 
 export const metadata: Metadata = {
   title: "RampOS Admin",
@@ -34,6 +35,7 @@ export default async function AdminLayout({
           {children}
         </PageContainer>
       </main>
+      <CommandPalette />
     </div>
   );
 }

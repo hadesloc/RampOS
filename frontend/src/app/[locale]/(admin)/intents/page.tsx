@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { ColumnDef } from "@tanstack/react-table";
+import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import { ArrowUpDown, Filter, Search, Loader2, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatusBadge } from "@/components/dashboard/status-badge";
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { intentsApi, type Intent as ApiIntent } from "@/lib/api";
 import { useToast } from "@/components/ui/use-toast";
 import { useTranslations, useFormatter } from "next-intl";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface Intent {
   id: string;
@@ -59,6 +60,11 @@ function mapApiIntentToLocal(apiIntent: ApiIntent): Intent {
 }
 
 export default function IntentsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pageParam = searchParams.get('page');
+  const perPageParam = searchParams.get('per_page');
+
   const [intents, setIntents] = useState<Intent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +74,14 @@ export default function IntentsPage() {
     type: "",
     state: "",
   });
+
+  // Server-side pagination state
+  const [{ pageIndex, pageSize }, setPagination] = useState<PaginationState>({
+    pageIndex: pageParam ? parseInt(pageParam) - 1 : 0,
+    pageSize: perPageParam ? parseInt(perPageParam) : 10,
+  });
+  const [pageCount, setPageCount] = useState(0);
+
   const t = useTranslations('Navigation');
   const tCommon = useTranslations('Common');
   const format = useFormatter();
@@ -230,11 +244,33 @@ export default function IntentsPage() {
     setError(null);
     try {
       const response = await intentsApi.list({
-        per_page: 100,
+        page: pageIndex + 1,
+        per_page: pageSize,
         status: filter.state || undefined,
         intent_type: filter.type || undefined,
       });
       setIntents(response.data.map(mapApiIntentToLocal));
+
+      // Calculate page count if provided by API (assuming standard pagination metadata)
+      // Since API type might not include total, fallback to a heuristic or assume more pages exist
+      // If the API returns fewer items than pageSize, we're on the last page.
+      // If we don't have total_count, we can't know exact pages, but here we'll assume response.total exists
+      // or implement basic "next page availability" logic.
+
+      // Type assertion for potential extra fields not in interface
+      const meta = (response as any).meta || {};
+      if (meta.total_pages) {
+        setPageCount(meta.total_pages);
+      } else {
+         // Fallback: if we got a full page, assume there might be another one
+         const currentCount = response.data.length;
+         if (currentCount < pageSize) {
+            setPageCount(pageIndex + 1);
+         } else {
+            setPageCount(pageIndex + 2); // Allow next button
+         }
+      }
+
     } catch (err: any) {
       console.error("Failed to fetch intents:", err);
       const message = err.message || "Failed to load intents";
@@ -247,12 +283,22 @@ export default function IntentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [filter.state, filter.type, toast, tCommon]);
+  }, [pageIndex, pageSize, filter.state, filter.type, toast, tCommon]);
 
   useEffect(() => {
     fetchIntents();
   }, [fetchIntents]);
 
+  // Update URL on pagination change
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', (pageIndex + 1).toString());
+    params.set('per_page', pageSize.toString());
+    // Only push if changed to avoid loops/redundant entries
+    // router.push(`?${params.toString()}`);
+  }, [pageIndex, pageSize, searchParams, router]);
+
+  // Client-side filtering for search text (API doesn't support text search yet)
   const filteredIntents = useMemo(() => {
     return intents.filter((intent) => {
       if (search && !intent.id.toLowerCase().includes(search.toLowerCase()) && !intent.referenceCode?.toLowerCase().includes(search.toLowerCase())) return false;
@@ -294,7 +340,10 @@ export default function IntentsPage() {
                 <select
                   className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   value={filter.type}
-                  onChange={(e) => setFilter({ ...filter, type: e.target.value })}
+                  onChange={(e) => {
+                    setFilter({ ...filter, type: e.target.value });
+                    setPagination(p => ({ ...p, pageIndex: 0 })); // Reset to page 1
+                  }}
                 >
                   <option value="">All Types</option>
                   <option value="PAYIN">Pay-in</option>
@@ -307,7 +356,10 @@ export default function IntentsPage() {
                 <select
                   className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   value={filter.state}
-                  onChange={(e) => setFilter({ ...filter, state: e.target.value })}
+                  onChange={(e) => {
+                     setFilter({ ...filter, state: e.target.value });
+                     setPagination(p => ({ ...p, pageIndex: 0 })); // Reset to page 1
+                  }}
                 >
                   <option value="">All States</option>
                   <option value="PENDING_BANK">Pending Bank</option>
@@ -342,6 +394,12 @@ export default function IntentsPage() {
               columns={columns}
               data={filteredIntents}
               pagination={true}
+              manualPagination={true}
+              pageCount={pageCount}
+              onPaginationChange={setPagination}
+              state={{
+                pagination: { pageIndex, pageSize }
+              }}
             />
           )}
         </CardContent>

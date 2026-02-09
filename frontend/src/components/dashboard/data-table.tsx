@@ -7,6 +7,7 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
+  PaginationState,
 } from "@tanstack/react-table"
 import { ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
 
@@ -29,6 +30,14 @@ interface DataTableProps<TData, TValue> {
   className?: string
   onRowClick?: (row: TData) => void
   pagination?: boolean
+  // Server-side pagination props
+  pageCount?: number;
+  manualPagination?: boolean;
+  onPaginationChange?: (pagination: PaginationState) => void;
+  state?: {
+    pagination?: PaginationState;
+    sorting?: SortingState;
+  };
 }
 
 export function DataTable<TData, TValue>({
@@ -38,18 +47,39 @@ export function DataTable<TData, TValue>({
   className,
   onRowClick,
   pagination = true,
+  pageCount,
+  manualPagination = false,
+  onPaginationChange,
+  state: controlledState,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
+  const [paginationState, setPaginationState] = React.useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 10,
+  });
 
   const table = useReactTable({
     data,
     columns,
+    pageCount: manualPagination ? pageCount : undefined,
+    manualPagination: manualPagination,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: pagination ? getPaginationRowModel() : undefined,
+    getPaginationRowModel: pagination && !manualPagination ? getPaginationRowModel() : undefined,
     onSortingChange: setSorting,
     getSortedRowModel: getSortedRowModel(),
+    onPaginationChange: (updater) => {
+        if (typeof updater === 'function') {
+            const newState = updater(paginationState);
+            setPaginationState(newState);
+            onPaginationChange?.(newState);
+        } else {
+            setPaginationState(updater);
+            onPaginationChange?.(updater);
+        }
+    },
     state: {
-      sorting,
+      sorting: controlledState?.sorting ?? sorting,
+      pagination: controlledState?.pagination ?? paginationState,
     },
   })
 
@@ -117,8 +147,11 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      {pagination && !loading && data.length > 0 && (
+      {pagination && !loading && (
         <div className="flex items-center justify-end space-x-2 py-4">
+          <div className="text-sm text-muted-foreground">
+             Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+          </div>
           <Button
             variant="outline"
             size="sm"
