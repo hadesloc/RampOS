@@ -1,0 +1,333 @@
+// ============================================================
+// @rampos/widget - Vanilla JS Embed Entry Point
+// Usage: <script src="rampos-embed.js"></script>
+//        window.RampOSWidget.init({ apiKey: '...', container: '#widget' })
+// ============================================================
+
+import { RampOSEventEmitter } from './utils/events';
+import { RampOSApiClient, ApiClientConfig } from './utils/api';
+import type {
+  WidgetTheme,
+  CheckoutConfig,
+  KYCConfig,
+  WalletConfig,
+  CheckoutResult,
+  KYCResult,
+  WalletInfo,
+  WidgetEventType,
+} from './types/index';
+import { DEFAULT_THEME } from './types/index';
+
+// ----- Embed Config -----
+
+export interface EmbedWidgetConfig {
+  apiKey: string;
+  container: string | HTMLElement;
+  type?: 'checkout' | 'kyc' | 'wallet';
+  environment?: 'sandbox' | 'production';
+  theme?: Partial<WidgetTheme>;
+
+  // Checkout-specific
+  amount?: number;
+  asset?: string;
+  network?: string;
+  walletAddress?: string;
+  fiatCurrency?: string;
+
+  // KYC-specific
+  userId?: string;
+  kycLevel?: string;
+
+  // Wallet-specific
+  defaultNetwork?: string;
+  showBalance?: boolean;
+  allowSend?: boolean;
+  allowReceive?: boolean;
+
+  // Callbacks
+  onSuccess?: (result: CheckoutResult | KYCResult | WalletInfo) => void;
+  onError?: (error: Error) => void;
+  onClose?: () => void;
+  onReady?: () => void;
+}
+
+// ----- Widget Instance -----
+
+export interface WidgetInstance {
+  destroy: () => void;
+  update: (config: Partial<EmbedWidgetConfig>) => void;
+  getApiClient: () => RampOSApiClient;
+  getEventEmitter: () => RampOSEventEmitter;
+  readonly container: HTMLElement;
+  readonly id: string;
+}
+
+// Internal tracking
+const activeInstances = new Map<string, WidgetInstance>();
+let instanceCounter = 0;
+
+function generateId(): string {
+  return `rampos-widget-${++instanceCounter}`;
+}
+
+function resolveContainer(target: string | HTMLElement): HTMLElement {
+  if (typeof target === 'string') {
+    const el = document.querySelector(target);
+    if (!el) {
+      throw new Error(`[RampOS] Container not found: ${target}`);
+    }
+    return el as HTMLElement;
+  }
+  if (target instanceof HTMLElement) {
+    return target;
+  }
+  throw new Error('[RampOS] Invalid container: must be a CSS selector string or HTMLElement');
+}
+
+function applyTheme(element: HTMLElement, theme: WidgetTheme): void {
+  const merged = { ...DEFAULT_THEME, ...theme };
+  element.style.setProperty('--rampos-primary', merged.primaryColor || '');
+  element.style.setProperty('--rampos-bg', merged.backgroundColor || '');
+  element.style.setProperty('--rampos-text', merged.textColor || '');
+  element.style.setProperty('--rampos-radius', merged.borderRadius || '');
+  element.style.setProperty('--rampos-font', merged.fontFamily || '');
+  element.style.setProperty('--rampos-error', merged.errorColor || '');
+  element.style.setProperty('--rampos-success', merged.successColor || '');
+}
+
+function buildWidgetHTML(config: EmbedWidgetConfig): string {
+  const widgetType = config.type || 'checkout';
+  const env = config.environment || 'sandbox';
+
+  return `<div class="rampos-widget-inner" data-type="${widgetType}" data-env="${env}">
+    <div class="rampos-widget-header">
+      <span class="rampos-widget-title">RampOS ${widgetType.charAt(0).toUpperCase() + widgetType.slice(1)}</span>
+      <button class="rampos-widget-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="rampos-widget-body">
+      <div class="rampos-widget-content"></div>
+    </div>
+    <div class="rampos-widget-footer">
+      <span class="rampos-powered">Powered by RampOS</span>
+    </div>
+  </div>`;
+}
+
+function injectStyles(container: HTMLElement): void {
+  const styleId = 'rampos-embed-styles';
+  if (container.querySelector(`#${styleId}`)) return;
+
+  const style = document.createElement('style');
+  style.id = styleId;
+  style.textContent = `
+    .rampos-widget-root {
+      font-family: var(--rampos-font, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+      color: var(--rampos-text, #1f2937);
+      background: var(--rampos-bg, #ffffff);
+      border-radius: var(--rampos-radius, 8px);
+      border: 1px solid #e5e7eb;
+      overflow: hidden;
+      box-sizing: border-box;
+      max-width: 480px;
+      width: 100%;
+    }
+    .rampos-widget-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e7eb;
+      background: var(--rampos-primary, #2563eb);
+      color: #ffffff;
+    }
+    .rampos-widget-title {
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .rampos-widget-close {
+      background: none;
+      border: none;
+      color: #ffffff;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 0 4px;
+      line-height: 1;
+    }
+    .rampos-widget-body {
+      padding: 16px;
+      min-height: 120px;
+    }
+    .rampos-widget-content {
+      font-size: 14px;
+    }
+    .rampos-widget-footer {
+      padding: 8px 16px;
+      border-top: 1px solid #e5e7eb;
+      text-align: center;
+    }
+    .rampos-powered {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+  `;
+  container.prepend(style);
+}
+
+function createWidget(config: EmbedWidgetConfig): WidgetInstance {
+  if (!config.apiKey) {
+    throw new Error('[RampOS] apiKey is required');
+  }
+
+  const containerEl = resolveContainer(config.container);
+  const widgetId = generateId();
+
+  // Create widget root
+  const widgetRoot = document.createElement('div');
+  widgetRoot.className = 'rampos-widget-root';
+  widgetRoot.id = widgetId;
+  widgetRoot.setAttribute('data-rampos-widget', 'true');
+
+  // Apply theme
+  const theme: WidgetTheme = { ...DEFAULT_THEME, ...config.theme };
+  applyTheme(widgetRoot, theme);
+
+  // Inject styles and HTML
+  injectStyles(widgetRoot);
+  widgetRoot.insertAdjacentHTML('beforeend', buildWidgetHTML(config));
+
+  // Mount to container
+  containerEl.appendChild(widgetRoot);
+
+  // Create API client
+  const apiClient = new RampOSApiClient({
+    apiKey: config.apiKey,
+    environment: config.environment,
+  });
+
+  // Get event emitter
+  const emitter = RampOSEventEmitter.getInstance();
+
+  // Wire up close button
+  const closeBtn = widgetRoot.querySelector('.rampos-widget-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      config.onClose?.();
+      emitter.emit('CHECKOUT_CLOSE');
+    });
+  }
+
+  // Wire up event callbacks
+  const unsubscribers: Array<() => void> = [];
+
+  if (config.onSuccess) {
+    const eventType: WidgetEventType = config.type === 'kyc'
+      ? 'KYC_APPROVED'
+      : config.type === 'wallet'
+        ? 'WALLET_CONNECTED'
+        : 'CHECKOUT_SUCCESS';
+    unsubscribers.push(emitter.on(eventType, config.onSuccess));
+  }
+
+  if (config.onError) {
+    const eventType: WidgetEventType = config.type === 'kyc'
+      ? 'KYC_ERROR'
+      : config.type === 'wallet'
+        ? 'WALLET_ERROR'
+        : 'CHECKOUT_ERROR';
+    unsubscribers.push(emitter.on(eventType, (payload) => {
+      config.onError!(payload instanceof Error ? payload : new Error(String(payload || 'Unknown error')));
+    }));
+  }
+
+  if (config.onReady) {
+    const eventType: WidgetEventType = config.type === 'kyc'
+      ? 'KYC_READY'
+      : config.type === 'wallet'
+        ? 'WALLET_READY'
+        : 'CHECKOUT_READY';
+    unsubscribers.push(emitter.on(eventType, config.onReady));
+  }
+
+  // Fire ready event
+  const readyEventType: WidgetEventType = config.type === 'kyc'
+    ? 'KYC_READY'
+    : config.type === 'wallet'
+      ? 'WALLET_READY'
+      : 'CHECKOUT_READY';
+
+  // Defer ready to next tick so listeners are attached
+  setTimeout(() => emitter.emit(readyEventType), 0);
+
+  // Build instance
+  const instance: WidgetInstance = {
+    id: widgetId,
+    container: widgetRoot,
+    destroy() {
+      // Unsubscribe all event listeners
+      unsubscribers.forEach(unsub => unsub());
+      unsubscribers.length = 0;
+
+      // Remove DOM
+      widgetRoot.remove();
+
+      // Remove from active instances
+      activeInstances.delete(widgetId);
+    },
+    update(newConfig: Partial<EmbedWidgetConfig>) {
+      if (newConfig.theme) {
+        const updatedTheme = { ...theme, ...newConfig.theme };
+        applyTheme(widgetRoot, updatedTheme);
+      }
+    },
+    getApiClient() {
+      return apiClient;
+    },
+    getEventEmitter() {
+      return emitter;
+    },
+  };
+
+  activeInstances.set(widgetId, instance);
+  return instance;
+}
+
+// ----- Public API (window.RampOSWidget) -----
+
+export const RampOSWidget = {
+  version: '1.0.0',
+
+  init(config: EmbedWidgetConfig): WidgetInstance {
+    return createWidget(config);
+  },
+
+  destroy(instanceOrId?: WidgetInstance | string): void {
+    if (!instanceOrId) {
+      // Destroy all
+      activeInstances.forEach(inst => inst.destroy());
+      return;
+    }
+    const id = typeof instanceOrId === 'string' ? instanceOrId : instanceOrId.id;
+    const inst = activeInstances.get(id);
+    if (inst) {
+      inst.destroy();
+    }
+  },
+
+  destroyAll(): void {
+    activeInstances.forEach(inst => inst.destroy());
+  },
+
+  getInstances(): WidgetInstance[] {
+    return Array.from(activeInstances.values());
+  },
+
+  EventEmitter: RampOSEventEmitter,
+  ApiClient: RampOSApiClient,
+};
+
+// Expose on window for script-tag usage
+if (typeof window !== 'undefined') {
+  (window as Record<string, unknown>).RampOSWidget = RampOSWidget;
+}
+
+export default RampOSWidget;

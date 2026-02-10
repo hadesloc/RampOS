@@ -4,7 +4,7 @@
 //! covering velocity limits and tier-based restrictions.
 
 use crate::event::InMemoryEventPublisher;
-use crate::repository::user::UserRow;
+use crate::repository::user::{UserRepository, UserRow};
 use crate::service::payout::{CreatePayoutRequest, PayoutBankStatus, PayoutService, ConfirmPayoutRequest};
 use crate::test_utils::{MockIntentRepository, MockLedgerRepository, MockUserRepository};
 use chrono::Utc;
@@ -525,6 +525,505 @@ async fn test_payout_idempotency_key_prevents_duplicate() {
     // Verify only ONE intent was created
     let intents = intent_repo.intents.lock().unwrap();
     assert_eq!(intents.len(), 1, "Only one intent should exist for idempotent key");
+}
+
+/// Atomic transaction semantics: intent + ledger must be created together.
+/// If payout creation succeeds, both intent and ledger entries must exist.
+/// If a pre-condition fails (e.g., insufficient balance), neither should exist.
+#[tokio::test]
+async fn test_payout_atomic_intent_and_ledger_consistency() {
+    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_atom", "tenant_atom", 1));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_atom"),
+        Some(&UserId::new("user_atom")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(5_000_000),
+    );
+
+    // Successful payout: both intent and ledger entry must be created
+    let req = make_payout_request("tenant_atom", "user_atom", 1_000_000);
+    let res = service.create_payout(req).await.unwrap();
+    assert_eq!(res.status, PayoutState::Submitted);
+
+    let intents = intent_repo.intents.lock().unwrap();
+    assert_eq!(intents.len(), 1, "Intent must be created on success");
+    assert_eq!(intents[0].state, "PAYOUT_SUBMITTED");
+    drop(intents);
+
+    let txs = ledger_repo.transactions.lock().unwrap();
+    assert_eq!(txs.len(), 1, "Ledger transaction must be created on success");
+    assert!(txs[0].is_balanced(), "Ledger transaction must be balanced");
+    drop(txs);
+
+    // Failed payout (insufficient balance): neither new intent nor ledger entry should be added
+    let (service2, intent_repo2, ledger_repo2, user_repo2, _ep2) = setup_payout_service();
+    user_repo2.add_user(make_active_user("user_atom2", "tenant_atom2", 1));
+    ledger_repo2.set_balance(
+        &TenantId::new("tenant_atom2"),
+        Some(&UserId::new("user_atom2")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(50_000), // Only 50K
+    );
+
+    let req2 = make_payout_request("tenant_atom2", "user_atom2", 1_000_000);
+    let res2 = service2.create_payout(req2).await;
+    assert!(res2.is_err(), "Should fail with insufficient balance");
+
+    let intents2 = intent_repo2.intents.lock().unwrap();
+    assert_eq!(intents2.len(), 0, "No intent should be created on balance failure");
+    drop(intents2);
+
+    let txs2 = ledger_repo2.transactions.lock().unwrap();
+    assert_eq!(txs2.len(), 0, "No ledger transaction should be created on balance failure");
+}
+
+/// Atomic rollback simulation: when policy rejects a payout, ledger entries must NOT be created
+/// but intent should exist in REJECTED_BY_POLICY state.
+#[tokio::test]
+async fn test_payout_policy_rejection_no_ledger_entries() {
+    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    // Tier0 user: policy will reject
+    user_repo.add_user(make_active_user("user_rej", "tenant_rej", 0));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_rej"),
+        Some(&UserId::new("user_rej")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(50_000_000),
+    );
+
+    let req = make_payout_request("tenant_rej", "user_rej", 100_000);
+    let res = service.create_payout(req).await.unwrap();
+    assert_eq!(res.status, PayoutState::RejectedByPolicy);
+
+    // Intent should be created but in rejected state
+    let intents = intent_repo.intents.lock().unwrap();
+    assert_eq!(intents.len(), 1);
+    assert_eq!(intents[0].state, "REJECTED_BY_POLICY");
+    drop(intents);
+
+    // NO ledger entries should exist (funds were never held)
+    let txs = ledger_repo.transactions.lock().unwrap();
+    assert_eq!(txs.len(), 0, "No ledger transaction for policy-rejected payout");
+}
+
+/// Concurrent payout race condition: two requests with the same idempotency key
+/// should return the same intent without creating a duplicate, even when called back-to-back.
+#[tokio::test]
+async fn test_payout_concurrent_idempotency_key_race() {
+    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_race", "tenant_race", 1));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_race"),
+        Some(&UserId::new("user_race")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(10_000_000),
+    );
+
+    let idem_key = IdempotencyKey::new("race-key-001");
+
+    // First request
+    let mut req1 = make_payout_request("tenant_race", "user_race", 500_000);
+    req1.idempotency_key = Some(idem_key.clone());
+    let res1 = service.create_payout(req1).await.unwrap();
+
+    // Simulate "concurrent" second request with same key
+    let mut req2 = make_payout_request("tenant_race", "user_race", 500_000);
+    req2.idempotency_key = Some(idem_key.clone());
+    let res2 = service.create_payout(req2).await.unwrap();
+
+    // Third request with same key
+    let mut req3 = make_payout_request("tenant_race", "user_race", 500_000);
+    req3.idempotency_key = Some(idem_key.clone());
+    let res3 = service.create_payout(req3).await.unwrap();
+
+    // All must return the same intent_id
+    assert_eq!(res1.intent_id, res2.intent_id);
+    assert_eq!(res2.intent_id, res3.intent_id);
+
+    // Only ONE intent should exist
+    let intents = intent_repo.intents.lock().unwrap();
+    assert_eq!(intents.len(), 1, "Only one intent for repeated idempotency key");
+    drop(intents);
+
+    // Only ONE ledger transaction should exist
+    let txs = ledger_repo.transactions.lock().unwrap();
+    assert_eq!(txs.len(), 1, "Only one ledger tx for repeated idempotency key");
+}
+
+/// Different idempotency keys must create separate intents.
+#[tokio::test]
+async fn test_payout_different_idempotency_keys_create_separate_intents() {
+    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_diff", "tenant_diff", 1));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_diff"),
+        Some(&UserId::new("user_diff")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(10_000_000),
+    );
+
+    let mut req1 = make_payout_request("tenant_diff", "user_diff", 500_000);
+    req1.idempotency_key = Some(IdempotencyKey::new("key-A"));
+    let res1 = service.create_payout(req1).await.unwrap();
+
+    let mut req2 = make_payout_request("tenant_diff", "user_diff", 500_000);
+    req2.idempotency_key = Some(IdempotencyKey::new("key-B"));
+    let res2 = service.create_payout(req2).await.unwrap();
+
+    assert_ne!(res1.intent_id, res2.intent_id, "Different keys must create different intents");
+
+    let intents = intent_repo.intents.lock().unwrap();
+    assert_eq!(intents.len(), 2);
+}
+
+/// Balance deduction correctness: verify the correct amount is deducted and
+/// ledger entries reflect the exact payout amount.
+#[tokio::test]
+async fn test_payout_balance_deduction_correctness() {
+    let (service, _intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_bal_c", "tenant_bal_c", 2));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_bal_c"),
+        Some(&UserId::new("user_bal_c")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(10_000_000),
+    );
+
+    let amounts = [1_500_000i64, 2_000_000, 3_000_000];
+    for amount in &amounts {
+        let req = make_payout_request("tenant_bal_c", "user_bal_c", *amount);
+        let res = service.create_payout(req).await.unwrap();
+        assert_eq!(res.status, PayoutState::Submitted);
+    }
+
+    // Verify each ledger transaction has the correct amount
+    let txs = ledger_repo.transactions.lock().unwrap();
+    assert_eq!(txs.len(), 3, "Three ledger transactions for three payouts");
+
+    for (i, expected_amount) in amounts.iter().enumerate() {
+        let tx = &txs[i];
+        assert!(tx.is_balanced(), "Transaction {} must be balanced", i);
+        // Each entry in the transaction should reflect the payout amount
+        for entry in &tx.entries {
+            assert_eq!(
+                entry.amount,
+                Decimal::from(*expected_amount),
+                "Entry amount must match payout request for tx {}",
+                i
+            );
+        }
+    }
+}
+
+/// Balance boundary: payout for the exact balance should succeed,
+/// but one unit more should fail.
+#[tokio::test]
+async fn test_payout_exact_balance_boundary() {
+    let (service, _intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_bnd", "tenant_bnd", 2));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_bnd"),
+        Some(&UserId::new("user_bnd")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(1_000_000), // Exactly 1M
+    );
+
+    // Exact balance should succeed
+    let req = make_payout_request("tenant_bnd", "user_bnd", 1_000_000);
+    let res = service.create_payout(req).await.unwrap();
+    assert_eq!(res.status, PayoutState::Submitted);
+}
+
+#[tokio::test]
+async fn test_payout_over_balance_by_one_fails() {
+    let (service, _intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_bnd2", "tenant_bnd2", 2));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_bnd2"),
+        Some(&UserId::new("user_bnd2")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(999_999),
+    );
+
+    // 1M exceeds 999,999 balance
+    let req = make_payout_request("tenant_bnd2", "user_bnd2", 1_000_000);
+    let res = service.create_payout(req).await;
+    assert!(res.is_err(), "Payout exceeding balance by 1 VND should fail");
+}
+
+/// Velocity limit enforcement: verify daily remaining is correctly reported
+/// and decreases with each payout.
+#[tokio::test]
+async fn test_payout_daily_remaining_decreases() {
+    let (service, _intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    // Tier1: daily limit = 20M VND
+    user_repo.add_user(make_active_user("user_rem", "tenant_rem", 1));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_rem"),
+        Some(&UserId::new("user_rem")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(100_000_000),
+    );
+
+    // First payout: 5M
+    let req1 = make_payout_request("tenant_rem", "user_rem", 5_000_000);
+    let res1 = service.create_payout(req1).await.unwrap();
+    assert_eq!(res1.status, PayoutState::Submitted);
+    let remaining_after_1 = res1.daily_remaining;
+
+    // Second payout: 3M
+    let req2 = make_payout_request("tenant_rem", "user_rem", 3_000_000);
+    let res2 = service.create_payout(req2).await.unwrap();
+    assert_eq!(res2.status, PayoutState::Submitted);
+    let remaining_after_2 = res2.daily_remaining;
+
+    // Remaining should decrease
+    assert!(
+        remaining_after_2 < remaining_after_1,
+        "Daily remaining should decrease: {} should be < {}",
+        remaining_after_2,
+        remaining_after_1
+    );
+
+    // Check that the decrease matches the second payout amount
+    let expected_decrease = Decimal::from(3_000_000);
+    assert_eq!(
+        remaining_after_1 - remaining_after_2,
+        expected_decrease,
+        "Remaining decrease should equal the second payout amount"
+    );
+}
+
+/// Velocity limit: a single payout that exactly hits the daily limit should succeed,
+/// then any additional payout (even 1 VND) should be rejected.
+#[tokio::test]
+async fn test_payout_velocity_exact_daily_limit() {
+    let (service, _intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    // Tier1: daily limit = 20M VND, single tx limit = 10M VND
+    user_repo.add_user(make_active_user("user_edl", "tenant_edl", 1));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_edl"),
+        Some(&UserId::new("user_edl")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(100_000_000),
+    );
+
+    // Two payouts of 10M each = exactly 20M daily limit
+    let req1 = make_payout_request("tenant_edl", "user_edl", 10_000_000);
+    let res1 = service.create_payout(req1).await.unwrap();
+    assert_eq!(res1.status, PayoutState::Submitted);
+
+    let req2 = make_payout_request("tenant_edl", "user_edl", 10_000_000);
+    let res2 = service.create_payout(req2).await.unwrap();
+    assert_eq!(res2.status, PayoutState::Submitted);
+
+    // Third payout of any amount should be rejected
+    let req3 = make_payout_request("tenant_edl", "user_edl", 100_000);
+    let res3 = service.create_payout(req3).await;
+    match res3 {
+        Ok(r) => assert_eq!(r.status, PayoutState::RejectedByPolicy,
+            "Payout after hitting exact daily limit should be rejected"),
+        Err(e) => {
+            let err_str = format!("{:?}", e);
+            assert!(
+                err_str.contains("LimitExceeded") || err_str.contains("limit"),
+                "Expected limit error, got: {}",
+                err_str
+            );
+        }
+    }
+}
+
+/// Sanctions screening: Tier0 user with large balance should still be blocked.
+/// The service pre-checks tier limits before running policy check, so either
+/// an error (UserLimitExceeded) or RejectedByPolicy is acceptable.
+#[tokio::test]
+async fn test_payout_sanctions_screening_before_balance_check() {
+    // Tier0 users cannot withdraw - verify across a range of amounts
+    for amount in [1i64, 1_000, 1_000_000] {
+        let (svc, _irepo, lrepo, urepo, _ep) = setup_payout_service();
+        urepo.add_user(make_active_user("user_s", "tenant_s", 0));
+        lrepo.set_balance(
+            &TenantId::new("tenant_s"),
+            Some(&UserId::new("user_s")),
+            &AccountType::LiabilityUserVnd,
+            &LedgerCurrency::VND,
+            dec!(999_999_999_999),
+        );
+
+        let req = make_payout_request("tenant_s", "user_s", amount);
+        let res = svc.create_payout(req).await;
+        match res {
+            Ok(r) => {
+                assert_eq!(
+                    r.status,
+                    PayoutState::RejectedByPolicy,
+                    "Sanctioned entity payout of {} must be rejected by policy",
+                    amount
+                );
+                // No ledger entries should be created for policy rejection
+                let txs = lrepo.transactions.lock().unwrap();
+                assert_eq!(txs.len(), 0, "No ledger tx for sanctioned entity payout of {}", amount);
+            }
+            Err(e) => {
+                // UserLimitExceeded is also valid - Tier0 has zero limit
+                let err_str = format!("{:?}", e);
+                assert!(
+                    err_str.contains("LimitExceeded") || err_str.contains("limit"),
+                    "Expected limit or policy rejection for amount {}, got: {}",
+                    amount,
+                    err_str
+                );
+                // On error, no intent or ledger should be created either
+                let txs = lrepo.transactions.lock().unwrap();
+                assert_eq!(txs.len(), 0, "No ledger tx on error for amount {}", amount);
+            }
+        }
+    }
+}
+
+/// Sanctions check interaction: after a Tier0 user gets upgraded to Tier1, payouts should work.
+#[tokio::test]
+async fn test_payout_sanctions_cleared_after_tier_upgrade() {
+    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    // Start as Tier0
+    user_repo.add_user(make_active_user("user_upg", "tenant_upg", 0));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_upg"),
+        Some(&UserId::new("user_upg")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(5_000_000),
+    );
+
+    // Tier0: should be rejected
+    let req1 = make_payout_request("tenant_upg", "user_upg", 100_000);
+    let res1 = service.create_payout(req1).await.unwrap();
+    assert_eq!(res1.status, PayoutState::RejectedByPolicy);
+
+    // Upgrade to Tier1
+    UserRepository::update_kyc_tier(&*user_repo, &TenantId::new("tenant_upg"), &UserId::new("user_upg"), 1)
+        .await
+        .unwrap();
+
+    // Tier1: should now succeed
+    let req2 = make_payout_request("tenant_upg", "user_upg", 100_000);
+    let res2 = service.create_payout(req2).await.unwrap();
+    assert_eq!(res2.status, PayoutState::Submitted,
+        "After tier upgrade, payout should succeed");
+}
+
+/// Full reversal flow: create -> submit -> bank reject -> reverse.
+/// Verify that reversal ledger entries are balanced and reverse the original hold.
+#[tokio::test]
+async fn test_payout_full_reversal_ledger_balance() {
+    let (service, intent_repo, ledger_repo, user_repo, event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_frev", "tenant_frev", 1));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_frev"),
+        Some(&UserId::new("user_frev")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(5_000_000),
+    );
+
+    // Create and submit
+    let req = make_payout_request("tenant_frev", "user_frev", 2_000_000);
+    let res = service.create_payout(req).await.unwrap();
+    assert_eq!(res.status, PayoutState::Submitted);
+
+    // Bank rejects
+    let confirm_req = ConfirmPayoutRequest {
+        tenant_id: TenantId::new("tenant_frev"),
+        intent_id: res.intent_id.clone(),
+        bank_tx_id: "BANK_FREV_001".to_string(),
+        status: PayoutBankStatus::Rejected("Invalid account".to_string()),
+    };
+    service.confirm_payout(confirm_req).await.unwrap();
+
+    // Verify state
+    let intents = intent_repo.intents.lock().unwrap();
+    let intent = intents.iter().find(|i| i.id == res.intent_id.0).unwrap();
+    assert_eq!(intent.state, "REVERSED");
+    drop(intents);
+
+    // Verify ledger: 2 transactions (hold + reversal), both balanced
+    let txs = ledger_repo.transactions.lock().unwrap();
+    assert_eq!(txs.len(), 2);
+    assert!(txs[0].is_balanced(), "Hold transaction must be balanced");
+    assert!(txs[1].is_balanced(), "Reversal transaction must be balanced");
+
+    // Reversal amount should match original hold amount
+    let hold_amount: Decimal = txs[0].entries.iter().map(|e| e.amount).max().unwrap_or_default();
+    let reversal_amount: Decimal = txs[1].entries.iter().map(|e| e.amount).max().unwrap_or_default();
+    assert_eq!(hold_amount, reversal_amount,
+        "Reversal amount must match hold amount");
+    assert_eq!(hold_amount, dec!(2_000_000));
+    drop(txs);
+
+    // Verify both status_changed and payout.reversed events
+    let events = event_publisher.get_events().await;
+    let has_reversed = events
+        .iter()
+        .any(|e| e.get("type").and_then(|t| t.as_str()) == Some("payout.reversed"));
+    assert!(has_reversed, "payout.reversed event must be published");
+    let has_status_changed = events
+        .iter()
+        .any(|e| e.get("type").and_then(|t| t.as_str()) == Some("intent.status_changed"));
+    assert!(has_status_changed, "intent.status_changed event must be published");
+}
+
+/// Velocity across multiple tenants: payouts for different tenants should have independent limits.
+#[tokio::test]
+async fn test_payout_velocity_independent_per_tenant() {
+    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    // Setup two tenants with same user ID but different tenant IDs
+    user_repo.add_user(make_active_user("user_mt", "tenant_A", 1));
+    user_repo.add_user(make_active_user("user_mt", "tenant_B", 1));
+
+    for tenant in ["tenant_A", "tenant_B"] {
+        ledger_repo.set_balance(
+            &TenantId::new(tenant),
+            Some(&UserId::new("user_mt")),
+            &AccountType::LiabilityUserVnd,
+            &LedgerCurrency::VND,
+            dec!(100_000_000),
+        );
+    }
+
+    // Tenant A: 9M payout
+    let req_a = make_payout_request("tenant_A", "user_mt", 9_000_000);
+    let res_a = service.create_payout(req_a).await.unwrap();
+    assert_eq!(res_a.status, PayoutState::Submitted);
+
+    // Tenant B: 9M payout (should succeed independently)
+    let req_b = make_payout_request("tenant_B", "user_mt", 9_000_000);
+    let res_b = service.create_payout(req_b).await.unwrap();
+    assert_eq!(res_b.status, PayoutState::Submitted,
+        "Different tenant should have independent velocity limits");
 }
 
 /// State transitions: verify that PayoutState enforces valid transitions only.

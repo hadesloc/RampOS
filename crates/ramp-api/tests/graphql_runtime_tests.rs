@@ -409,3 +409,594 @@ async fn test_graphql_mutation_without_auth_token() {
         "GraphQL mutation without auth should now return 401"
     );
 }
+
+// ============================================================================
+// F07: Functional Resolver Tests
+// ============================================================================
+//
+// These tests exercise the GraphQL resolvers directly via schema.execute(),
+// bypassing HTTP/auth layers to verify business logic and data correctness.
+
+use ramp_api::graphql::build_schema;
+use ramp_core::repository::intent::IntentRow;
+use ramp_core::repository::user::UserRow;
+use rust_decimal::Decimal;
+
+/// Helper: build an AppState with pre-populated mock data and return it.
+fn setup_app_state_with_data() -> (
+    ramp_api::router::AppState,
+    Arc<MockIntentRepository>,
+    Arc<MockUserRepository>,
+) {
+    let intent_repo = Arc::new(MockIntentRepository::new());
+    let ledger_repo = Arc::new(MockLedgerRepository::new());
+    let user_repo = Arc::new(MockUserRepository::new());
+    let tenant_repo = create_tenant_repo_with_test_tenant();
+    let event_publisher = Arc::new(InMemoryEventPublisher::new());
+
+    // Seed test users
+    user_repo.add_user(UserRow {
+        id: "user-1".to_string(),
+        tenant_id: TEST_TENANT_ID.to_string(),
+        status: "ACTIVE".to_string(),
+        kyc_tier: 2,
+        kyc_status: "VERIFIED".to_string(),
+        kyc_verified_at: Some(Utc::now()),
+        risk_score: Some(Decimal::new(15, 1)),
+        risk_flags: serde_json::json!([]),
+        daily_payin_limit_vnd: Some(Decimal::new(500_000_000, 0)),
+        daily_payout_limit_vnd: Some(Decimal::new(200_000_000, 0)),
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    });
+    user_repo.add_user(UserRow {
+        id: "user-2".to_string(),
+        tenant_id: TEST_TENANT_ID.to_string(),
+        status: "SUSPENDED".to_string(),
+        kyc_tier: 1,
+        kyc_status: "PENDING".to_string(),
+        kyc_verified_at: None,
+        risk_score: None,
+        risk_flags: serde_json::json!([]),
+        daily_payin_limit_vnd: None,
+        daily_payout_limit_vnd: None,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    });
+    user_repo.add_user(UserRow {
+        id: "user-3".to_string(),
+        tenant_id: TEST_TENANT_ID.to_string(),
+        status: "ACTIVE".to_string(),
+        kyc_tier: 3,
+        kyc_status: "VERIFIED".to_string(),
+        kyc_verified_at: Some(Utc::now()),
+        risk_score: Some(Decimal::new(5, 1)),
+        risk_flags: serde_json::json!(["HIGH_VOLUME"]),
+        daily_payin_limit_vnd: Some(Decimal::new(1_000_000_000, 0)),
+        daily_payout_limit_vnd: Some(Decimal::new(500_000_000, 0)),
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    });
+
+    // Seed test intents for user-1
+    let base_time = Utc::now();
+    for i in 0..5 {
+        intent_repo.intents.lock().unwrap().push(IntentRow {
+            id: format!("intent-{}", i + 1),
+            tenant_id: TEST_TENANT_ID.to_string(),
+            user_id: "user-1".to_string(),
+            intent_type: if i < 3 { "PAYIN_VND" } else { "PAYOUT_VND" }.to_string(),
+            state: if i == 0 { "COMPLETED" } else { "INSTRUCTION_ISSUED" }.to_string(),
+            state_history: serde_json::json!([{"state": "CREATED", "ts": base_time.to_rfc3339()}]),
+            amount: Decimal::new((i as i64 + 1) * 100_000, 0),
+            currency: "VND".to_string(),
+            actual_amount: if i == 0 { Some(Decimal::new(100_000, 0)) } else { None },
+            rails_provider: Some("VCB".to_string()),
+            reference_code: Some(format!("REF-{}", i + 1)),
+            bank_tx_id: if i == 0 { Some("BANK-TX-001".to_string()) } else { None },
+            chain_id: None,
+            tx_hash: None,
+            from_address: None,
+            to_address: None,
+            metadata: serde_json::json!({"source": "test"}),
+            idempotency_key: Some(format!("idem-{}", i + 1)),
+            created_at: base_time,
+            updated_at: base_time,
+            expires_at: Some(base_time + chrono::Duration::hours(1)),
+            completed_at: if i == 0 { Some(base_time) } else { None },
+        });
+    }
+
+    let payin_service = Arc::new(PayinService::new(
+        intent_repo.clone(),
+        ledger_repo.clone(),
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let payout_service = Arc::new(PayoutService::new(
+        intent_repo.clone(),
+        ledger_repo.clone(),
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let trade_service = Arc::new(TradeService::new(
+        intent_repo.clone(),
+        ledger_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let ledger_service = Arc::new(LedgerService::new(ledger_repo.clone()));
+    let onboarding_service = Arc::new(ramp_core::service::onboarding::OnboardingService::new(
+        tenant_repo.clone(),
+        ledger_service.clone(),
+    ));
+    let user_service = Arc::new(ramp_core::service::user::UserService::new(
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+    let pool = PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
+        .expect("Failed to create lazy pool");
+    let report_generator = Arc::new(ReportGenerator::new(
+        pool,
+        Arc::new(MockDocumentStorage::new()),
+    ));
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
+
+    let app_state = ramp_api::router::AppState {
+        payin_service,
+        payout_service,
+        trade_service,
+        ledger_service,
+        onboarding_service,
+        user_service,
+        webhook_service: Arc::new(
+            ramp_core::service::webhook::WebhookService::new(
+                Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
+                tenant_repo.clone(),
+            )
+            .unwrap(),
+        ),
+        tenant_repo: tenant_repo.clone(),
+        intent_repo: intent_repo.clone(),
+        report_generator,
+        case_manager,
+        rule_manager: None,
+        rate_limiter: None,
+        idempotency_handler: None,
+        aa_service: None,
+        portal_auth_config: Arc::new(PortalAuthConfig {
+            jwt_secret: "test-secret-key-for-testing".to_string(),
+            issuer: None,
+            audience: None,
+            allow_missing_tenant: false,
+        }),
+        bank_confirmation_repo: None,
+        licensing_repo: None,
+        compliance_audit_service: None,
+        sso_service: Arc::new(ramp_core::sso::SsoService::new()),
+        billing_service: Arc::new(ramp_core::billing::BillingService::new(
+            ramp_core::billing::BillingConfig::default(),
+            Arc::new(ramp_core::billing::mock::MockBillingDataProvider::new()),
+        )),
+        vnst_protocol: Arc::new(ramp_core::stablecoin::VnstProtocolService::new(
+            ramp_core::stablecoin::VnstProtocolConfig::default(),
+            Arc::new(ramp_core::stablecoin::MockVnstProtocolDataProvider::new()),
+        )),
+        db_pool: None,
+        ctr_service: None,
+        ws_state: None,
+    };
+
+    (app_state, intent_repo, user_repo)
+}
+
+/// F07: Query a single user by ID returns correct fields
+#[tokio::test]
+async fn test_graphql_resolver_query_user_by_id() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = format!(
+        r#"{{ user(tenantId: "{}", id: "user-1") {{ id tenantId kycTier kycStatus status dailyPayinLimitVnd dailyPayoutLimitVnd }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let user = &data["user"];
+    assert_eq!(user["id"], "user-1");
+    assert_eq!(user["tenantId"], TEST_TENANT_ID);
+    assert_eq!(user["kycTier"], 2);
+    assert_eq!(user["kycStatus"], "VERIFIED");
+    assert_eq!(user["status"], "ACTIVE");
+    assert_eq!(user["dailyPayinLimitVnd"], "500000000");
+    assert_eq!(user["dailyPayoutLimitVnd"], "200000000");
+}
+
+/// F07: Query a non-existent user returns null
+#[tokio::test]
+async fn test_graphql_resolver_query_nonexistent_user() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = format!(
+        r#"{{ user(tenantId: "{}", id: "does-not-exist") {{ id }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    assert!(data["user"].is_null(), "Non-existent user should return null");
+}
+
+/// F07: Query users list returns correct data with pagination info
+#[tokio::test]
+async fn test_graphql_resolver_query_users_list() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = format!(
+        r#"{{ users(tenantId: "{}", first: 10) {{ edges {{ cursor node {{ id status kycTier }} }} pageInfo {{ hasNextPage hasPreviousPage startCursor endCursor }} totalCount }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let edges = data["users"]["edges"].as_array().unwrap();
+    assert_eq!(edges.len(), 3, "Should return all 3 test users");
+
+    // Verify each edge has cursor and node
+    for edge in edges {
+        assert!(edge["cursor"].is_string(), "Each edge should have a cursor");
+        assert!(edge["node"]["id"].is_string(), "Each node should have an id");
+        assert!(edge["node"]["status"].is_string(), "Each node should have a status");
+    }
+
+    // Verify pagination info
+    let page_info = &data["users"]["pageInfo"];
+    assert_eq!(page_info["hasNextPage"], false);
+    assert_eq!(page_info["hasPreviousPage"], false);
+    assert!(page_info["startCursor"].is_string());
+    assert!(page_info["endCursor"].is_string());
+    assert_eq!(data["users"]["totalCount"], 3);
+}
+
+/// F07: Query users with pagination limit returns correct subset
+#[tokio::test]
+async fn test_graphql_resolver_query_users_pagination() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    // Request only 2 users
+    let query = format!(
+        r#"{{ users(tenantId: "{}", first: 2) {{ edges {{ cursor node {{ id }} }} pageInfo {{ hasNextPage hasPreviousPage }} totalCount }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let edges = data["users"]["edges"].as_array().unwrap();
+    assert_eq!(edges.len(), 2, "Should return exactly 2 users");
+    assert_eq!(data["users"]["pageInfo"]["hasNextPage"], true, "Should have next page");
+    assert_eq!(data["users"]["totalCount"], 3, "Total count should still be 3");
+}
+
+/// F07: Query a single intent by ID returns full data structure
+#[tokio::test]
+async fn test_graphql_resolver_query_intent_by_id() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = format!(
+        r#"{{ intent(tenantId: "{}", id: "intent-1") {{ id tenantId userId intentType state amount currency actualAmount railsProvider referenceCode bankTxId metadata idempotencyKey }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let intent = &data["intent"];
+    assert_eq!(intent["id"], "intent-1");
+    assert_eq!(intent["tenantId"], TEST_TENANT_ID);
+    assert_eq!(intent["userId"], "user-1");
+    assert_eq!(intent["intentType"], "PAYIN_VND");
+    assert_eq!(intent["state"], "COMPLETED");
+    assert_eq!(intent["amount"], "100000");
+    assert_eq!(intent["currency"], "VND");
+    assert_eq!(intent["actualAmount"], "100000");
+    assert_eq!(intent["railsProvider"], "VCB");
+    assert_eq!(intent["referenceCode"], "REF-1");
+    assert_eq!(intent["bankTxId"], "BANK-TX-001");
+    assert_eq!(intent["idempotencyKey"], "idem-1");
+}
+
+/// F07: Query intents list filtered by user_id returns correct items
+#[tokio::test]
+async fn test_graphql_resolver_query_intents_with_user_filter() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = format!(
+        r#"{{ intents(tenantId: "{}", filter: {{ userId: "user-1" }}, first: 10) {{ edges {{ node {{ id intentType state amount }} }} pageInfo {{ hasNextPage }} }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let edges = data["intents"]["edges"].as_array().unwrap();
+    assert_eq!(edges.len(), 5, "Should return all 5 intents for user-1");
+}
+
+/// F07: Query intents filtered by intent_type narrows results
+#[tokio::test]
+async fn test_graphql_resolver_query_intents_type_filter() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = format!(
+        r#"{{ intents(tenantId: "{}", filter: {{ userId: "user-1", intentType: "PAYIN_VND" }}, first: 10) {{ edges {{ node {{ id intentType }} }} }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let edges = data["intents"]["edges"].as_array().unwrap();
+    assert_eq!(edges.len(), 3, "Should return only PAYIN_VND intents");
+    for edge in edges {
+        assert_eq!(edge["node"]["intentType"], "PAYIN_VND");
+    }
+}
+
+/// F07: Query intents filtered by state narrows results
+#[tokio::test]
+async fn test_graphql_resolver_query_intents_state_filter() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = format!(
+        r#"{{ intents(tenantId: "{}", filter: {{ userId: "user-1", state: "COMPLETED" }}, first: 10) {{ edges {{ node {{ id state }} }} }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let edges = data["intents"]["edges"].as_array().unwrap();
+    assert_eq!(edges.len(), 1, "Should return only the COMPLETED intent");
+    assert_eq!(edges[0]["node"]["id"], "intent-1");
+    assert_eq!(edges[0]["node"]["state"], "COMPLETED");
+}
+
+/// F07: Query intents without user_id filter returns empty (repo requires user scoping)
+#[tokio::test]
+async fn test_graphql_resolver_query_intents_no_user_returns_empty() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = format!(
+        r#"{{ intents(tenantId: "{}", first: 10) {{ edges {{ node {{ id }} }} }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let edges = data["intents"]["edges"].as_array().unwrap();
+    assert!(edges.is_empty(), "Without user_id filter, intents should return empty");
+}
+
+/// F07: Query dashboardStats returns correct aggregate data
+#[tokio::test]
+async fn test_graphql_resolver_query_dashboard_stats() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = format!(
+        r#"{{ dashboardStats(tenantId: "{}") {{ totalUsers activeUsers totalIntentsToday totalPayinVolumeToday totalPayoutVolumeToday pendingIntents }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let stats = &data["dashboardStats"];
+    assert_eq!(stats["totalUsers"], 3, "Should count all 3 test users");
+    assert_eq!(stats["activeUsers"], 2, "Should count 2 ACTIVE users");
+    assert_eq!(stats["totalIntentsToday"], 0);
+    assert_eq!(stats["totalPayinVolumeToday"], "0");
+    assert_eq!(stats["totalPayoutVolumeToday"], "0");
+    assert_eq!(stats["pendingIntents"], 0);
+}
+
+/// F07: createPayIn mutation returns valid intent data
+#[tokio::test]
+async fn test_graphql_resolver_mutation_create_payin() {
+    let (app_state, intent_repo, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let mutation = format!(
+        r#"mutation {{ createPayIn(tenantId: "{}", input: {{ userId: "user-1", amountVnd: "500000", railsProvider: "VCB" }}) {{ intentId referenceCode status dailyLimit dailyRemaining }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&mutation).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let result = &data["createPayIn"];
+    assert!(result["intentId"].is_string(), "Should return an intent ID");
+    assert!(!result["intentId"].as_str().unwrap().is_empty(), "Intent ID should not be empty");
+    assert!(result["referenceCode"].is_string(), "Should return a reference code");
+    assert_eq!(result["status"], "INSTRUCTION_ISSUED");
+
+    // Verify intent was actually created in the repository
+    let intents = intent_repo.intents.lock().unwrap();
+    let new_intent = intents.iter().find(|i| i.id == result["intentId"].as_str().unwrap());
+    assert!(new_intent.is_some(), "Intent should exist in repository after creation");
+}
+
+/// F07: createPayIn mutation with invalid amount format returns error
+#[tokio::test]
+async fn test_graphql_resolver_mutation_invalid_amount() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let mutation = format!(
+        r#"mutation {{ createPayIn(tenantId: "{}", input: {{ userId: "user-1", amountVnd: "not-a-number", railsProvider: "VCB" }}) {{ intentId }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&mutation).await;
+    assert!(!resp.errors.is_empty(), "Should return errors for invalid amount");
+    let error_msg = resp.errors[0].message.to_lowercase();
+    assert!(
+        error_msg.contains("invalid") || error_msg.contains("amount"),
+        "Error should mention invalid amount, got: {}",
+        resp.errors[0].message
+    );
+}
+
+/// F07: createPayIn mutation missing required fields returns GraphQL validation error
+#[tokio::test]
+async fn test_graphql_resolver_mutation_missing_required_fields() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    // Missing amountVnd and railsProvider (required fields)
+    let mutation = format!(
+        r#"mutation {{ createPayIn(tenantId: "{}", input: {{ userId: "user-1" }}) {{ intentId }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&mutation).await;
+    assert!(!resp.errors.is_empty(), "Missing required fields should produce errors");
+}
+
+/// F07: Schema introspection exposes expected query and mutation fields
+#[tokio::test]
+async fn test_graphql_resolver_schema_fields() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = r#"{
+        __schema {
+            queryType {
+                fields { name }
+            }
+            mutationType {
+                fields { name }
+            }
+        }
+    }"#;
+
+    let resp = schema.execute(query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let query_fields: Vec<&str> = data["__schema"]["queryType"]["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["name"].as_str().unwrap())
+        .collect();
+
+    assert!(query_fields.contains(&"intent"), "Schema should have 'intent' query");
+    assert!(query_fields.contains(&"intents"), "Schema should have 'intents' query");
+    assert!(query_fields.contains(&"user"), "Schema should have 'user' query");
+    assert!(query_fields.contains(&"users"), "Schema should have 'users' query");
+    assert!(query_fields.contains(&"dashboardStats"), "Schema should have 'dashboardStats' query");
+
+    let mutation_fields: Vec<&str> = data["__schema"]["mutationType"]["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["name"].as_str().unwrap())
+        .collect();
+
+    assert!(mutation_fields.contains(&"createPayIn"), "Schema should have 'createPayIn' mutation");
+    assert!(mutation_fields.contains(&"confirmPayIn"), "Schema should have 'confirmPayIn' mutation");
+    assert!(mutation_fields.contains(&"createPayout"), "Schema should have 'createPayout' mutation");
+}
+
+/// F07: Intent fields include timestamps (createdAt, updatedAt, expiresAt)
+#[tokio::test]
+async fn test_graphql_resolver_intent_timestamp_fields() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = format!(
+        r#"{{ intent(tenantId: "{}", id: "intent-1") {{ id createdAt updatedAt expiresAt completedAt }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let intent = &data["intent"];
+    assert!(intent["createdAt"].is_string(), "createdAt should be a string");
+    assert!(intent["updatedAt"].is_string(), "updatedAt should be a string");
+    assert!(intent["expiresAt"].is_string(), "expiresAt should be present for this intent");
+    assert!(intent["completedAt"].is_string(), "completedAt should be present for completed intent");
+}
+
+/// F07: User fields include risk_score and risk_flags
+#[tokio::test]
+async fn test_graphql_resolver_user_risk_fields() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = format!(
+        r#"{{ user(tenantId: "{}", id: "user-1") {{ id riskScore riskFlags }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let user = &data["user"];
+    assert_eq!(user["id"], "user-1");
+    assert!(user["riskScore"].is_string(), "riskScore should be a string representation");
+    assert!(user["riskFlags"].is_array(), "riskFlags should be a JSON array");
+}
+
+/// F07: createPayIn with idempotency_key passes it through to the created intent
+#[tokio::test]
+async fn test_graphql_resolver_mutation_create_payin_with_idempotency_key() {
+    let (app_state, intent_repo, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let mutation = format!(
+        r#"mutation {{ createPayIn(tenantId: "{}", input: {{ userId: "user-1", amountVnd: "250000", railsProvider: "TCB", idempotencyKey: "test-idem-key-999" }}) {{ intentId referenceCode status }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&mutation).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let result = &data["createPayIn"];
+    let intent_id = result["intentId"].as_str().unwrap();
+    assert!(!intent_id.is_empty());
+
+    // Verify the intent in repository has the idempotency key
+    let intents = intent_repo.intents.lock().unwrap();
+    let created = intents.iter().find(|i| i.id == intent_id).unwrap();
+    assert_eq!(created.idempotency_key, Some("test-idem-key-999".to_string()));
+}

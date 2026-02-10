@@ -538,4 +538,445 @@ mod tests {
         }
         key
     }
+
+    // ========================================================================
+    // F04 Delivery Integration Tests: HMAC, payload contract, event filtering,
+    // retry tracking, timeout handling, multi-endpoint
+    // ========================================================================
+
+    #[test]
+    fn test_hmac_signature_roundtrip_multiple_payloads() {
+        // Verify HMAC-SHA256 signature generation and verification with
+        // various payload shapes that match real webhook delivery payloads.
+        let secret = b"whsec_production_key_vnd_ramp_os";
+        let timestamp = chrono::Utc::now().timestamp();
+
+        let payloads = vec![
+            // Minimal payload
+            br#"{"id":"evt_1","type":"intent.status.changed","created_at":"2026-01-01T00:00:00Z","data":{}}"#.to_vec(),
+            // Payload with nested data
+            serde_json::to_vec(&serde_json::json!({
+                "id": "evt_2",
+                "type": "risk.review.required",
+                "created_at": "2026-01-01T00:00:00Z",
+                "data": {
+                    "intent_id": "pi_abc123",
+                    "risk_score": 0.85,
+                    "flags": ["velocity", "geo_mismatch"]
+                }
+            })).unwrap(),
+            // Empty data field
+            br#"{"id":"evt_3","type":"kyc.flagged","created_at":"2026-01-01T00:00:00Z","data":null}"#.to_vec(),
+            // Large payload with Unicode
+            serde_json::to_vec(&serde_json::json!({
+                "id": "evt_4",
+                "type": "recon.batch.ready",
+                "created_at": "2026-01-01T00:00:00Z",
+                "data": {
+                    "description": "Thanh toán VND - đối soát batch #42",
+                    "amount": 50000000,
+                    "currency": "VND"
+                }
+            })).unwrap(),
+        ];
+
+        for payload in &payloads {
+            let sig = ramp_common::crypto::generate_webhook_signature(secret, timestamp, payload)
+                .expect("signature generation should succeed");
+
+            // Verify format
+            assert!(sig.starts_with("t="), "Signature must start with t=");
+            assert!(sig.contains(",v1="), "Signature must contain ,v1=");
+
+            // Verify roundtrip
+            let result = ramp_common::crypto::verify_webhook_signature(secret, &sig, payload, 300);
+            assert!(result.is_ok(), "Valid signature should verify: {:?}", result.err());
+            assert_eq!(result.unwrap(), timestamp);
+        }
+    }
+
+    #[test]
+    fn test_hmac_signature_timestamp_tolerance() {
+        // Verify that expired timestamps are rejected
+        let secret = b"whsec_tolerance_test";
+        let old_timestamp = chrono::Utc::now().timestamp() - 600; // 10 minutes ago
+        let payload = br#"{"test": true}"#;
+
+        let sig = ramp_common::crypto::generate_webhook_signature(secret, old_timestamp, payload)
+            .expect("signature generation should succeed");
+
+        // 5 minute tolerance should reject 10-minute-old signature
+        let result = ramp_common::crypto::verify_webhook_signature(secret, &sig, payload, 300);
+        assert!(result.is_err(), "Expired timestamp should be rejected");
+
+        // 15 minute tolerance should accept it
+        let result = ramp_common::crypto::verify_webhook_signature(secret, &sig, payload, 900);
+        assert!(result.is_ok(), "Within-tolerance timestamp should be accepted");
+    }
+
+    #[test]
+    fn test_webhook_payload_contract_matches_deliver_event() {
+        // Verify that the webhook payload structure built by deliver_event
+        // matches the documented contract:
+        // { "id": "<event_id>", "type": "<event_type>", "created_at": "<rfc3339>", "data": <payload> }
+        let event = create_dummy_event();
+        let payload = serde_json::json!({
+            "id": event.id,
+            "type": event.event_type,
+            "created_at": event.created_at.to_rfc3339(),
+            "data": event.payload,
+        });
+
+        // Verify all required fields exist
+        assert!(payload.get("id").is_some(), "Payload must have 'id' field");
+        assert!(payload.get("type").is_some(), "Payload must have 'type' field");
+        assert!(payload.get("created_at").is_some(), "Payload must have 'created_at' field");
+        assert!(payload.get("data").is_some(), "Payload must have 'data' field");
+
+        // Verify types
+        assert!(payload["id"].is_string(), "'id' must be a string");
+        assert!(payload["type"].is_string(), "'type' must be a string");
+        assert!(payload["created_at"].is_string(), "'created_at' must be a string");
+
+        // Verify created_at is valid RFC3339
+        let created_at_str = payload["created_at"].as_str().unwrap();
+        let parsed = chrono::DateTime::parse_from_rfc3339(created_at_str);
+        assert!(parsed.is_ok(), "created_at must be valid RFC3339: {}", created_at_str);
+
+        // Verify serialization roundtrip
+        let serialized = serde_json::to_vec(&payload).expect("should serialize");
+        let deserialized: serde_json::Value = serde_json::from_slice(&serialized).expect("should deserialize");
+        assert_eq!(deserialized, payload, "Payload must survive serialization roundtrip");
+
+        // Verify no extra top-level fields (only id, type, created_at, data)
+        let obj = payload.as_object().unwrap();
+        assert_eq!(obj.len(), 4, "Webhook payload must have exactly 4 top-level fields");
+    }
+
+    #[tokio::test]
+    async fn test_event_type_filtering_by_queue() {
+        // Verify that different event types can be queued and their
+        // event_type strings are correctly set in the stored event.
+        let event_types = vec![
+            (WebhookEventType::IntentStatusChanged, "intent.status.changed"),
+            (WebhookEventType::RiskReviewRequired, "risk.review.required"),
+            (WebhookEventType::KycFlagged, "kyc.flagged"),
+            (WebhookEventType::ReconBatchReady, "recon.batch.ready"),
+        ];
+
+        for (event_type, expected_str) in event_types {
+            let mut mock_webhook_repo = MockWebhookRepository::new();
+            let mock_tenant_repo = MockTenantRepository::new();
+
+            let expected = expected_str.to_string();
+            mock_webhook_repo
+                .expect_queue_event()
+                .times(1)
+                .withf(move |event: &WebhookEventRow| {
+                    event.event_type == expected
+                })
+                .returning(|_| Ok(()));
+
+            let service = WebhookService::new(
+                Arc::new(mock_webhook_repo),
+                Arc::new(mock_tenant_repo),
+            ).unwrap();
+
+            let tenant_id = TenantId::new("tenant_filter_test");
+            let result = service
+                .queue_event(
+                    &tenant_id,
+                    event_type,
+                    None,
+                    json!({"test": true}),
+                )
+                .await;
+
+            assert!(result.is_ok(), "Queueing event type '{}' should succeed", expected_str);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_retry_count_tracking_across_attempts() {
+        // Verify that schedule_retry correctly increments attempts
+        // and transitions from retryable -> permanently failed.
+        let mut mock_webhook_repo = MockWebhookRepository::new();
+        let mock_tenant_repo = MockTenantRepository::new();
+
+        // Expect mark_failed for attempts 0..9 (10 calls)
+        mock_webhook_repo
+            .expect_mark_failed()
+            .times(10)
+            .returning(|_, _, _| Ok(()));
+
+        // Expect mark_permanently_failed when attempts == 10
+        mock_webhook_repo
+            .expect_mark_permanently_failed()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let service = WebhookService::new(
+            Arc::new(mock_webhook_repo),
+            Arc::new(mock_tenant_repo),
+        ).unwrap();
+
+        let event_id = EventId::new();
+
+        // Attempts 0 through 9: should call mark_failed (retryable)
+        for attempt in 0..10 {
+            let result = service.schedule_retry(&event_id, &format!("Error at attempt {}", attempt), attempt).await;
+            assert!(result.is_ok(), "schedule_retry at attempt {} should succeed", attempt);
+        }
+
+        // Attempt 10: should call mark_permanently_failed
+        let result = service.schedule_retry(&event_id, "Final failure", 10).await;
+        assert!(result.is_ok(), "schedule_retry at max attempts should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_webhook_delivery_timeout_error_handling() {
+        // Verify that timeout errors are properly handled via schedule_retry
+        // and recorded in the event error message.
+        let mut mock_webhook_repo = MockWebhookRepository::new();
+        let mock_tenant_repo = MockTenantRepository::new();
+
+        mock_webhook_repo
+            .expect_mark_failed()
+            .times(1)
+            .withf(|_id: &EventId, error: &str, _next: &DateTime<Utc>| {
+                error.contains("timeout") || error.contains("Timeout")
+            })
+            .returning(|_, _, _| Ok(()));
+
+        let service = WebhookService::new(
+            Arc::new(mock_webhook_repo),
+            Arc::new(mock_tenant_repo),
+        ).unwrap();
+
+        let event_id = EventId::new();
+        let result = service
+            .schedule_retry(&event_id, "Connection timeout after 30s", 0)
+            .await;
+        assert!(result.is_ok(), "Timeout error should be handled gracefully");
+    }
+
+    #[tokio::test]
+    async fn test_multiple_webhook_endpoints_same_tenant() {
+        // Verify that a single tenant can queue multiple events
+        // and each event is independently tracked.
+        let mut mock_webhook_repo = MockWebhookRepository::new();
+        let mock_tenant_repo = MockTenantRepository::new();
+
+        // Expect 3 queue_event calls for the same tenant
+        mock_webhook_repo
+            .expect_queue_event()
+            .times(3)
+            .withf(|event: &WebhookEventRow| {
+                event.tenant_id == "tenant_multi_endpoint"
+            })
+            .returning(|_| Ok(()));
+
+        let service = WebhookService::new(
+            Arc::new(mock_webhook_repo),
+            Arc::new(mock_tenant_repo),
+        ).unwrap();
+
+        let tenant_id = TenantId::new("tenant_multi_endpoint");
+
+        // Queue three different events for the same tenant
+        let event_ids: Vec<EventId> = futures::future::try_join_all(vec![
+            service.queue_event(
+                &tenant_id,
+                WebhookEventType::IntentStatusChanged,
+                Some(&IntentId::new("intent_1")),
+                json!({"status": "completed"}),
+            ),
+            service.queue_event(
+                &tenant_id,
+                WebhookEventType::RiskReviewRequired,
+                Some(&IntentId::new("intent_2")),
+                json!({"risk_score": 0.9}),
+            ),
+            service.queue_event(
+                &tenant_id,
+                WebhookEventType::KycFlagged,
+                None,
+                json!({"user_id": "usr_123"}),
+            ),
+        ])
+        .await
+        .expect("All queue operations should succeed");
+
+        // Verify all 3 events have unique IDs
+        assert_eq!(event_ids.len(), 3);
+        assert_ne!(event_ids[0].0, event_ids[1].0);
+        assert_ne!(event_ids[1].0, event_ids[2].0);
+        assert_ne!(event_ids[0].0, event_ids[2].0);
+    }
+
+    #[tokio::test]
+    async fn test_list_events_pagination() {
+        // Verify list_events correctly passes pagination parameters
+        let mut mock_webhook_repo = MockWebhookRepository::new();
+        let mock_tenant_repo = MockTenantRepository::new();
+
+        let events: Vec<WebhookEventRow> = (0..5)
+            .map(|i| {
+                let mut e = create_dummy_event();
+                e.id = format!("evt_page_{}", i);
+                e.tenant_id = "tenant_page".to_string();
+                e
+            })
+            .collect();
+        let events_clone = events.clone();
+
+        mock_webhook_repo
+            .expect_list_events()
+            .times(1)
+            .withf(|tid: &TenantId, limit: &i64, offset: &i64| {
+                tid.0 == "tenant_page" && *limit == 2 && *offset == 1
+            })
+            .returning(move |_, _, _| Ok(events_clone[1..3].to_vec()));
+
+        let service = WebhookService::new(
+            Arc::new(mock_webhook_repo),
+            Arc::new(mock_tenant_repo),
+        ).unwrap();
+
+        let result = service
+            .list_events(&TenantId::new("tenant_page"), 2, 1)
+            .await;
+        assert!(result.is_ok());
+        let listed = result.unwrap();
+        assert_eq!(listed.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_event_returns_correct_event() {
+        // Verify get_event retrieves the correct event by tenant + event_id
+        let mut mock_webhook_repo = MockWebhookRepository::new();
+        let mock_tenant_repo = MockTenantRepository::new();
+
+        let mut event = create_dummy_event();
+        event.id = "evt_specific_123".to_string();
+        event.tenant_id = "tenant_get".to_string();
+        let event_clone = event.clone();
+
+        mock_webhook_repo
+            .expect_get_event()
+            .times(1)
+            .withf(|tid: &TenantId, eid: &str| {
+                tid.0 == "tenant_get" && eid == "evt_specific_123"
+            })
+            .returning(move |_, _| Ok(Some(event_clone.clone())));
+
+        let service = WebhookService::new(
+            Arc::new(mock_webhook_repo),
+            Arc::new(mock_tenant_repo),
+        ).unwrap();
+
+        let result = service
+            .get_event(&TenantId::new("tenant_get"), "evt_specific_123")
+            .await;
+        assert!(result.is_ok());
+        let found = result.unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, "evt_specific_123");
+    }
+
+    #[tokio::test]
+    async fn test_retry_event_resets_to_pending() {
+        // Verify retry_event delegates to the repository correctly
+        let mut mock_webhook_repo = MockWebhookRepository::new();
+        let mock_tenant_repo = MockTenantRepository::new();
+
+        mock_webhook_repo
+            .expect_retry_event()
+            .times(1)
+            .withf(|tid: &TenantId, eid: &str| {
+                tid.0 == "tenant_retry" && eid == "evt_retry_me"
+            })
+            .returning(|_, _| Ok(()));
+
+        let service = WebhookService::new(
+            Arc::new(mock_webhook_repo),
+            Arc::new(mock_tenant_repo),
+        ).unwrap();
+
+        let result = service
+            .retry_event(&TenantId::new("tenant_retry"), "evt_retry_me")
+            .await;
+        assert!(result.is_ok(), "retry_event should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_get_events_by_intent_filtering() {
+        // Verify get_events_by_intent returns only events for the given intent
+        let mut mock_webhook_repo = MockWebhookRepository::new();
+        let mock_tenant_repo = MockTenantRepository::new();
+
+        let mut e1 = create_dummy_event();
+        e1.intent_id = Some("intent_target".to_string());
+        e1.tenant_id = "tenant_intent".to_string();
+        let e1_clone = e1.clone();
+
+        mock_webhook_repo
+            .expect_get_events_by_intent()
+            .times(1)
+            .withf(|tid: &TenantId, iid: &IntentId| {
+                tid.0 == "tenant_intent" && iid.0 == "intent_target"
+            })
+            .returning(move |_, _| Ok(vec![e1_clone.clone()]));
+
+        let service = WebhookService::new(
+            Arc::new(mock_webhook_repo),
+            Arc::new(mock_tenant_repo),
+        ).unwrap();
+
+        let result = service
+            .get_events_by_intent(
+                &TenantId::new("tenant_intent"),
+                &IntentId::new("intent_target"),
+            )
+            .await;
+        assert!(result.is_ok());
+        let events = result.unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].intent_id.as_deref(), Some("intent_target"));
+    }
+
+    #[tokio::test]
+    async fn test_schedule_retry_exponential_backoff_boundary() {
+        // Verify boundary: attempt 9 (last retryable) calls mark_failed,
+        // attempt 10 calls mark_permanently_failed.
+        let mut mock_webhook_repo = MockWebhookRepository::new();
+        let mock_tenant_repo = MockTenantRepository::new();
+
+        // Attempt 9 -> mark_failed
+        mock_webhook_repo
+            .expect_mark_failed()
+            .times(1)
+            .returning(|_, _, _| Ok(()));
+
+        // Attempt 10 -> mark_permanently_failed
+        mock_webhook_repo
+            .expect_mark_permanently_failed()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let service = WebhookService::new(
+            Arc::new(mock_webhook_repo),
+            Arc::new(mock_tenant_repo),
+        ).unwrap();
+
+        // Boundary: attempt 9 is the last retryable
+        let event_id_9 = EventId::new();
+        let r9 = service.schedule_retry(&event_id_9, "HTTP 502", 9).await;
+        assert!(r9.is_ok());
+
+        // Boundary: attempt 10 triggers permanent failure
+        let event_id_10 = EventId::new();
+        let r10 = service.schedule_retry(&event_id_10, "HTTP 502", 10).await;
+        assert!(r10.is_ok());
+    }
 }

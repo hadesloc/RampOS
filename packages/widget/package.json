@@ -9,7 +9,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "vite build && vite build -c vite.cdn.config.ts && tsc -p tsconfig.build.json",
+    "build": "vite build && vite build -c vite.cdn.config.ts && vite build -c vite.embed.config.ts && tsc -p tsconfig.build.json",
     "dev": "vite",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
