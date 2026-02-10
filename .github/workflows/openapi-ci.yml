@@ -1,0 +1,66 @@
+name: OpenAPI Spec Validation
+
+on:
+  push:
+    paths:
+      - 'crates/ramp-api/src/openapi.rs'
+      - 'openapi/**'
+      - 'scripts/validate-openapi.sh'
+  pull_request:
+    paths:
+      - 'crates/ramp-api/src/openapi.rs'
+      - 'openapi/**'
+      - 'scripts/validate-openapi.sh'
+  workflow_dispatch:
+
+jobs:
+  validate-openapi:
+    name: Validate OpenAPI Spec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-openapi-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-openapi-
+
+      - name: Validate OpenAPI spec unit test
+        run: cargo test -p ramp-api test_openapi_spec_valid --no-fail-fast
+
+      - name: Check spec completeness
+        run: |
+          echo "=== OpenAPI Spec Completeness Check ==="
+          # Verify openapi.rs exists and has endpoint definitions
+          if [ -f "crates/ramp-api/src/openapi.rs" ]; then
+            PATHS_COUNT=$(grep -c 'path =' crates/ramp-api/src/openapi.rs || echo "0")
+            echo "API paths defined: $PATHS_COUNT"
+            if [ "$PATHS_COUNT" -lt 1 ]; then
+              echo "WARNING: No API paths found in openapi.rs"
+            fi
+          else
+            echo "ERROR: openapi.rs not found"
+            exit 1
+          fi
+
+      - name: Check spec hash for drift
+        run: |
+          CURRENT_HASH=$(sha256sum crates/ramp-api/src/openapi.rs | cut -d' ' -f1)
+          echo "Current spec hash: $CURRENT_HASH"
+          if [ -f ".openapi-spec-hash" ]; then
+            SAVED_HASH=$(cat .openapi-spec-hash)
+            if [ "$CURRENT_HASH" != "$SAVED_HASH" ]; then
+              echo "::warning::OpenAPI spec has changed since last SDK generation. Run scripts/validate-openapi.sh to update."
+            else
+              echo "Spec hash matches saved hash. No drift."
+            fi
+          else
+            echo "No saved spec hash found. First run."
+          fi

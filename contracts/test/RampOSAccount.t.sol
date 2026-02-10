@@ -629,6 +629,96 @@ contract RampOSAccountTest is Test {
         assertFalse(account.isSelectorAllowed(sessionKey, bytes4(0xdeadbeef)));
     }
 
+    function test_SessionKeyRevocationPreventsExecution() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        // Fund account
+        vm.deal(address(account), 1 ether);
+
+        // Create session key
+        (address sessionKey,) = makeAddrAndKey("session");
+        uint48 validAfter = uint48(block.timestamp);
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+
+        address[] memory allowedTargets = new address[](0);
+        bytes4[] memory allowedSelectors = new bytes4[](0);
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0,
+            dailyLimit: 0
+        });
+
+        // Add session key
+        vm.prank(owner);
+        account.addSessionKey(sessionKey, validAfter, validUntil, permissions);
+        assertTrue(account.isValidSessionKey(sessionKey));
+
+        // Revoke the session key
+        vm.prank(owner);
+        account.removeSessionKey(sessionKey);
+
+        // Verify session key is no longer valid
+        assertFalse(account.isValidSessionKey(sessionKey));
+
+        // Verify the session key metadata is fully cleared
+        (address storedKey, uint48 storedValidAfter, uint48 storedValidUntil, bytes32 storedHash) =
+            account.sessionKeys(sessionKey);
+        assertEq(storedKey, address(0));
+        assertEq(storedValidAfter, 0);
+        assertEq(storedValidUntil, 0);
+        assertEq(storedHash, bytes32(0));
+
+        // Verify permissions are also cleared
+        RampOSAccount.SessionKeyPermissions memory storedPerms =
+            account.getSessionKeyPermissions(sessionKey);
+        assertEq(storedPerms.allowedTargets.length, 0);
+        assertEq(storedPerms.allowedSelectors.length, 0);
+        assertEq(storedPerms.spendingLimit, 0);
+        assertEq(storedPerms.dailyLimit, 0);
+    }
+
+    function test_ExpiredSessionKeyRejected() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        // Create session key that expires in 1 hour
+        (address sessionKey,) = makeAddrAndKey("session");
+        uint48 validAfter = uint48(block.timestamp);
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+
+        address[] memory allowedTargets = new address[](0);
+        bytes4[] memory allowedSelectors = new bytes4[](0);
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0,
+            dailyLimit: 0
+        });
+
+        vm.prank(owner);
+        account.addSessionKey(sessionKey, validAfter, validUntil, permissions);
+
+        // Session key is valid now
+        assertTrue(account.isValidSessionKey(sessionKey));
+
+        // Warp to exactly the expiry time - key should be invalid (validUntil is exclusive boundary)
+        vm.warp(uint256(validUntil) + 1);
+        assertFalse(account.isValidSessionKey(sessionKey));
+
+        // The key struct still exists in storage but is time-expired
+        (address storedKey,,,) = account.sessionKeys(sessionKey);
+        assertEq(storedKey, sessionKey); // key address still stored
+        assertFalse(account.isValidSessionKey(sessionKey)); // but not valid
+
+        // Warp far into the future - still rejected
+        vm.warp(block.timestamp + 365 days);
+        assertFalse(account.isValidSessionKey(sessionKey));
+    }
+
     function test_PermissionsHashConsistency() public {
         uint256 salt = 12345;
         RampOSAccount account = factory.createAccount(owner, salt);

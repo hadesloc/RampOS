@@ -438,4 +438,244 @@ mod tests {
         assert_eq!(config.tenant_max_requests, 100);
         assert_eq!(config.window_seconds, 60);
     }
+
+    #[tokio::test]
+    async fn test_memory_store_basic_allow() {
+        let store = MemoryRateLimitStore::new();
+        let result = store
+            .check("test_key", 10, 60, "ramp:test")
+            .await
+            .expect("check should succeed");
+        assert!(result.allowed);
+        assert_eq!(result.remaining, 9);
+    }
+
+    #[tokio::test]
+    async fn test_memory_store_exhausts_limit() {
+        let store = MemoryRateLimitStore::new();
+        let limit = 5u64;
+        for i in 0..limit {
+            let result = store
+                .check("exhaust_key", limit, 60, "ramp:test")
+                .await
+                .expect("check should succeed");
+            assert!(result.allowed, "request {} should be allowed", i);
+            assert_eq!(result.remaining, limit - i - 1);
+        }
+        // Next request should be rejected
+        let result = store
+            .check("exhaust_key", limit, 60, "ramp:test")
+            .await
+            .expect("check should succeed");
+        assert!(!result.allowed);
+        assert_eq!(result.remaining, 0);
+        assert!(result.reset_after_seconds > 0);
+    }
+
+    #[tokio::test]
+    async fn test_memory_store_burst_allowance() {
+        let store = MemoryRateLimitStore::new();
+        let burst_limit = 3u64;
+        // Simulate burst: send burst_limit requests rapidly
+        for _ in 0..burst_limit {
+            let result = store
+                .check("burst_key", burst_limit, 60, "ramp:test")
+                .await
+                .expect("check should succeed");
+            assert!(result.allowed);
+        }
+        // After burst, should be denied
+        let result = store
+            .check("burst_key", burst_limit, 60, "ramp:test")
+            .await
+            .expect("check should succeed");
+        assert!(!result.allowed);
+    }
+
+    #[tokio::test]
+    async fn test_per_tenant_separate_limits() {
+        let store = MemoryRateLimitStore::new();
+        let limit = 2u64;
+        // Tenant A uses up its limit
+        for _ in 0..limit {
+            let r = store
+                .check("tenant_a", limit, 60, "ramp:test")
+                .await
+                .unwrap();
+            assert!(r.allowed);
+        }
+        let r = store
+            .check("tenant_a", limit, 60, "ramp:test")
+            .await
+            .unwrap();
+        assert!(!r.allowed, "tenant_a should be rate limited");
+
+        // Tenant B should still be allowed
+        let r = store
+            .check("tenant_b", limit, 60, "ramp:test")
+            .await
+            .unwrap();
+        assert!(r.allowed, "tenant_b should not be affected by tenant_a");
+        assert_eq!(r.remaining, 1);
+    }
+
+    #[tokio::test]
+    async fn test_memory_fallback_when_no_redis() {
+        // MemoryRateLimitStore is the fallback when Redis is unavailable
+        let limiter = RateLimiter::with_memory(RateLimitConfig {
+            global_max_requests: 50,
+            tenant_max_requests: 10,
+            window_seconds: 60,
+            key_prefix: "ramp:fallback".to_string(),
+            endpoint_limits: HashMap::new(),
+        });
+        let result = limiter.check("fallback_test", 10).await.unwrap();
+        assert!(result.allowed);
+        assert_eq!(result.remaining, 9);
+    }
+
+    #[tokio::test]
+    async fn test_rate_limit_result_has_correct_reset() {
+        let store = MemoryRateLimitStore::new();
+        let window = 120u64;
+        let result = store
+            .check("reset_key", 5, window, "ramp:test")
+            .await
+            .unwrap();
+        assert!(result.allowed);
+        // For allowed requests, reset_after_seconds equals the window
+        assert_eq!(result.reset_after_seconds, window);
+    }
+
+    #[tokio::test]
+    async fn test_different_route_group_limits() {
+        let store = MemoryRateLimitStore::new();
+        // Route group "api" has limit 2
+        for _ in 0..2 {
+            let r = store.check("tenant1:api", 2, 60, "ramp:test").await.unwrap();
+            assert!(r.allowed);
+        }
+        let r = store.check("tenant1:api", 2, 60, "ramp:test").await.unwrap();
+        assert!(!r.allowed, "api route group should be exhausted");
+
+        // Route group "admin" has limit 5, should still work
+        let r = store.check("tenant1:admin", 5, 60, "ramp:test").await.unwrap();
+        assert!(r.allowed);
+        assert_eq!(r.remaining, 4);
+    }
+
+    #[tokio::test]
+    async fn test_endpoint_specific_limits_in_config() {
+        let mut endpoint_limits = HashMap::new();
+        endpoint_limits.insert("/v1/aa/user-operations".to_string(), 5u64);
+        endpoint_limits.insert("/v1/intents/payin".to_string(), 20u64);
+
+        let config = RateLimitConfig {
+            global_max_requests: 1000,
+            tenant_max_requests: 100,
+            window_seconds: 60,
+            key_prefix: "ramp:endpoint".to_string(),
+            endpoint_limits,
+        };
+
+        let limiter = RateLimiter::with_memory(config);
+
+        // Check that endpoint limits are configured correctly
+        assert_eq!(
+            limiter.config.endpoint_limits.get("/v1/aa/user-operations"),
+            Some(&5)
+        );
+        assert_eq!(
+            limiter.config.endpoint_limits.get("/v1/intents/payin"),
+            Some(&20)
+        );
+
+        // The store itself enforces per-key limits
+        // Simulate checking with the endpoint-specific limit
+        let r = limiter.check("tenant1:/v1/aa/user-operations", 5).await.unwrap();
+        assert!(r.allowed);
+        assert_eq!(r.remaining, 4);
+    }
+
+    #[tokio::test]
+    async fn test_rate_limit_remaining_decrements() {
+        let store = MemoryRateLimitStore::new();
+        let limit = 10u64;
+        for i in 0..limit {
+            let r = store.check("decrement_key", limit, 60, "ramp:test").await.unwrap();
+            assert!(r.allowed);
+            assert_eq!(r.remaining, limit - i - 1, "remaining should decrement at step {}", i);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_429_response_fields() {
+        // When rate limit is exceeded, RateLimitResult should have the correct fields
+        // for building a 429 response with Retry-After, X-RateLimit-Remaining, X-RateLimit-Reset
+        let store = MemoryRateLimitStore::new();
+        let limit = 1u64;
+        // Use up the single allowed request
+        let r = store.check("resp_key", limit, 60, "ramp:test").await.unwrap();
+        assert!(r.allowed);
+        assert_eq!(r.remaining, 0);
+
+        // Next request is denied - verify response fields
+        let denied = store.check("resp_key", limit, 60, "ramp:test").await.unwrap();
+        assert!(!denied.allowed);
+        assert_eq!(denied.remaining, 0, "X-RateLimit-Remaining should be 0");
+        assert!(denied.reset_after_seconds > 0, "Retry-After / X-RateLimit-Reset should be > 0");
+        assert!(denied.reset_after_seconds <= 60, "reset should not exceed window");
+    }
+
+    #[tokio::test]
+    async fn test_rate_limit_headers_on_success() {
+        // On successful requests, the middleware sets X-RateLimit-Limit, X-RateLimit-Remaining,
+        // and X-RateLimit-Reset headers. Verify the RateLimitResult supplies correct values.
+        let limiter = RateLimiter::with_memory(RateLimitConfig {
+            global_max_requests: 1000,
+            tenant_max_requests: 50,
+            window_seconds: 30,
+            key_prefix: "ramp:headers".to_string(),
+            endpoint_limits: HashMap::new(),
+        });
+
+        let r = limiter.check("header_test_tenant", 50).await.unwrap();
+        assert!(r.allowed);
+        // These values map to response headers in the middleware:
+        // X-RateLimit-Remaining
+        assert_eq!(r.remaining, 49);
+        // X-RateLimit-Reset (equals window_seconds for allowed requests)
+        assert_eq!(r.reset_after_seconds, 30);
+    }
+
+    #[tokio::test]
+    async fn test_tenant_db_override_concept() {
+        // Simulates the tenant DB override pattern: different tenants get different limits
+        // based on what would be loaded from tenant_rate_limits table.
+        // In production, the middleware reads tenant_rate_limits and overrides the default.
+        let store = Arc::new(MemoryRateLimitStore::new());
+        let config = RateLimitConfig::default();
+        let limiter = RateLimiter::new(store, config);
+
+        // Default tenant gets tenant_max_requests = 100
+        let default_limit = 100u64;
+        let r = limiter.check("default_tenant", default_limit).await.unwrap();
+        assert!(r.allowed);
+        assert_eq!(r.remaining, 99);
+
+        // Premium tenant gets DB-override limit of 500 (from tenant_rate_limits table)
+        let db_override_limit = 500u64;
+        let r = limiter.check("premium_tenant", db_override_limit).await.unwrap();
+        assert!(r.allowed);
+        assert_eq!(r.remaining, 499);
+
+        // Restricted tenant gets DB-override limit of 10
+        let restricted_limit = 10u64;
+        for _ in 0..restricted_limit {
+            let r = limiter.check("restricted_tenant", restricted_limit).await.unwrap();
+            assert!(r.allowed);
+        }
+        let r = limiter.check("restricted_tenant", restricted_limit).await.unwrap();
+        assert!(!r.allowed, "restricted tenant should be rate limited at 10");
+    }
 }

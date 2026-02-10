@@ -45,7 +45,7 @@ from rampos.models.passkey import (
     SignTransactionParams,
     SignTransactionResponse,
 )
-from rampos.utils.webhook_verifier import WebhookVerifier
+from rampos.utils.webhook_verifier import WebhookVerifier, verify_webhook_signature
 
 __version__ = "0.1.0"
 
@@ -57,6 +57,7 @@ __all__ = [
     "RampOSValidationError",
     "RampOSRateLimitError",
     "WebhookVerifier",
+    "verify_webhook_signature",
     # Intent models
     "Intent",
     "IntentType",

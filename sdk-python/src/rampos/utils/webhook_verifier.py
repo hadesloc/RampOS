@@ -12,6 +12,26 @@ import hmac
 from binascii import unhexlify
 
 
+def verify_webhook_signature(payload: str, signature: str, secret: str) -> bool:
+    """Verify a webhook payload signature (convenience function).
+
+    This is a standalone helper that wraps WebhookVerifier.verify()
+    for simple usage without instantiating the class.
+
+    Args:
+        payload: The raw request body as a string.
+        signature: The signature header sent by RampOS.
+        secret: The webhook signing secret.
+
+    Returns:
+        True if the signature is valid, False otherwise.
+
+    Raises:
+        ValueError: If any parameter is missing.
+    """
+    return WebhookVerifier.verify(payload, signature, secret)
+
+
 class WebhookVerifier:
     """Verifies the signature of webhook payloads from RampOS."""
 

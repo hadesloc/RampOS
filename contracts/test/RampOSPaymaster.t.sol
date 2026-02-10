@@ -390,6 +390,54 @@ contract RampOSPaymasterTest is Test {
         assertEq(paymaster.senderNonces(sender2), 1);
     }
 
+    function test_PaymasterNonceConcurrentReplay() public {
+        bytes32 tenantId = keccak256("tenant1");
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+        uint48 validAfter = uint48(block.timestamp);
+        address sender = makeAddr("sender");
+
+        // First call with nonce 0 succeeds
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 0, 0.1 ether);
+        assertEq(paymaster.senderNonces(sender), 1);
+
+        // Second call with same nonce 0 MUST revert (replay attack)
+        vm.expectRevert(RampOSPaymaster.InvalidNonce.selector);
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 0, 0.1 ether);
+
+        // Nonce should still be 1 (unchanged by failed tx)
+        assertEq(paymaster.senderNonces(sender), 1);
+    }
+
+    function test_PaymasterNonceProgressesSequentially() public {
+        bytes32 tenantId = keccak256("tenant1");
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+        uint48 validAfter = uint48(block.timestamp);
+        address sender = makeAddr("sender");
+
+        // Nonce 0 works
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 0, 0.1 ether);
+        assertEq(paymaster.senderNonces(sender), 1);
+
+        // Nonce 1 works
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 1, 0.1 ether);
+        assertEq(paymaster.senderNonces(sender), 2);
+
+        // Nonce 2 works
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 2, 0.1 ether);
+        assertEq(paymaster.senderNonces(sender), 3);
+
+        // Skipping nonce 3 and trying nonce 4 should fail
+        vm.expectRevert(RampOSPaymaster.InvalidNonce.selector);
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 4, 0.1 ether);
+
+        // Nonce should still be 3
+        assertEq(paymaster.senderNonces(sender), 3);
+
+        // Nonce 3 should work (sequential continues)
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 3, 0.1 ether);
+        assertEq(paymaster.senderNonces(sender), 4);
+    }
+
     /// @dev Helper to construct and validate a paymaster op with a nonce
     function _validateWithNonce(
         address sender,

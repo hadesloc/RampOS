@@ -326,21 +326,6 @@ var UserOpReceiptSchema = z4.object({
   blockHash: z4.string(),
   blockNumber: z4.string()
 });
-var SessionKeySchema = z4.object({
-  id: z4.string().optional(),
-  publicKey: z4.string(),
-  permissions: z4.array(z4.string()),
-  validUntil: z4.number(),
-  validAfter: z4.number().optional()
-});
-var AddSessionKeyParamsSchema = z4.object({
-  accountAddress: z4.string(),
-  sessionKey: SessionKeySchema
-});
-var RemoveSessionKeyParamsSchema = z4.object({
-  accountAddress: z4.string(),
-  keyId: z4.string()
-});
 
 // src/services/aa.service.ts
 var AAService = class {
@@ -364,24 +349,6 @@ var AAService = class {
   async getSmartAccount(address) {
     const response = await this.httpClient.get(`/aa/accounts/${address}`);
     return SmartAccountSchema.parse(response.data);
-  }
-  /**
-   * Add a session key to an account.
-   * @param params Add Session Key Params
-   * @returns Void (throws on error)
-   */
-  async addSessionKey(params) {
-    void params;
-    throw new Error("Session key management is not exposed via the API");
-  }
-  /**
-   * Remove a session key from an account.
-   * @param params Remove Session Key Params
-   * @returns Void (throws on error)
-   */
-  async removeSessionKey(params) {
-    void params;
-    throw new Error("Session key management is not exposed via the API");
   }
   /**
    * Send a user operation.
@@ -414,6 +381,464 @@ var AAService = class {
   async getUserOperationReceipt(hash) {
     const response = await this.httpClient.get(`/aa/user-operations/${hash}/receipt`);
     return UserOpReceiptSchema.parse(response.data);
+  }
+};
+
+// src/types/passkey.ts
+import { z as z5 } from "zod";
+var PasskeyCredentialSchema = z5.object({
+  credentialId: z5.string(),
+  userId: z5.string(),
+  publicKeyX: z5.string(),
+  publicKeyY: z5.string(),
+  smartAccountAddress: z5.string().nullable().optional(),
+  displayName: z5.string(),
+  isActive: z5.boolean(),
+  createdAt: z5.string(),
+  lastUsedAt: z5.string().nullable().optional()
+});
+var RegisterPasskeyParamsSchema = z5.object({
+  userId: z5.string(),
+  credentialId: z5.string(),
+  publicKeyX: z5.string().regex(/^(0x)?[0-9a-fA-F]{1,64}$/, "Invalid P256 x coordinate"),
+  publicKeyY: z5.string().regex(/^(0x)?[0-9a-fA-F]{1,64}$/, "Invalid P256 y coordinate"),
+  displayName: z5.string()
+});
+var RegisterPasskeyResponseSchema = z5.object({
+  credentialId: z5.string(),
+  smartAccountAddress: z5.string().nullable().optional(),
+  createdAt: z5.string()
+});
+var CreatePasskeyWalletParamsSchema = z5.object({
+  userId: z5.string(),
+  credentialId: z5.string(),
+  publicKeyX: z5.string().regex(/^(0x)?[0-9a-fA-F]{1,64}$/, "Invalid P256 x coordinate"),
+  publicKeyY: z5.string().regex(/^(0x)?[0-9a-fA-F]{1,64}$/, "Invalid P256 y coordinate"),
+  displayName: z5.string(),
+  ownerAddress: z5.string().optional(),
+  salt: z5.string().optional()
+});
+var CreatePasskeyWalletResponseSchema = z5.object({
+  credentialId: z5.string(),
+  smartAccountAddress: z5.string(),
+  publicKeyX: z5.string(),
+  publicKeyY: z5.string(),
+  isDeployed: z5.boolean(),
+  createdAt: z5.string()
+});
+var LinkSmartAccountParamsSchema = z5.object({
+  userId: z5.string(),
+  credentialId: z5.string(),
+  smartAccountAddress: z5.string()
+});
+var PasskeySignatureSchema = z5.object({
+  r: z5.string().regex(/^(0x)?[0-9a-fA-F]{1,64}$/, "Invalid signature r component"),
+  s: z5.string().regex(/^(0x)?[0-9a-fA-F]{1,64}$/, "Invalid signature s component")
+});
+var WebAuthnAssertionSchema = z5.object({
+  authenticatorData: z5.string(),
+  clientDataJSON: z5.string(),
+  signature: PasskeySignatureSchema,
+  credentialId: z5.string()
+});
+var SignTransactionParamsSchema = z5.object({
+  userId: z5.string(),
+  credentialId: z5.string(),
+  userOperation: z5.object({
+    sender: z5.string(),
+    nonce: z5.string(),
+    callData: z5.string(),
+    callGasLimit: z5.string().optional(),
+    verificationGasLimit: z5.string().optional(),
+    preVerificationGas: z5.string().optional(),
+    maxFeePerGas: z5.string().optional(),
+    maxPriorityFeePerGas: z5.string().optional()
+  }),
+  assertion: WebAuthnAssertionSchema
+});
+var SignTransactionResponseSchema = z5.object({
+  userOpHash: z5.string(),
+  sender: z5.string(),
+  nonce: z5.string(),
+  signature: z5.string(),
+  status: z5.string()
+});
+var GetCounterfactualAddressParamsSchema = z5.object({
+  publicKeyX: z5.string(),
+  publicKeyY: z5.string(),
+  salt: z5.string().optional()
+});
+var GetCounterfactualAddressResponseSchema = z5.object({
+  address: z5.string(),
+  isDeployed: z5.boolean()
+});
+
+// src/services/passkey.service.ts
+var PasskeyWalletService = class {
+  constructor(httpClient) {
+    this.httpClient = httpClient;
+  }
+  // ==========================================================================
+  // Wallet Lifecycle
+  // ==========================================================================
+  /**
+   * Create a passkey wallet: registers the credential and deploys a smart
+   * account with the passkey set as a signer.
+   *
+   * @param params - Passkey public key coordinates + user info
+   * @returns Deployed smart account address and credential info
+   */
+  async createWallet(params) {
+    const response = await this.httpClient.post("/aa/passkey/wallets", params);
+    return CreatePasskeyWalletResponseSchema.parse(response.data);
+  }
+  /**
+   * Get the counterfactual (CREATE2) address for a passkey wallet before
+   * deployment. Useful for pre-funding the account.
+   *
+   * @param params - Passkey public key coordinates + optional salt
+   * @returns The deterministic address and deployment status
+   */
+  async getCounterfactualAddress(params) {
+    const response = await this.httpClient.post("/aa/passkey/address", params);
+    return GetCounterfactualAddressResponseSchema.parse(response.data);
+  }
+  // ==========================================================================
+  // Transaction Signing
+  // ==========================================================================
+  /**
+   * Sign and submit an ERC-4337 UserOperation using a passkey (WebAuthn P256).
+   *
+   * The client is responsible for:
+   * 1. Calling `navigator.credentials.get()` to obtain the WebAuthn assertion
+   * 2. Extracting the P256 signature (r, s) from the assertion
+   * 3. Passing the assertion data to this method
+   *
+   * The backend will:
+   * 1. Encode the signature with the passkey type byte (0x01)
+   * 2. Submit the UserOperation to the bundler
+   *
+   * @param params - UserOperation + WebAuthn assertion with P256 signature
+   * @returns Submitted UserOperation hash and status
+   */
+  async signTransaction(params) {
+    const response = await this.httpClient.post("/aa/passkey/sign", params);
+    return SignTransactionResponseSchema.parse(response.data);
+  }
+  // ==========================================================================
+  // Credential Management
+  // ==========================================================================
+  /**
+   * Register a new passkey credential for a user.
+   *
+   * This stores the P256 public key coordinates from a WebAuthn registration
+   * ceremony. The credential can later be linked to a smart account.
+   *
+   * @param params - Credential ID + P256 public key (x, y) + display name
+   * @returns Registered credential info
+   */
+  async registerCredential(params) {
+    const response = await this.httpClient.post("/aa/passkey/credentials", params);
+    return RegisterPasskeyResponseSchema.parse(response.data);
+  }
+  /**
+   * Get all passkey credentials for a user.
+   *
+   * @param userId - The user ID to fetch credentials for
+   * @returns Array of passkey credentials (only active ones)
+   */
+  async getCredentials(userId) {
+    const response = await this.httpClient.get(`/aa/passkey/credentials/${userId}`);
+    return PasskeyCredentialSchema.array().parse(response.data);
+  }
+  /**
+   * Get a specific passkey credential by credential ID.
+   *
+   * @param userId - The user ID
+   * @param credentialId - The credential ID from WebAuthn registration
+   * @returns The passkey credential
+   */
+  async getCredential(userId, credentialId) {
+    const response = await this.httpClient.get(
+      `/aa/passkey/credentials/${userId}/${credentialId}`
+    );
+    return PasskeyCredentialSchema.parse(response.data);
+  }
+  /**
+   * Link a passkey credential to an existing smart account address.
+   *
+   * @param params - User ID + credential ID + smart account address
+   */
+  async linkSmartAccount(params) {
+    await this.httpClient.post("/aa/passkey/link", params);
+  }
+  /**
+   * Deactivate a passkey credential.
+   *
+   * The credential will no longer be usable for signing but is kept
+   * for audit purposes.
+   *
+   * @param userId - The user ID
+   * @param credentialId - The credential ID to deactivate
+   */
+  async deactivateCredential(userId, credentialId) {
+    await this.httpClient.delete(`/aa/passkey/credentials/${userId}/${credentialId}`);
+  }
+};
+
+// src/multichain/provider.ts
+import { JsonRpcProvider, ethers } from "ethers";
+
+// src/types/multichain.ts
+import { z as z6 } from "zod";
+var ChainType = /* @__PURE__ */ ((ChainType2) => {
+  ChainType2["EVM"] = "EVM";
+  ChainType2["SOLANA"] = "SOLANA";
+  return ChainType2;
+})(ChainType || {});
+var ChainConfigSchema = z6.object({
+  chainId: z6.number(),
+  name: z6.string(),
+  type: z6.nativeEnum(ChainType),
+  rpcUrl: z6.string().url().optional(),
+  explorerUrl: z6.string().url().optional(),
+  nativeCurrency: z6.object({
+    name: z6.string(),
+    symbol: z6.string(),
+    decimals: z6.number()
+  }),
+  entryPointAddress: z6.string().optional(),
+  paymasterAddress: z6.string().optional(),
+  isTestnet: z6.boolean().default(false)
+});
+var CrossChainIntentSchema = z6.object({
+  id: z6.string().optional(),
+  sourceChainId: z6.number(),
+  targetChainId: z6.number(),
+  type: z6.enum(["BRIDGE", "SWAP", "TRANSFER", "MINT", "BURN"]),
+  fromAddress: z6.string(),
+  toAddress: z6.string(),
+  tokenAddress: z6.string().optional(),
+  amount: z6.string(),
+  slippageTolerance: z6.number().min(0).max(100).optional(),
+  deadline: z6.number().optional(),
+  metadata: z6.record(z6.unknown()).optional()
+});
+var CrossChainIntentResponseSchema = z6.object({
+  intentId: z6.string(),
+  status: z6.enum(["PENDING", "SUBMITTED", "BRIDGING", "COMPLETED", "FAILED"]),
+  sourceChainId: z6.number(),
+  targetChainId: z6.number(),
+  sourceTxHash: z6.string().optional(),
+  targetTxHash: z6.string().optional(),
+  estimatedTime: z6.number().optional(),
+  bridgeFee: z6.string().optional(),
+  createdAt: z6.string(),
+  updatedAt: z6.string()
+});
+var MultiChainAccountSchema = z6.object({
+  address: z6.string(),
+  chainId: z6.number(),
+  chainName: z6.string(),
+  accountType: z6.enum(["EOA", "SMART_ACCOUNT", "EIP7702"]),
+  isDeployed: z6.boolean(),
+  nonce: z6.string().optional(),
+  balance: z6.string().optional()
+});
+var MultiChainPortfolioSchema = z6.object({
+  accounts: z6.array(MultiChainAccountSchema),
+  totalBalanceUsd: z6.string().optional()
+});
+var BridgeQuoteRequestSchema = z6.object({
+  sourceChainId: z6.number(),
+  targetChainId: z6.number(),
+  tokenAddress: z6.string(),
+  amount: z6.string(),
+  fromAddress: z6.string(),
+  toAddress: z6.string().optional()
+});
+var BridgeQuoteSchema = z6.object({
+  sourceChainId: z6.number(),
+  targetChainId: z6.number(),
+  inputAmount: z6.string(),
+  outputAmount: z6.string(),
+  bridgeFee: z6.string(),
+  gasFee: z6.string(),
+  estimatedTimeSeconds: z6.number(),
+  bridgeProvider: z6.string(),
+  expiresAt: z6.string()
+});
+var BridgeTransactionSchema = z6.object({
+  id: z6.string(),
+  status: z6.enum(["PENDING", "SOURCE_CONFIRMED", "BRIDGING", "TARGET_CONFIRMED", "COMPLETED", "FAILED"]),
+  sourceChainId: z6.number(),
+  targetChainId: z6.number(),
+  sourceTxHash: z6.string().optional(),
+  targetTxHash: z6.string().optional(),
+  amount: z6.string(),
+  fee: z6.string(),
+  createdAt: z6.string(),
+  completedAt: z6.string().optional()
+});
+var ChainTokenSchema = z6.object({
+  chainId: z6.number(),
+  address: z6.string(),
+  symbol: z6.string(),
+  name: z6.string(),
+  decimals: z6.number(),
+  logoUri: z6.string().optional(),
+  priceUsd: z6.string().optional()
+});
+var Eip7702AuthorizationSchema = z6.object({
+  chainId: z6.number(),
+  delegateAddress: z6.string(),
+  nonce: z6.number(),
+  signature: z6.string().optional()
+});
+var Eip7702SessionSchema = z6.object({
+  sessionId: z6.string(),
+  delegator: z6.string(),
+  delegate: z6.string(),
+  chainId: z6.number(),
+  validAfter: z6.number(),
+  validUntil: z6.number(),
+  permissions: z6.object({
+    allowedTargets: z6.array(z6.string()).optional(),
+    maxValuePerTx: z6.string().optional(),
+    maxTotalValue: z6.string().optional(),
+    allowedSelectors: z6.array(z6.string()).optional()
+  }).optional()
+});
+var DEFAULT_CHAINS = {
+  [1 /* ETHEREUM */]: {
+    chainId: 1 /* ETHEREUM */,
+    name: "Ethereum Mainnet",
+    type: "EVM" /* EVM */,
+    explorerUrl: "https://etherscan.io",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    isTestnet: false
+  },
+  [137 /* POLYGON */]: {
+    chainId: 137 /* POLYGON */,
+    name: "Polygon",
+    type: "EVM" /* EVM */,
+    explorerUrl: "https://polygonscan.com",
+    nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 },
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    isTestnet: false
+  },
+  [42161 /* ARBITRUM */]: {
+    chainId: 42161 /* ARBITRUM */,
+    name: "Arbitrum One",
+    type: "EVM" /* EVM */,
+    explorerUrl: "https://arbiscan.io",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    isTestnet: false
+  },
+  [10 /* OPTIMISM */]: {
+    chainId: 10 /* OPTIMISM */,
+    name: "Optimism",
+    type: "EVM" /* EVM */,
+    explorerUrl: "https://optimistic.etherscan.io",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    isTestnet: false
+  },
+  [8453 /* BASE */]: {
+    chainId: 8453 /* BASE */,
+    name: "Base",
+    type: "EVM" /* EVM */,
+    explorerUrl: "https://basescan.org",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    isTestnet: false
+  },
+  [56 /* BNB_CHAIN */]: {
+    chainId: 56 /* BNB_CHAIN */,
+    name: "BNB Chain",
+    type: "EVM" /* EVM */,
+    explorerUrl: "https://bscscan.com",
+    nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    isTestnet: false
+  },
+  [43114 /* AVALANCHE */]: {
+    chainId: 43114 /* AVALANCHE */,
+    name: "Avalanche C-Chain",
+    type: "EVM" /* EVM */,
+    explorerUrl: "https://snowtrace.io",
+    nativeCurrency: { name: "AVAX", symbol: "AVAX", decimals: 18 },
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    isTestnet: false
+  },
+  [101 /* SOLANA */]: {
+    chainId: 101 /* SOLANA */,
+    name: "Solana",
+    type: "SOLANA" /* SOLANA */,
+    explorerUrl: "https://solscan.io",
+    nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },
+    isTestnet: false
+  }
+};
+function getChainConfig(chainId) {
+  return DEFAULT_CHAINS[chainId];
+}
+
+// src/multichain/provider.ts
+var MultichainProvider = class {
+  constructor(rpcUrls) {
+    __publicField(this, "providers", /* @__PURE__ */ new Map());
+    __publicField(this, "currentChainId", 1 /* ETHEREUM */);
+    Object.entries(rpcUrls).forEach(([chainId, url]) => {
+      this.providers.set(Number(chainId), new JsonRpcProvider(url));
+    });
+  }
+  /**
+   * Switch the current active chain
+   * @param chainId Chain ID to switch to
+   */
+  async switchChain(chainId) {
+    const config = getChainConfig(chainId);
+    if (!config) {
+      throw new Error(`Unsupported chain ID: ${chainId}`);
+    }
+    if (!this.providers.has(chainId)) {
+      if (config.rpcUrl) {
+        this.providers.set(chainId, new JsonRpcProvider(config.rpcUrl));
+      } else {
+        throw new Error(`No RPC URL configured for chain ${chainId}`);
+      }
+    }
+    this.currentChainId = chainId;
+  }
+  /**
+   * Get native balance for an address on a specific chain
+   * @param address Wallet address
+   * @param chainId Optional chain ID (defaults to current)
+   */
+  async getBalance(address, chainId) {
+    const targetChainId = chainId || this.currentChainId;
+    const provider = this.getProvider(targetChainId);
+    const balance = await provider.getBalance(address);
+    return ethers.formatUnits(balance, 18);
+  }
+  /**
+   * Get provider for a specific chain
+   */
+  getProvider(chainId) {
+    const provider = this.providers.get(chainId);
+    if (!provider) {
+      const config = getChainConfig(chainId);
+      if (config && config.rpcUrl) {
+        const newProvider = new JsonRpcProvider(config.rpcUrl);
+        this.providers.set(chainId, newProvider);
+        return newProvider;
+      }
+      throw new Error(`Provider not initialized for chain ${chainId}`);
+    }
+    return provider;
   }
 };
 
@@ -482,6 +907,7 @@ var RampOSClient = class {
     __publicField(this, "users");
     __publicField(this, "ledger");
     __publicField(this, "aa");
+    __publicField(this, "passkey");
     __publicField(this, "webhooks");
     const baseURL = config.baseURL || "https://api.rampos.io/v1";
     this.httpClient = axios.create({
@@ -546,18 +972,30 @@ var RampOSClient = class {
     this.users = new UserService(this.httpClient);
     this.ledger = new LedgerService(this.httpClient);
     this.aa = new AAService(this.httpClient);
+    this.passkey = new PasskeyWalletService(this.httpClient);
     this.webhooks = new WebhookVerifier();
+  }
+  // ============================================================================
+  // Multi-chain Provider Helper
+  // ============================================================================
+  /**
+   * Initialize a MultichainProvider for direct chain interaction
+   * @param rpcUrls Optional map of chain ID to RPC URL overrides
+   */
+  createMultichainProvider(rpcUrls = {}) {
+    return new MultichainProvider(rpcUrls);
   }
 };
 export {
   AAService,
-  AddSessionKeyParamsSchema,
   BalanceSchema,
   BankAccountSchema,
   ConfirmPayinRequestSchema,
   ConfirmPayinResponseSchema,
   CreateAccountParamsSchema,
   CreateAccountResponseSchema,
+  CreatePasskeyWalletParamsSchema,
+  CreatePasskeyWalletResponseSchema,
   CreatePayInSchema,
   CreatePayOutSchema,
   CreatePayinRequestSchema,
@@ -567,6 +1005,8 @@ export {
   EstimateGasRequestSchema,
   GasEstimateSchema,
   GetAccountResponseSchema,
+  GetCounterfactualAddressParamsSchema,
+  GetCounterfactualAddressResponseSchema,
   IntentFilterSchema,
   IntentSchema,
   IntentService,
@@ -576,11 +1016,18 @@ export {
   LedgerEntryType,
   LedgerFilterSchema,
   LedgerService,
+  LinkSmartAccountParamsSchema,
+  MultichainProvider,
+  PasskeyCredentialSchema,
+  PasskeySignatureSchema,
+  PasskeyWalletService,
   RampOSClient,
-  RemoveSessionKeyParamsSchema,
+  RegisterPasskeyParamsSchema,
+  RegisterPasskeyResponseSchema,
   SendUserOperationRequestSchema,
   SendUserOperationResponseSchema,
-  SessionKeySchema,
+  SignTransactionParamsSchema,
+  SignTransactionResponseSchema,
   SmartAccountSchema,
   StateHistoryEntrySchema,
   UserBalanceSchema,
@@ -590,6 +1037,7 @@ export {
   UserOperationSchema,
   UserService,
   VirtualAccountSchema,
+  WebAuthnAssertionSchema,
   WebhookVerifier,
   withRetry
 };

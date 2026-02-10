@@ -12,7 +12,9 @@
     "build": "tsup src/index.ts --format cjs,esm --dts",
     "dev": "tsup src/index.ts --format cjs,esm --watch --dts",
     "lint": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "prepublishOnly": "npm run build",
+    "clean": "rimraf dist"
   },
   "jest": {
     "preset": "ts-jest",

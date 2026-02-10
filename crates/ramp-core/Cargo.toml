@@ -42,6 +42,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 sha2.workspace = true
 rand.workspace = true
 subtle = "2.5"
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 base64 = { workspace = true }
 jsonwebtoken = { workspace = true }
 urlencoding = "2.1"

@@ -33,13 +33,14 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
 var index_exports = {};
 __export(index_exports, {
   AAService: () => AAService,
-  AddSessionKeyParamsSchema: () => AddSessionKeyParamsSchema,
   BalanceSchema: () => BalanceSchema,
   BankAccountSchema: () => BankAccountSchema,
   ConfirmPayinRequestSchema: () => ConfirmPayinRequestSchema,
   ConfirmPayinResponseSchema: () => ConfirmPayinResponseSchema,
   CreateAccountParamsSchema: () => CreateAccountParamsSchema,
   CreateAccountResponseSchema: () => CreateAccountResponseSchema,
+  CreatePasskeyWalletParamsSchema: () => CreatePasskeyWalletParamsSchema,
+  CreatePasskeyWalletResponseSchema: () => CreatePasskeyWalletResponseSchema,
   CreatePayInSchema: () => CreatePayInSchema,
   CreatePayOutSchema: () => CreatePayOutSchema,
   CreatePayinRequestSchema: () => CreatePayinRequestSchema,
@@ -49,6 +50,8 @@ __export(index_exports, {
   EstimateGasRequestSchema: () => EstimateGasRequestSchema,
   GasEstimateSchema: () => GasEstimateSchema,
   GetAccountResponseSchema: () => GetAccountResponseSchema,
+  GetCounterfactualAddressParamsSchema: () => GetCounterfactualAddressParamsSchema,
+  GetCounterfactualAddressResponseSchema: () => GetCounterfactualAddressResponseSchema,
   IntentFilterSchema: () => IntentFilterSchema,
   IntentSchema: () => IntentSchema,
   IntentService: () => IntentService,
@@ -58,11 +61,18 @@ __export(index_exports, {
   LedgerEntryType: () => LedgerEntryType,
   LedgerFilterSchema: () => LedgerFilterSchema,
   LedgerService: () => LedgerService,
+  LinkSmartAccountParamsSchema: () => LinkSmartAccountParamsSchema,
+  MultichainProvider: () => MultichainProvider,
+  PasskeyCredentialSchema: () => PasskeyCredentialSchema,
+  PasskeySignatureSchema: () => PasskeySignatureSchema,
+  PasskeyWalletService: () => PasskeyWalletService,
   RampOSClient: () => RampOSClient,
-  RemoveSessionKeyParamsSchema: () => RemoveSessionKeyParamsSchema,
+  RegisterPasskeyParamsSchema: () => RegisterPasskeyParamsSchema,
+  RegisterPasskeyResponseSchema: () => RegisterPasskeyResponseSchema,
   SendUserOperationRequestSchema: () => SendUserOperationRequestSchema,
   SendUserOperationResponseSchema: () => SendUserOperationResponseSchema,
-  SessionKeySchema: () => SessionKeySchema,
+  SignTransactionParamsSchema: () => SignTransactionParamsSchema,
+  SignTransactionResponseSchema: () => SignTransactionResponseSchema,
   SmartAccountSchema: () => SmartAccountSchema,
   StateHistoryEntrySchema: () => StateHistoryEntrySchema,
   UserBalanceSchema: () => UserBalanceSchema,
@@ -72,6 +82,7 @@ __export(index_exports, {
   UserOperationSchema: () => UserOperationSchema,
   UserService: () => UserService,
   VirtualAccountSchema: () => VirtualAccountSchema,
+  WebAuthnAssertionSchema: () => WebAuthnAssertionSchema,
   WebhookVerifier: () => WebhookVerifier,
   withRetry: () => withRetry
 });
@@ -401,21 +412,6 @@ var UserOpReceiptSchema = import_zod4.z.object({
   blockHash: import_zod4.z.string(),
   blockNumber: import_zod4.z.string()
 });
-var SessionKeySchema = import_zod4.z.object({
-  id: import_zod4.z.string().optional(),
-  publicKey: import_zod4.z.string(),
-  permissions: import_zod4.z.array(import_zod4.z.string()),
-  validUntil: import_zod4.z.number(),
-  validAfter: import_zod4.z.number().optional()
-});
-var AddSessionKeyParamsSchema = import_zod4.z.object({
-  accountAddress: import_zod4.z.string(),
-  sessionKey: SessionKeySchema
-});
-var RemoveSessionKeyParamsSchema = import_zod4.z.object({
-  accountAddress: import_zod4.z.string(),
-  keyId: import_zod4.z.string()
-});
 
 // src/services/aa.service.ts
 var AAService = class {
@@ -439,24 +435,6 @@ var AAService = class {
   async getSmartAccount(address) {
     const response = await this.httpClient.get(`/aa/accounts/${address}`);
     return SmartAccountSchema.parse(response.data);
-  }
-  /**
-   * Add a session key to an account.
-   * @param params Add Session Key Params
-   * @returns Void (throws on error)
-   */
-  async addSessionKey(params) {
-    void params;
-    throw new Error("Session key management is not exposed via the API");
-  }
-  /**
-   * Remove a session key from an account.
-   * @param params Remove Session Key Params
-   * @returns Void (throws on error)
-   */
-  async removeSessionKey(params) {
-    void params;
-    throw new Error("Session key management is not exposed via the API");
   }
   /**
    * Send a user operation.
@@ -489,6 +467,464 @@ var AAService = class {
   async getUserOperationReceipt(hash) {
     const response = await this.httpClient.get(`/aa/user-operations/${hash}/receipt`);
     return UserOpReceiptSchema.parse(response.data);
+  }
+};
+
+// src/types/passkey.ts
+var import_zod5 = require("zod");
+var PasskeyCredentialSchema = import_zod5.z.object({
+  credentialId: import_zod5.z.string(),
+  userId: import_zod5.z.string(),
+  publicKeyX: import_zod5.z.string(),
+  publicKeyY: import_zod5.z.string(),
+  smartAccountAddress: import_zod5.z.string().nullable().optional(),
+  displayName: import_zod5.z.string(),
+  isActive: import_zod5.z.boolean(),
+  createdAt: import_zod5.z.string(),
+  lastUsedAt: import_zod5.z.string().nullable().optional()
+});
+var RegisterPasskeyParamsSchema = import_zod5.z.object({
+  userId: import_zod5.z.string(),
+  credentialId: import_zod5.z.string(),
+  publicKeyX: import_zod5.z.string().regex(/^(0x)?[0-9a-fA-F]{1,64}$/, "Invalid P256 x coordinate"),
+  publicKeyY: import_zod5.z.string().regex(/^(0x)?[0-9a-fA-F]{1,64}$/, "Invalid P256 y coordinate"),
+  displayName: import_zod5.z.string()
+});
+var RegisterPasskeyResponseSchema = import_zod5.z.object({
+  credentialId: import_zod5.z.string(),
+  smartAccountAddress: import_zod5.z.string().nullable().optional(),
+  createdAt: import_zod5.z.string()
+});
+var CreatePasskeyWalletParamsSchema = import_zod5.z.object({
+  userId: import_zod5.z.string(),
+  credentialId: import_zod5.z.string(),
+  publicKeyX: import_zod5.z.string().regex(/^(0x)?[0-9a-fA-F]{1,64}$/, "Invalid P256 x coordinate"),
+  publicKeyY: import_zod5.z.string().regex(/^(0x)?[0-9a-fA-F]{1,64}$/, "Invalid P256 y coordinate"),
+  displayName: import_zod5.z.string(),
+  ownerAddress: import_zod5.z.string().optional(),
+  salt: import_zod5.z.string().optional()
+});
+var CreatePasskeyWalletResponseSchema = import_zod5.z.object({
+  credentialId: import_zod5.z.string(),
+  smartAccountAddress: import_zod5.z.string(),
+  publicKeyX: import_zod5.z.string(),
+  publicKeyY: import_zod5.z.string(),
+  isDeployed: import_zod5.z.boolean(),
+  createdAt: import_zod5.z.string()
+});
+var LinkSmartAccountParamsSchema = import_zod5.z.object({
+  userId: import_zod5.z.string(),
+  credentialId: import_zod5.z.string(),
+  smartAccountAddress: import_zod5.z.string()
+});
+var PasskeySignatureSchema = import_zod5.z.object({
+  r: import_zod5.z.string().regex(/^(0x)?[0-9a-fA-F]{1,64}$/, "Invalid signature r component"),
+  s: import_zod5.z.string().regex(/^(0x)?[0-9a-fA-F]{1,64}$/, "Invalid signature s component")
+});
+var WebAuthnAssertionSchema = import_zod5.z.object({
+  authenticatorData: import_zod5.z.string(),
+  clientDataJSON: import_zod5.z.string(),
+  signature: PasskeySignatureSchema,
+  credentialId: import_zod5.z.string()
+});
+var SignTransactionParamsSchema = import_zod5.z.object({
+  userId: import_zod5.z.string(),
+  credentialId: import_zod5.z.string(),
+  userOperation: import_zod5.z.object({
+    sender: import_zod5.z.string(),
+    nonce: import_zod5.z.string(),
+    callData: import_zod5.z.string(),
+    callGasLimit: import_zod5.z.string().optional(),
+    verificationGasLimit: import_zod5.z.string().optional(),
+    preVerificationGas: import_zod5.z.string().optional(),
+    maxFeePerGas: import_zod5.z.string().optional(),
+    maxPriorityFeePerGas: import_zod5.z.string().optional()
+  }),
+  assertion: WebAuthnAssertionSchema
+});
+var SignTransactionResponseSchema = import_zod5.z.object({
+  userOpHash: import_zod5.z.string(),
+  sender: import_zod5.z.string(),
+  nonce: import_zod5.z.string(),
+  signature: import_zod5.z.string(),
+  status: import_zod5.z.string()
+});
+var GetCounterfactualAddressParamsSchema = import_zod5.z.object({
+  publicKeyX: import_zod5.z.string(),
+  publicKeyY: import_zod5.z.string(),
+  salt: import_zod5.z.string().optional()
+});
+var GetCounterfactualAddressResponseSchema = import_zod5.z.object({
+  address: import_zod5.z.string(),
+  isDeployed: import_zod5.z.boolean()
+});
+
+// src/services/passkey.service.ts
+var PasskeyWalletService = class {
+  constructor(httpClient) {
+    this.httpClient = httpClient;
+  }
+  // ==========================================================================
+  // Wallet Lifecycle
+  // ==========================================================================
+  /**
+   * Create a passkey wallet: registers the credential and deploys a smart
+   * account with the passkey set as a signer.
+   *
+   * @param params - Passkey public key coordinates + user info
+   * @returns Deployed smart account address and credential info
+   */
+  async createWallet(params) {
+    const response = await this.httpClient.post("/aa/passkey/wallets", params);
+    return CreatePasskeyWalletResponseSchema.parse(response.data);
+  }
+  /**
+   * Get the counterfactual (CREATE2) address for a passkey wallet before
+   * deployment. Useful for pre-funding the account.
+   *
+   * @param params - Passkey public key coordinates + optional salt
+   * @returns The deterministic address and deployment status
+   */
+  async getCounterfactualAddress(params) {
+    const response = await this.httpClient.post("/aa/passkey/address", params);
+    return GetCounterfactualAddressResponseSchema.parse(response.data);
+  }
+  // ==========================================================================
+  // Transaction Signing
+  // ==========================================================================
+  /**
+   * Sign and submit an ERC-4337 UserOperation using a passkey (WebAuthn P256).
+   *
+   * The client is responsible for:
+   * 1. Calling `navigator.credentials.get()` to obtain the WebAuthn assertion
+   * 2. Extracting the P256 signature (r, s) from the assertion
+   * 3. Passing the assertion data to this method
+   *
+   * The backend will:
+   * 1. Encode the signature with the passkey type byte (0x01)
+   * 2. Submit the UserOperation to the bundler
+   *
+   * @param params - UserOperation + WebAuthn assertion with P256 signature
+   * @returns Submitted UserOperation hash and status
+   */
+  async signTransaction(params) {
+    const response = await this.httpClient.post("/aa/passkey/sign", params);
+    return SignTransactionResponseSchema.parse(response.data);
+  }
+  // ==========================================================================
+  // Credential Management
+  // ==========================================================================
+  /**
+   * Register a new passkey credential for a user.
+   *
+   * This stores the P256 public key coordinates from a WebAuthn registration
+   * ceremony. The credential can later be linked to a smart account.
+   *
+   * @param params - Credential ID + P256 public key (x, y) + display name
+   * @returns Registered credential info
+   */
+  async registerCredential(params) {
+    const response = await this.httpClient.post("/aa/passkey/credentials", params);
+    return RegisterPasskeyResponseSchema.parse(response.data);
+  }
+  /**
+   * Get all passkey credentials for a user.
+   *
+   * @param userId - The user ID to fetch credentials for
+   * @returns Array of passkey credentials (only active ones)
+   */
+  async getCredentials(userId) {
+    const response = await this.httpClient.get(`/aa/passkey/credentials/${userId}`);
+    return PasskeyCredentialSchema.array().parse(response.data);
+  }
+  /**
+   * Get a specific passkey credential by credential ID.
+   *
+   * @param userId - The user ID
+   * @param credentialId - The credential ID from WebAuthn registration
+   * @returns The passkey credential
+   */
+  async getCredential(userId, credentialId) {
+    const response = await this.httpClient.get(
+      `/aa/passkey/credentials/${userId}/${credentialId}`
+    );
+    return PasskeyCredentialSchema.parse(response.data);
+  }
+  /**
+   * Link a passkey credential to an existing smart account address.
+   *
+   * @param params - User ID + credential ID + smart account address
+   */
+  async linkSmartAccount(params) {
+    await this.httpClient.post("/aa/passkey/link", params);
+  }
+  /**
+   * Deactivate a passkey credential.
+   *
+   * The credential will no longer be usable for signing but is kept
+   * for audit purposes.
+   *
+   * @param userId - The user ID
+   * @param credentialId - The credential ID to deactivate
+   */
+  async deactivateCredential(userId, credentialId) {
+    await this.httpClient.delete(`/aa/passkey/credentials/${userId}/${credentialId}`);
+  }
+};
+
+// src/multichain/provider.ts
+var import_ethers = require("ethers");
+
+// src/types/multichain.ts
+var import_zod6 = require("zod");
+var ChainType = /* @__PURE__ */ ((ChainType2) => {
+  ChainType2["EVM"] = "EVM";
+  ChainType2["SOLANA"] = "SOLANA";
+  return ChainType2;
+})(ChainType || {});
+var ChainConfigSchema = import_zod6.z.object({
+  chainId: import_zod6.z.number(),
+  name: import_zod6.z.string(),
+  type: import_zod6.z.nativeEnum(ChainType),
+  rpcUrl: import_zod6.z.string().url().optional(),
+  explorerUrl: import_zod6.z.string().url().optional(),
+  nativeCurrency: import_zod6.z.object({
+    name: import_zod6.z.string(),
+    symbol: import_zod6.z.string(),
+    decimals: import_zod6.z.number()
+  }),
+  entryPointAddress: import_zod6.z.string().optional(),
+  paymasterAddress: import_zod6.z.string().optional(),
+  isTestnet: import_zod6.z.boolean().default(false)
+});
+var CrossChainIntentSchema = import_zod6.z.object({
+  id: import_zod6.z.string().optional(),
+  sourceChainId: import_zod6.z.number(),
+  targetChainId: import_zod6.z.number(),
+  type: import_zod6.z.enum(["BRIDGE", "SWAP", "TRANSFER", "MINT", "BURN"]),
+  fromAddress: import_zod6.z.string(),
+  toAddress: import_zod6.z.string(),
+  tokenAddress: import_zod6.z.string().optional(),
+  amount: import_zod6.z.string(),
+  slippageTolerance: import_zod6.z.number().min(0).max(100).optional(),
+  deadline: import_zod6.z.number().optional(),
+  metadata: import_zod6.z.record(import_zod6.z.unknown()).optional()
+});
+var CrossChainIntentResponseSchema = import_zod6.z.object({
+  intentId: import_zod6.z.string(),
+  status: import_zod6.z.enum(["PENDING", "SUBMITTED", "BRIDGING", "COMPLETED", "FAILED"]),
+  sourceChainId: import_zod6.z.number(),
+  targetChainId: import_zod6.z.number(),
+  sourceTxHash: import_zod6.z.string().optional(),
+  targetTxHash: import_zod6.z.string().optional(),
+  estimatedTime: import_zod6.z.number().optional(),
+  bridgeFee: import_zod6.z.string().optional(),
+  createdAt: import_zod6.z.string(),
+  updatedAt: import_zod6.z.string()
+});
+var MultiChainAccountSchema = import_zod6.z.object({
+  address: import_zod6.z.string(),
+  chainId: import_zod6.z.number(),
+  chainName: import_zod6.z.string(),
+  accountType: import_zod6.z.enum(["EOA", "SMART_ACCOUNT", "EIP7702"]),
+  isDeployed: import_zod6.z.boolean(),
+  nonce: import_zod6.z.string().optional(),
+  balance: import_zod6.z.string().optional()
+});
+var MultiChainPortfolioSchema = import_zod6.z.object({
+  accounts: import_zod6.z.array(MultiChainAccountSchema),
+  totalBalanceUsd: import_zod6.z.string().optional()
+});
+var BridgeQuoteRequestSchema = import_zod6.z.object({
+  sourceChainId: import_zod6.z.number(),
+  targetChainId: import_zod6.z.number(),
+  tokenAddress: import_zod6.z.string(),
+  amount: import_zod6.z.string(),
+  fromAddress: import_zod6.z.string(),
+  toAddress: import_zod6.z.string().optional()
+});
+var BridgeQuoteSchema = import_zod6.z.object({
+  sourceChainId: import_zod6.z.number(),
+  targetChainId: import_zod6.z.number(),
+  inputAmount: import_zod6.z.string(),
+  outputAmount: import_zod6.z.string(),
+  bridgeFee: import_zod6.z.string(),
+  gasFee: import_zod6.z.string(),
+  estimatedTimeSeconds: import_zod6.z.number(),
+  bridgeProvider: import_zod6.z.string(),
+  expiresAt: import_zod6.z.string()
+});
+var BridgeTransactionSchema = import_zod6.z.object({
+  id: import_zod6.z.string(),
+  status: import_zod6.z.enum(["PENDING", "SOURCE_CONFIRMED", "BRIDGING", "TARGET_CONFIRMED", "COMPLETED", "FAILED"]),
+  sourceChainId: import_zod6.z.number(),
+  targetChainId: import_zod6.z.number(),
+  sourceTxHash: import_zod6.z.string().optional(),
+  targetTxHash: import_zod6.z.string().optional(),
+  amount: import_zod6.z.string(),
+  fee: import_zod6.z.string(),
+  createdAt: import_zod6.z.string(),
+  completedAt: import_zod6.z.string().optional()
+});
+var ChainTokenSchema = import_zod6.z.object({
+  chainId: import_zod6.z.number(),
+  address: import_zod6.z.string(),
+  symbol: import_zod6.z.string(),
+  name: import_zod6.z.string(),
+  decimals: import_zod6.z.number(),
+  logoUri: import_zod6.z.string().optional(),
+  priceUsd: import_zod6.z.string().optional()
+});
+var Eip7702AuthorizationSchema = import_zod6.z.object({
+  chainId: import_zod6.z.number(),
+  delegateAddress: import_zod6.z.string(),
+  nonce: import_zod6.z.number(),
+  signature: import_zod6.z.string().optional()
+});
+var Eip7702SessionSchema = import_zod6.z.object({
+  sessionId: import_zod6.z.string(),
+  delegator: import_zod6.z.string(),
+  delegate: import_zod6.z.string(),
+  chainId: import_zod6.z.number(),
+  validAfter: import_zod6.z.number(),
+  validUntil: import_zod6.z.number(),
+  permissions: import_zod6.z.object({
+    allowedTargets: import_zod6.z.array(import_zod6.z.string()).optional(),
+    maxValuePerTx: import_zod6.z.string().optional(),
+    maxTotalValue: import_zod6.z.string().optional(),
+    allowedSelectors: import_zod6.z.array(import_zod6.z.string()).optional()
+  }).optional()
+});
+var DEFAULT_CHAINS = {
+  [1 /* ETHEREUM */]: {
+    chainId: 1 /* ETHEREUM */,
+    name: "Ethereum Mainnet",
+    type: "EVM" /* EVM */,
+    explorerUrl: "https://etherscan.io",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    isTestnet: false
+  },
+  [137 /* POLYGON */]: {
+    chainId: 137 /* POLYGON */,
+    name: "Polygon",
+    type: "EVM" /* EVM */,
+    explorerUrl: "https://polygonscan.com",
+    nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 },
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    isTestnet: false
+  },
+  [42161 /* ARBITRUM */]: {
+    chainId: 42161 /* ARBITRUM */,
+    name: "Arbitrum One",
+    type: "EVM" /* EVM */,
+    explorerUrl: "https://arbiscan.io",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    isTestnet: false
+  },
+  [10 /* OPTIMISM */]: {
+    chainId: 10 /* OPTIMISM */,
+    name: "Optimism",
+    type: "EVM" /* EVM */,
+    explorerUrl: "https://optimistic.etherscan.io",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    isTestnet: false
+  },
+  [8453 /* BASE */]: {
+    chainId: 8453 /* BASE */,
+    name: "Base",
+    type: "EVM" /* EVM */,
+    explorerUrl: "https://basescan.org",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    isTestnet: false
+  },
+  [56 /* BNB_CHAIN */]: {
+    chainId: 56 /* BNB_CHAIN */,
+    name: "BNB Chain",
+    type: "EVM" /* EVM */,
+    explorerUrl: "https://bscscan.com",
+    nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    isTestnet: false
+  },
+  [43114 /* AVALANCHE */]: {
+    chainId: 43114 /* AVALANCHE */,
+    name: "Avalanche C-Chain",
+    type: "EVM" /* EVM */,
+    explorerUrl: "https://snowtrace.io",
+    nativeCurrency: { name: "AVAX", symbol: "AVAX", decimals: 18 },
+    entryPointAddress: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    isTestnet: false
+  },
+  [101 /* SOLANA */]: {
+    chainId: 101 /* SOLANA */,
+    name: "Solana",
+    type: "SOLANA" /* SOLANA */,
+    explorerUrl: "https://solscan.io",
+    nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },
+    isTestnet: false
+  }
+};
+function getChainConfig(chainId) {
+  return DEFAULT_CHAINS[chainId];
+}
+
+// src/multichain/provider.ts
+var MultichainProvider = class {
+  constructor(rpcUrls) {
+    __publicField(this, "providers", /* @__PURE__ */ new Map());
+    __publicField(this, "currentChainId", 1 /* ETHEREUM */);
+    Object.entries(rpcUrls).forEach(([chainId, url]) => {
+      this.providers.set(Number(chainId), new import_ethers.JsonRpcProvider(url));
+    });
+  }
+  /**
+   * Switch the current active chain
+   * @param chainId Chain ID to switch to
+   */
+  async switchChain(chainId) {
+    const config = getChainConfig(chainId);
+    if (!config) {
+      throw new Error(`Unsupported chain ID: ${chainId}`);
+    }
+    if (!this.providers.has(chainId)) {
+      if (config.rpcUrl) {
+        this.providers.set(chainId, new import_ethers.JsonRpcProvider(config.rpcUrl));
+      } else {
+        throw new Error(`No RPC URL configured for chain ${chainId}`);
+      }
+    }
+    this.currentChainId = chainId;
+  }
+  /**
+   * Get native balance for an address on a specific chain
+   * @param address Wallet address
+   * @param chainId Optional chain ID (defaults to current)
+   */
+  async getBalance(address, chainId) {
+    const targetChainId = chainId || this.currentChainId;
+    const provider = this.getProvider(targetChainId);
+    const balance = await provider.getBalance(address);
+    return import_ethers.ethers.formatUnits(balance, 18);
+  }
+  /**
+   * Get provider for a specific chain
+   */
+  getProvider(chainId) {
+    const provider = this.providers.get(chainId);
+    if (!provider) {
+      const config = getChainConfig(chainId);
+      if (config && config.rpcUrl) {
+        const newProvider = new import_ethers.JsonRpcProvider(config.rpcUrl);
+        this.providers.set(chainId, newProvider);
+        return newProvider;
+      }
+      throw new Error(`Provider not initialized for chain ${chainId}`);
+    }
+    return provider;
   }
 };
 
@@ -557,6 +993,7 @@ var RampOSClient = class {
     __publicField(this, "users");
     __publicField(this, "ledger");
     __publicField(this, "aa");
+    __publicField(this, "passkey");
     __publicField(this, "webhooks");
     const baseURL = config.baseURL || "https://api.rampos.io/v1";
     this.httpClient = import_axios.default.create({
@@ -621,19 +1058,31 @@ var RampOSClient = class {
     this.users = new UserService(this.httpClient);
     this.ledger = new LedgerService(this.httpClient);
     this.aa = new AAService(this.httpClient);
+    this.passkey = new PasskeyWalletService(this.httpClient);
     this.webhooks = new WebhookVerifier();
+  }
+  // ============================================================================
+  // Multi-chain Provider Helper
+  // ============================================================================
+  /**
+   * Initialize a MultichainProvider for direct chain interaction
+   * @param rpcUrls Optional map of chain ID to RPC URL overrides
+   */
+  createMultichainProvider(rpcUrls = {}) {
+    return new MultichainProvider(rpcUrls);
   }
 };
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   AAService,
-  AddSessionKeyParamsSchema,
   BalanceSchema,
   BankAccountSchema,
   ConfirmPayinRequestSchema,
   ConfirmPayinResponseSchema,
   CreateAccountParamsSchema,
   CreateAccountResponseSchema,
+  CreatePasskeyWalletParamsSchema,
+  CreatePasskeyWalletResponseSchema,
   CreatePayInSchema,
   CreatePayOutSchema,
   CreatePayinRequestSchema,
@@ -643,6 +1092,8 @@ var RampOSClient = class {
   EstimateGasRequestSchema,
   GasEstimateSchema,
   GetAccountResponseSchema,
+  GetCounterfactualAddressParamsSchema,
+  GetCounterfactualAddressResponseSchema,
   IntentFilterSchema,
   IntentSchema,
   IntentService,
@@ -652,11 +1103,18 @@ var RampOSClient = class {
   LedgerEntryType,
   LedgerFilterSchema,
   LedgerService,
+  LinkSmartAccountParamsSchema,
+  MultichainProvider,
+  PasskeyCredentialSchema,
+  PasskeySignatureSchema,
+  PasskeyWalletService,
   RampOSClient,
-  RemoveSessionKeyParamsSchema,
+  RegisterPasskeyParamsSchema,
+  RegisterPasskeyResponseSchema,
   SendUserOperationRequestSchema,
   SendUserOperationResponseSchema,
-  SessionKeySchema,
+  SignTransactionParamsSchema,
+  SignTransactionResponseSchema,
   SmartAccountSchema,
   StateHistoryEntrySchema,
   UserBalanceSchema,
@@ -666,6 +1124,7 @@ var RampOSClient = class {
   UserOperationSchema,
   UserService,
   VirtualAccountSchema,
+  WebAuthnAssertionSchema,
   WebhookVerifier,
   withRetry
 });

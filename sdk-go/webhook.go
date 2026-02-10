@@ -170,3 +170,11 @@ func (e *WebhookEvent) GetAmount() int64 {
 	}
 	return 0
 }
+
+// VerifyWebhookSignature is a convenience function that verifies a webhook
+// payload signature using HMAC-SHA256 (v1 format: sha256=<hex>).
+// This is a standalone helper for simple usage without creating a WebhookVerifier.
+func VerifyWebhookSignature(payload string, signature string, secret string) bool {
+	v := NewWebhookVerifier(secret)
+	return v.Verify(payload, signature)
+}

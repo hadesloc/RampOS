@@ -15,8 +15,13 @@ pub mod timeout;
 pub mod trade;
 pub mod user;
 pub mod webhook;
+pub mod webhook_delivery;
+pub mod webhook_dlq;
+pub mod webhook_signing;
 #[cfg(test)]
 mod webhook_tests;
+#[cfg(test)]
+mod webhook_delivery_tests;
 pub mod withdraw;
 pub mod exchange_rate;
 pub mod offramp;
@@ -25,6 +30,8 @@ pub mod escrow;
 pub mod settlement;
 #[cfg(test)]
 mod offramp_tests;
+#[cfg(test)]
+mod payout_compliance_tests;
 pub mod withdraw_policy_provider;
 
 pub use bridge::BridgeService;

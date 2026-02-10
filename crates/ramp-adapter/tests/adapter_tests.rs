@@ -180,14 +180,9 @@ mod napas_tests {
 
         let result = adapter
             .parse_payin_webhook(payload.to_string().as_bytes(), None)
-            .await
-            .unwrap();
+            .await;
 
-        assert_eq!(result.reference_code, "");
-        assert_eq!(result.bank_tx_id, "");
-        assert_eq!(result.amount_vnd, Decimal::from(0));
-        assert!(result.sender_name.is_none());
-        assert!(result.sender_account.is_none());
+        assert!(result.is_err(), "Empty payload should be rejected after validation hardening");
     }
 
     #[tokio::test]

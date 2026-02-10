@@ -205,3 +205,77 @@ async fn graphql_introspection_returns_schema() {
         "SubscriptionRoot"
     );
 }
+
+/// F07: Verify that a GraphQL mutation sent WITHOUT an auth token still reaches
+/// the GraphQL handler (returns 200 with a GraphQL-level error, not an HTTP 401).
+///
+/// NOTE: The /graphql endpoint currently has NO auth middleware applied at the
+/// HTTP layer (see router.rs — it is nested directly without auth_middleware).
+/// This test documents the current behaviour so that if auth is added later,
+/// the change is intentional and caught by CI.
+#[tokio::test]
+async fn test_graphql_mutation_without_auth_token() {
+    let router = setup_app().await;
+
+    let body = serde_json::json!({
+        "query": r#"mutation { createPayIn(tenantId: "t1", input: { userId: "u1", amountVnd: "100000", railsProvider: "VCB" }) { intentId } }"#
+    });
+
+    let request = Request::builder()
+        .uri("/graphql")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        // Deliberately NO Authorization header
+        .body(Body::from(serde_json::to_string(&body).unwrap()))
+        .unwrap();
+
+    let response = router.oneshot(request).await.unwrap();
+
+    // The endpoint should still be reachable (200 OK at HTTP level) because
+    // /graphql has no auth middleware. The GraphQL resolver itself may return
+    // a domain-level error, but the HTTP status should NOT be 401/403.
+    assert_ne!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "GraphQL endpoint should not return 401 — no auth middleware is applied"
+    );
+    assert_ne!(
+        response.status(),
+        StatusCode::FORBIDDEN,
+        "GraphQL endpoint should not return 403 — no auth middleware is applied"
+    );
+    // Should be 200 (GraphQL always returns 200 even for resolver errors)
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+/// F07: Verify that a GraphQL query WITH a valid-looking Authorization header
+/// still reaches the handler and returns 200.
+///
+/// Because /graphql has no auth middleware, the header is simply ignored at the
+/// HTTP layer and passed through to the GraphQL context (which also does not
+/// inspect it today).
+#[tokio::test]
+async fn test_graphql_query_with_auth_token() {
+    let router = setup_app().await;
+
+    let body = serde_json::json!({
+        "query": "{ __typename }"
+    });
+
+    let request = Request::builder()
+        .uri("/graphql")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .header("Authorization", "Bearer test-valid-token-12345")
+        .body(Body::from(serde_json::to_string(&body).unwrap()))
+        .unwrap();
+
+    let response = router.oneshot(request).await.unwrap();
+
+    // With or without a token the endpoint should respond identically
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "GraphQL query with auth token should return 200"
+    );
+}

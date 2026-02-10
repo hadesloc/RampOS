@@ -165,6 +165,15 @@ impl IntentRepository for MockIntentRepository {
     async fn list_expired(&self, _limit: i64) -> ramp_common::Result<Vec<IntentRow>> {
         Ok(vec![])
     }
+
+    async fn list_by_cursor(
+        &self,
+        _tenant_id: &TenantId,
+        _cursor: Option<&str>,
+        _limit: i64,
+    ) -> ramp_common::Result<Vec<IntentRow>> {
+        Ok(vec![])
+    }
 }
 
 #[tokio::test]
