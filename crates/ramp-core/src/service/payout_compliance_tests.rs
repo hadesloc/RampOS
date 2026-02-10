@@ -1106,3 +1106,355 @@ async fn test_payout_state_transitions_are_valid() {
     let err = service.confirm_payout(confirm_again).await;
     assert!(err.is_err(), "Confirming a COMPLETED payout should fail with invalid state transition");
 }
+
+/// Full payout lifecycle with settlement integration:
+/// create -> compliance approved -> submitted -> settlement triggered -> bank confirms -> completed.
+/// Verifies that SettlementService correctly produces a Processing settlement and that
+/// the PayoutService confirm flow transitions the intent to COMPLETED.
+#[tokio::test]
+async fn test_payout_full_lifecycle_with_settlement() {
+    use crate::service::settlement::SettlementService;
+
+    let (service, intent_repo, ledger_repo, user_repo, event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_lc", "tenant_lc", 2));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_lc"),
+        Some(&UserId::new("user_lc")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(50_000_000),
+    );
+
+    // Step 1: Create payout
+    let req = make_payout_request("tenant_lc", "user_lc", 5_000_000);
+    let create_res = service.create_payout(req).await.unwrap();
+    assert_eq!(create_res.status, PayoutState::Submitted);
+
+    // Step 2: Trigger settlement (simulates backend triggering bank transfer)
+    let settlement_svc = SettlementService::new();
+    let settlement = settlement_svc.trigger_settlement(&create_res.intent_id.0).unwrap();
+    assert!(settlement.id.starts_with("stl_"));
+    assert_eq!(settlement.offramp_intent_id, create_res.intent_id.0);
+    assert_eq!(settlement.status, crate::service::settlement::SettlementStatus::Processing);
+    assert!(settlement.bank_reference.is_some());
+
+    // Step 3: Bank confirms settlement success
+    let confirm_req = ConfirmPayoutRequest {
+        tenant_id: TenantId::new("tenant_lc"),
+        intent_id: create_res.intent_id.clone(),
+        bank_tx_id: settlement.bank_reference.unwrap(),
+        status: PayoutBankStatus::Success,
+    };
+    service.confirm_payout(confirm_req).await.unwrap();
+
+    // Verify final state is COMPLETED
+    let intents = intent_repo.intents.lock().unwrap();
+    let intent = intents.iter().find(|i| i.id == create_res.intent_id.0).unwrap();
+    assert_eq!(intent.state, "COMPLETED");
+    drop(intents);
+
+    // Verify 2 ledger transactions: hold + confirmation, both balanced
+    let txs = ledger_repo.transactions.lock().unwrap();
+    assert_eq!(txs.len(), 2);
+    assert!(txs[0].is_balanced());
+    assert!(txs[1].is_balanced());
+    assert!(txs[1].description.contains("confirmed"));
+    drop(txs);
+
+    // Verify events: at least created + status_changed
+    let events = event_publisher.get_events().await;
+    assert!(events.len() >= 2);
+}
+
+/// Double-spend prevention: submitting a payout with the same idempotency key but
+/// different amounts should return the original intent, NOT create a new one with the
+/// different amount. This verifies the idempotency key takes precedence over request body.
+#[tokio::test]
+async fn test_payout_double_spend_same_idempotency_key_different_amount() {
+    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_ds", "tenant_ds", 1));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_ds"),
+        Some(&UserId::new("user_ds")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(10_000_000),
+    );
+
+    // First request: 1M VND
+    let mut req1 = make_payout_request("tenant_ds", "user_ds", 1_000_000);
+    req1.idempotency_key = Some(IdempotencyKey::new("ds-key-001"));
+    let res1 = service.create_payout(req1).await.unwrap();
+    assert_eq!(res1.status, PayoutState::Submitted);
+    let original_id = res1.intent_id.clone();
+
+    // Second request: DIFFERENT amount (2M VND) but SAME idempotency key
+    let mut req2 = make_payout_request("tenant_ds", "user_ds", 2_000_000);
+    req2.idempotency_key = Some(IdempotencyKey::new("ds-key-001"));
+    let res2 = service.create_payout(req2).await.unwrap();
+
+    // Must return the ORIGINAL intent, not create a new one
+    assert_eq!(res2.intent_id, original_id, "Idempotency key must return original intent");
+
+    // Only ONE intent should exist
+    let intents = intent_repo.intents.lock().unwrap();
+    assert_eq!(intents.len(), 1, "Double-spend: only one intent should exist");
+    // Amount should be the ORIGINAL 1M, not the second request's 2M
+    assert_eq!(intents[0].amount, Decimal::from(1_000_000),
+        "Idempotent replay must preserve original amount");
+
+    // Only ONE ledger transaction
+    let txs = ledger_repo.transactions.lock().unwrap();
+    assert_eq!(txs.len(), 1, "Double-spend: only one ledger tx should exist");
+}
+
+/// Concurrent payouts from same user without idempotency keys: each should create
+/// a separate intent until velocity limits are hit.
+#[tokio::test]
+async fn test_payout_concurrent_same_user_no_idempotency_key() {
+    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    // Tier2 user: single tx limit = 100M, daily limit = 200M
+    user_repo.add_user(make_active_user("user_conc", "tenant_conc", 2));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_conc"),
+        Some(&UserId::new("user_conc")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(500_000_000), // 500M VND
+    );
+
+    // Create 5 sequential payouts of 10M each (total 50M, within 200M daily limit)
+    let mut intent_ids = Vec::new();
+    for i in 0..5 {
+        let req = make_payout_request("tenant_conc", "user_conc", 10_000_000);
+        let res = service.create_payout(req).await
+            .unwrap_or_else(|e| panic!("Payout {} should succeed: {:?}", i, e));
+        assert_eq!(res.status, PayoutState::Submitted, "Payout {} should be submitted", i);
+        intent_ids.push(res.intent_id);
+    }
+
+    // All intent IDs must be unique (separate payouts)
+    for i in 0..intent_ids.len() {
+        for j in (i + 1)..intent_ids.len() {
+            assert_ne!(intent_ids[i], intent_ids[j],
+                "Concurrent payouts must have unique intent IDs (payout {} vs {})", i, j);
+        }
+    }
+
+    // Verify 5 intents and 5 ledger transactions
+    let intents = intent_repo.intents.lock().unwrap();
+    assert_eq!(intents.len(), 5, "5 concurrent payouts should create 5 intents");
+    drop(intents);
+
+    let txs = ledger_repo.transactions.lock().unwrap();
+    assert_eq!(txs.len(), 5, "5 concurrent payouts should create 5 ledger transactions");
+}
+
+/// Settlement callback verification: after confirm_payout with Success,
+/// verify the intent state transitions through Confirmed -> Completed,
+/// and the ledger confirmation transaction has the correct amount.
+#[tokio::test]
+async fn test_payout_settlement_callback_updates_state_and_ledger() {
+    let (service, intent_repo, ledger_repo, user_repo, event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_cb", "tenant_cb", 1));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_cb"),
+        Some(&UserId::new("user_cb")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(5_000_000),
+    );
+
+    let payout_amount = 2_500_000i64;
+    let req = make_payout_request("tenant_cb", "user_cb", payout_amount);
+    let res = service.create_payout(req).await.unwrap();
+    assert_eq!(res.status, PayoutState::Submitted);
+
+    // Simulate bank settlement callback
+    let confirm_req = ConfirmPayoutRequest {
+        tenant_id: TenantId::new("tenant_cb"),
+        intent_id: res.intent_id.clone(),
+        bank_tx_id: "SETTLE_CB_001".to_string(),
+        status: PayoutBankStatus::Success,
+    };
+    service.confirm_payout(confirm_req).await.unwrap();
+
+    // Verify final state is COMPLETED (went through CONFIRMED -> COMPLETED)
+    let intents = intent_repo.intents.lock().unwrap();
+    let intent = intents.iter().find(|i| i.id == res.intent_id.0).unwrap();
+    assert_eq!(intent.state, "COMPLETED");
+    drop(intents);
+
+    // Verify confirmation ledger transaction amount matches payout
+    let txs = ledger_repo.transactions.lock().unwrap();
+    assert_eq!(txs.len(), 2, "Hold + confirmation = 2 transactions");
+    let confirmation_tx = &txs[1];
+    assert!(confirmation_tx.is_balanced());
+    assert!(confirmation_tx.description.contains("confirmed"));
+    // Verify amounts match the payout amount
+    for entry in &confirmation_tx.entries {
+        assert_eq!(entry.amount, Decimal::from(payout_amount),
+            "Confirmation ledger entry amount must match payout amount");
+    }
+    drop(txs);
+
+    // Verify status_changed event was published for the completion
+    let events = event_publisher.get_events().await;
+    let completed_events: Vec<_> = events.iter()
+        .filter(|e| {
+            e.get("type").and_then(|t| t.as_str()) == Some("intent.status_changed")
+                && e.get("new_status").and_then(|s| s.as_str()) == Some("COMPLETED")
+        })
+        .collect();
+    assert!(!completed_events.is_empty(), "COMPLETED status_changed event must be published");
+}
+
+/// Confirm payout on non-existent intent should fail with IntentNotFound.
+#[tokio::test]
+async fn test_payout_confirm_nonexistent_intent_fails() {
+    let (service, _intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_ne", "tenant_ne", 1));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_ne"),
+        Some(&UserId::new("user_ne")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(5_000_000),
+    );
+
+    // Try to confirm a payout that was never created
+    let confirm_req = ConfirmPayoutRequest {
+        tenant_id: TenantId::new("tenant_ne"),
+        intent_id: IntentId("po_nonexistent_12345".to_string()),
+        bank_tx_id: "BANK_NE_001".to_string(),
+        status: PayoutBankStatus::Success,
+    };
+    let result = service.confirm_payout(confirm_req).await;
+    assert!(result.is_err(), "Confirming non-existent intent must fail");
+
+    let err_str = format!("{:?}", result.unwrap_err());
+    assert!(
+        err_str.contains("NotFound") || err_str.contains("not found") || err_str.contains("IntentNotFound"),
+        "Error should indicate intent not found, got: {}",
+        err_str
+    );
+}
+
+/// Double rejection prevention: after a payout is bank-rejected and reversed,
+/// a second confirm attempt should fail because the intent is no longer in SUBMITTED state.
+#[tokio::test]
+async fn test_payout_double_rejection_prevention() {
+    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_dr", "tenant_dr", 1));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_dr"),
+        Some(&UserId::new("user_dr")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(5_000_000),
+    );
+
+    // Create payout
+    let req = make_payout_request("tenant_dr", "user_dr", 1_000_000);
+    let res = service.create_payout(req).await.unwrap();
+    assert_eq!(res.status, PayoutState::Submitted);
+
+    // First bank rejection -> reversal
+    let confirm_req1 = ConfirmPayoutRequest {
+        tenant_id: TenantId::new("tenant_dr"),
+        intent_id: res.intent_id.clone(),
+        bank_tx_id: "BANK_DR_001".to_string(),
+        status: PayoutBankStatus::Rejected("Account frozen".to_string()),
+    };
+    service.confirm_payout(confirm_req1).await.unwrap();
+
+    // Verify state is REVERSED
+    let intents = intent_repo.intents.lock().unwrap();
+    let intent = intents.iter().find(|i| i.id == res.intent_id.0).unwrap();
+    assert_eq!(intent.state, "REVERSED");
+    drop(intents);
+
+    // Second confirm attempt should fail (state is REVERSED, not SUBMITTED)
+    let confirm_req2 = ConfirmPayoutRequest {
+        tenant_id: TenantId::new("tenant_dr"),
+        intent_id: res.intent_id.clone(),
+        bank_tx_id: "BANK_DR_002".to_string(),
+        status: PayoutBankStatus::Success,
+    };
+    let result = service.confirm_payout(confirm_req2).await;
+    assert!(result.is_err(), "Second confirm on REVERSED payout must fail");
+
+    // Verify no extra ledger transactions were created (still 2: hold + reversal)
+    let txs = ledger_repo.transactions.lock().unwrap();
+    assert_eq!(txs.len(), 2, "No extra ledger tx on double rejection");
+}
+
+/// Nonexistent user payout should fail with UserNotFound error.
+#[tokio::test]
+async fn test_payout_nonexistent_user_fails() {
+    let (service, _intent_repo, ledger_repo, _user_repo, _event_publisher) = setup_payout_service();
+
+    // Do NOT add user to repo - user does not exist
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_ghost"),
+        Some(&UserId::new("user_ghost")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(10_000_000),
+    );
+
+    let req = make_payout_request("tenant_ghost", "user_ghost", 100_000);
+    let result = service.create_payout(req).await;
+    assert!(result.is_err(), "Payout for non-existent user must fail");
+
+    let err_str = format!("{:?}", result.unwrap_err());
+    assert!(
+        err_str.contains("UserNotFound") || err_str.contains("not found"),
+        "Error should indicate user not found, got: {}",
+        err_str
+    );
+}
+
+/// Zero amount payout: verify the service handles zero-amount payouts correctly.
+/// Depending on implementation, this may succeed (policy allows) or fail.
+/// The key invariant is that if it succeeds, ledger entries must still be balanced.
+#[tokio::test]
+async fn test_payout_zero_amount_handling() {
+    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_zero", "tenant_zero", 1));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_zero"),
+        Some(&UserId::new("user_zero")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(5_000_000),
+    );
+
+    let req = make_payout_request("tenant_zero", "user_zero", 0);
+    let result = service.create_payout(req).await;
+
+    match result {
+        Ok(res) => {
+            // If zero-amount is accepted, verify ledger integrity
+            let txs = ledger_repo.transactions.lock().unwrap();
+            for tx in txs.iter() {
+                assert!(tx.is_balanced(), "Zero-amount ledger transaction must be balanced");
+            }
+        }
+        Err(_) => {
+            // Zero-amount rejection is also acceptable behavior
+            // Verify no intent or ledger entries were created
+            let intents = intent_repo.intents.lock().unwrap();
+            assert_eq!(intents.len(), 0, "No intent should exist on zero-amount rejection");
+            let txs = ledger_repo.transactions.lock().unwrap();
+            assert_eq!(txs.len(), 0, "No ledger tx should exist on zero-amount rejection");
+        }
+    }
+}

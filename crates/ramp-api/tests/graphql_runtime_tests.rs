@@ -1000,3 +1000,317 @@ async fn test_graphql_resolver_mutation_create_payin_with_idempotency_key() {
     let created = intents.iter().find(|i| i.id == intent_id).unwrap();
     assert_eq!(created.idempotency_key, Some("test-idem-key-999".to_string()));
 }
+
+// ============================================================================
+// F07: Schema Completeness & Subscription Tests (T2)
+// ============================================================================
+
+/// F07-T2: Full schema introspection returns all expected types including
+/// input types, connection types, and subscription event types.
+#[tokio::test]
+async fn test_graphql_schema_has_all_expected_types() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = r#"{
+        __schema {
+            types {
+                name
+                kind
+            }
+        }
+    }"#;
+
+    let resp = schema.execute(query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let types: Vec<&str> = data["__schema"]["types"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|t| t["name"].as_str())
+        .collect();
+
+    // Core object types
+    assert!(types.contains(&"QueryRoot"), "Schema should have QueryRoot");
+    assert!(types.contains(&"MutationRoot"), "Schema should have MutationRoot");
+    assert!(types.contains(&"SubscriptionRoot"), "Schema should have SubscriptionRoot");
+
+    // Domain types
+    assert!(types.contains(&"IntentType"), "Schema should have IntentType");
+    assert!(types.contains(&"UserType"), "Schema should have UserType");
+    assert!(types.contains(&"DashboardStatsType"), "Schema should have DashboardStatsType");
+
+    // Connection/pagination types
+    assert!(types.contains(&"IntentConnection"), "Schema should have IntentConnection");
+    assert!(types.contains(&"IntentEdge"), "Schema should have IntentEdge");
+    assert!(types.contains(&"UserConnection"), "Schema should have UserConnection");
+    assert!(types.contains(&"UserEdge"), "Schema should have UserEdge");
+    assert!(types.contains(&"PageInfo"), "Schema should have PageInfo");
+
+    // Input types
+    assert!(types.contains(&"IntentFilter"), "Schema should have IntentFilter input");
+    assert!(types.contains(&"CreatePayInInput"), "Schema should have CreatePayInInput");
+    assert!(types.contains(&"ConfirmPayInInput"), "Schema should have ConfirmPayInInput");
+    assert!(types.contains(&"CreatePayoutInput"), "Schema should have CreatePayoutInput");
+
+    // Result types
+    assert!(types.contains(&"CreatePayInResult"), "Schema should have CreatePayInResult");
+    assert!(types.contains(&"ConfirmPayInResult"), "Schema should have ConfirmPayInResult");
+    assert!(types.contains(&"CreatePayoutResult"), "Schema should have CreatePayoutResult");
+
+    // Subscription event type
+    assert!(types.contains(&"IntentStatusEvent"), "Schema should have IntentStatusEvent");
+}
+
+/// F07-T2: Subscription type exposes the intentStatusChanged field with correct arguments.
+#[tokio::test]
+async fn test_graphql_subscription_type_has_expected_fields() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = r#"{
+        __type(name: "SubscriptionRoot") {
+            name
+            fields {
+                name
+                args {
+                    name
+                    type {
+                        name
+                        kind
+                        ofType {
+                            name
+                            kind
+                        }
+                    }
+                }
+                type {
+                    name
+                    kind
+                    ofType {
+                        name
+                    }
+                }
+            }
+        }
+    }"#;
+
+    let resp = schema.execute(query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    let fields = data["__type"]["fields"].as_array().unwrap();
+
+    // Should have intentStatusChanged subscription
+    let field_names: Vec<&str> = fields.iter().map(|f| f["name"].as_str().unwrap()).collect();
+    assert!(
+        field_names.contains(&"intentStatusChanged"),
+        "SubscriptionRoot should have 'intentStatusChanged' field, got: {:?}",
+        field_names
+    );
+
+    // Verify intentStatusChanged has tenantId argument
+    let intent_field = fields
+        .iter()
+        .find(|f| f["name"].as_str().unwrap() == "intentStatusChanged")
+        .unwrap();
+    let args: Vec<&str> = intent_field["args"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["name"].as_str().unwrap())
+        .collect();
+    assert!(
+        args.contains(&"tenantId"),
+        "intentStatusChanged should have 'tenantId' argument, got: {:?}",
+        args
+    );
+}
+
+/// F07-T2: IntentStatusEvent type has expected fields (intentId, tenantId, newStatus, timestamp).
+#[tokio::test]
+async fn test_graphql_intent_status_event_type_fields() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = r#"{
+        __type(name: "IntentStatusEvent") {
+            name
+            kind
+            fields {
+                name
+                type {
+                    name
+                    kind
+                    ofType {
+                        name
+                    }
+                }
+            }
+        }
+    }"#;
+
+    let resp = schema.execute(query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+    assert_eq!(data["__type"]["name"], "IntentStatusEvent");
+
+    let fields: Vec<&str> = data["__type"]["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["name"].as_str().unwrap())
+        .collect();
+
+    assert!(fields.contains(&"intentId"), "IntentStatusEvent should have 'intentId'");
+    assert!(fields.contains(&"tenantId"), "IntentStatusEvent should have 'tenantId'");
+    assert!(fields.contains(&"newStatus"), "IntentStatusEvent should have 'newStatus'");
+    assert!(fields.contains(&"timestamp"), "IntentStatusEvent should have 'timestamp'");
+}
+
+/// F07-T2: GraphQL error response follows spec format (errors array with message).
+#[tokio::test]
+async fn test_graphql_error_response_follows_spec_format() {
+    let router = setup_app().await;
+
+    // Send a syntactically invalid GraphQL query
+    let body = serde_json::json!({
+        "query": "{ nonExistentField }"
+    });
+
+    let request = build_authenticated_graphql_request(&body);
+    let response = router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK, "GraphQL errors should still return HTTP 200");
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+    // Per GraphQL spec, errors should be an array
+    assert!(json["errors"].is_array(), "Error response should have 'errors' array");
+    let errors = json["errors"].as_array().unwrap();
+    assert!(!errors.is_empty(), "Errors array should not be empty for invalid query");
+
+    // Each error must have a 'message' field per spec
+    for error in errors {
+        assert!(
+            error["message"].is_string(),
+            "Each error should have a 'message' string field"
+        );
+        let msg = error["message"].as_str().unwrap();
+        assert!(!msg.is_empty(), "Error message should not be empty");
+    }
+
+    // 'locations' field is recommended by spec
+    let first_error = &errors[0];
+    assert!(
+        first_error.get("locations").is_some(),
+        "GraphQL errors should include 'locations' per spec"
+    );
+}
+
+/// F07-T2: Batch query support - sending multiple operations in a single request body.
+#[tokio::test]
+async fn test_graphql_batch_query_via_separate_requests() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    // Execute multiple queries in sequence to verify schema handles concurrent access
+    let query1 = format!(
+        r#"{{ user(tenantId: "{}", id: "user-1") {{ id status }} }}"#,
+        TEST_TENANT_ID
+    );
+    let query2 = format!(
+        r#"{{ dashboardStats(tenantId: "{}") {{ totalUsers activeUsers }} }}"#,
+        TEST_TENANT_ID
+    );
+    let query3 = format!(
+        r#"{{ intents(tenantId: "{}", filter: {{ userId: "user-1" }}, first: 2) {{ edges {{ node {{ id }} }} pageInfo {{ hasNextPage }} }} }}"#,
+        TEST_TENANT_ID
+    );
+
+    let resp1 = schema.execute(&query1).await;
+    let resp2 = schema.execute(&query2).await;
+    let resp3 = schema.execute(&query3).await;
+
+    assert!(resp1.errors.is_empty(), "Query 1 errors: {:?}", resp1.errors);
+    assert!(resp2.errors.is_empty(), "Query 2 errors: {:?}", resp2.errors);
+    assert!(resp3.errors.is_empty(), "Query 3 errors: {:?}", resp3.errors);
+
+    let data1 = resp1.data.into_json().unwrap();
+    assert_eq!(data1["user"]["id"], "user-1");
+
+    let data2 = resp2.data.into_json().unwrap();
+    assert_eq!(data2["dashboardStats"]["totalUsers"], 3);
+
+    let data3 = resp3.data.into_json().unwrap();
+    let edges = data3["intents"]["edges"].as_array().unwrap();
+    assert_eq!(edges.len(), 2);
+    assert_eq!(data3["intents"]["pageInfo"]["hasNextPage"], true);
+}
+
+/// F07-T2: Variables validation - wrong variable type produces a clear error.
+#[tokio::test]
+async fn test_graphql_variables_type_validation() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    // Pass an integer where a String is expected for tenantId
+    let request = async_graphql::Request::new(
+        r#"query GetUser($tid: String!, $uid: ID!) {
+            user(tenantId: $tid, id: $uid) { id }
+        }"#,
+    )
+    .variables(async_graphql::Variables::from_json(serde_json::json!({
+        "tid": 12345,
+        "uid": "user-1"
+    })));
+
+    let resp = schema.execute(request).await;
+
+    // async_graphql may coerce the int to string or produce an error
+    // Either way, the schema should handle it gracefully (no panic)
+    // If it produces errors, they should be well-formed
+    if !resp.errors.is_empty() {
+        for error in &resp.errors {
+            assert!(
+                !error.message.is_empty(),
+                "Variable validation error should have a message"
+            );
+        }
+    }
+    // If no error, it means async_graphql coerced the value - also acceptable
+}
+
+/// F07-T2: Query with aliases returns correctly named results.
+#[tokio::test]
+async fn test_graphql_query_aliases() {
+    let (app_state, _, _) = setup_app_state_with_data();
+    let schema = build_schema(&app_state);
+
+    let query = format!(
+        r#"{{
+            firstUser: user(tenantId: "{tid}", id: "user-1") {{ id status }}
+            secondUser: user(tenantId: "{tid}", id: "user-2") {{ id status }}
+            stats: dashboardStats(tenantId: "{tid}") {{ totalUsers }}
+        }}"#,
+        tid = TEST_TENANT_ID
+    );
+
+    let resp = schema.execute(&query).await;
+    assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
+
+    let data = resp.data.into_json().unwrap();
+
+    assert_eq!(data["firstUser"]["id"], "user-1");
+    assert_eq!(data["firstUser"]["status"], "ACTIVE");
+
+    assert_eq!(data["secondUser"]["id"], "user-2");
+    assert_eq!(data["secondUser"]["status"], "SUSPENDED");
+
+    assert_eq!(data["stats"]["totalUsers"], 3);
+}

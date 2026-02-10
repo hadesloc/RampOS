@@ -844,3 +844,460 @@ async fn test_tiered_rate_limit_429_with_headers() {
     let retry_val: u64 = retry_after.to_str().unwrap().parse().unwrap();
     assert!(retry_val > 0, "Retry-After should be > 0");
 }
+
+// =============================================================================
+// Test 13: Per-tenant isolation using TenantContext (not just IP-based)
+// =============================================================================
+
+#[tokio::test]
+async fn test_tenant_context_isolation_between_tenants() {
+    let config_a = RateLimitConfig {
+        global_max_requests: 10000,
+        tenant_max_requests: 100,
+        window_seconds: 60,
+        key_prefix: "test:ctx_iso_a".to_string(),
+        endpoint_limits: HashMap::new(),
+    };
+    let config_b = RateLimitConfig {
+        global_max_requests: 10000,
+        tenant_max_requests: 100,
+        window_seconds: 60,
+        key_prefix: "test:ctx_iso_b".to_string(),
+        endpoint_limits: HashMap::new(),
+    };
+
+    // Build two separate apps with tenant context to ensure isolation
+    let app_a = build_test_app_with_tenant(config_a, "tenant_iso_A", TenantTier::Standard);
+    let app_b = build_test_app_with_tenant(config_b, "tenant_iso_B", TenantTier::Standard);
+
+    // Send requests to tenant A - should all succeed (limit is 100 for Standard)
+    for i in 0..5 {
+        let request = Request::builder()
+            .uri("/test")
+            .method("GET")
+            .body(Body::empty())
+            .unwrap();
+        let response = app_a.clone().oneshot(request).await.unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "Tenant A request {} should succeed",
+            i + 1
+        );
+    }
+
+    // Tenant B's first request should succeed with full remaining (its own counter)
+    let request = Request::builder()
+        .uri("/test")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    let response = app_b.clone().oneshot(request).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Tenant B should not be affected by Tenant A's requests"
+    );
+    let remaining = response
+        .headers()
+        .get("X-RateLimit-Remaining")
+        .expect("Should have X-RateLimit-Remaining");
+    assert_eq!(
+        remaining.to_str().unwrap(),
+        "99",
+        "Tenant B should have 99 remaining (its own counter starts fresh)"
+    );
+}
+
+// =============================================================================
+// Test 14: 429 response includes all required rate limit headers
+// =============================================================================
+
+#[tokio::test]
+async fn test_429_response_contains_all_required_headers() {
+    let limit = 2u64;
+    let config = RateLimitConfig {
+        global_max_requests: 10000,
+        tenant_max_requests: limit,
+        window_seconds: 60,
+        key_prefix: "test:429_all_headers".to_string(),
+        endpoint_limits: HashMap::new(),
+    };
+
+    let (app, _) = build_test_app(config);
+    let ip = "10.50.0.1";
+
+    // Exhaust the limit
+    for _ in 0..limit {
+        let request = Request::builder()
+            .uri("/test")
+            .method("GET")
+            .header("x-forwarded-for", ip)
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    // Trigger 429
+    let request = Request::builder()
+        .uri("/test")
+        .method("GET")
+        .header("x-forwarded-for", ip)
+        .body(Body::empty())
+        .unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    // Verify ALL required headers are present
+    let headers = response.headers();
+
+    let retry_after = headers
+        .get("Retry-After")
+        .expect("429 must have Retry-After");
+    let retry_val: u64 = retry_after.to_str().unwrap().parse().unwrap();
+    assert!(retry_val > 0, "Retry-After must be > 0");
+
+    let rl_limit = headers
+        .get("X-RateLimit-Limit")
+        .expect("429 must have X-RateLimit-Limit");
+    let rl_limit_val: u64 = rl_limit.to_str().unwrap().parse().unwrap();
+    assert_eq!(rl_limit_val, limit, "X-RateLimit-Limit should match configured limit");
+
+    let rl_remaining = headers
+        .get("X-RateLimit-Remaining")
+        .expect("429 must have X-RateLimit-Remaining");
+    assert_eq!(rl_remaining.to_str().unwrap(), "0", "X-RateLimit-Remaining must be 0 on 429");
+
+    let rl_reset = headers
+        .get("X-RateLimit-Reset")
+        .expect("429 must have X-RateLimit-Reset");
+    let rl_reset_val: u64 = rl_reset.to_str().unwrap().parse().unwrap();
+    assert!(rl_reset_val > 0, "X-RateLimit-Reset must be > 0");
+}
+
+// =============================================================================
+// Test 15: Sliding window - requests expire and free up capacity
+// =============================================================================
+
+#[tokio::test]
+async fn test_sliding_window_requests_expire_individually() {
+    // Use a 2-second window so we can stagger requests across different seconds
+    let limit = 2u64;
+    let window_seconds = 2u64;
+
+    let config = RateLimitConfig {
+        global_max_requests: 10000,
+        tenant_max_requests: limit,
+        window_seconds,
+        key_prefix: "test:sliding_window".to_string(),
+        endpoint_limits: HashMap::new(),
+    };
+
+    let (app, _) = build_test_app(config);
+    let ip = "10.60.0.1";
+
+    // Send first request at T=0
+    let request = Request::builder()
+        .uri("/test")
+        .method("GET")
+        .header("x-forwarded-for", ip)
+        .body(Body::empty())
+        .unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Wait 1.1s so second request lands in a different timestamp second
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+
+    // Send second request at T~1.1s
+    let request = Request::builder()
+        .uri("/test")
+        .method("GET")
+        .header("x-forwarded-for", ip)
+        .body(Body::empty())
+        .unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Limit is now exhausted (2/2 used)
+    let request = Request::builder()
+        .uri("/test")
+        .method("GET")
+        .header("x-forwarded-for", ip)
+        .body(Body::empty())
+        .unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::TOO_MANY_REQUESTS,
+        "Should be rate limited after 2 requests"
+    );
+
+    // Wait for the first request to slide out of the 2s window
+    // First request was at T=0, window is 2s, so it expires at T=2s
+    // We are currently at T~1.1s, so wait another ~1.1s
+    tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+
+    // Now at T~2.3s: first request (T=0) has slid out, second (T~1.1s) is still in window
+    // So we have 1 slot available
+    let request = Request::builder()
+        .uri("/test")
+        .method("GET")
+        .header("x-forwarded-for", ip)
+        .body(Body::empty())
+        .unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "After oldest request slides out of window, new request should succeed"
+    );
+}
+
+// =============================================================================
+// Test 16: Multiple tenants concurrent - each with independent counters
+// =============================================================================
+
+#[tokio::test]
+async fn test_multiple_tenants_concurrent_independent_counters() {
+    let limit = 3u64;
+    let config = RateLimitConfig {
+        global_max_requests: 10000,
+        tenant_max_requests: limit,
+        window_seconds: 60,
+        key_prefix: "test:multi_tenant".to_string(),
+        endpoint_limits: HashMap::new(),
+    };
+
+    let (app, _) = build_test_app(config);
+
+    // Interleave requests from 3 different tenants (IPs)
+    let ips = ["10.70.0.1", "10.70.0.2", "10.70.0.3"];
+
+    for round in 0..limit {
+        for (idx, ip) in ips.iter().enumerate() {
+            let request = Request::builder()
+                .uri("/test")
+                .method("GET")
+                .header("x-forwarded-for", *ip)
+                .body(Body::empty())
+                .unwrap();
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::OK,
+                "Tenant {} (IP {}) request {} should succeed",
+                idx,
+                ip,
+                round + 1
+            );
+
+            let remaining = response
+                .headers()
+                .get("X-RateLimit-Remaining")
+                .expect("Should have X-RateLimit-Remaining");
+            let remaining_val: u64 = remaining.to_str().unwrap().parse().unwrap();
+            assert_eq!(
+                remaining_val,
+                limit - round - 1,
+                "Tenant {} should have {} remaining after round {}",
+                idx,
+                limit - round - 1,
+                round + 1
+            );
+        }
+    }
+
+    // All tenants should now be exhausted independently
+    for (idx, ip) in ips.iter().enumerate() {
+        let request = Request::builder()
+            .uri("/test")
+            .method("GET")
+            .header("x-forwarded-for", *ip)
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "Tenant {} (IP {}) should be rate limited after {} requests",
+            idx,
+            ip,
+            limit
+        );
+    }
+}
+
+// =============================================================================
+// Test 17: Endpoint-specific limit returns 429 with Retry-After header
+// =============================================================================
+
+#[tokio::test]
+async fn test_endpoint_specific_limit_429_has_retry_after() {
+    let mut endpoint_limits = HashMap::new();
+    endpoint_limits.insert("/test".to_string(), 1u64); // only 1 request allowed
+
+    let config = RateLimitConfig {
+        global_max_requests: 10000,
+        tenant_max_requests: 100,
+        window_seconds: 60,
+        key_prefix: "test:ep_retry".to_string(),
+        endpoint_limits,
+    };
+
+    let (app, _) = build_test_app(config);
+    let ip = "10.80.0.1";
+
+    // First request should succeed
+    let request = Request::builder()
+        .uri("/test")
+        .method("GET")
+        .header("x-forwarded-for", ip)
+        .body(Body::empty())
+        .unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Second request to same endpoint should be 429
+    let request = Request::builder()
+        .uri("/test")
+        .method("GET")
+        .header("x-forwarded-for", ip)
+        .body(Body::empty())
+        .unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::TOO_MANY_REQUESTS,
+        "Endpoint-specific limit should trigger 429"
+    );
+
+    // Verify Retry-After is present on endpoint-specific 429
+    let retry_after = response
+        .headers()
+        .get("Retry-After")
+        .expect("Endpoint 429 should have Retry-After header");
+    let retry_val: u64 = retry_after.to_str().unwrap().parse().unwrap();
+    assert!(retry_val > 0, "Endpoint Retry-After should be > 0");
+}
+
+// =============================================================================
+// Test 18: Tiered middleware - VIP tenant has higher capacity than Standard
+// =============================================================================
+
+#[tokio::test]
+async fn test_tiered_vip_higher_capacity_than_standard() {
+    // Standard tenant: limit 100
+    let config_std = RateLimitConfig {
+        global_max_requests: 10000,
+        tenant_max_requests: 100,
+        window_seconds: 60,
+        key_prefix: "test:tiered_cap_std".to_string(),
+        endpoint_limits: HashMap::new(),
+    };
+    let app_std =
+        build_tiered_app_with_tenant(config_std, "tenant_regular", TenantTier::Standard);
+
+    // VIP tenant: limit 5000 (tenant_vip_1 special override)
+    let config_vip = RateLimitConfig {
+        global_max_requests: 10000,
+        tenant_max_requests: 100,
+        window_seconds: 60,
+        key_prefix: "test:tiered_cap_vip".to_string(),
+        endpoint_limits: HashMap::new(),
+    };
+    let app_vip =
+        build_tiered_app_with_tenant(config_vip, "tenant_vip_1", TenantTier::Enterprise);
+
+    // Check Standard tenant's limit header
+    let request = Request::builder()
+        .uri("/test")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    let response_std = app_std.oneshot(request).await.unwrap();
+    assert_eq!(response_std.status(), StatusCode::OK);
+    let std_limit: u64 = response_std
+        .headers()
+        .get("X-RateLimit-Limit")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    // Check VIP tenant's limit header
+    let request = Request::builder()
+        .uri("/test")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    let response_vip = app_vip.oneshot(request).await.unwrap();
+    assert_eq!(response_vip.status(), StatusCode::OK);
+    let vip_limit: u64 = response_vip
+        .headers()
+        .get("X-RateLimit-Limit")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    assert!(
+        vip_limit > std_limit,
+        "VIP limit ({}) should be higher than Standard limit ({})",
+        vip_limit,
+        std_limit
+    );
+    assert_eq!(std_limit, 100, "Standard tier should have limit 100");
+    assert_eq!(vip_limit, 5000, "VIP tenant_vip_1 should have limit 5000");
+}
+
+// =============================================================================
+// Test 19: Unknown IP fallback uses tenant_max_requests config
+// =============================================================================
+
+#[tokio::test]
+async fn test_unknown_ip_fallback_uses_config_tenant_max() {
+    let tenant_max = 4u64;
+    let config = RateLimitConfig {
+        global_max_requests: 10000,
+        tenant_max_requests: tenant_max,
+        window_seconds: 60,
+        key_prefix: "test:unknown_ip".to_string(),
+        endpoint_limits: HashMap::new(),
+    };
+
+    // Build app WITHOUT tenant context - IP-based fallback
+    let (app, _) = build_test_app(config);
+
+    // Request without x-forwarded-for header => key will be "unknown"
+    let request = Request::builder()
+        .uri("/test")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let limit_header = response
+        .headers()
+        .get("X-RateLimit-Limit")
+        .expect("Should have X-RateLimit-Limit");
+    assert_eq!(
+        limit_header.to_str().unwrap(),
+        tenant_max.to_string(),
+        "Unknown IP should use tenant_max_requests from config"
+    );
+
+    let remaining = response
+        .headers()
+        .get("X-RateLimit-Remaining")
+        .expect("Should have X-RateLimit-Remaining");
+    assert_eq!(
+        remaining.to_str().unwrap(),
+        (tenant_max - 1).to_string(),
+        "First request should have tenant_max - 1 remaining"
+    );
+}
