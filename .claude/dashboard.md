@@ -21,7 +21,7 @@
 | ramp-compliance (Rust) | **14 pass** (1 ignored) | `cargo test -p ramp-compliance --lib` | YES |
 | ramp-api (integration) | **28 pass** | `cargo test -p ramp-api --test api_e2e_tests` | YES |
 | ramp-core (integration) | **8 pass** | `cargo test -p ramp-core --tests` | YES |
-| **Rust Total** | **1,400+ pass** | `cargo test --workspace` | YES |
+| **Rust Total** | **1,550+ pass** | `cargo test --workspace` | YES |
 | Solidity | **100+ pass** | `forge test -vv` (44 Account+Paymaster + fuzz/invariant) | Prev |
 | Python SDK | **10+ pass** | `pytest -q sdk-python/tests` | Prev |
 | Go SDK | **40+ pass** | `go test ./sdk-go/...` | Prev |

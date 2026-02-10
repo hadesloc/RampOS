@@ -1,7 +1,7 @@
 # Next-Gen Status Ledger (Source of Truth)
 
 **Created:** 2026-02-10
-**Last Updated:** 2026-02-10 (RB09 Final Gate Verified)
+**Last Updated:** 2026-02-10 (Session 159 Gap-Closing Sprint)
 **Purpose:** Evidence-based maturity assessment for all F01-F16 features
 **Labels:** `Complete` | `Partial` | `Simulated` | `Planned` | `Blocked`
 
@@ -11,21 +11,21 @@
 
 | Feature | Name | Label | Evidence Path | Test Count | Last Verified |
 |---------|------|-------|---------------|------------|---------------|
-| F01 | Rate Limiting | Partial | `crates/ramp-api/src/middleware/rate_limit.rs` | 19 | 2026-02-10 |
-| F02 | API Versioning | Partial | `crates/ramp-api/src/versioning/` | 22 | 2026-02-10 |
+| F01 | Rate Limiting | Partial | `crates/ramp-api/src/middleware/rate_limit.rs`, `crates/ramp-api/tests/rate_limit_integration_tests.rs` | 32 | 2026-02-10 |
+| F02 | API Versioning | Partial | `crates/ramp-api/src/versioning/`, `crates/ramp-api/tests/versioning_tests.rs` | 90 | 2026-02-10 |
 | F03 | OpenAPI Docs | Partial | `crates/ramp-api/src/openapi.rs`, `.github/workflows/openapi-ci.yml` | N/A | 2026-02-10 |
-| F04 | Webhook v2 | Partial | `crates/ramp-core/src/service/webhook.rs`, `crates/ramp-core/src/service/webhook_tests.rs` | 24 | 2026-02-10 |
+| F04 | Webhook v2 | Partial | `crates/ramp-core/src/service/webhook.rs`, `crates/ramp-core/src/service/webhook_tests.rs` | 40 | 2026-02-10 |
 | F05 | AI Fraud Detection | Partial | `crates/ramp-compliance/src/fraud/`, `crates/ramp-compliance/tests/fraud_acceptance_test.rs` | 84 | 2026-02-10 |
 | F06 | Passkey Wallet | Partial | `contracts/src/passkey/PasskeySigner.sol`, `frontend/src/components/passkey/` | Solidity | 2026-02-10 |
-| F07 | GraphQL API | Partial | `crates/ramp-api/src/graphql/`, `crates/ramp-api/tests/graphql_runtime_tests.rs` | 21 | 2026-02-10 |
+| F07 | GraphQL API | Partial | `crates/ramp-api/src/graphql/`, `crates/ramp-api/tests/graphql_runtime_tests.rs` | 26 | 2026-02-10 |
 | F08 | Multi-SDK (Python+Go) | Partial | `sdk-python/`, `sdk-go/`, `.github/workflows/sdk-generate.yml` | 50+ | 2026-02-10 |
 | F09 | ZK-KYC | Planned | `contracts/src/zk/ZkKycVerifier.sol` | N/A | 2026-02-10 |
-| F10 | Chain Abstraction | Partial | `crates/ramp-core/src/chain/`, `crates/ramp-api/tests/chain_abstraction_test.rs` | 3 | 2026-02-10 |
+| F10 | Chain Abstraction | Partial | `crates/ramp-api/src/handlers/chain.rs`, `crates/ramp-api/tests/chain_abstraction_test.rs` | 29 | 2026-02-10 |
 | F11 | MPC Custody | Planned | `crates/ramp-core/src/custody/mod.rs` | N/A | 2026-02-10 |
-| F12 | Widget SDK | Partial | `sdk/src/` | 9 | 2026-02-10 |
-| F13 | Backend Fixes | Partial | `crates/ramp-core/src/service/payout.rs`, `crates/ramp-core/src/service/payout_compliance_tests.rs` | 14 | 2026-02-10 |
+| F12 | Widget SDK | Partial | `packages/widget/src/`, `packages/widget/tests/` | 62 | 2026-02-10 |
+| F13 | Backend Fixes | Partial | `crates/ramp-core/src/service/payout.rs`, `crates/ramp-core/src/service/payout_compliance_tests.rs` | 27 | 2026-02-10 |
 | F14 | Contract Fixes | Partial | `contracts/src/RampOSAccount.sol`, `contracts/src/RampOSPaymaster.sol` | 100 | 2026-02-10 |
-| F15 | Frontend DX | Partial | `frontend/src/`, `frontend/src/lib/api-health.ts` | N/A | 2026-02-10 |
+| F15 | Frontend DX | Partial | `frontend/src/lib/api-client.ts`, `frontend/src/lib/__tests__/api-client.test.ts` | 31 | 2026-02-10 |
 | F16 | Off-Ramp VND | Partial | `crates/ramp-core/src/service/offramp.rs`, `crates/ramp-api/tests/e2e_offramp_test.rs` | 54 | 2026-02-10 |
 
 ---
@@ -73,6 +73,29 @@
 
 ---
 
+## Session 159 Sprint Evidence (Gap-Closing)
+
+### Tests Added This Sprint
+| Feature | New Tests | File |
+|---------|----------|------|
+| F01 | +6 tenant tier override, VIP config, 429 headers | `crates/ramp-api/tests/rate_limit_integration_tests.rs` |
+| F02 | +20 multi-hop chain, pinning, deprecated fields, edge cases | `crates/ramp-api/tests/versioning_tests.rs` |
+| F04 | +12 HMAC roundtrip, timestamp tolerance, payload contract, retry | `crates/ramp-core/src/service/webhook_tests.rs` |
+| F07 | +18 functional resolver tests (query, mutation, pagination) | `crates/ramp-api/tests/graphql_runtime_tests.rs` |
+| F10 | +17 ChainRegistryConfig, fee calculation, filtering, validation | `crates/ramp-api/tests/chain_abstraction_test.rs` |
+| F12 | +32 vanilla JS embed (init, destroy, events, multi-instance) | `packages/widget/tests/embed.test.ts` |
+| F13 | +14 atomic tx, idempotency, balance, velocity, sanctions, reversal | `crates/ramp-core/src/service/payout_compliance_tests.rs` |
+| F15 | +31 API client wrapper (retry, auth, CSRF, interceptors) | `frontend/src/lib/__tests__/api-client.test.ts` |
+
+### Verification Results (Session 159)
+- `cargo check --workspace`: PASS (0 errors, warnings only)
+- `cargo test -p ramp-core --lib`: 777 pass, 0 fail, 4 ignored
+- `cargo test -p ramp-api --lib`: 205 pass, 0 fail
+- Widget SDK: 62 pass, 0 fail
+- 0 regressions
+
+---
+
 ## Evidence Path Verification Notes
 
 All evidence paths were verified via filesystem glob on 2026-02-10:
@@ -82,7 +105,7 @@ All evidence paths were verified via filesystem glob on 2026-02-10:
 - **F04**: Corrected from `crates/ramp-core/src/webhook/` to `crates/ramp-core/src/service/webhook.rs` (actual location)
 - **F05**: Corrected from `crates/ramp-core/src/fraud/` to `crates/ramp-compliance/src/fraud/` (actual crate)
 - **F06**: Corrected from `contracts/src/PasskeySigner.sol` to `contracts/src/passkey/PasskeySigner.sol` (subdirectory)
-- **F12**: Corrected from `sdk/widget/` to `sdk/src/` (widget SDK lives at sdk root, no widget/ subdirectory)
+- **F12**: Corrected from `sdk/widget/` to `packages/widget/src/` (widget SDK lives at packages/widget/)
 
 ---
 
