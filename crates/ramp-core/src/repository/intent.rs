@@ -133,6 +133,15 @@ pub trait IntentRepository: Send + Sync {
 
     /// List expired intents for processing
     async fn list_expired(&self, limit: i64) -> Result<Vec<IntentRow>>;
+
+    /// List intents for a tenant using cursor-based pagination.
+    /// Returns limit+1 items to determine if there are more results.
+    async fn list_by_cursor(
+        &self,
+        tenant_id: &TenantId,
+        cursor: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<IntentRow>>;
 }
 
 /// PostgreSQL implementation
@@ -698,6 +707,62 @@ impl IntentRepository for PgIntentRepository {
         .await
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
+        Ok(rows)
+    }
+
+    async fn list_by_cursor(
+        &self,
+        tenant_id: &TenantId,
+        cursor: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<IntentRow>> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        let rows = if let Some(cursor_id) = cursor {
+            // Fetch the created_at of the cursor intent for keyset pagination
+            sqlx::query_as::<_, IntentRow>(
+                r#"
+                SELECT * FROM intents
+                WHERE tenant_id = $1
+                  AND (created_at, id) < (
+                    SELECT created_at, id FROM intents WHERE id = $2 AND tenant_id = $1
+                  )
+                ORDER BY created_at DESC, id DESC
+                LIMIT $3
+                "#,
+            )
+            .bind(&tenant_id.0)
+            .bind(cursor_id)
+            .bind(limit)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?
+        } else {
+            sqlx::query_as::<_, IntentRow>(
+                r#"
+                SELECT * FROM intents
+                WHERE tenant_id = $1
+                ORDER BY created_at DESC, id DESC
+                LIMIT $2
+                "#,
+            )
+            .bind(&tenant_id.0)
+            .bind(limit)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?
+        };
+
+        tx.commit()
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
         Ok(rows)
     }
 }

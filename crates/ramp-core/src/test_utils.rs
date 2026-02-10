@@ -140,6 +140,36 @@ impl IntentRepository for MockIntentRepository {
         Ok(expired)
     }
 
+    async fn list_by_cursor(
+        &self,
+        tenant_id: &TenantId,
+        cursor: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<IntentRow>> {
+        let intents = self.intents.lock().unwrap();
+        let mut filtered: Vec<_> = intents
+            .iter()
+            .filter(|i| i.tenant_id == tenant_id.0)
+            .cloned()
+            .collect();
+
+        // Sort by created_at DESC, id DESC
+        filtered.sort_by(|a, b| {
+            b.created_at
+                .cmp(&a.created_at)
+                .then_with(|| b.id.cmp(&a.id))
+        });
+
+        // If cursor is provided, skip items until we pass the cursor
+        if let Some(cursor_id) = cursor {
+            if let Some(pos) = filtered.iter().position(|i| i.id == cursor_id) {
+                filtered = filtered[pos + 1..].to_vec();
+            }
+        }
+
+        Ok(filtered.into_iter().take(limit as usize).collect())
+    }
+
     async fn get_daily_payin_amount(
         &self,
         tenant_id: &TenantId,

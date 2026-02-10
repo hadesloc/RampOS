@@ -11,6 +11,7 @@ use tracing::{info, instrument};
 use ramp_common::types::IntentId;
 use ramp_core::repository::intent::{IntentRepository, IntentRow};
 
+use crate::dto::{CursorPagination, PaginatedResponse};
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
 
@@ -237,6 +238,43 @@ pub async fn list_intents(
             has_more,
         },
     }))
+}
+
+/// GET /v1/intents/cursor
+///
+/// List intents with cursor-based pagination (keyset pagination).
+/// More efficient than offset-based for large datasets.
+#[instrument(skip(intent_repo, tenant_ctx), fields(tenant_id = %tenant_ctx.tenant_id.0))]
+pub async fn list_intents_cursor(
+    State(intent_repo): State<Arc<dyn IntentRepository>>,
+    Extension(tenant_ctx): Extension<TenantContext>,
+    axum::extract::Query(pagination): axum::extract::Query<CursorPagination>,
+) -> Result<Json<PaginatedResponse<IntentResponse>>, ApiError> {
+    let limit = pagination.effective_limit();
+
+    info!(
+        tenant = %tenant_ctx.tenant_id.0,
+        limit = limit,
+        cursor = ?pagination.cursor,
+        "Listing intents with cursor pagination"
+    );
+
+    let intents = intent_repo
+        .list_by_cursor(
+            &tenant_ctx.tenant_id,
+            pagination.cursor.as_deref(),
+            (limit + 1) as i64,
+        )
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let response = PaginatedResponse::from_items(
+        intents.into_iter().map(IntentResponse::from).collect(),
+        limit,
+        |item| item.id.clone(),
+    );
+
+    Ok(Json(response))
 }
 
 #[cfg(test)]

@@ -383,6 +383,75 @@ pub struct TradeExecutedResponse {
 }
 
 // ============================================================================
+// Cursor-based Pagination DTOs
+// ============================================================================
+
+/// Cursor-based pagination query parameters.
+/// Uses UUID v7 time-sortable IDs as cursors for efficient keyset pagination.
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CursorPagination {
+    /// Cursor for the next page (opaque string, typically a UUID v7 ID).
+    /// Omit for the first page.
+    #[validate(length(max = 128, message = "Cursor must not exceed 128 characters"))]
+    #[schema(example = "01912345-6789-7abc-def0-123456789abc")]
+    pub cursor: Option<String>,
+
+    /// Maximum number of results to return (1-100, default 20)
+    #[validate(range(min = 1, max = 100, message = "Limit must be between 1 and 100"))]
+    #[schema(example = 20, minimum = 1, maximum = 100)]
+    pub limit: Option<u32>,
+}
+
+impl CursorPagination {
+    pub fn effective_limit(&self) -> u32 {
+        self.limit.unwrap_or(20).min(100).max(1)
+    }
+}
+
+/// Paginated response wrapper for cursor-based pagination.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PaginatedResponse<T: Serialize> {
+    /// The page of results
+    pub data: Vec<T>,
+
+    /// Cursor for fetching the next page. Null if no more results.
+    #[schema(example = "01912345-6789-7abc-def0-123456789abc")]
+    pub next_cursor: Option<String>,
+
+    /// Whether there are more results after this page
+    pub has_more: bool,
+}
+
+impl<T: Serialize> PaginatedResponse<T> {
+    /// Build a paginated response from a list of items.
+    /// `items` should contain limit+1 items if there are more results.
+    /// The `cursor_fn` extracts the cursor value from the last item in the page.
+    pub fn from_items<F>(mut items: Vec<T>, limit: u32, cursor_fn: F) -> Self
+    where
+        F: Fn(&T) -> String,
+    {
+        let has_more = items.len() > limit as usize;
+        if has_more {
+            items.truncate(limit as usize);
+        }
+
+        let next_cursor = if has_more {
+            items.last().map(|item| cursor_fn(item))
+        } else {
+            None
+        };
+
+        Self {
+            data: items,
+            next_cursor,
+            has_more,
+        }
+    }
+}
+
+// ============================================================================
 // Intent Query DTOs
 // ============================================================================
 
@@ -917,5 +986,70 @@ mod tests {
         // Null should pass (used when Option is None)
         let null_value = serde_json::Value::Null;
         assert!(validate_metadata(&null_value).is_ok());
+    }
+
+    #[test]
+    fn test_cursor_pagination_defaults() {
+        let pagination = CursorPagination {
+            cursor: None,
+            limit: None,
+        };
+        assert_eq!(pagination.effective_limit(), 20);
+    }
+
+    #[test]
+    fn test_cursor_pagination_custom_limit() {
+        let pagination = CursorPagination {
+            cursor: Some("abc123".to_string()),
+            limit: Some(50),
+        };
+        assert_eq!(pagination.effective_limit(), 50);
+        assert_eq!(pagination.cursor.as_deref(), Some("abc123"));
+    }
+
+    #[test]
+    fn test_cursor_pagination_limit_clamped() {
+        let pagination = CursorPagination {
+            cursor: None,
+            limit: Some(200),
+        };
+        assert_eq!(pagination.effective_limit(), 100);
+
+        let pagination_zero = CursorPagination {
+            cursor: None,
+            limit: Some(0),
+        };
+        assert_eq!(pagination_zero.effective_limit(), 1);
+    }
+
+    #[test]
+    fn test_paginated_response_with_more() {
+        // Simulate limit=2, but 3 items returned (has_more = true)
+        let items = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let response = PaginatedResponse::from_items(items, 2, |item| item.clone());
+
+        assert_eq!(response.data.len(), 2);
+        assert!(response.has_more);
+        assert_eq!(response.next_cursor, Some("b".to_string()));
+    }
+
+    #[test]
+    fn test_paginated_response_without_more() {
+        let items = vec!["a".to_string(), "b".to_string()];
+        let response = PaginatedResponse::from_items(items, 2, |item| item.clone());
+
+        assert_eq!(response.data.len(), 2);
+        assert!(!response.has_more);
+        assert_eq!(response.next_cursor, None);
+    }
+
+    #[test]
+    fn test_paginated_response_empty() {
+        let items: Vec<String> = vec![];
+        let response = PaginatedResponse::from_items(items, 20, |item| item.clone());
+
+        assert!(response.data.is_empty());
+        assert!(!response.has_more);
+        assert_eq!(response.next_cursor, None);
     }
 }

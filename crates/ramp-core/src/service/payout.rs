@@ -59,6 +59,8 @@ pub struct PayoutService {
     ledger_repo: Arc<dyn LedgerRepository>,
     user_repo: Arc<dyn UserRepository>,
     event_publisher: Arc<dyn EventPublisher>,
+    /// Optional database pool for cross-repo atomic transactions.
+    db_pool: Option<sqlx::PgPool>,
 }
 
 impl PayoutService {
@@ -73,6 +75,24 @@ impl PayoutService {
             ledger_repo,
             user_repo,
             event_publisher,
+            db_pool: None,
+        }
+    }
+
+    /// Create a PayoutService with a database pool for atomic transactions
+    pub fn with_pool(
+        intent_repo: Arc<dyn IntentRepository>,
+        ledger_repo: Arc<dyn LedgerRepository>,
+        user_repo: Arc<dyn UserRepository>,
+        event_publisher: Arc<dyn EventPublisher>,
+        pool: sqlx::PgPool,
+    ) -> Self {
+        Self {
+            intent_repo,
+            ledger_repo,
+            user_repo,
+            event_publisher,
+            db_pool: Some(pool),
         }
     }
 
@@ -216,35 +236,158 @@ impl PayoutService {
             completed_at: None,
         };
 
-        // Save to database
-        self.intent_repo.create(&intent_row).await?;
-
-        // Run policy check (simplified - in production would call compliance service)
+        // Save to database, run policy check, create ledger entries atomically
         let policy_approved = self.check_payout_policy(&req).await?;
 
-        if policy_approved {
-            self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, &PayoutState::PolicyApproved.to_string())
-                .await?;
+        if let Some(ref pool) = self.db_pool {
+            // Atomic path: wrap intent create + state updates + ledger in 1 transaction
+            let mut db_tx = pool
+                .begin()
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
 
-            // Create ledger entries to hold funds
-            let tx = patterns::payout_vnd_initiated(
-                req.tenant_id.clone(),
-                req.user_id.clone(),
-                intent_id.clone(),
-                req.amount_vnd.0,
-            )?;
+            // Set RLS context
+            sqlx::query("SELECT set_config('app.current_tenant', $1, true)")
+                .bind(&req.tenant_id.0)
+                .execute(&mut *db_tx)
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
 
-            self.ledger_repo.record_transaction(tx).await?;
+            // 1. Create intent
+            sqlx::query(
+                r#"INSERT INTO intents (
+                    id, tenant_id, user_id, intent_type, state, state_history,
+                    amount, currency, actual_amount, rails_provider, reference_code,
+                    bank_tx_id, chain_id, tx_hash, from_address, to_address,
+                    metadata, idempotency_key, created_at, updated_at, expires_at
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+                    $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+                )"#,
+            )
+            .bind(&intent_row.id)
+            .bind(&intent_row.tenant_id)
+            .bind(&intent_row.user_id)
+            .bind(&intent_row.intent_type)
+            .bind(&intent_row.state)
+            .bind(&intent_row.state_history)
+            .bind(intent_row.amount)
+            .bind(&intent_row.currency)
+            .bind(intent_row.actual_amount)
+            .bind(&intent_row.rails_provider)
+            .bind(&intent_row.reference_code)
+            .bind(&intent_row.bank_tx_id)
+            .bind(&intent_row.chain_id)
+            .bind(&intent_row.tx_hash)
+            .bind(&intent_row.from_address)
+            .bind(&intent_row.to_address)
+            .bind(&intent_row.metadata)
+            .bind(&intent_row.idempotency_key)
+            .bind(intent_row.created_at)
+            .bind(intent_row.updated_at)
+            .bind(intent_row.expires_at)
+            .execute(&mut *db_tx)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
 
-            // Submit to bank (in production would call rails adapter)
-            self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, &PayoutState::Submitted.to_string())
-                .await?;
+            if policy_approved {
+                // 2. Update state to PolicyApproved
+                sqlx::query(
+                    "UPDATE intents SET state = $1, updated_at = NOW() WHERE tenant_id = $2 AND id = $3",
+                )
+                .bind(&PayoutState::PolicyApproved.to_string())
+                .bind(&req.tenant_id.0)
+                .bind(&intent_id.0)
+                .execute(&mut *db_tx)
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+
+                // 3. Create ledger entries to hold funds
+                let ledger_tx = patterns::payout_vnd_initiated(
+                    req.tenant_id.clone(),
+                    req.user_id.clone(),
+                    intent_id.clone(),
+                    req.amount_vnd.0,
+                )?;
+
+                for entry in &ledger_tx.entries {
+                    sqlx::query(
+                        r#"INSERT INTO ledger_entries
+                           (id, tenant_id, user_id, intent_id, transaction_id,
+                            account_type, direction, amount, currency,
+                            balance_after, sequence, description, metadata, created_at)
+                           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())"#,
+                    )
+                    .bind(&entry.id.0)
+                    .bind(&req.tenant_id.0)
+                    .bind(&entry.user_id.as_ref().map(|u| &u.0))
+                    .bind(&intent_id.0)
+                    .bind(&ledger_tx.id)
+                    .bind(&entry.account_type.to_string())
+                    .bind(&entry.direction.to_string())
+                    .bind(entry.amount)
+                    .bind(&entry.currency.to_string())
+                    .bind(entry.amount)
+                    .bind(0i64)
+                    .bind(&entry.description)
+                    .bind(&serde_json::json!({}))
+                    .execute(&mut *db_tx)
+                    .await
+                    .map_err(|e| Error::Database(e.to_string()))?;
+                }
+
+                // 4. Update state to Submitted
+                sqlx::query(
+                    "UPDATE intents SET state = $1, updated_at = NOW() WHERE tenant_id = $2 AND id = $3",
+                )
+                .bind(&PayoutState::Submitted.to_string())
+                .bind(&req.tenant_id.0)
+                .bind(&intent_id.0)
+                .execute(&mut *db_tx)
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+            } else {
+                sqlx::query(
+                    "UPDATE intents SET state = $1, updated_at = NOW() WHERE tenant_id = $2 AND id = $3",
+                )
+                .bind(&PayoutState::RejectedByPolicy.to_string())
+                .bind(&req.tenant_id.0)
+                .bind(&intent_id.0)
+                .execute(&mut *db_tx)
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+            }
+
+            db_tx
+                .commit()
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
         } else {
-            self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, &PayoutState::RejectedByPolicy.to_string())
-                .await?;
+            // Non-atomic fallback (tests / mock repos)
+            self.intent_repo.create(&intent_row).await?;
+
+            if policy_approved {
+                self.intent_repo
+                    .update_state(&req.tenant_id, &intent_id, &PayoutState::PolicyApproved.to_string())
+                    .await?;
+
+                let tx = patterns::payout_vnd_initiated(
+                    req.tenant_id.clone(),
+                    req.user_id.clone(),
+                    intent_id.clone(),
+                    req.amount_vnd.0,
+                )?;
+
+                self.ledger_repo.record_transaction(tx).await?;
+
+                self.intent_repo
+                    .update_state(&req.tenant_id, &intent_id, &PayoutState::Submitted.to_string())
+                    .await?;
+            } else {
+                self.intent_repo
+                    .update_state(&req.tenant_id, &intent_id, &PayoutState::RejectedByPolicy.to_string())
+                    .await?;
+            }
         }
 
         // Publish event

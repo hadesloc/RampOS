@@ -1,6 +1,6 @@
 # RampOS Go SDK
 
-Official Go SDK for interacting with the RampOS API.
+Official Go SDK for interacting with the RampOS API. Idiomatic Go, stdlib only (net/http, crypto, encoding/json).
 
 ## Installation
 
@@ -25,7 +25,9 @@ func main() {
 	client := rampos.NewClient(
 		"your-api-key",
 		"your-api-secret",
-		rampos.WithBaseURL("https://api.rampos.io"), // Optional
+		rampos.WithBaseURL("https://api.rampos.io"),
+		rampos.WithTenantID("tenant_123"),
+		rampos.WithRetry(rampos.DefaultRetryConfig()),
 	)
 
 	ctx := context.Background()
@@ -34,10 +36,7 @@ func main() {
 	payin, err := client.CreatePayin(ctx, rampos.CreatePayinRequest{
 		UserID:        "user_123",
 		AmountVND:     1000000,
-		RailsProvider: "mock",
-		Metadata: map[string]interface{}{
-			"order_id": "ord_123",
-		},
+		RailsProvider: "vietqr",
 	})
 	if err != nil {
 		log.Fatalf("Failed to create payin: %v", err)
@@ -47,354 +46,303 @@ func main() {
 }
 ```
 
+## Features
+
+- **Idiomatic Go**: `context.Context` on all methods, error returns, functional options
+- **HMAC-SHA256 Request Signing**: Automatic signature generation for every request
+- **Retry with Exponential Backoff + Jitter**: Configurable retry for transient failures
+- **Custom Error Types**: `APIError` with status codes for programmatic error handling
+- **Webhook Verification**: HMAC v1 (`sha256=<hex>`) and legacy timestamp-based formats
+- **Full API Coverage**: Intents, Users, Ledger, Compliance, Account Abstraction, Passkeys
+- **Zero Dependencies**: Uses only Go stdlib (`net/http`, `crypto`, `encoding/json`)
+
 ## Authentication
 
-The SDK uses an API Key and Secret for authentication. Signatures are automatically generated for each request.
+The SDK uses API Key + Secret for authentication. HMAC-SHA256 signatures are automatically generated.
 
 ```go
 client := rampos.NewClient("your-api-key", "your-api-secret")
 ```
 
+### Client Options
+
+```go
+client := rampos.NewClient("key", "secret",
+	rampos.WithBaseURL("https://custom.api.com"),       // Custom API URL
+	rampos.WithTenantID("tenant_123"),                  // Multi-tenant
+	rampos.WithHTTPClient(&http.Client{Timeout: 60*time.Second}), // Custom HTTP client
+	rampos.WithRetry(rampos.RetryConfig{                // Retry config
+		MaxRetries: 5,
+		BaseDelay:  500 * time.Millisecond,
+		MaxDelay:   10 * time.Second,
+		RetryableStatusCodes: []int{429, 500, 502, 503, 504},
+	}),
+)
+```
+
 ## API Reference
 
-### Examples
-
-Complete examples are available in the [examples](./examples) directory.
-
-#### Create Pay-In
-```go
-client := rampos.NewClient(
-    rampos.WithAPIKey("your-api-key"),
-    rampos.WithAPISecret("your-api-secret"),
-)
-
-intent, err := client.Payins.Create(context.Background(), &rampos.CreatePayinRequest{
-    UserID:    "usr_123",
-    AmountVND: 1000000,
-})
-```
-
-#### Create Pay-Out
-```go
-intent, err := client.Payouts.Create(context.Background(), &rampos.CreatePayoutRequest{
-    UserID:    "usr_123",
-    AmountVND: 1000000,
-    BankAccount: rampos.BankAccount{
-        BankCode:      "970415",
-        AccountNumber: "101000000000",
-        AccountName:   "NGUYEN VAN A",
-    },
-})
-```
-
-### Intents
-
-#### Create Pay-In
-Create a new intent to receive funds from a user.
+### Intents (Pay-In / Pay-Out)
 
 ```go
+// Create Pay-In
 payin, err := client.CreatePayin(ctx, rampos.CreatePayinRequest{
-    UserID:        "user_123",
-    AmountVND:     500000,
-    RailsProvider: "vietqr",
+	UserID:        "user_123",
+	AmountVND:     500000,
+	RailsProvider: "vietqr",
 })
-```
 
-#### Confirm Pay-In
-Confirm that funds have been received.
-
-```go
+// Confirm Pay-In
 confirmed, err := client.ConfirmPayin(ctx, rampos.ConfirmPayinRequest{
-    ReferenceCode: "PAYIN_REF_123",
-    Status:        "FUNDS_CONFIRMED",
-    BankTxID:      "BANK_TX_999",
-    AmountVND:     500000,
+	ReferenceCode: "PAYIN_REF_123",
+	Status:        "FUNDS_CONFIRMED",
+	BankTxID:      "BANK_TX_999",
+	AmountVND:     500000,
 })
-```
 
-#### Create Pay-Out
-Create a new intent to send funds to a user.
-
-```go
+// Create Pay-Out
 payout, err := client.CreatePayout(ctx, rampos.CreatePayoutRequest{
-    UserID:        "user_123",
-    AmountVND:     200000,
-    RailsProvider: "mock",
-    BankAccount: rampos.BankAccount{
-        BankCode:      "VCB",
-        AccountNumber: "1234567890",
-        AccountName:   "NGUYEN VAN A",
-    },
+	UserID:        "user_123",
+	AmountVND:     200000,
+	RailsProvider: "mock",
+	BankAccount: rampos.BankAccount{
+		BankCode:      "VCB",
+		AccountNumber: "1234567890",
+		AccountName:   "NGUYEN VAN A",
+	},
 })
-```
 
-#### Get Intent
-Retrieve details of an existing intent.
-
-```go
+// Get Intent by ID
 intent, err := client.GetIntent(ctx, "intent_id_123")
-```
 
-#### List Intents
-List intents with filtering options.
-
-```go
+// List Intents with filters
 state := "COMPLETED"
 intents, err := client.ListIntents(ctx, rampos.ListIntentsRequest{
-    UserID: nil, // optional
-    State:  &state,
-    Limit:  10,
+	State: &state,
+	Limit: 10,
 })
+
+// Or use sub-service syntax
+payin, err := client.Payins.Create(ctx, &rampos.CreatePayinRequest{...})
+payout, err := client.Payouts.Create(ctx, &rampos.CreatePayoutRequest{...})
 ```
 
 ### Users
 
-#### Get User
-Retrieve details of a specific user.
-
 ```go
+// Get User
 user, err := client.Users.Get(ctx, "user_123")
-if err != nil {
-    log.Fatalf("Failed to get user: %v", err)
-}
-fmt.Printf("User: %s, KYC Status: %s\n", user.ID, user.KYCStatus)
-```
 
-#### List Users
-List users with filtering options.
-
-```go
+// List Users
 status := "ACTIVE"
 users, err := client.Users.List(ctx, rampos.ListUsersParams{
-    Status: &status,
-    Limit:  50,
-    Offset: 0,
+	Status: &status,
+	Limit:  50,
 })
-if err != nil {
-    log.Fatalf("Failed to list users: %v", err)
-}
-for _, u := range users.Data {
-    fmt.Printf("User: %s, Status: %s\n", u.ID, u.Status)
-}
-```
 
-#### Get User Balances
-Check a user's balances.
-
-```go
+// Get User Balances
 balances, err := client.Users.GetBalances(ctx, "user_123")
-if err != nil {
-    log.Fatalf("Failed to get balances: %v", err)
-}
-for _, b := range balances.Balances {
-    fmt.Printf("%s %s: Balance=%s, Available=%s\n", b.AccountType, b.Currency, b.Balance, b.Available)
-}
 ```
 
 ### Ledger
 
-#### Get Ledger Entries
-Retrieve ledger entries with optional filtering.
-
 ```go
+// Get Ledger Entries
 userID := "user_123"
 entries, err := client.Ledger.GetEntries(ctx, rampos.LedgerEntriesParams{
-    UserID: &userID,
-    Limit:  100,
+	UserID: &userID,
+	Limit:  100,
 })
-if err != nil {
-    log.Fatalf("Failed to get ledger entries: %v", err)
-}
-for _, entry := range entries.Data {
-    fmt.Printf("Entry: %s %s %s %s\n", entry.ID, entry.Direction, entry.Amount, entry.Currency)
-}
-```
 
-#### Get Ledger Balances
-Query ledger balances with filtering.
-
-```go
+// Get Ledger Balances
 currency := "VND"
 balances, err := client.Ledger.GetBalances(ctx, rampos.LedgerBalancesParams{
-    Currency: &currency,
-    Limit:    50,
+	Currency: &currency,
 })
-if err != nil {
-    log.Fatalf("Failed to get ledger balances: %v", err)
-}
-for _, b := range balances.Data {
-    fmt.Printf("User %s: %s %s\n", b.UserID, b.Balance, b.Currency)
-}
 ```
 
 ### Compliance
 
-#### List Compliance Cases
-List compliance cases with filtering.
-
 ```go
+// List Cases
 status := "OPEN"
 cases, err := client.Compliance.ListCases(ctx, rampos.ListCasesParams{
-    Status: &status,
-    Limit:  20,
+	Status: &status,
 })
-if err != nil {
-    log.Fatalf("Failed to list cases: %v", err)
-}
-for _, c := range cases.Data {
-    fmt.Printf("Case %s: %s - %s\n", c.ID, c.CaseType, c.Status)
-}
-```
 
-#### Get Compliance Case
-Retrieve details of a specific compliance case.
+// Get Case
+caseDetail, err := client.Compliance.GetCase(ctx, "case_123")
 
-```go
-caseDetails, err := client.Compliance.GetCase(ctx, "case_123")
-if err != nil {
-    log.Fatalf("Failed to get case: %v", err)
-}
-fmt.Printf("Case: %s, User: %s, Severity: %s\n", caseDetails.ID, caseDetails.UserID, caseDetails.Severity)
-```
-
-#### List Compliance Rules
-Retrieve all compliance rules.
-
-```go
+// List Rules
 rules, err := client.Compliance.ListRules(ctx)
-if err != nil {
-    log.Fatalf("Failed to list rules: %v", err)
-}
-for _, r := range rules.Data {
-    fmt.Printf("Rule %s: %s (enabled: %v)\n", r.ID, r.Name, r.Enabled)
-}
-```
 
-#### Create Compliance Rule
-Create a new compliance rule.
-
-```go
+// Create Rule
 rule, err := client.Compliance.CreateRule(ctx, rampos.CreateRuleRequest{
-    Name:        "High Value Transaction Alert",
-    Description: "Alert on transactions over 100M VND",
-    RuleType:    "TRANSACTION",
-    Severity:    "HIGH",
-    Enabled:     true,
-    Conditions: []rampos.RuleCondition{
-        {Field: "amount", Operator: "gt", Value: 100000000},
-    },
-    Actions: []rampos.RuleAction{
-        {Type: "CREATE_CASE", Params: map[string]interface{}{"autoAssign": true}},
-    },
+	Name:     "High Value Alert",
+	RuleType: "TRANSACTION",
+	Severity: "HIGH",
+	Enabled:  true,
+	Conditions: []rampos.RuleCondition{
+		{Field: "amount", Operator: "gt", Value: 100000000},
+	},
+	Actions: []rampos.RuleAction{
+		{Type: "CREATE_CASE"},
+	},
 })
-if err != nil {
-    log.Fatalf("Failed to create rule: %v", err)
-}
-fmt.Printf("Created rule: %s\n", rule.Rule.ID)
 ```
 
-### Account Abstraction (AA)
-
-#### Create Smart Account
-Create an ERC-4337 smart account for a user.
+### Account Abstraction (ERC-4337)
 
 ```go
+// Create Smart Account
 account, err := client.AA.CreateAccount(ctx, rampos.CreateAccountParams{
-    UserID:       "user_123",
-    OwnerAddress: "0x1234567890abcdef1234567890abcdef12345678",
-    ChainID:      1, // Ethereum mainnet
-    AccountType:  "simple",
+	UserID:       "user_123",
+	OwnerAddress: "0x1234...5678",
+	ChainID:      1,
 })
-if err != nil {
-    log.Fatalf("Failed to create account: %v", err)
-}
-fmt.Printf("Created smart account: %s\n", account.Account.Address)
-```
 
-#### Get Smart Account
-Retrieve a smart account by address.
+// Get Smart Account
+account, err := client.AA.GetAccount(ctx, "0xabc...def")
 
-```go
-account, err := client.AA.GetAccount(ctx, "0xabcdef1234567890abcdef1234567890abcdef12")
-if err != nil {
-    log.Fatalf("Failed to get account: %v", err)
-}
-fmt.Printf("Account: %s, Deployed: %v\n", account.Address, account.IsDeployed)
-```
-
-#### Create User Operation
-Create a new ERC-4337 user operation.
-
-```go
+// Create User Operation
 userOp, err := client.AA.CreateUserOperation(ctx, rampos.UserOpParams{
-    Sender:   "0xabcdef1234567890abcdef1234567890abcdef12",
-    ChainID:  1,
-    CallData: "0x...", // Encoded call data
+	Sender:   "0xabc...def",
+	ChainID:  1,
+	CallData: "0x...",
 })
-if err != nil {
-    log.Fatalf("Failed to create user operation: %v", err)
-}
-fmt.Printf("UserOp Hash: %s\n", userOp.UserOpHash)
+
+// Estimate Gas
+estimate, err := client.AA.EstimateGas(ctx, rampos.UserOpParams{
+	Sender:   "0xabc...def",
+	ChainID:  1,
+	CallData: "0x...",
+})
 ```
 
-#### Estimate Gas
-Estimate gas for a user operation.
+### Passkey Wallets (WebAuthn P256)
 
 ```go
-estimate, err := client.AA.EstimateGas(ctx, rampos.UserOpParams{
-    Sender:   "0xabcdef1234567890abcdef1234567890abcdef12",
-    ChainID:  1,
-    CallData: "0x...",
+// Create Passkey Wallet
+wallet, err := client.Passkey.CreateWallet(ctx, rampos.CreatePasskeyWalletParams{
+	UserID:       "user_123",
+	CredentialID: "cred_abc",
+	PublicKeyX:   "0x...",
+	PublicKeyY:   "0x...",
+	DisplayName:  "My Passkey",
 })
-if err != nil {
-    log.Fatalf("Failed to estimate gas: %v", err)
-}
-fmt.Printf("Call Gas Limit: %s\n", estimate.CallGasLimit)
+
+// Register Credential
+cred, err := client.Passkey.RegisterCredential(ctx, rampos.RegisterPasskeyParams{
+	UserID:       "user_123",
+	CredentialID: "cred_abc",
+	PublicKeyX:   "0x...",
+	PublicKeyY:   "0x...",
+	DisplayName:  "My Key",
+})
+
+// Get Credentials
+creds, err := client.Passkey.GetCredentials(ctx, "user_123")
+
+// Sign Transaction
+signed, err := client.Passkey.SignTransaction(ctx, rampos.SignTransactionParams{
+	UserID:       "user_123",
+	CredentialID: "cred_abc",
+	UserOperation: rampos.SignTransactionUserOp{
+		Sender:   "0x...",
+		Nonce:    "1",
+		CallData: "0x...",
+	},
+	Assertion: rampos.WebAuthnAssertion{
+		AuthenticatorData: "0x...",
+		ClientDataJSON:    "0x...",
+		Signature:         rampos.PasskeySignature{R: "0x...", S: "0x..."},
+		CredentialID:      "cred_abc",
+	},
+})
+
+// Link Smart Account
+err := client.Passkey.LinkSmartAccount(ctx, rampos.LinkSmartAccountParams{
+	UserID:              "user_123",
+	CredentialID:        "cred_abc",
+	SmartAccountAddress: "0x...",
+})
+
+// Get Counterfactual Address
+addr, err := client.Passkey.GetCounterfactualAddress(ctx, rampos.GetCounterfactualAddressParams{
+	PublicKeyX: "0x...",
+	PublicKeyY: "0x...",
+})
+
+// Deactivate Credential
+err := client.Passkey.DeactivateCredential(ctx, "user_123", "cred_abc")
 ```
 
 ### Webhooks
 
-Verify and parse incoming webhooks from RampOS.
-
 ```go
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
-    verifier := rampos.NewWebhookVerifier("your-webhook-secret")
+	verifier := rampos.NewWebhookVerifier("your-webhook-secret")
 
-    // Read body
-    body, _ := io.ReadAll(r.Body)
-    signature := r.Header.Get("X-RampOS-Signature")
-    timestamp := r.Header.Get("X-Timestamp")
+	body, _ := io.ReadAll(r.Body)
+	signature := r.Header.Get("X-RampOS-Signature")
+	timestamp := r.Header.Get("X-Timestamp")
 
-    // Verify and parse
-    event, err := verifier.VerifyAndParse(body, signature, timestamp)
-    if err != nil {
-        http.Error(w, "Invalid webhook", http.StatusUnauthorized)
-        return
-    }
+	// Option 1: Verify + parse in one step
+	event, err := verifier.VerifyAndParse(body, signature, timestamp)
+	if err != nil {
+		http.Error(w, "Invalid webhook", http.StatusUnauthorized)
+		return
+	}
 
-    // Handle event based on type
-    switch event.Type {
-    case rampos.EventIntentPayinConfirmed:
-        fmt.Printf("Pay-in confirmed: %s\n", event.GetIntentID())
-    // ... handle other events
-    }
+	// Option 2: Simple signature verification (v1 sha256= format)
+	if !verifier.Verify(string(body), signature) {
+		http.Error(w, "Bad signature", http.StatusUnauthorized)
+		return
+	}
 
-    w.WriteHeader(http.StatusOK)
+	switch event.Type {
+	case rampos.EventIntentPayinConfirmed:
+		fmt.Printf("Pay-in confirmed: %s\n", event.GetIntentID())
+	case rampos.EventIntentPayoutCompleted:
+		fmt.Printf("Pay-out completed: %s\n", event.GetIntentID())
+	case rampos.EventCaseCreated:
+		fmt.Printf("Compliance case: %s\n", event.GetIntentID())
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 ```
 
 ## Error Handling
 
-The SDK returns `*rampos.APIError` for API-level errors (4xx, 5xx), which includes the status code and error message.
-
 ```go
 if err != nil {
-    if apiErr, ok := err.(*rampos.APIError); ok {
-        fmt.Printf("API Error %d: %s\n", apiErr.StatusCode, apiErr.Message)
-    } else {
-        fmt.Printf("Network error: %v\n", err)
-    }
+	if apiErr, ok := err.(*rampos.APIError); ok {
+		fmt.Printf("API Error [%d] %s: %s\n", apiErr.StatusCode, apiErr.Code, apiErr.Message)
+	} else {
+		fmt.Printf("Network error: %v\n", err)
+	}
 }
+```
+
+## Retry Configuration
+
+The SDK supports configurable retry with exponential backoff and jitter:
+
+```go
+client := rampos.NewClient("key", "secret",
+	rampos.WithRetry(rampos.RetryConfig{
+		MaxRetries:           3,                              // Max retry attempts
+		BaseDelay:            1 * time.Second,                // Initial delay
+		MaxDelay:             30 * time.Second,               // Max delay cap
+		RetryableStatusCodes: []int{429, 500, 502, 503, 504}, // Status codes to retry
+	}),
+)
+
+// Or use defaults:
+client := rampos.NewClient("key", "secret",
+	rampos.WithRetry(rampos.DefaultRetryConfig()),
+)
 ```
 
 ## License

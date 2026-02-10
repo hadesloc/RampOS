@@ -52,6 +52,10 @@ pub struct PayinService {
     ledger_repo: Arc<dyn LedgerRepository>,
     user_repo: Arc<dyn UserRepository>,
     event_publisher: Arc<dyn EventPublisher>,
+    /// Optional database pool for cross-repo atomic transactions.
+    /// When present, confirm_payin wraps intent+ledger writes in a single DB transaction.
+    /// When absent (tests), operations execute sequentially as before.
+    db_pool: Option<sqlx::PgPool>,
 }
 
 impl PayinService {
@@ -66,6 +70,24 @@ impl PayinService {
             ledger_repo,
             user_repo,
             event_publisher,
+            db_pool: None,
+        }
+    }
+
+    /// Create a PayinService with a database pool for atomic transactions
+    pub fn with_pool(
+        intent_repo: Arc<dyn IntentRepository>,
+        ledger_repo: Arc<dyn LedgerRepository>,
+        user_repo: Arc<dyn UserRepository>,
+        event_publisher: Arc<dyn EventPublisher>,
+        pool: sqlx::PgPool,
+    ) -> Self {
+        Self {
+            intent_repo,
+            ledger_repo,
+            user_repo,
+            event_publisher,
+            db_pool: Some(pool),
         }
     }
 
@@ -293,35 +315,125 @@ impl PayinService {
             return Ok(intent_id);
         }
 
-        // Update intent with bank confirmation
-        self.intent_repo
-            .update_bank_confirmed(&req.tenant_id, &intent_id, &req.bank_tx_id, actual_amount)
-            .await?;
+        // Update intent with bank confirmation, create ledger entries, and update state atomically
+        if let Some(ref pool) = self.db_pool {
+            // Atomic path: wrap all writes in a single DB transaction
+            let mut db_tx = pool
+                .begin()
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
 
-        self.intent_repo
-            .update_state(&req.tenant_id, &intent_id, &PayinState::FundsConfirmed.to_string())
-            .await?;
+            // Set RLS context
+            sqlx::query("SELECT set_config('app.current_tenant', $1, true)")
+                .bind(&req.tenant_id.0)
+                .execute(&mut *db_tx)
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
 
-        // Create ledger entries
-        let user_id = UserId::new(&intent.user_id);
-        let tx = patterns::payin_vnd_confirmed(
-            req.tenant_id.clone(),
-            user_id,
-            intent_id.clone(),
-            actual_amount,
-        )?;
+            // 1. Update bank confirmation
+            sqlx::query(
+                r#"UPDATE intents
+                   SET bank_tx_id = $1, actual_amount = $2, updated_at = NOW()
+                   WHERE tenant_id = $3 AND id = $4"#,
+            )
+            .bind(&req.bank_tx_id)
+            .bind(actual_amount)
+            .bind(&req.tenant_id.0)
+            .bind(&intent_id.0)
+            .execute(&mut *db_tx)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
 
-        self.ledger_repo.record_transaction(tx).await?;
+            // 2. Update state to FUNDS_CONFIRMED
+            sqlx::query(
+                "UPDATE intents SET state = $1, updated_at = NOW() WHERE tenant_id = $2 AND id = $3",
+            )
+            .bind(&PayinState::FundsConfirmed.to_string())
+            .bind(&req.tenant_id.0)
+            .bind(&intent_id.0)
+            .execute(&mut *db_tx)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
 
-        // Update to VND_CREDITED
-        self.intent_repo
-            .update_state(&req.tenant_id, &intent_id, &PayinState::VndCredited.to_string())
-            .await?;
+            // 3. Create ledger entries
+            let user_id = UserId::new(&intent.user_id);
+            let ledger_tx = patterns::payin_vnd_confirmed(
+                req.tenant_id.clone(),
+                user_id,
+                intent_id.clone(),
+                actual_amount,
+            )?;
 
-        // Update to COMPLETED
-        self.intent_repo
-            .update_state(&req.tenant_id, &intent_id, &PayinState::Completed.to_string())
-            .await?;
+            for entry in &ledger_tx.entries {
+                sqlx::query(
+                    r#"INSERT INTO ledger_entries
+                       (id, tenant_id, user_id, intent_id, transaction_id,
+                        account_type, direction, amount, currency,
+                        balance_after, sequence, description, metadata, created_at)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())"#,
+                )
+                .bind(&entry.id.0)
+                .bind(&req.tenant_id.0)
+                .bind(&entry.user_id.as_ref().map(|u| &u.0))
+                .bind(&intent_id.0)
+                .bind(&ledger_tx.id)
+                .bind(&entry.account_type.to_string())
+                .bind(&entry.direction.to_string())
+                .bind(entry.amount)
+                .bind(&entry.currency.to_string())
+                .bind(entry.amount) // balance_after computed by trigger/app
+                .bind(0i64) // sequence
+                .bind(&entry.description)
+                .bind(&serde_json::json!({}))
+                .execute(&mut *db_tx)
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+            }
+
+            // 4. Update state to VND_CREDITED then COMPLETED
+            sqlx::query(
+                "UPDATE intents SET state = $1, completed_at = NOW(), updated_at = NOW() WHERE tenant_id = $2 AND id = $3",
+            )
+            .bind(&PayinState::Completed.to_string())
+            .bind(&req.tenant_id.0)
+            .bind(&intent_id.0)
+            .execute(&mut *db_tx)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+            // Commit the transaction atomically
+            db_tx
+                .commit()
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+        } else {
+            // Non-atomic fallback (tests / mock repos)
+            self.intent_repo
+                .update_bank_confirmed(&req.tenant_id, &intent_id, &req.bank_tx_id, actual_amount)
+                .await?;
+
+            self.intent_repo
+                .update_state(&req.tenant_id, &intent_id, &PayinState::FundsConfirmed.to_string())
+                .await?;
+
+            let user_id = UserId::new(&intent.user_id);
+            let ledger_tx = patterns::payin_vnd_confirmed(
+                req.tenant_id.clone(),
+                user_id,
+                intent_id.clone(),
+                actual_amount,
+            )?;
+
+            self.ledger_repo.record_transaction(ledger_tx).await?;
+
+            self.intent_repo
+                .update_state(&req.tenant_id, &intent_id, &PayinState::VndCredited.to_string())
+                .await?;
+
+            self.intent_repo
+                .update_state(&req.tenant_id, &intent_id, &PayinState::Completed.to_string())
+                .await?;
+        }
 
         // Publish events
         self.event_publisher

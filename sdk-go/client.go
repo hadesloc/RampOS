@@ -39,11 +39,12 @@ const (
 
 // Client is the RampOS API client.
 type Client struct {
-	baseURL    string
-	apiKey     string
-	apiSecret  string
-	httpClient *http.Client
-	tenantID   string
+	baseURL     string
+	apiKey      string
+	apiSecret   string
+	httpClient  *http.Client
+	tenantID    string
+	retryConfig *RetryConfig
 
 	Payins     *PayinService
 	Payouts    *PayoutService
@@ -51,6 +52,7 @@ type Client struct {
 	Ledger     *LedgerService
 	Compliance *ComplianceService
 	AA         *AAService
+	Passkey    *PasskeyService
 }
 
 type PayinService struct {
@@ -108,12 +110,18 @@ func NewClient(apiKey, apiSecret string, opts ...ClientOption) *Client {
 		opt(c)
 	}
 
+	// Apply retry configuration if set
+	if c.retryConfig != nil {
+		wrapWithRetry(c.httpClient, *c.retryConfig)
+	}
+
 	c.Payins = &PayinService{client: c}
 	c.Payouts = &PayoutService{client: c}
 	c.Users = &UsersService{client: c}
 	c.Ledger = &LedgerService{client: c}
 	c.Compliance = &ComplianceService{client: c}
 	c.AA = &AAService{client: c}
+	c.Passkey = &PasskeyService{client: c}
 
 	return c
 }

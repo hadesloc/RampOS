@@ -12,6 +12,7 @@ pub mod tiered_rate_limit;
 mod rate_limit_test;
 
 pub mod billing;
+pub mod error_sanitizer;
 pub mod versioning;
 
 pub use auth::*;
@@ -22,3 +23,4 @@ pub use request_id::*;
 pub use tenant::*;
 pub use tiered_rate_limit::*;
 pub use versioning::*;
+pub use error_sanitizer::*;

@@ -40,6 +40,8 @@ pub struct TradeService {
     intent_repo: Arc<dyn IntentRepository>,
     ledger_repo: Arc<dyn LedgerRepository>,
     event_publisher: Arc<dyn EventPublisher>,
+    /// Optional database pool for cross-repo atomic transactions.
+    db_pool: Option<sqlx::PgPool>,
 }
 
 impl TradeService {
@@ -52,6 +54,22 @@ impl TradeService {
             intent_repo,
             ledger_repo,
             event_publisher,
+            db_pool: None,
+        }
+    }
+
+    /// Create a TradeService with a database pool for atomic transactions
+    pub fn with_pool(
+        intent_repo: Arc<dyn IntentRepository>,
+        ledger_repo: Arc<dyn LedgerRepository>,
+        event_publisher: Arc<dyn EventPublisher>,
+        pool: sqlx::PgPool,
+    ) -> Self {
+        Self {
+            intent_repo,
+            ledger_repo,
+            event_publisher,
+            db_pool: Some(pool),
         }
     }
 
@@ -111,60 +129,194 @@ impl TradeService {
             completed_at: None,
         };
 
-        // Save to database
-        self.intent_repo.create(&intent_row).await?;
-
-        // Run post-trade compliance check
+        // Save to database + create ledger entries + update state atomically
         let compliance_ok = self.post_trade_check(&req).await?;
 
-        if compliance_ok {
+        if let Some(ref pool) = self.db_pool {
+            // Atomic path
+            let mut db_tx = pool
+                .begin()
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+
+            // Set RLS context
+            sqlx::query("SELECT set_config('app.current_tenant', $1, true)")
+                .bind(&req.tenant_id.0)
+                .execute(&mut *db_tx)
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+
+            // 1. Create intent
+            sqlx::query(
+                r#"INSERT INTO intents (
+                    id, tenant_id, user_id, intent_type, state, state_history,
+                    amount, currency, actual_amount, rails_provider, reference_code,
+                    bank_tx_id, chain_id, tx_hash, from_address, to_address,
+                    metadata, idempotency_key, created_at, updated_at, expires_at
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+                    $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+                )"#,
+            )
+            .bind(&intent_row.id)
+            .bind(&intent_row.tenant_id)
+            .bind(&intent_row.user_id)
+            .bind(&intent_row.intent_type)
+            .bind(&intent_row.state)
+            .bind(&intent_row.state_history)
+            .bind(intent_row.amount)
+            .bind(&intent_row.currency)
+            .bind(intent_row.actual_amount)
+            .bind(&intent_row.rails_provider)
+            .bind(&intent_row.reference_code)
+            .bind(&intent_row.bank_tx_id)
+            .bind(&intent_row.chain_id)
+            .bind(&intent_row.tx_hash)
+            .bind(&intent_row.from_address)
+            .bind(&intent_row.to_address)
+            .bind(&intent_row.metadata)
+            .bind(&intent_row.idempotency_key)
+            .bind(intent_row.created_at)
+            .bind(intent_row.updated_at)
+            .bind(intent_row.expires_at)
+            .execute(&mut *db_tx)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+            if !compliance_ok {
+                sqlx::query(
+                    "UPDATE intents SET state = $1, updated_at = NOW() WHERE tenant_id = $2 AND id = $3",
+                )
+                .bind(&TradeState::ComplianceHold.to_string())
+                .bind(&req.tenant_id.0)
+                .bind(&intent_id.0)
+                .execute(&mut *db_tx)
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+
+                db_tx.commit().await.map_err(|e| Error::Database(e.to_string()))?;
+
+                self.event_publisher
+                    .publish_risk_review_required(&intent_id, &req.tenant_id)
+                    .await?;
+
+                return Ok(TradeExecutedResponse {
+                    intent_id,
+                    status: TradeState::ComplianceHold,
+                });
+            }
+
+            // 2. Update state to PostTradeChecked
+            sqlx::query(
+                "UPDATE intents SET state = $1, updated_at = NOW() WHERE tenant_id = $2 AND id = $3",
+            )
+            .bind(&TradeState::PostTradeChecked.to_string())
+            .bind(&req.tenant_id.0)
+            .bind(&intent_id.0)
+            .execute(&mut *db_tx)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+            // 3. Create ledger entries
+            let crypto_currency = self.parse_crypto_currency(&req.symbol);
+            let is_buy = req.crypto_delta.is_sign_positive();
+
+            let ledger_tx = patterns::trade_crypto_vnd(
+                req.tenant_id.clone(),
+                req.user_id.clone(),
+                intent_id.clone(),
+                req.vnd_delta.0.abs(),
+                req.crypto_delta.abs(),
+                crypto_currency,
+                is_buy,
+            )
+            .map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?;
+
+            for entry in &ledger_tx.entries {
+                sqlx::query(
+                    r#"INSERT INTO ledger_entries
+                       (id, tenant_id, user_id, intent_id, transaction_id,
+                        account_type, direction, amount, currency,
+                        balance_after, sequence, description, metadata, created_at)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())"#,
+                )
+                .bind(&entry.id.0)
+                .bind(&req.tenant_id.0)
+                .bind(&entry.user_id.as_ref().map(|u| &u.0))
+                .bind(&intent_id.0)
+                .bind(&ledger_tx.id)
+                .bind(&entry.account_type.to_string())
+                .bind(&entry.direction.to_string())
+                .bind(entry.amount)
+                .bind(&entry.currency.to_string())
+                .bind(entry.amount)
+                .bind(0i64)
+                .bind(&entry.description)
+                .bind(&serde_json::json!({}))
+                .execute(&mut *db_tx)
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+            }
+
+            // 4. Update state to Completed
+            sqlx::query(
+                "UPDATE intents SET state = $1, completed_at = NOW(), updated_at = NOW() WHERE tenant_id = $2 AND id = $3",
+            )
+            .bind(&TradeState::Completed.to_string())
+            .bind(&req.tenant_id.0)
+            .bind(&intent_id.0)
+            .execute(&mut *db_tx)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+            db_tx.commit().await.map_err(|e| Error::Database(e.to_string()))?;
+        } else {
+            // Non-atomic fallback (tests / mock repos)
+            self.intent_repo.create(&intent_row).await?;
+
+            if !compliance_ok {
+                self.intent_repo
+                    .update_state(&req.tenant_id, &intent_id, &TradeState::ComplianceHold.to_string())
+                    .await?;
+
+                self.event_publisher
+                    .publish_risk_review_required(&intent_id, &req.tenant_id)
+                    .await?;
+
+                return Ok(TradeExecutedResponse {
+                    intent_id,
+                    status: TradeState::ComplianceHold,
+                });
+            }
+
             self.intent_repo
                 .update_state(&req.tenant_id, &intent_id, &TradeState::PostTradeChecked.to_string())
                 .await?;
-        } else {
+
+            let crypto_currency = self.parse_crypto_currency(&req.symbol);
+            let is_buy = req.crypto_delta.is_sign_positive();
+
+            let ledger_tx = patterns::trade_crypto_vnd(
+                req.tenant_id.clone(),
+                req.user_id.clone(),
+                intent_id.clone(),
+                req.vnd_delta.0.abs(),
+                req.crypto_delta.abs(),
+                crypto_currency,
+                is_buy,
+            )
+            .map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?;
+
+            self.ledger_repo.record_transaction(ledger_tx).await?;
+
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, &TradeState::ComplianceHold.to_string())
+                .update_state(&req.tenant_id, &intent_id, &TradeState::SettledLedger.to_string())
                 .await?;
 
-            self.event_publisher
-                .publish_risk_review_required(&intent_id, &req.tenant_id)
+            self.intent_repo
+                .update_state(&req.tenant_id, &intent_id, &TradeState::Completed.to_string())
                 .await?;
-
-            return Ok(TradeExecutedResponse {
-                intent_id,
-                status: TradeState::ComplianceHold,
-            });
         }
-
-        // Parse symbol to get crypto currency
-        let crypto_currency = self.parse_crypto_currency(&req.symbol);
-
-        // Determine if this is a buy or sell
-        let is_buy = req.crypto_delta.is_sign_positive();
-
-        // Create ledger entries
-        let tx = patterns::trade_crypto_vnd(
-            req.tenant_id.clone(),
-            req.user_id.clone(),
-            intent_id.clone(),
-            req.vnd_delta.0.abs(),
-            req.crypto_delta.abs(),
-            crypto_currency,
-            is_buy,
-        )
-        .map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?;
-
-        self.ledger_repo.record_transaction(tx).await?;
-
-        // Update to settled
-        self.intent_repo
-            .update_state(&req.tenant_id, &intent_id, &TradeState::SettledLedger.to_string())
-            .await?;
-
-        // Mark completed
-        self.intent_repo
-            .update_state(&req.tenant_id, &intent_id, &TradeState::Completed.to_string())
-            .await?;
 
         // Publish event
         self.event_publisher

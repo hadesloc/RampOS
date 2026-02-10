@@ -34,7 +34,8 @@ use crate::handlers::aa::AAServiceState;
 use crate::handlers::bank_webhooks::BankWebhookState;
 use crate::handlers::ws::WsState;
 use crate::middleware::{
-    auth_middleware, billing::usage_metering_middleware, idempotency_middleware,
+    auth_middleware, billing::usage_metering_middleware, error_sanitizer_middleware,
+    idempotency_middleware,
     portal_auth_middleware, rate_limit_middleware, request_id_middleware,
     tiered_rate_limit_middleware, versioning::version_negotiation_middleware,
     IdempotencyHandler, PortalAuthConfig, RateLimiter,
@@ -88,6 +89,7 @@ pub fn create_router(state: AppState) -> Router {
     // Split into sub-routers because they require different state types
     let intent_read_routes = Router::new()
         .route("/", get(handlers::list_intents))
+        .route("/cursor", get(handlers::list_intents_cursor))
         .route("/:id", get(handlers::get_intent))
         .with_state(state.intent_repo.clone());
 
@@ -482,6 +484,7 @@ pub fn create_router(state: AppState) -> Router {
         // WebSocket endpoint for real-time updates (JWT auth via query param)
         .nest("/v1/portal", ws_routes)
         .layer(middleware::from_fn(request_id_middleware))
+        .layer(middleware::from_fn(error_sanitizer_middleware))
         .layer({
             let request_headers = Arc::new([
                 header::AUTHORIZATION,

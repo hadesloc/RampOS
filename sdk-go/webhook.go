@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -20,14 +21,14 @@ type WebhookEvent struct {
 
 // WebhookVerifier verifies webhook signatures.
 type WebhookVerifier struct {
-	secret            string
+	secret             string
 	timestampTolerance time.Duration
 }
 
 // NewWebhookVerifier creates a new webhook signature verifier.
 func NewWebhookVerifier(secret string) *WebhookVerifier {
 	return &WebhookVerifier{
-		secret:            secret,
+		secret:             secret,
 		timestampTolerance: 5 * time.Minute,
 	}
 }
@@ -36,6 +37,22 @@ func NewWebhookVerifier(secret string) *WebhookVerifier {
 func (v *WebhookVerifier) WithTimestampTolerance(d time.Duration) *WebhookVerifier {
 	v.timestampTolerance = d
 	return v
+}
+
+// Verify verifies the HMAC-SHA256 signature of a webhook payload.
+// Matches the TypeScript SDK pattern: sha256=<hex digest>.
+// This is the v1 signature format.
+func (v *WebhookVerifier) Verify(payload string, signature string) bool {
+	if payload == "" || signature == "" || v.secret == "" {
+		return false
+	}
+
+	mac := hmac.New(sha256.New, []byte(v.secret))
+	mac.Write([]byte(payload))
+	digest := hex.EncodeToString(mac.Sum(nil))
+	expected := "sha256=" + digest
+
+	return hmac.Equal([]byte(signature), []byte(expected))
 }
 
 // VerifyAndParse verifies the webhook signature and parses the event.
@@ -57,10 +74,18 @@ func (v *WebhookVerifier) VerifyAndParse(payload []byte, signature string, times
 		return nil, fmt.Errorf("timestamp too far in future: %v", eventTime)
 	}
 
-	// Verify signature
-	expectedSig := v.computeSignature(payload, timestamp)
-	if !hmac.Equal([]byte(signature), []byte(expectedSig)) {
-		return nil, fmt.Errorf("signature mismatch")
+	// Verify signature - support both formats
+	if strings.HasPrefix(signature, "sha256=") {
+		// v1 format: sha256=<hex>
+		if !v.Verify(string(payload), signature) {
+			return nil, fmt.Errorf("signature mismatch")
+		}
+	} else {
+		// Legacy format: timestamp.payload
+		expectedSig := v.computeSignature(payload, timestamp)
+		if !hmac.Equal([]byte(signature), []byte(expectedSig)) {
+			return nil, fmt.Errorf("signature mismatch")
+		}
 	}
 
 	// Parse event
@@ -72,7 +97,7 @@ func (v *WebhookVerifier) VerifyAndParse(payload []byte, signature string, times
 	return &event, nil
 }
 
-// computeSignature computes the expected HMAC-SHA256 signature.
+// computeSignature computes the expected HMAC-SHA256 signature (legacy format).
 func (v *WebhookVerifier) computeSignature(payload []byte, timestamp string) string {
 	message := fmt.Sprintf("%s.%s", timestamp, string(payload))
 	mac := hmac.New(sha256.New, []byte(v.secret))

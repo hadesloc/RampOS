@@ -1,8 +1,9 @@
 //! RampOS Server - Main binary
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::net::TcpListener;
-use tracing::info;
+use tracing::{info, warn};
 
 use ramp_aa::types::ChainConfig;
 use ramp_api::{
@@ -76,25 +77,28 @@ async fn main() -> anyhow::Result<()> {
     )
     .await?;
 
-    // Create services
-    let payin_service = Arc::new(PayinService::new(
+    // Create services (with_pool for atomic cross-repo transactions)
+    let payin_service = Arc::new(PayinService::with_pool(
         intent_repo.clone(),
         ledger_repo.clone(),
         user_repo.clone(),
         event_publisher.clone(),
+        pool.clone(),
     ));
 
-    let payout_service = Arc::new(PayoutService::new(
+    let payout_service = Arc::new(PayoutService::with_pool(
         intent_repo.clone(),
         ledger_repo.clone(),
         user_repo.clone(),
         event_publisher.clone(),
+        pool.clone(),
     ));
 
-    let trade_service = Arc::new(TradeService::new(
+    let trade_service = Arc::new(TradeService::with_pool(
         intent_repo.clone(),
         ledger_repo.clone(),
         event_publisher.clone(),
+        pool.clone(),
     ));
 
     let ledger_service = Arc::new(LedgerService::new(ledger_repo.clone()));
@@ -233,6 +237,9 @@ async fn main() -> anyhow::Result<()> {
         ws_state: Some(ws_state),
     };
 
+    // Graceful shutdown flag
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+
     // Create router
     let app = create_router(app_state);
 
@@ -244,8 +251,13 @@ async fn main() -> anyhow::Result<()> {
 
     // Start webhook processor in background
     let webhook_service_clone = webhook_service.clone();
+    let shutdown_flag_webhook = shutdown_flag.clone();
     tokio::spawn(async move {
         loop {
+            if shutdown_flag_webhook.load(Ordering::Relaxed) {
+                info!("Webhook processor shutting down");
+                break;
+            }
             match webhook_service_clone.process_pending_events(100).await {
                 Ok(delivered) => {
                     if delivered > 0 {
@@ -266,13 +278,59 @@ async fn main() -> anyhow::Result<()> {
         event_publisher.clone(),
     ));
     let timeout_job = IntentTimeoutJob::new(timeout_service);
+    let shutdown_flag_timeout = shutdown_flag.clone();
     tokio::spawn(async move {
-        timeout_job.run().await;
+        loop {
+            if shutdown_flag_timeout.load(Ordering::Relaxed) {
+                info!("Timeout job shutting down");
+                break;
+            }
+            if let Err(e) = timeout_job.process_expired().await {
+                tracing::error!(error = %e, "Failed to process expired intents");
+            }
+            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+        }
     });
 
-    // Serve
-    axum::serve(listener, app).await?;
+    // Graceful shutdown signal handler
+    let shutdown_flag_signal = shutdown_flag.clone();
+    let shutdown_signal = async move {
+        let ctrl_c = async {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("Failed to install Ctrl+C handler");
+        };
 
+        #[cfg(unix)]
+        let terminate = async {
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .expect("Failed to install SIGTERM handler")
+                .recv()
+                .await;
+        };
+
+        #[cfg(not(unix))]
+        let terminate = std::future::pending::<()>();
+
+        tokio::select! {
+            _ = ctrl_c => {
+                info!("Received Ctrl+C, initiating graceful shutdown");
+            }
+            _ = terminate => {
+                info!("Received SIGTERM, initiating graceful shutdown");
+            }
+        }
+
+        shutdown_flag_signal.store(true, Ordering::SeqCst);
+        warn!("Graceful shutdown initiated - draining in-flight requests (30s timeout)");
+    };
+
+    // Serve with graceful shutdown
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal)
+        .await?;
+
+    info!("Server shut down gracefully");
     shutdown_telemetry();
 
     Ok(())
