@@ -332,4 +332,80 @@ mod tests {
         // Non-objects pass through unchanged
         assert_eq!(output, input);
     }
+
+    #[test]
+    fn test_transformer_applies_to_matching_version() {
+        let transformer = V20260201ToV20260301;
+        let from = transformer.from_version();
+        let to = transformer.to_version();
+
+        // Verify transformer version bounds
+        assert_eq!(from.to_string(), "2026-02-01");
+        assert_eq!(to.to_string(), "2026-03-01");
+
+        // When client version matches from_version, transformer should apply
+        let registry = TransformerRegistry::new();
+        let input = json!({ "amount": 5000 });
+        let output = registry.upgrade_request(&from, &to, input).unwrap();
+        assert_eq!(output["amount_minor"], 5000);
+        assert!(output.get("amount").is_none());
+    }
+
+    #[test]
+    fn test_transformer_skips_newer_version() {
+        let transformer = V20260201ToV20260301;
+        let to = transformer.to_version(); // 2026-03-01
+
+        // When client is already at to_version, no transformation should happen
+        let registry = TransformerRegistry::new();
+        let input = json!({ "amount_minor": 5000, "currency": "VND" });
+        let output = registry.upgrade_request(&to, &to, input.clone()).unwrap();
+        assert_eq!(output, input, "No transformation for same version");
+    }
+
+    #[test]
+    fn test_transformer_downgrade_applies_for_older_client() {
+        let registry = TransformerRegistry::new();
+        let v1 = ApiVersion::parse("2026-02-01").unwrap();
+        let v2 = ApiVersion::parse("2026-03-01").unwrap();
+
+        let response = json!({
+            "amount_minor": 10000,
+            "currency": "VND",
+            "status": "awaiting_confirmation",
+            "api_version": "2026-03-01",
+            "id": "intent_123"
+        });
+
+        let downgraded = registry.downgrade_response(&v1, &v2, response).unwrap();
+        // Old fields should be restored
+        assert_eq!(downgraded["amount"], 10000);
+        assert_eq!(downgraded["status"], "pending");
+        // New fields should be removed
+        assert!(downgraded.get("amount_minor").is_none());
+        assert!(downgraded.get("api_version").is_none());
+        assert!(downgraded.get("currency").is_none());
+        // Unrelated fields should be preserved
+        assert_eq!(downgraded["id"], "intent_123");
+    }
+
+    #[test]
+    fn test_transformer_version_bounds() {
+        let transformer = V20260201ToV20260301;
+        assert!(transformer.from_version() < transformer.to_version());
+        assert!(transformer.from_version().is_compatible());
+        assert!(transformer.to_version().is_compatible());
+    }
+
+    #[test]
+    fn test_registry_default_has_transformers() {
+        let registry = TransformerRegistry::default();
+        let v1 = ApiVersion::parse("2026-02-01").unwrap();
+        let v2 = ApiVersion::parse("2026-03-01").unwrap();
+
+        // Should be able to transform between known versions
+        let input = json!({ "amount": 100 });
+        let result = registry.upgrade_request(&v1, &v2, input);
+        assert!(result.is_ok());
+    }
 }

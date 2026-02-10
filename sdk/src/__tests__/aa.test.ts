@@ -19,22 +19,25 @@ describe('AAService', () => {
   describe('createSmartAccount', () => {
     it('should create a smart account', async () => {
       const params = {
+        tenantId: 'tenant-1',
         userId: 'user-1',
-        chainId: 1,
+        ownerAddress: '0xowner123',
       };
 
       const responseData = {
         address: '0x1234567890abcdef',
-        userId: 'user-1',
+        owner: '0xowner123',
+        accountType: 'simple',
+        isDeployed: true,
         chainId: 1,
-        deployed: true,
+        entryPoint: '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
       };
 
       mock.onPost('/aa/accounts').reply(200, responseData);
 
       const result = await service.createSmartAccount(params);
       expect(result.address).toBe('0x1234567890abcdef');
-      expect(result.deployed).toBe(true);
+      expect(result.isDeployed).toBe(true);
     });
   });
 
@@ -43,10 +46,11 @@ describe('AAService', () => {
       const address = '0x1234567890abcdef';
       const responseData = {
         address,
-        userId: 'user-1',
+        owner: '0xowner123',
+        accountType: 'simple',
+        isDeployed: true,
         chainId: 1,
-        deployed: true,
-        nonce: 0,
+        entryPoint: '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
       };
 
       mock.onGet(`/aa/accounts/${address}`).reply(200, responseData);
@@ -59,14 +63,25 @@ describe('AAService', () => {
   describe('sendUserOperation', () => {
     it('should send a user operation', async () => {
       const params = {
-        sender: '0x1234',
-        callData: '0xabcd',
-        chainId: 1,
+        tenantId: 'tenant-1',
+        userOperation: {
+          sender: '0x1234',
+          nonce: '0',
+          callData: '0xabcd',
+          callGasLimit: '100000',
+          verificationGasLimit: '50000',
+          preVerificationGas: '21000',
+          maxFeePerGas: '30000000000',
+          maxPriorityFeePerGas: '1000000000',
+        },
       };
 
       const responseData = {
         userOpHash: '0xhash123',
+        sender: '0x1234',
+        nonce: '0',
         status: 'PENDING',
+        sponsored: false,
       };
 
       mock.onPost('/aa/user-operations').reply(200, responseData);
@@ -79,9 +94,17 @@ describe('AAService', () => {
   describe('estimateGas', () => {
     it('should estimate gas for user operation', async () => {
       const params = {
-        sender: '0x1234',
-        callData: '0xabcd',
-        chainId: 1,
+        tenantId: 'tenant-1',
+        userOperation: {
+          sender: '0x1234',
+          nonce: '0',
+          callData: '0xabcd',
+          callGasLimit: '100000',
+          verificationGasLimit: '50000',
+          preVerificationGas: '21000',
+          maxFeePerGas: '30000000000',
+          maxPriorityFeePerGas: '1000000000',
+        },
       };
 
       const responseData = {
@@ -103,16 +126,20 @@ describe('AAService', () => {
     it('should get user operation by hash', async () => {
       const hash = '0xhash123';
       const responseData = {
-        userOpHash: hash,
         sender: '0x1234',
-        status: 'COMPLETED',
-        transactionHash: '0xtxhash',
+        nonce: '1',
+        callData: '0xabcd',
+        callGasLimit: '100000',
+        verificationGasLimit: '50000',
+        preVerificationGas: '21000',
+        maxFeePerGas: '30000000000',
+        maxPriorityFeePerGas: '1000000000',
       };
 
       mock.onGet(`/aa/user-operations/${hash}`).reply(200, responseData);
 
       const result = await service.getUserOperation(hash);
-      expect(result.userOpHash).toBe(hash);
+      expect(result.sender).toBe('0x1234');
     });
   });
 
@@ -121,9 +148,14 @@ describe('AAService', () => {
       const hash = '0xhash123';
       const responseData = {
         userOpHash: hash,
+        sender: '0x1234',
+        nonce: '1',
         success: true,
         actualGasCost: '2100000',
         actualGasUsed: '70000',
+        transactionHash: '0xtxhash',
+        blockHash: '0xblockhash',
+        blockNumber: '12345',
       };
 
       mock.onGet(`/aa/user-operations/${hash}/receipt`).reply(200, responseData);

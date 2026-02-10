@@ -386,6 +386,14 @@ pub fn create_router(state: AppState) -> Router {
         ));
     }
 
+    // Chain routes (auth required)
+    let chain_routes = Router::new()
+        .route("/", get(handlers::chain::list_chains))
+        .route("/:chain_id", get(handlers::chain::get_chain_detail))
+        .route("/:chain_id/quote", post(handlers::chain::get_bridge_quote))
+        .route("/bridge", post(handlers::chain::initiate_bridge))
+        .with_state(state.clone());
+
     // API v1 routes with authentication
     let mut api_v1 = Router::new()
         .nest("/intents", intent_routes)
@@ -395,6 +403,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/admin", admin_routes)
         .nest("/yield", yield_routes)
         .nest("/aa", aa_routes)
+        .nest("/chains", chain_routes)
         .layer(middleware::from_fn(version_negotiation_middleware))
         .layer(middleware::from_fn_with_state(
             state.clone(),

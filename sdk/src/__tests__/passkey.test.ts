@@ -27,16 +27,19 @@ describe('PasskeyWalletService', () => {
       };
 
       const responseData = {
-        address: '0xwallet123',
         credentialId: 'cred-1',
-        deployed: true,
+        smartAccountAddress: '0xwallet123',
+        publicKeyX: '0xabc',
+        publicKeyY: '0xdef',
+        isDeployed: true,
+        createdAt: '2024-01-01T00:00:00Z',
       };
 
       mock.onPost('/aa/passkey/wallets').reply(200, responseData);
 
       const result = await service.createWallet(params);
-      expect(result.address).toBe('0xwallet123');
-      expect(result.deployed).toBe(true);
+      expect(result.smartAccountAddress).toBe('0xwallet123');
+      expect(result.isDeployed).toBe(true);
     });
   });
 
@@ -63,16 +66,26 @@ describe('PasskeyWalletService', () => {
   describe('signTransaction', () => {
     it('should sign and submit a user operation', async () => {
       const params = {
-        userOpHash: '0xhash',
+        userId: 'user-1',
         credentialId: 'cred-1',
-        authenticatorData: '0xauth',
-        clientDataJSON: '0xclient',
-        signatureR: '0xr',
-        signatureS: '0xs',
+        userOperation: {
+          sender: '0xsender',
+          nonce: '1',
+          callData: '0xcalldata',
+        },
+        assertion: {
+          authenticatorData: '0xauth',
+          clientDataJSON: '0xclient',
+          signature: { r: '0xabc', s: '0xdef' },
+          credentialId: 'cred-1',
+        },
       };
 
       const responseData = {
         userOpHash: '0xsubmitted',
+        sender: '0xsender',
+        nonce: '1',
+        signature: '0xsig',
         status: 'PENDING',
       };
 
@@ -95,7 +108,6 @@ describe('PasskeyWalletService', () => {
 
       const responseData = {
         credentialId: 'cred-new',
-        userId: 'user-1',
         createdAt: '2024-01-01T00:00:00Z',
       };
 

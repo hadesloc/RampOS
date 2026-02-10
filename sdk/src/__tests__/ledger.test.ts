@@ -22,14 +22,11 @@ describe('LedgerService', () => {
         {
           id: 'entry-1',
           tenantId: 'tenant-1',
-          intentId: 'intent-1',
           transactionId: 'tx-1',
-          accountType: 'FIAT',
-          direction: 'CREDIT',
+          type: 'CREDIT',
           amount: '500000',
           currency: 'VND',
           balanceAfter: '500000',
-          sequence: 1,
           createdAt: '2024-01-01T00:00:00Z',
         },
       ];
@@ -39,7 +36,7 @@ describe('LedgerService', () => {
       const result = await service.getEntries();
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('entry-1');
-      expect(result[0].direction).toBe('CREDIT');
+      expect(result[0].type).toBe('CREDIT');
     });
 
     it('should get ledger entries wrapped in data', async () => {
@@ -47,14 +44,11 @@ describe('LedgerService', () => {
         {
           id: 'entry-2',
           tenantId: 'tenant-1',
-          intentId: 'intent-2',
           transactionId: 'tx-2',
-          accountType: 'CRYPTO',
-          direction: 'DEBIT',
+          type: 'DEBIT',
           amount: '100',
           currency: 'USDC',
           balanceAfter: '900',
-          sequence: 2,
           createdAt: '2024-01-02T00:00:00Z',
         },
       ];
@@ -69,11 +63,10 @@ describe('LedgerService', () => {
     it('should pass filters as query params', async () => {
       mock.onGet('/ledger').reply(200, []);
 
-      await service.getEntries({ intentId: 'intent-1', userId: 'user-1' });
+      await service.getEntries({ transactionId: 'tx-1' });
 
       expect(mock.history.get[0].params).toEqual({
-        intentId: 'intent-1',
-        userId: 'user-1',
+        transactionId: 'tx-1',
       });
     });
 

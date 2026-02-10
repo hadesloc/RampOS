@@ -339,3 +339,271 @@ async fn test_payout_insufficient_balance_rejected() {
     let res = service.create_payout(req).await;
     assert!(res.is_err(), "Insufficient balance should reject payout");
 }
+
+/// Daily velocity limit: cumulative payouts in a day must not exceed the tier daily limit.
+/// Tier1 daily limit = 20M VND. Two 8M payouts (16M total) succeed, then an 8M payout
+/// pushing to 24M must be rejected.
+#[tokio::test]
+async fn test_payout_velocity_limit_per_day() {
+    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_vd", "tenant_vd", 1));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_vd"),
+        Some(&UserId::new("user_vd")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(100_000_000), // 100M VND balance
+    );
+
+    // First payout: 8M (within 10M single tx and 20M daily)
+    let req1 = make_payout_request("tenant_vd", "user_vd", 8_000_000);
+    let res1 = service.create_payout(req1).await.expect("first payout should succeed");
+    assert_eq!(res1.status, PayoutState::Submitted);
+
+    // Second payout: 8M (cumulative 16M, still under 20M daily)
+    let req2 = make_payout_request("tenant_vd", "user_vd", 8_000_000);
+    let res2 = service.create_payout(req2).await.expect("second payout should succeed");
+    assert_eq!(res2.status, PayoutState::Submitted);
+
+    // Third payout: 8M (cumulative 24M, exceeds 20M daily limit)
+    let req3 = make_payout_request("tenant_vd", "user_vd", 8_000_000);
+    let res3 = service.create_payout(req3).await;
+    match res3 {
+        Ok(r) => assert_eq!(r.status, PayoutState::RejectedByPolicy,
+            "Third payout should be rejected by daily limit policy"),
+        Err(e) => {
+            let err_str = format!("{:?}", e);
+            assert!(
+                err_str.contains("LimitExceeded") || err_str.contains("limit"),
+                "Expected daily limit error, got: {}",
+                err_str
+            );
+        }
+    }
+
+    // Verify at least 2 successful intents were created
+    let intents = intent_repo.intents.lock().unwrap();
+    let submitted: Vec<_> = intents.iter().filter(|i| i.state == "PAYOUT_SUBMITTED").collect();
+    assert!(submitted.len() >= 2, "Expected at least 2 submitted intents, got {}", submitted.len());
+}
+
+/// Monthly velocity limit: Tier1 monthly limit = 200M VND. This test verifies that
+/// the compliance module defines a monthly limit for each tier and that it is finite.
+#[tokio::test]
+async fn test_payout_velocity_limit_per_month() {
+    use ramp_compliance::withdraw_policy::TierWithdrawLimits;
+    use ramp_compliance::types::KycTier;
+
+    // Tier1: monthly limit should be 200M VND (finite)
+    let tier1 = TierWithdrawLimits::for_tier(KycTier::Tier1);
+    assert_eq!(tier1.monthly_limit_vnd, Decimal::from(200_000_000),
+        "Tier1 monthly limit should be 200M VND");
+    assert!(tier1.monthly_limit_vnd > Decimal::ZERO, "Monthly limit must be positive");
+
+    // Tier2: monthly limit should be 2B VND
+    let tier2 = TierWithdrawLimits::for_tier(KycTier::Tier2);
+    assert_eq!(tier2.monthly_limit_vnd, Decimal::from(2_000_000_000i64),
+        "Tier2 monthly limit should be 2B VND");
+
+    // Tier0: monthly limit should be zero (no withdrawals allowed)
+    let tier0 = TierWithdrawLimits::for_tier(KycTier::Tier0);
+    assert!(tier0.monthly_limit_vnd.is_zero(),
+        "Tier0 monthly limit should be zero");
+
+    // Tier3: monthly limit is unlimited (Decimal::MAX)
+    let tier3 = TierWithdrawLimits::for_tier(KycTier::Tier3);
+    assert_eq!(tier3.monthly_limit_vnd, Decimal::MAX,
+        "Tier3 monthly limit should be unlimited");
+}
+
+/// Sanctions check: a Tier0 user represents an unverified/sanctioned entity and should
+/// have all payouts rejected regardless of balance or amount.
+#[tokio::test]
+async fn test_payout_sanctions_check_blocks_payout() {
+    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    // Tier0 = unverified/sanctioned entity - cannot withdraw
+    user_repo.add_user(make_active_user("user_sanc", "tenant_sanc", 0));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_sanc"),
+        Some(&UserId::new("user_sanc")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(100_000_000), // 100M VND - plenty of balance
+    );
+
+    // Even the smallest payout should be blocked for sanctioned (Tier0) entity
+    let req = make_payout_request("tenant_sanc", "user_sanc", 10_000);
+    let res = service.create_payout(req).await.expect("should return Ok with RejectedByPolicy");
+    assert_eq!(res.status, PayoutState::RejectedByPolicy,
+        "Sanctioned entity (Tier0) payout must be rejected by policy");
+
+    // Verify intent was created but in REJECTED_BY_POLICY state
+    let intents = intent_repo.intents.lock().unwrap();
+    assert_eq!(intents.len(), 1);
+    assert_eq!(intents[0].state, "REJECTED_BY_POLICY");
+}
+
+/// Manual review threshold: Tier1 has a manual_review_threshold_vnd of 15M VND.
+/// A payout above this threshold (but within the single tx limit) should still pass
+/// the PayoutService check_payout_policy (which doesn't enforce manual review),
+/// but the TierWithdrawLimits should correctly define the threshold.
+#[tokio::test]
+async fn test_payout_manual_review_threshold() {
+    use ramp_compliance::withdraw_policy::TierWithdrawLimits;
+    use ramp_compliance::types::KycTier;
+
+    // Verify Tier1 has a manual review threshold defined
+    let tier1 = TierWithdrawLimits::for_tier(KycTier::Tier1);
+    assert_eq!(
+        tier1.manual_review_threshold_vnd,
+        Some(Decimal::from(15_000_000)),
+        "Tier1 manual review threshold should be 15M VND"
+    );
+
+    // Verify Tier2 has a higher manual review threshold
+    let tier2 = TierWithdrawLimits::for_tier(KycTier::Tier2);
+    assert_eq!(
+        tier2.manual_review_threshold_vnd,
+        Some(Decimal::from(150_000_000)),
+        "Tier2 manual review threshold should be 150M VND"
+    );
+
+    // Verify Tier0 has no manual review threshold (cannot withdraw at all)
+    let tier0 = TierWithdrawLimits::for_tier(KycTier::Tier0);
+    assert!(tier0.manual_review_threshold_vnd.is_none(),
+        "Tier0 should have no manual review threshold");
+
+    // End-to-end: A Tier2 payout under the threshold should succeed
+    let (service, _intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_mr", "tenant_mr", 2));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_mr"),
+        Some(&UserId::new("user_mr")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(500_000_000),
+    );
+
+    // 50M VND - under Tier2 single tx limit (100M) and under manual review threshold (150M)
+    let req = make_payout_request("tenant_mr", "user_mr", 50_000_000);
+    let res = service.create_payout(req).await.expect("Payout under threshold should succeed");
+    assert_eq!(res.status, PayoutState::Submitted);
+}
+
+/// Idempotency key: same key should return the same intent without creating a duplicate.
+#[tokio::test]
+async fn test_payout_idempotency_key_prevents_duplicate() {
+    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+
+    user_repo.add_user(make_active_user("user_idem", "tenant_idem", 1));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_idem"),
+        Some(&UserId::new("user_idem")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(5_000_000),
+    );
+
+    // First request with idempotency key
+    let mut req1 = make_payout_request("tenant_idem", "user_idem", 1_000_000);
+    req1.idempotency_key = Some(IdempotencyKey::new("idem-payout-001"));
+    let res1 = service.create_payout(req1).await.expect("first payout should succeed");
+    let intent_id_1 = res1.intent_id.clone();
+    assert_eq!(res1.status, PayoutState::Submitted);
+
+    // Second request with the SAME idempotency key
+    let mut req2 = make_payout_request("tenant_idem", "user_idem", 1_000_000);
+    req2.idempotency_key = Some(IdempotencyKey::new("idem-payout-001"));
+    let res2 = service.create_payout(req2).await.expect("idempotent payout should succeed");
+
+    // Should return the SAME intent_id - no duplicate created
+    assert_eq!(res2.intent_id, intent_id_1, "Idempotent request must return same intent ID");
+
+    // Verify only ONE intent was created
+    let intents = intent_repo.intents.lock().unwrap();
+    assert_eq!(intents.len(), 1, "Only one intent should exist for idempotent key");
+}
+
+/// State transitions: verify that PayoutState enforces valid transitions only.
+#[tokio::test]
+async fn test_payout_state_transitions_are_valid() {
+    // Created -> PolicyApproved (valid)
+    assert!(PayoutState::Created.can_transition_to(PayoutState::PolicyApproved));
+    // Created -> RejectedByPolicy (valid)
+    assert!(PayoutState::Created.can_transition_to(PayoutState::RejectedByPolicy));
+    // Created -> ManualReview (valid)
+    assert!(PayoutState::Created.can_transition_to(PayoutState::ManualReview));
+    // Created -> Completed (INVALID - must go through PolicyApproved -> Submitted -> Confirmed)
+    assert!(!PayoutState::Created.can_transition_to(PayoutState::Completed));
+    // Created -> Submitted (INVALID - must go through PolicyApproved first)
+    assert!(!PayoutState::Created.can_transition_to(PayoutState::Submitted));
+
+    // PolicyApproved -> Submitted (valid)
+    assert!(PayoutState::PolicyApproved.can_transition_to(PayoutState::Submitted));
+    // PolicyApproved -> Cancelled (valid)
+    assert!(PayoutState::PolicyApproved.can_transition_to(PayoutState::Cancelled));
+    // PolicyApproved -> Completed (INVALID)
+    assert!(!PayoutState::PolicyApproved.can_transition_to(PayoutState::Completed));
+
+    // Submitted -> Confirmed (valid)
+    assert!(PayoutState::Submitted.can_transition_to(PayoutState::Confirmed));
+    // Submitted -> BankRejected (valid)
+    assert!(PayoutState::Submitted.can_transition_to(PayoutState::BankRejected));
+    // Submitted -> Timeout (valid)
+    assert!(PayoutState::Submitted.can_transition_to(PayoutState::Timeout));
+    // Submitted -> Completed (INVALID - must go through Confirmed)
+    assert!(!PayoutState::Submitted.can_transition_to(PayoutState::Completed));
+
+    // Confirmed -> Completed (valid)
+    assert!(PayoutState::Confirmed.can_transition_to(PayoutState::Completed));
+    // Confirmed -> Reversed (INVALID)
+    assert!(!PayoutState::Confirmed.can_transition_to(PayoutState::Reversed));
+
+    // Terminal states have no allowed transitions
+    assert!(PayoutState::Completed.allowed_transitions().is_empty());
+    assert!(PayoutState::RejectedByPolicy.allowed_transitions().is_empty());
+    assert!(PayoutState::Reversed.allowed_transitions().is_empty());
+
+    // BankRejected -> Reversed (valid)
+    assert!(PayoutState::BankRejected.can_transition_to(PayoutState::Reversed));
+    // BankRejected -> Completed (INVALID)
+    assert!(!PayoutState::BankRejected.can_transition_to(PayoutState::Completed));
+
+    // Verify confirm_payout rejects invalid state transition
+    let (service, _intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+    user_repo.add_user(make_active_user("user_st", "tenant_st", 1));
+    ledger_repo.set_balance(
+        &TenantId::new("tenant_st"),
+        Some(&UserId::new("user_st")),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        dec!(5_000_000),
+    );
+
+    // Create payout -> goes to Submitted
+    let req = make_payout_request("tenant_st", "user_st", 1_000_000);
+    let res = service.create_payout(req).await.unwrap();
+    assert_eq!(res.status, PayoutState::Submitted);
+
+    // Confirm it successfully (Submitted -> Confirmed -> Completed)
+    let confirm_req = ConfirmPayoutRequest {
+        tenant_id: TenantId::new("tenant_st"),
+        intent_id: res.intent_id.clone(),
+        bank_tx_id: "BANK_TX_ST".to_string(),
+        status: PayoutBankStatus::Success,
+    };
+    service.confirm_payout(confirm_req).await.unwrap();
+
+    // Now try to confirm again - should fail because state is COMPLETED (not SUBMITTED)
+    let confirm_again = ConfirmPayoutRequest {
+        tenant_id: TenantId::new("tenant_st"),
+        intent_id: res.intent_id.clone(),
+        bank_tx_id: "BANK_TX_ST_2".to_string(),
+        status: PayoutBankStatus::Success,
+    };
+    let err = service.confirm_payout(confirm_again).await;
+    assert!(err.is_err(), "Confirming a COMPLETED payout should fail with invalid state transition");
+}

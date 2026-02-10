@@ -346,3 +346,415 @@ fn test_analytics_integration() {
     let fp_rate = FraudAnalytics::false_positive_rate(&transactions);
     assert!(fp_rate.is_some());
 }
+
+// ============================================================
+// Test 7: High-risk transaction flags review (high amount + new account)
+// ============================================================
+
+#[test]
+fn test_fraud_score_high_risk_transaction_flags_review() {
+    let now = Utc.with_ymd_and_hms(2025, 7, 10, 14, 0, 0).unwrap();
+    let ctx = TransactionContext {
+        amount: dec!(10_000_000),
+        amount_usd: dec!(6_000), // above high_amount threshold ($5000) -> +10
+        timestamp: now,
+        account_created_at: now - chrono::Duration::days(3), // new account (<7 days) -> +12
+        historical_amounts: vec![dec!(500_000), dec!(1_000_000)],
+        txn_timestamps_1h: vec![],
+        txn_timestamps_24h: vec![now - chrono::Duration::hours(6)],
+        txn_timestamps_7d: vec![now - chrono::Duration::days(2)],
+        user_typical_hours: vec![9, 10, 11, 12, 13, 14, 15, 16, 17],
+        recipient_first_seen: Some(now - chrono::Duration::days(30)),
+        total_disputes: 0,
+        total_transactions: 5,
+        distinct_recipients_24h: 1,
+        is_new_device: false,
+        country_risk_score: 0.1,
+        is_cross_border: false,
+        failed_txn_count_24h: 0,
+        cumulative_amount_24h_usd: dec!(6_000),
+    };
+
+    let features = FraudFeatureExtractor::extract(&ctx);
+    let scorer = RuleBasedScorer::new();
+    let risk_score = scorer.score(&features);
+
+    // high_value(+10) + new_account(+12) + amount_deviation(+10, 6000/~30 avg >> 5x) = 32+
+    // Score should land in Review range (30-80)
+    let factor_names: Vec<&str> = risk_score
+        .risk_factors
+        .iter()
+        .map(|f| f.rule_name.as_str())
+        .collect();
+    assert!(
+        factor_names.contains(&"high_value_transaction"),
+        "Expected high_value_transaction, got {:?}",
+        factor_names
+    );
+    assert!(
+        factor_names.contains(&"new_account"),
+        "Expected new_account, got {:?}",
+        factor_names
+    );
+    assert!(
+        risk_score.score >= 30,
+        "High amount + new account should score >= 30, got {}",
+        risk_score.score
+    );
+
+    let engine = FraudDecisionEngine::new();
+    let decision = engine.decide(&risk_score);
+    assert_eq!(
+        decision,
+        FraudDecision::Review,
+        "High amount + new account should trigger Review, got {:?} (score={})",
+        decision,
+        risk_score.score
+    );
+}
+
+// ============================================================
+// Test 8: Velocity anomaly detection (many txns in short period)
+// ============================================================
+
+#[test]
+fn test_fraud_score_velocity_anomaly_detection() {
+    let now = Utc.with_ymd_and_hms(2025, 7, 10, 14, 0, 0).unwrap();
+    let ctx = TransactionContext {
+        amount: dec!(500_000),
+        amount_usd: dec!(20),
+        timestamp: now,
+        account_created_at: now - chrono::Duration::days(180),
+        historical_amounts: vec![dec!(500_000); 10],
+        // 10 transactions in 1 hour -> triggers velocity_1h(+15) and rapid_succession(+18)
+        txn_timestamps_1h: (0..10)
+            .map(|i| now - chrono::Duration::minutes(i * 5))
+            .collect(),
+        // 25 transactions in 24 hours -> triggers velocity_24h(+12)
+        txn_timestamps_24h: (0..25)
+            .map(|i| now - chrono::Duration::hours(i))
+            .collect(),
+        txn_timestamps_7d: vec![],
+        user_typical_hours: vec![9, 10, 11, 12, 13, 14, 15, 16, 17],
+        recipient_first_seen: Some(now - chrono::Duration::days(60)),
+        total_disputes: 0,
+        total_transactions: 100,
+        distinct_recipients_24h: 2,
+        is_new_device: false,
+        country_risk_score: 0.1,
+        is_cross_border: false,
+        failed_txn_count_24h: 0,
+        cumulative_amount_24h_usd: dec!(500),
+    };
+
+    let features = FraudFeatureExtractor::extract(&ctx);
+    assert!(
+        features.velocity_1h >= 10.0,
+        "Expected velocity_1h >= 10, got {}",
+        features.velocity_1h
+    );
+    assert!(
+        features.velocity_24h >= 25.0,
+        "Expected velocity_24h >= 25, got {}",
+        features.velocity_24h
+    );
+
+    let scorer = RuleBasedScorer::new();
+    let risk_score = scorer.score(&features);
+
+    let factor_names: Vec<&str> = risk_score
+        .risk_factors
+        .iter()
+        .map(|f| f.rule_name.as_str())
+        .collect();
+
+    assert!(
+        factor_names.contains(&"velocity_1h_exceeded"),
+        "Expected velocity_1h_exceeded, got {:?}",
+        factor_names
+    );
+    assert!(
+        factor_names.contains(&"velocity_24h_exceeded"),
+        "Expected velocity_24h_exceeded, got {:?}",
+        factor_names
+    );
+    assert!(
+        factor_names.contains(&"rapid_succession"),
+        "Expected rapid_succession, got {:?}",
+        factor_names
+    );
+    // velocity_1h(+15) + velocity_24h(+12) + rapid_succession(+18) = 45
+    assert!(
+        risk_score.score >= 30,
+        "Velocity anomaly should score >= 30, got {}",
+        risk_score.score
+    );
+}
+
+// ============================================================
+// Test 9: Geographic mismatch (cross-border + high-risk country)
+// ============================================================
+
+#[test]
+fn test_fraud_score_geographic_mismatch() {
+    let now = Utc.with_ymd_and_hms(2025, 7, 10, 14, 0, 0).unwrap();
+    let ctx = TransactionContext {
+        amount: dec!(5_000_000),
+        amount_usd: dec!(200),
+        timestamp: now,
+        account_created_at: now - chrono::Duration::days(180),
+        historical_amounts: vec![dec!(200_000); 10],
+        txn_timestamps_1h: vec![],
+        txn_timestamps_24h: vec![now - chrono::Duration::hours(6)],
+        txn_timestamps_7d: vec![now - chrono::Duration::days(2)],
+        user_typical_hours: vec![9, 10, 11, 12, 13, 14, 15, 16, 17],
+        recipient_first_seen: Some(now - chrono::Duration::days(30)),
+        total_disputes: 0,
+        total_transactions: 50,
+        distinct_recipients_24h: 1,
+        is_new_device: false,
+        country_risk_score: 0.85, // high-risk country
+        is_cross_border: true,    // cross-border transaction
+        failed_txn_count_24h: 0,
+        cumulative_amount_24h_usd: dec!(200),
+    };
+
+    let features = FraudFeatureExtractor::extract(&ctx);
+    assert_eq!(features.is_cross_border, 1.0);
+    assert!(features.country_risk > 0.8);
+
+    let scorer = RuleBasedScorer::new();
+    let risk_score = scorer.score(&features);
+
+    let factor_names: Vec<&str> = risk_score
+        .risk_factors
+        .iter()
+        .map(|f| f.rule_name.as_str())
+        .collect();
+
+    assert!(
+        factor_names.contains(&"cross_border_high_risk"),
+        "Expected cross_border_high_risk for geographic mismatch, got {:?}",
+        factor_names
+    );
+
+    // cross_border_high_risk contributes +12
+    let cross_border_factor = risk_score
+        .risk_factors
+        .iter()
+        .find(|f| f.rule_name == "cross_border_high_risk")
+        .unwrap();
+    assert_eq!(cross_border_factor.contribution, 12);
+}
+
+// ============================================================
+// Test 10: Device fingerprint change (new device = risk factor)
+// ============================================================
+
+#[test]
+fn test_fraud_score_device_fingerprint_change() {
+    let now = Utc.with_ymd_and_hms(2025, 7, 10, 14, 0, 0).unwrap();
+    let ctx = TransactionContext {
+        amount: dec!(2_000_000),
+        amount_usd: dec!(1_500), // > $500, so new_device_high_value triggers
+        timestamp: now,
+        account_created_at: now - chrono::Duration::days(180),
+        historical_amounts: vec![dec!(1_000_000); 10],
+        txn_timestamps_1h: vec![],
+        txn_timestamps_24h: vec![now - chrono::Duration::hours(6)],
+        txn_timestamps_7d: vec![now - chrono::Duration::days(2)],
+        user_typical_hours: vec![9, 10, 11, 12, 13, 14, 15, 16, 17],
+        recipient_first_seen: Some(now - chrono::Duration::days(30)),
+        total_disputes: 0,
+        total_transactions: 50,
+        distinct_recipients_24h: 1,
+        is_new_device: true, // new device fingerprint
+        country_risk_score: 0.1,
+        is_cross_border: false,
+        failed_txn_count_24h: 0,
+        cumulative_amount_24h_usd: dec!(1_500),
+    };
+
+    let features = FraudFeatureExtractor::extract(&ctx);
+    assert_eq!(
+        features.device_novelty, 1.0,
+        "New device should have device_novelty = 1.0"
+    );
+
+    let scorer = RuleBasedScorer::new();
+    let risk_score = scorer.score(&features);
+
+    let factor_names: Vec<&str> = risk_score
+        .risk_factors
+        .iter()
+        .map(|f| f.rule_name.as_str())
+        .collect();
+
+    assert!(
+        factor_names.contains(&"new_device_high_value"),
+        "Expected new_device_high_value for device fingerprint change, got {:?}",
+        factor_names
+    );
+
+    let device_factor = risk_score
+        .risk_factors
+        .iter()
+        .find(|f| f.rule_name == "new_device_high_value")
+        .unwrap();
+    assert_eq!(device_factor.contribution, 10);
+}
+
+// ============================================================
+// Test 11: Decision escalation path (allow < 30, review 30-80, block > 80)
+// ============================================================
+
+#[test]
+fn test_fraud_decision_escalation_path() {
+    use ramp_compliance::fraud::FraudFeatureVector;
+
+    let scorer = RuleBasedScorer::new();
+    let engine = FraudDecisionEngine::new(); // allow_below=30, block_above=80
+
+    // Scenario A: Low risk -> Allow (score = 0)
+    let low_features = FraudFeatureVector {
+        amount_usd: 50.0,
+        account_age_days: 365.0,
+        velocity_1h: 1.0,
+        velocity_24h: 2.0,
+        velocity_7d: 5.0,
+        ..FraudFeatureVector::default()
+    };
+    let low_score = scorer.score(&low_features);
+    assert!(
+        low_score.score < 30,
+        "Low risk score should be < 30, got {}",
+        low_score.score
+    );
+    assert_eq!(engine.decide(&low_score), FraudDecision::Allow);
+
+    // Scenario B: Medium risk -> Review (high value + new account + velocity = ~37)
+    let medium_features = FraudFeatureVector {
+        amount_usd: 6_000.0,     // high_value_transaction: +10
+        account_age_days: 3.0,    // new_account: +12
+        velocity_1h: 6.0,        // velocity_1h_exceeded: +15
+        velocity_24h: 3.0,
+        velocity_7d: 10.0,
+        device_novelty: 0.0,
+        country_risk: 0.0,
+        is_cross_border: 0.0,
+        recipient_recency: 0.0,
+        ..FraudFeatureVector::default()
+    };
+    let medium_score = scorer.score(&medium_features);
+    assert!(
+        medium_score.score >= 30 && medium_score.score <= 80,
+        "Medium risk score should be 30-80, got {}",
+        medium_score.score
+    );
+    assert_eq!(engine.decide(&medium_score), FraudDecision::Review);
+
+    // Scenario C: High risk -> Block (trigger enough rules to exceed 80)
+    let high_features = FraudFeatureVector {
+        amount_usd: 60_000.0,        // high_value(+10) + very_high_value(+25)
+        account_age_days: 2.0,        // new_account(+12)
+        velocity_1h: 10.0,           // velocity_1h_exceeded(+15) + rapid_succession(+18)
+        velocity_24h: 25.0,          // velocity_24h_exceeded(+12)
+        velocity_7d: 60.0,           // velocity_7d_exceeded(+8)
+        device_novelty: 1.0,         // new_device_high_value(+10)
+        country_risk: 0.9,
+        is_cross_border: 1.0,        // cross_border_high_risk(+12)
+        recipient_recency: 1.0,      // new_recipient_high_value(+10)
+        time_of_day_anomaly: 0.8,    // unusual_hour(+8)
+        historical_dispute_rate: 0.1, // high_dispute_rate(+15)
+        ..FraudFeatureVector::default()
+    };
+    let high_score = scorer.score(&high_features);
+    assert!(
+        high_score.score > 80,
+        "High risk score should be > 80, got {}",
+        high_score.score
+    );
+    assert_eq!(engine.decide(&high_score), FraudDecision::Block);
+}
+
+// ============================================================
+// Test 12: Score aggregation across features (weak signals combine)
+// ============================================================
+
+#[test]
+fn test_fraud_score_aggregation_across_features() {
+    use ramp_compliance::fraud::FraudFeatureVector;
+
+    let scorer = RuleBasedScorer::new();
+
+    // Individual weak signals that each contribute a small amount
+    // None alone pushes above 30, but combined they do
+
+    // Signal 1: velocity_1h just above threshold (+15)
+    let mut features = FraudFeatureVector::default();
+    features.amount_usd = 50.0;
+    features.account_age_days = 365.0;
+    features.velocity_1h = 6.0; // just above 5.0 -> +15
+    let score_velocity_only = scorer.score(&features);
+    assert!(
+        score_velocity_only.score < 30,
+        "Velocity alone should be < 30, got {}",
+        score_velocity_only.score
+    );
+
+    // Signal 2: new_account alone (+12)
+    let mut features2 = FraudFeatureVector::default();
+    features2.amount_usd = 50.0;
+    features2.account_age_days = 3.0; // -> +12
+    let score_account_only = scorer.score(&features2);
+    assert!(
+        score_account_only.score < 30,
+        "New account alone should be < 30, got {}",
+        score_account_only.score
+    );
+
+    // Combined: velocity_1h(+15) + new_account(+12) + unusual_hour(+8) = 35
+    let mut combined = FraudFeatureVector::default();
+    combined.amount_usd = 50.0;
+    combined.velocity_1h = 6.0;         // +15
+    combined.account_age_days = 3.0;    // +12
+    combined.time_of_day_anomaly = 0.8; // +8
+    let combined_score = scorer.score(&combined);
+
+    assert!(
+        combined_score.score >= 30,
+        "Combined weak signals should aggregate to >= 30, got {}",
+        combined_score.score
+    );
+    assert!(
+        combined_score.risk_factors.len() >= 3,
+        "Expected >= 3 risk factors from aggregation, got {}",
+        combined_score.risk_factors.len()
+    );
+
+    // Verify the score is the sum of individual contributions
+    let total_contributions: u8 = combined_score
+        .risk_factors
+        .iter()
+        .map(|f| f.contribution)
+        .sum();
+    assert_eq!(
+        combined_score.score, total_contributions,
+        "Score should equal sum of contributions"
+    );
+
+    let engine = FraudDecisionEngine::new();
+    let individual_decision = engine.decide(&score_velocity_only);
+    let combined_decision = engine.decide(&combined_score);
+
+    assert_eq!(
+        individual_decision,
+        FraudDecision::Allow,
+        "Individual signal should Allow"
+    );
+    assert_eq!(
+        combined_decision,
+        FraudDecision::Review,
+        "Combined weak signals should escalate to Review"
+    );
+}

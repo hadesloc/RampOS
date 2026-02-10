@@ -224,4 +224,63 @@ mod tests {
         let v2: ApiVersion = serde_json::from_str(&json).unwrap();
         assert_eq!(v, v2);
     }
+
+    #[test]
+    fn test_version_comparison_newer() {
+        let older = ApiVersion::parse("2026-02-01").unwrap();
+        let newer = ApiVersion::parse("2026-03-01").unwrap();
+        assert!(newer > older);
+        assert!(!newer.is_older_than(&older));
+        assert!(newer.is_at_least(&older));
+    }
+
+    #[test]
+    fn test_version_comparison_older() {
+        let older = ApiVersion::parse("2026-02-01").unwrap();
+        let newer = ApiVersion::parse("2026-03-01").unwrap();
+        assert!(older < newer);
+        assert!(older.is_older_than(&newer));
+        assert!(!older.is_at_least(&newer));
+    }
+
+    #[test]
+    fn test_version_comparison_equal() {
+        let a = ApiVersion::parse("2026-02-01").unwrap();
+        let b = ApiVersion::parse("2026-02-01").unwrap();
+        assert_eq!(a, b);
+        assert!(!(a < b));
+        assert!(!(a > b));
+        assert!(!a.is_older_than(&b));
+        assert!(a.is_at_least(&b));
+    }
+
+    #[test]
+    fn test_default_version_is_not_latest() {
+        // Default version should be the initial stable version, not the latest
+        let default = ApiVersion::default_version();
+        let latest = ApiVersion::latest();
+        assert!(default < latest, "Default version should be older than latest");
+        assert_eq!(default.to_string(), DEFAULT_VERSION);
+    }
+
+    #[test]
+    fn test_minimum_version_is_compatible() {
+        let min = ApiVersion::minimum();
+        assert!(min.is_compatible());
+        assert!(min.is_known());
+    }
+
+    #[test]
+    fn test_version_just_before_minimum_is_incompatible() {
+        // Day before minimum should not be compatible
+        let day_before = ApiVersion::parse("2026-01-31").unwrap();
+        assert!(!day_before.is_compatible());
+    }
+
+    #[test]
+    fn test_version_date_accessor() {
+        let v = ApiVersion::parse("2026-02-01").unwrap();
+        let date = v.date();
+        assert_eq!(date.to_string(), "2026-02-01");
+    }
 }

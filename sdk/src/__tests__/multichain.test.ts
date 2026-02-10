@@ -46,24 +46,24 @@ describe('MultichainService', () => {
     it('should get multi-chain portfolio', async () => {
       const address = '0x1234';
       const responseData = {
-        address,
-        totalValueUsd: '1000.00',
-        chains: [
+        accounts: [
           {
+            address,
             chainId: 1,
             chainName: 'Ethereum',
-            nativeBalance: '0.5',
-            tokens: [],
-            totalValueUsd: '1000.00',
+            accountType: 'EOA',
+            isDeployed: true,
+            balance: '0.5',
           },
         ],
+        totalBalanceUsd: '1000.00',
       };
 
       mock.onGet(`/multichain/portfolio/${address}`).reply(200, responseData);
 
       const result = await service.getPortfolio(address);
-      expect(result.address).toBe(address);
-      expect(result.chains).toHaveLength(1);
+      expect(result.accounts).toHaveLength(1);
+      expect(result.accounts[0].address).toBe(address);
     });
   });
 
@@ -74,8 +74,8 @@ describe('MultichainService', () => {
         {
           address: '0xtoken',
           symbol: 'USDC',
+          name: 'USD Coin',
           decimals: 6,
-          balance: '100000000',
           chainId: 1,
         },
       ];
@@ -93,9 +93,10 @@ describe('MultichainService', () => {
       const intent = {
         sourceChainId: 1,
         targetChainId: 42161,
-        token: 'USDC',
+        type: 'BRIDGE' as const,
+        fromAddress: '0xfrom',
+        toAddress: '0xto',
         amount: '100',
-        recipient: '0xrecipient',
       };
 
       const responseData = {
@@ -103,6 +104,8 @@ describe('MultichainService', () => {
         status: 'PENDING',
         sourceChainId: 1,
         targetChainId: 42161,
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
       };
 
       mock.onPost('/multichain/intents').reply(200, responseData);
@@ -117,37 +120,46 @@ describe('MultichainService', () => {
       const request = {
         sourceChainId: 1,
         targetChainId: 42161,
-        token: 'USDC',
+        tokenAddress: '0xtoken',
         amount: '100',
+        fromAddress: '0xfrom',
       };
 
       const responseData = {
-        quoteId: 'quote-1',
-        estimatedOutput: '99.5',
-        fee: '0.5',
-        estimatedTime: 300,
+        sourceChainId: 1,
+        targetChainId: 42161,
+        inputAmount: '100',
+        outputAmount: '99.5',
+        bridgeFee: '0.3',
+        gasFee: '0.2',
+        estimatedTimeSeconds: 300,
+        bridgeProvider: 'stargate',
+        expiresAt: '2024-01-01T01:00:00Z',
       };
 
       mock.onPost('/multichain/bridge/quote').reply(200, responseData);
 
       const result = await service.getBridgeQuote(request);
-      expect(result.quoteId).toBe('quote-1');
+      expect(result.outputAmount).toBe('99.5');
     });
   });
 
   describe('executeBridge', () => {
     it('should execute a bridge transaction', async () => {
       const responseData = {
-        transactionId: 'bridge-tx-1',
+        id: 'bridge-tx-1',
         status: 'PENDING',
         sourceChainId: 1,
         targetChainId: 42161,
+        amount: '100',
+        fee: '0.5',
+        createdAt: '2024-01-01T00:00:00Z',
       };
 
       mock.onPost('/multichain/bridge/execute').reply(200, responseData);
 
       const result = await service.executeBridge('quote-1');
-      expect(result.transactionId).toBe('bridge-tx-1');
+      expect(result.id).toBe('bridge-tx-1');
     });
   });
 
@@ -180,9 +192,11 @@ describe('MultichainService', () => {
 
       const responseData = {
         sessionId: 'session-1',
+        delegator: '0xdelegator',
         delegate: '0xdelegate',
+        chainId: 1,
+        validAfter: 1699000000,
         validUntil: 1700000000,
-        isActive: true,
       };
 
       mock.onPost('/multichain/eip7702/session').reply(200, responseData);

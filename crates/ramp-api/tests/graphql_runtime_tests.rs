@@ -1,28 +1,100 @@
-//! Tests to verify GraphQL endpoints are mounted and reachable at runtime.
+//! Tests to verify GraphQL endpoints are mounted and reachable at runtime,
+//! with proper authentication via the same auth middleware used by REST routes.
 
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use chrono::Utc;
+use hmac::{Hmac, Mac};
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{
     case::CaseManager, reports::ReportGenerator, storage::MockDocumentStorage, InMemoryCaseStore,
 };
 use ramp_core::event::InMemoryEventPublisher;
+use ramp_core::repository::tenant::TenantRow;
 use ramp_core::service::{
     ledger::LedgerService, payin::PayinService, payout::PayoutService, trade::TradeService,
 };
 use ramp_core::test_utils::*;
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::sync::Arc;
 use tower::ServiceExt;
+
+type HmacSha256 = Hmac<Sha256>;
+
+const TEST_API_KEY: &str = "ramp_test_api_key_12345";
+const TEST_API_SECRET: &str = "test-api-secret-for-hmac";
+const TEST_TENANT_ID: &str = "tenant-graphql-test";
+
+/// Compute SHA256 hex hash of the API key (used for tenant lookup).
+fn hash_api_key(api_key: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(api_key.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+/// Compute HMAC-SHA256 signature matching the auth middleware format:
+/// `{method}\n{path}\n{timestamp}\n{body}`
+fn compute_hmac_signature(
+    method: &str,
+    path: &str,
+    timestamp: &str,
+    body: &str,
+    secret: &str,
+) -> String {
+    let message = format!("{}\n{}\n{}\n{}", method, path, timestamp, body);
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+    mac.update(message.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
+
+/// Create an authenticated test tenant and return the tenant repo.
+fn create_tenant_repo_with_test_tenant() -> Arc<MockTenantRepository> {
+    let tenant_repo = Arc::new(MockTenantRepository::new());
+    tenant_repo.add_tenant(TenantRow {
+        id: TEST_TENANT_ID.to_string(),
+        name: "GraphQL Test Tenant".to_string(),
+        status: "ACTIVE".to_string(),
+        api_key_hash: hash_api_key(TEST_API_KEY),
+        api_secret_encrypted: Some(TEST_API_SECRET.as_bytes().to_vec()),
+        webhook_secret_hash: "wshash".to_string(),
+        webhook_secret_encrypted: None,
+        webhook_url: None,
+        config: serde_json::json!({}),
+        daily_payin_limit_vnd: None,
+        daily_payout_limit_vnd: None,
+        api_version: None,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    });
+    tenant_repo
+}
+
+/// Build an authenticated GraphQL POST request with proper API key + HMAC signature.
+fn build_authenticated_graphql_request(body: &serde_json::Value) -> Request<Body> {
+    let body_str = serde_json::to_string(body).unwrap();
+    let timestamp = Utc::now().timestamp().to_string();
+    let signature = compute_hmac_signature("POST", "/graphql", &timestamp, &body_str, TEST_API_SECRET);
+
+    Request::builder()
+        .uri("/graphql")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", TEST_API_KEY))
+        .header("X-Timestamp", &timestamp)
+        .header("X-Signature", &signature)
+        .body(Body::from(body_str))
+        .unwrap()
+}
 
 async fn setup_app() -> axum::Router {
     let intent_repo = Arc::new(MockIntentRepository::new());
     let ledger_repo = Arc::new(MockLedgerRepository::new());
     let user_repo = Arc::new(MockUserRepository::new());
-    let tenant_repo = Arc::new(MockTenantRepository::new());
+    let tenant_repo = create_tenant_repo_with_test_tenant();
     let event_publisher = Arc::new(InMemoryEventPublisher::new());
 
     let payin_service = Arc::new(PayinService::new(
@@ -107,6 +179,8 @@ async fn setup_app() -> axum::Router {
     create_router(app_state)
 }
 
+// ── Existing tests (updated with auth headers) ──────────────────────────
+
 #[tokio::test]
 async fn graphql_post_endpoint_is_mounted() {
     let router = setup_app().await;
@@ -115,21 +189,14 @@ async fn graphql_post_endpoint_is_mounted() {
         "query": "{ __typename }"
     });
 
-    let request = Request::builder()
-        .uri("/graphql")
-        .method("POST")
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&body).unwrap()))
-        .unwrap();
-
+    let request = build_authenticated_graphql_request(&body);
     let response = router.oneshot(request).await.unwrap();
-    // Should NOT be 404 - that would mean the route is not mounted
+
     assert_ne!(
         response.status(),
         StatusCode::NOT_FOUND,
         "GraphQL POST /graphql should be mounted (got 404)"
     );
-    // Should be 200 OK for a valid introspection query
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -137,6 +204,7 @@ async fn graphql_post_endpoint_is_mounted() {
 async fn graphql_playground_is_available() {
     let router = setup_app().await;
 
+    // Playground GET does NOT require auth
     let request = Request::builder()
         .uri("/graphql")
         .method("GET")
@@ -156,6 +224,7 @@ async fn graphql_playground_is_available() {
 async fn graphql_playground_alias_is_available() {
     let router = setup_app().await;
 
+    // Playground alias GET does NOT require auth
     let request = Request::builder()
         .uri("/graphql/playground")
         .method("GET")
@@ -179,13 +248,7 @@ async fn graphql_introspection_returns_schema() {
         "query": "{ __schema { queryType { name } mutationType { name } subscriptionType { name } } }"
     });
 
-    let request = Request::builder()
-        .uri("/graphql")
-        .method("POST")
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&body).unwrap()))
-        .unwrap();
-
+    let request = build_authenticated_graphql_request(&body);
     let response = router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
@@ -194,7 +257,6 @@ async fn graphql_introspection_returns_schema() {
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
-    // Verify schema types are present
     assert_eq!(json["data"]["__schema"]["queryType"]["name"], "QueryRoot");
     assert_eq!(
         json["data"]["__schema"]["mutationType"]["name"],
@@ -206,13 +268,122 @@ async fn graphql_introspection_returns_schema() {
     );
 }
 
-/// F07: Verify that a GraphQL mutation sent WITHOUT an auth token still reaches
-/// the GraphQL handler (returns 200 with a GraphQL-level error, not an HTTP 401).
-///
-/// NOTE: The /graphql endpoint currently has NO auth middleware applied at the
-/// HTTP layer (see router.rs — it is nested directly without auth_middleware).
-/// This test documents the current behaviour so that if auth is added later,
-/// the change is intentional and caught by CI.
+#[tokio::test]
+async fn test_graphql_query_with_auth_token() {
+    let router = setup_app().await;
+
+    let body = serde_json::json!({
+        "query": "{ __typename }"
+    });
+
+    let request = build_authenticated_graphql_request(&body);
+    let response = router.oneshot(request).await.unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "GraphQL query with valid auth should return 200"
+    );
+}
+
+// ── New auth tests ──────────────────────────────────────────────────────
+
+/// F07: Verify that a GraphQL POST without any auth headers is rejected with 401.
+#[tokio::test]
+async fn test_graphql_rejects_unauthenticated_request() {
+    let router = setup_app().await;
+
+    let body = serde_json::json!({
+        "query": "{ __typename }"
+    });
+
+    // No Authorization, no X-Signature, no X-Timestamp
+    let request = Request::builder()
+        .uri("/graphql")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&body).unwrap()))
+        .unwrap();
+
+    let response = router.oneshot(request).await.unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "GraphQL POST without auth should return 401"
+    );
+}
+
+/// F07: Verify that a GraphQL POST with an invalid API key is rejected.
+#[tokio::test]
+async fn test_graphql_rejects_invalid_api_key() {
+    let router = setup_app().await;
+
+    let body_str = serde_json::to_string(&serde_json::json!({
+        "query": "{ __typename }"
+    }))
+    .unwrap();
+
+    let timestamp = Utc::now().timestamp().to_string();
+    // Use the wrong API key but still compute a signature (won't match any tenant)
+    let bad_api_key = "ramp_invalid_key_99999";
+    let signature = compute_hmac_signature("POST", "/graphql", &timestamp, &body_str, "any-secret");
+
+    let request = Request::builder()
+        .uri("/graphql")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", bad_api_key))
+        .header("X-Timestamp", &timestamp)
+        .header("X-Signature", &signature)
+        .body(Body::from(body_str))
+        .unwrap();
+
+    let response = router.oneshot(request).await.unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "GraphQL POST with invalid API key should return 401"
+    );
+}
+
+/// F07: Verify that a valid authenticated request passes tenant context to GraphQL.
+#[tokio::test]
+async fn test_graphql_extracts_tenant_from_auth() {
+    let router = setup_app().await;
+
+    let body = serde_json::json!({
+        "query": "{ __typename }"
+    });
+
+    let request = build_authenticated_graphql_request(&body);
+    let response = router.oneshot(request).await.unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Authenticated GraphQL request should succeed"
+    );
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+    // __typename should return the root query type, confirming the request
+    // was processed by the GraphQL engine (not rejected by auth)
+    assert_eq!(
+        json["data"]["__typename"], "QueryRoot",
+        "Authenticated request should reach the GraphQL resolver"
+    );
+    assert!(
+        json.get("errors").is_none() || json["errors"].as_array().map_or(true, |a| a.is_empty()),
+        "Authenticated introspection query should have no errors"
+    );
+}
+
+/// F07: Verify that a mutation sent WITHOUT auth is now rejected (unlike before).
 #[tokio::test]
 async fn test_graphql_mutation_without_auth_token() {
     let router = setup_app().await;
@@ -231,51 +402,10 @@ async fn test_graphql_mutation_without_auth_token() {
 
     let response = router.oneshot(request).await.unwrap();
 
-    // The endpoint should still be reachable (200 OK at HTTP level) because
-    // /graphql has no auth middleware. The GraphQL resolver itself may return
-    // a domain-level error, but the HTTP status should NOT be 401/403.
-    assert_ne!(
-        response.status(),
-        StatusCode::UNAUTHORIZED,
-        "GraphQL endpoint should not return 401 — no auth middleware is applied"
-    );
-    assert_ne!(
-        response.status(),
-        StatusCode::FORBIDDEN,
-        "GraphQL endpoint should not return 403 — no auth middleware is applied"
-    );
-    // Should be 200 (GraphQL always returns 200 even for resolver errors)
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-/// F07: Verify that a GraphQL query WITH a valid-looking Authorization header
-/// still reaches the handler and returns 200.
-///
-/// Because /graphql has no auth middleware, the header is simply ignored at the
-/// HTTP layer and passed through to the GraphQL context (which also does not
-/// inspect it today).
-#[tokio::test]
-async fn test_graphql_query_with_auth_token() {
-    let router = setup_app().await;
-
-    let body = serde_json::json!({
-        "query": "{ __typename }"
-    });
-
-    let request = Request::builder()
-        .uri("/graphql")
-        .method("POST")
-        .header("Content-Type", "application/json")
-        .header("Authorization", "Bearer test-valid-token-12345")
-        .body(Body::from(serde_json::to_string(&body).unwrap()))
-        .unwrap();
-
-    let response = router.oneshot(request).await.unwrap();
-
-    // With or without a token the endpoint should respond identically
+    // Now that auth middleware is applied, unauthenticated POST should be rejected
     assert_eq!(
         response.status(),
-        StatusCode::OK,
-        "GraphQL query with auth token should return 200"
+        StatusCode::UNAUTHORIZED,
+        "GraphQL mutation without auth should now return 401"
     );
 }

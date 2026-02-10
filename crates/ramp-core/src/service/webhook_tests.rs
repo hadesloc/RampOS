@@ -377,4 +377,165 @@ mod tests {
         let deserialized: serde_json::Value = serde_json::from_str(&serialized).expect("should deserialize");
         assert_eq!(deserialized, event.payload);
     }
+
+    // ========================================================================
+    // F04 Decryption Tests: webhook secret decrypt-before-sign + full flow
+    // ========================================================================
+
+    #[test]
+    fn test_webhook_decrypt_secret_before_signing() {
+        // Verify that CryptoService can encrypt a webhook secret and the
+        // decrypted result matches the original plaintext.
+        // This validates the nonce || ciphertext format used by deliver_event.
+        use crate::service::crypto::CryptoService;
+
+        let key = test_crypto_key();
+        let crypto = CryptoService::from_key(&key);
+        let original_secret = b"whsec_live_abc123def456ghi789";
+
+        // Encrypt
+        let (nonce, ciphertext) = crypto.encrypt_secret(original_secret).unwrap();
+        assert_eq!(nonce.len(), 12, "AES-256-GCM nonce must be 12 bytes");
+        assert_ne!(&ciphertext[..], original_secret, "Ciphertext must differ from plaintext");
+
+        // Build the stored blob: nonce || ciphertext (same format deliver_event expects)
+        let mut encrypted_blob = nonce.clone();
+        encrypted_blob.extend_from_slice(&ciphertext);
+        assert!(encrypted_blob.len() > 12, "Encrypted blob must be longer than nonce");
+
+        // Decrypt using the same split logic as deliver_event
+        let (dec_nonce, dec_ciphertext) = encrypted_blob.split_at(12);
+        let decrypted = crypto.decrypt_secret(dec_nonce, dec_ciphertext).unwrap();
+        assert_eq!(decrypted, original_secret, "Decrypted secret must match original");
+    }
+
+    #[test]
+    fn test_webhook_signature_with_decrypted_key_matches() {
+        // End-to-end: encrypt a webhook secret, decrypt it, use it for HMAC
+        // signing, then verify the signature matches.
+        use crate::service::crypto::CryptoService;
+
+        let key = test_crypto_key();
+        let crypto = CryptoService::from_key(&key);
+        let original_secret = b"whsec_production_key_xyz789";
+
+        // Encrypt and build blob
+        let (nonce, ciphertext) = crypto.encrypt_secret(original_secret).unwrap();
+        let mut encrypted_blob = nonce;
+        encrypted_blob.extend_from_slice(&ciphertext);
+
+        // Decrypt (simulating what deliver_event does)
+        let (dec_nonce, dec_ciphertext) = encrypted_blob.split_at(12);
+        let decrypted = crypto.decrypt_secret(dec_nonce, dec_ciphertext).unwrap();
+
+        // Sign with the decrypted key
+        let payload = br#"{"id":"evt_123","type":"intent.status.changed","data":{"status":"completed"}}"#;
+        let timestamp = chrono::Utc::now().timestamp();
+        let signature = ramp_common::crypto::generate_webhook_signature(&decrypted, timestamp, payload)
+            .expect("signature generation should succeed");
+
+        // Verify with the original (plaintext) key - must match
+        let result = ramp_common::crypto::verify_webhook_signature(original_secret, &signature, payload, 300);
+        assert!(result.is_ok(), "Signature from decrypted key must verify against original key");
+        assert_eq!(result.unwrap(), timestamp);
+
+        // Verify with a wrong key fails
+        let wrong_key = b"wrong_key_entirely";
+        let bad_result = ramp_common::crypto::verify_webhook_signature(wrong_key, &signature, payload, 300);
+        assert!(bad_result.is_err(), "Wrong key must fail verification");
+    }
+
+    #[tokio::test]
+    async fn test_webhook_delivery_full_flow() {
+        // Full flow test: create service with crypto, queue an event,
+        // and verify the service processes events correctly.
+        use crate::service::crypto::CryptoService;
+
+        let key = test_crypto_key();
+        let crypto = Arc::new(CryptoService::from_key(&key));
+
+        let mut mock_webhook_repo = MockWebhookRepository::new();
+        let mock_tenant_repo = MockTenantRepository::new();
+
+        // Queue should succeed
+        mock_webhook_repo
+            .expect_queue_event()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        // Process should return the queued event
+        let event = create_dummy_event();
+        let event_clone = event.clone();
+        mock_webhook_repo
+            .expect_get_pending_events()
+            .times(1)
+            .returning(move |_| Ok(vec![event_clone.clone()]));
+
+        let service = WebhookService::with_crypto(
+            Arc::new(mock_webhook_repo),
+            Arc::new(mock_tenant_repo),
+            crypto,
+        ).unwrap();
+
+        // Queue an event
+        let tenant_id = TenantId::new("tenant_crypto_test");
+        let result = service
+            .queue_event(
+                &tenant_id,
+                WebhookEventType::IntentStatusChanged,
+                None,
+                json!({"status": "completed", "amount": 500000}),
+            )
+            .await;
+        assert!(result.is_ok(), "queue_event should succeed with crypto service");
+
+        // Process pending events (without http-client, this logs and returns success)
+        let processed = service.process_pending_events(10).await;
+        assert!(processed.is_ok(), "process_pending_events should succeed");
+        assert_eq!(processed.unwrap(), 1, "Should process 1 pending event");
+    }
+
+    #[tokio::test]
+    async fn test_webhook_retry_on_failure() {
+        // Test that schedule_retry correctly delegates to the repository
+        // for both retryable and permanently-failed events.
+        let mut mock_webhook_repo = MockWebhookRepository::new();
+        let mock_tenant_repo = MockTenantRepository::new();
+
+        // Set up mock for mark_failed (retryable case, attempts < max)
+        mock_webhook_repo
+            .expect_mark_failed()
+            .times(1)
+            .returning(|_, _, _| Ok(()));
+
+        // Set up mock for mark_permanently_failed (exhausted case, attempts >= max)
+        mock_webhook_repo
+            .expect_mark_permanently_failed()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let service = WebhookService::new(
+            Arc::new(mock_webhook_repo),
+            Arc::new(mock_tenant_repo),
+        ).unwrap();
+
+        // Retryable case: attempts = 3 (< max_attempts = 10)
+        let event_id = EventId::new();
+        let retry_result = service.schedule_retry(&event_id, "HTTP 500", 3).await;
+        assert!(retry_result.is_ok(), "Retryable schedule_retry should succeed");
+
+        // Exhausted case: attempts = 10 (>= max_attempts = 10)
+        let exhausted_id = EventId::new();
+        let exhaust_result = service.schedule_retry(&exhausted_id, "HTTP 500", 10).await;
+        assert!(exhaust_result.is_ok(), "Exhausted schedule_retry should succeed");
+    }
+
+    /// Helper: deterministic 32-byte key for CryptoService in tests
+    fn test_crypto_key() -> [u8; 32] {
+        let mut key = [0u8; 32];
+        for (i, byte) in key.iter_mut().enumerate() {
+            *byte = i as u8;
+        }
+        key
+    }
 }

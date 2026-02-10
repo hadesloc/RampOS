@@ -1,11 +1,10 @@
 //! F10 Chain Abstraction - API Tests
 //!
 //! Tests for the chain abstraction layer: chain registry, address validation,
-//! and chain info types. These are compile-time and unit-level tests since
-//! the actual API routes for chains are not yet wired up.
+//! chain info types, and API route handler DTOs.
 
 use ramp_core::chain::{
-    ChainId, ChainRegistry, ChainType, UnifiedAddress,
+    ChainId, ChainInfo, ChainRegistry, ChainType, UnifiedAddress,
 };
 
 // ============================================================
@@ -174,4 +173,127 @@ fn test_testnet_chain_ids() {
     assert_eq!(ChainId::POLYGON_AMOY.0, 80002);
     assert_eq!(ChainId::SOLANA_DEVNET.0, 900002);
     assert_eq!(ChainId::TON_TESTNET.0, 900102);
+}
+
+// ============================================================
+// Test 9: ChainInfo from_chain and serialization
+// ============================================================
+
+#[test]
+fn test_chain_info_serialization() {
+    let info = ChainInfo {
+        chain_id: ChainId::ETHEREUM.0,
+        name: "Ethereum".to_string(),
+        chain_type: ChainType::Evm,
+        native_symbol: "ETH".to_string(),
+        is_testnet: false,
+        explorer_url: "https://etherscan.io".to_string(),
+    };
+
+    let json = serde_json::to_string(&info).unwrap();
+    assert!(json.contains("\"chainId\":1"));
+    assert!(json.contains("\"name\":\"Ethereum\""));
+    assert!(json.contains("\"nativeSymbol\":\"ETH\""));
+    assert!(json.contains("\"isTestnet\":false"));
+
+    // Deserialize back
+    let deserialized: ChainInfo = serde_json::from_str(&json).unwrap();
+    assert_eq!(deserialized.chain_id, 1);
+    assert_eq!(deserialized.name, "Ethereum");
+}
+
+// ============================================================
+// Test 10: Chain handler DTO serialization (BridgeQuoteRequest)
+// ============================================================
+
+#[test]
+fn test_bridge_quote_request_dto() {
+    use ramp_api::handlers::chain::BridgeQuoteRequest;
+
+    let json = r#"{
+        "sourceChainId": 1,
+        "destinationChainId": 42161,
+        "amount": "1000000000000000000",
+        "senderAddress": "0x1234567890123456789012345678901234567890"
+    }"#;
+    let req: BridgeQuoteRequest = serde_json::from_str(json).unwrap();
+    assert_eq!(req.source_chain_id, ChainId::ETHEREUM.0);
+    assert_eq!(req.destination_chain_id, ChainId::ARBITRUM.0);
+    assert!(req.token_address.is_none());
+    assert!(req.recipient_address.is_none());
+}
+
+// ============================================================
+// Test 11: Chain handler DTO serialization (BridgeRequest)
+// ============================================================
+
+#[test]
+fn test_bridge_request_dto() {
+    use ramp_api::handlers::chain::BridgeRequest;
+
+    let json = r#"{
+        "quoteId": "quote_abc123",
+        "sourceChainId": 1,
+        "destinationChainId": 8453,
+        "amount": "500000000000000000",
+        "senderAddress": "0x1234567890123456789012345678901234567890",
+        "recipientAddress": "0x0987654321098765432109876543210987654321"
+    }"#;
+    let req: BridgeRequest = serde_json::from_str(json).unwrap();
+    assert_eq!(req.quote_id, "quote_abc123");
+    assert_eq!(req.source_chain_id, ChainId::ETHEREUM.0);
+    assert_eq!(req.destination_chain_id, ChainId::BASE.0);
+    assert_eq!(req.recipient_address, "0x0987654321098765432109876543210987654321");
+}
+
+// ============================================================
+// Test 12: ChainListResponse and ChainDetailResponse serialization
+// ============================================================
+
+#[test]
+fn test_chain_response_dtos() {
+    use ramp_api::handlers::chain::{ChainListResponse, ChainDetailResponse};
+
+    let list_resp = ChainListResponse {
+        chains: vec![
+            ChainInfo {
+                chain_id: 1,
+                name: "Ethereum".to_string(),
+                chain_type: ChainType::Evm,
+                native_symbol: "ETH".to_string(),
+                is_testnet: false,
+                explorer_url: "https://etherscan.io".to_string(),
+            },
+            ChainInfo {
+                chain_id: ChainId::SOLANA_MAINNET.0,
+                name: "Solana".to_string(),
+                chain_type: ChainType::Solana,
+                native_symbol: "SOL".to_string(),
+                is_testnet: false,
+                explorer_url: "https://solscan.io".to_string(),
+            },
+        ],
+        total: 2,
+    };
+
+    let json = serde_json::to_string(&list_resp).unwrap();
+    assert!(json.contains("\"total\":2"));
+    assert!(json.contains("\"Ethereum\""));
+    assert!(json.contains("\"Solana\""));
+
+    let detail_resp = ChainDetailResponse {
+        info: ChainInfo {
+            chain_id: 1,
+            name: "Ethereum".to_string(),
+            chain_type: ChainType::Evm,
+            native_symbol: "ETH".to_string(),
+            is_testnet: false,
+            explorer_url: "https://etherscan.io".to_string(),
+        },
+        status: "active".to_string(),
+    };
+
+    let json = serde_json::to_string(&detail_resp).unwrap();
+    assert!(json.contains("\"status\":\"active\""));
+    assert!(json.contains("\"chainId\":1"));
 }

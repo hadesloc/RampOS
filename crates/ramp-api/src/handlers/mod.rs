@@ -13,6 +13,7 @@ pub mod domain;
 pub mod stablecoin;
 pub mod trade;
 pub mod auth;
+pub mod chain;
 pub mod ws;
 
 pub use aa::*;

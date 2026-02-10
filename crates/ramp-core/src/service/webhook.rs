@@ -16,6 +16,7 @@ use crate::repository::{
     tenant::TenantRepository,
     webhook::{WebhookEventRow, WebhookRepository},
 };
+use crate::service::crypto::CryptoService;
 
 /// Webhook event types
 #[derive(Debug, Clone)]
@@ -41,6 +42,11 @@ pub struct WebhookService {
     webhook_repo: Arc<dyn WebhookRepository>,
     #[allow(dead_code)]
     tenant_repo: Arc<dyn TenantRepository>,
+    /// Optional CryptoService for decrypting webhook secrets at runtime.
+    /// When set, `webhook_secret_encrypted` is treated as `nonce (12 bytes) || ciphertext`
+    /// and decrypted before use as an HMAC key.
+    #[allow(dead_code)]
+    crypto_service: Option<Arc<CryptoService>>,
     #[cfg(feature = "http-client")]
     http_client: reqwest::Client,
 }
@@ -57,6 +63,30 @@ impl WebhookService {
         Ok(Self {
             webhook_repo,
             tenant_repo,
+            crypto_service: None,
+            #[cfg(feature = "http-client")]
+            http_client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .map_err(|e| ramp_common::Error::Internal(format!("Failed to create webhook HTTP client: {}", e)))?,
+        })
+    }
+
+    /// Create a new webhook service with a CryptoService for decrypting webhook secrets.
+    ///
+    /// When `crypto_service` is provided, `webhook_secret_encrypted` stored on
+    /// the tenant is expected to be `nonce (12 bytes) || ciphertext` produced by
+    /// `CryptoService::encrypt_secret`. The secret is decrypted at delivery time
+    /// and used as the HMAC key for signature generation.
+    pub fn with_crypto(
+        webhook_repo: Arc<dyn WebhookRepository>,
+        tenant_repo: Arc<dyn TenantRepository>,
+        crypto_service: Arc<CryptoService>,
+    ) -> Result<Self> {
+        Ok(Self {
+            webhook_repo,
+            tenant_repo,
+            crypto_service: Some(crypto_service),
             #[cfg(feature = "http-client")]
             http_client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
@@ -143,11 +173,27 @@ impl WebhookService {
 
         // SECURITY FIX: Use the encrypted webhook secret, not the hash
         // The hash should only be used for verification, not for HMAC signing
-        let webhook_secret = tenant
+        let webhook_secret_encrypted = tenant
             .webhook_secret_encrypted
             .ok_or_else(|| ramp_common::Error::Internal(
                 "Webhook secret not configured. Please update tenant with encrypted webhook secret.".into()
             ))?;
+
+        // Decrypt the webhook secret if CryptoService is available.
+        // The encrypted blob format is: nonce (12 bytes) || ciphertext.
+        // If no CryptoService is configured, use the raw bytes as the HMAC key
+        // (backward-compatible with unencrypted secrets).
+        let webhook_secret = if let Some(ref crypto) = self.crypto_service {
+            if webhook_secret_encrypted.len() <= 12 {
+                return Err(ramp_common::Error::Encryption(
+                    "Encrypted webhook secret too short (must be nonce + ciphertext)".into()
+                ));
+            }
+            let (nonce, ciphertext) = webhook_secret_encrypted.split_at(12);
+            crypto.decrypt_secret(nonce, ciphertext)?
+        } else {
+            webhook_secret_encrypted
+        };
 
         // Build webhook payload
         let payload = serde_json::json!({
@@ -160,10 +206,9 @@ impl WebhookService {
         let payload_bytes = serde_json::to_vec(&payload)
             .map_err(|e| ramp_common::Error::Internal(e.to_string()))?;
 
-        // Generate signature using the actual secret (decrypted)
-        // NOTE: In production, decrypt webhook_secret here using application encryption key
+        // Generate signature using the decrypted secret
         let timestamp = Utc::now().timestamp();
-        let signature = generate_webhook_signature(&webhook_secret, timestamp, &payload_bytes)
+        let signature = ramp_common::crypto::generate_webhook_signature(&webhook_secret, timestamp, &payload_bytes)
             .map_err(|e| ramp_common::Error::Internal(format!("Failed to generate signature: {}", e)))?;
 
         // Send request
@@ -221,7 +266,7 @@ impl WebhookService {
 
     /// Schedule a retry with exponential backoff
     #[allow(dead_code)]
-    async fn schedule_retry(&self, event_id: &EventId, error: &str, attempts: i32) -> Result<()> {
+    pub(crate) async fn schedule_retry(&self, event_id: &EventId, error: &str, attempts: i32) -> Result<()> {
         let max_attempts = 10;
 
         if attempts >= max_attempts {
