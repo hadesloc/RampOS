@@ -1,0 +1,65 @@
+name: Contracts CI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "contracts/src/**"
+      - "contracts/test/**"
+      - "contracts/script/**"
+      - "contracts/foundry.toml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "contracts/src/**"
+      - "contracts/test/**"
+      - "contracts/script/**"
+      - "contracts/foundry.toml"
+
+jobs:
+  test:
+    name: Forge Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Show Forge version
+        run: forge --version
+
+      - name: Install dependencies
+        run: forge install
+
+      - name: Run tests
+        run: forge test -vvv
+
+  size-check:
+    name: Contract Size Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Install dependencies
+        run: forge install
+
+      - name: Check contract sizes
+        run: forge build --sizes

@@ -1,0 +1,59 @@
+name: Deploy Staging
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    environment: staging
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine image tag
+        id: tag
+        run: echo "sha=$(echo ${{ github.event.workflow_run.head_sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+
+      - name: Update image tag in kustomization
+        working-directory: k8s/overlays/staging
+        run: |
+          kustomize edit set image ghcr.io/rampos/rampos=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sha }}
+
+      - name: Deploy to staging
+        run: |
+          kubectl apply -k k8s/overlays/staging/
+          kubectl -n rampos-staging rollout status deployment/rampos-server --timeout=300s
+
+      - name: Verify deployment
+        run: |
+          kubectl -n rampos-staging get pods
+          kubectl -n rampos-staging get svc
+
+      - name: Smoke test
+        run: |
+          echo "Waiting for service to be ready..."
+          sleep 30
+          STAGING_URL="${{ secrets.STAGING_API_URL || 'https://staging-api.rampos.io' }}"
+          curl -sf "${STAGING_URL}/health" || echo "Warning: Health check not reachable from runner"

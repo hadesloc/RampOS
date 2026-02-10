@@ -1,0 +1,59 @@
+name: E2E Smoke Tests
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches: [main, master]
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env from example
+        run: |
+          cp .env.example .env
+          # Generate random secrets for CI
+          RAND_PG=$(openssl rand -hex 16)
+          RAND_REDIS=$(openssl rand -hex 16)
+          RAND_ADMIN=$(openssl rand -hex 24)
+          RAND_ENC=$(openssl rand -base64 32)
+          sed -i "s/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=${RAND_PG}/" .env
+          sed -i "s/^DATABASE_PASSWORD=$/DATABASE_PASSWORD=${RAND_PG}/" .env
+          sed -i "s/^REDIS_PASSWORD=$/REDIS_PASSWORD=${RAND_REDIS}/" .env
+          sed -i "s/^RAMPOS_ADMIN_KEY=$/RAMPOS_ADMIN_KEY=${RAND_ADMIN}/" .env
+          sed -i "s|^RAMPOS_ENCRYPTION_KEY=$|RAMPOS_ENCRYPTION_KEY=${RAND_ENC}|" .env
+
+      - name: Start services with Docker Compose
+        run: docker compose up -d --build --wait
+        timeout-minutes: 8
+
+      - name: Wait for API healthy
+        run: |
+          echo "Waiting for API to become healthy..."
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+              echo "API healthy after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Run smoke tests
+        run: |
+          chmod +x scripts/smoke-test.sh
+          ./scripts/smoke-test.sh http://localhost:8080
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose logs --tail=100
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

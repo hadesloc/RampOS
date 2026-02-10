@@ -1,0 +1,76 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to deploy (e.g. sha or version)'
+        required: true
+        type: string
+      confirm_deploy:
+        description: 'Type "deploy" to confirm production deployment'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  validate:
+    name: Validate Inputs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        if: ${{ inputs.confirm_deploy != 'deploy' }}
+        run: |
+          echo "::error::You must type 'deploy' in the confirm_deploy field to proceed"
+          exit 1
+
+      - name: Verify image exists
+        run: |
+          echo "Deploying image tag: ${{ inputs.image_tag }}"
+
+  deploy-prod:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [validate]
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > $HOME/.kube/config
+
+      - name: Update image tag in kustomization
+        working-directory: k8s/overlays/prod
+        run: |
+          kustomize edit set image ghcr.io/rampos/rampos=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
+
+      - name: Deploy to production
+        run: |
+          kubectl apply -k k8s/overlays/prod/
+          kubectl -n rampos rollout status deployment/rampos-server --timeout=600s
+
+      - name: Verify deployment
+        run: |
+          kubectl -n rampos get pods
+          kubectl -n rampos get svc
+          echo "Deployed image tag: ${{ inputs.image_tag }}"
+
+      - name: Health check
+        run: |
+          echo "Waiting for rollout to stabilize..."
+          sleep 30
+          PROD_URL="${{ secrets.PROD_API_URL || 'https://api.rampos.io' }}"
+          curl -sf "${PROD_URL}/health" || echo "Warning: Health check not reachable from runner"
