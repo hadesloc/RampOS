@@ -499,16 +499,63 @@ impl PayoutService {
         Ok(())
     }
 
-    /// Simple policy check (placeholder)
+    /// Compliance-backed payout policy check using KYC tier limits
     async fn check_payout_policy(&self, req: &CreatePayoutRequest) -> Result<bool> {
-        // In production, this would:
-        // - Check velocity limits
-        // - Check amount limits based on KYC tier
-        // - Run AML rules
-        // - Check sanctions lists
+        use ramp_compliance::withdraw_policy::TierWithdrawLimits;
 
-        // For now, approve all payouts under 100M VND
-        Ok(req.amount_vnd.0 <= Decimal::from(100_000_000))
+        // Look up user to get KYC tier
+        let user = self
+            .user_repo
+            .get_by_id(&req.tenant_id, &req.user_id)
+            .await?
+            .ok_or_else(|| Error::UserNotFound(req.user_id.0.clone()))?;
+
+        let tier = KycTier::from_i16(user.kyc_tier);
+        let tier_limits = TierWithdrawLimits::for_tier(tier);
+
+        // Tier0 cannot withdraw at all
+        if tier_limits.single_transaction_limit_vnd.is_zero() {
+            info!(
+                user_id = %req.user_id,
+                kyc_tier = ?tier,
+                "Payout rejected: KYC tier does not allow payouts"
+            );
+            return Ok(false);
+        }
+
+        // Check single transaction limit from compliance module
+        if req.amount_vnd.0 > tier_limits.single_transaction_limit_vnd {
+            info!(
+                user_id = %req.user_id,
+                amount = %req.amount_vnd.0,
+                limit = %tier_limits.single_transaction_limit_vnd,
+                kyc_tier = ?tier,
+                "Payout rejected: exceeds tier single transaction limit"
+            );
+            return Ok(false);
+        }
+
+        // Check daily limit from compliance module
+        let daily_usage = self
+            .intent_repo
+            .get_daily_payout_amount(&req.tenant_id, &req.user_id)
+            .await?;
+
+        if tier_limits.daily_limit_vnd > Decimal::ZERO
+            && tier_limits.daily_limit_vnd < Decimal::MAX
+            && (daily_usage + req.amount_vnd.0) > tier_limits.daily_limit_vnd
+        {
+            info!(
+                user_id = %req.user_id,
+                daily_usage = %daily_usage,
+                requested = %req.amount_vnd.0,
+                daily_limit = %tier_limits.daily_limit_vnd,
+                "Payout rejected: exceeds tier daily limit"
+            );
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 }
 
@@ -762,6 +809,122 @@ mod tests {
         // The second transaction should be the confirmation
         let confirmation_tx = &txs[1];
         assert!(confirmation_tx.description.contains("confirmed"));
+    }
+
+    #[tokio::test]
+    async fn payout_above_tier_limit_is_rejected() {
+        let intent_repo = Arc::new(MockIntentRepository::new());
+        let ledger_repo = Arc::new(MockLedgerRepository::new());
+        let user_repo = Arc::new(MockUserRepository::new());
+        let event_publisher = Arc::new(InMemoryEventPublisher::new());
+
+        // Setup Tier1 user (single tx limit = 10M VND, daily limit = 20M VND)
+        user_repo.add_user(UserRow {
+            id: "user1".to_string(),
+            tenant_id: "tenant1".to_string(),
+            status: "ACTIVE".to_string(),
+            kyc_tier: 1,
+            kyc_status: "VERIFIED".to_string(),
+            kyc_verified_at: Some(Utc::now()),
+            risk_score: None,
+            risk_flags: serde_json::json!({}),
+            daily_payin_limit_vnd: None,
+            daily_payout_limit_vnd: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        });
+
+        // Give user enough balance so balance is not the issue
+        ledger_repo.set_balance(
+            &TenantId::new("tenant1"),
+            Some(&UserId::new("user1")),
+            &AccountType::LiabilityUserVnd,
+            &LedgerCurrency::VND,
+            dec!(50_000_000), // 50M VND balance
+        );
+
+        let service = PayoutService::new(
+            intent_repo.clone(),
+            ledger_repo.clone(),
+            user_repo.clone(),
+            event_publisher.clone(),
+        );
+
+        // Request 15M VND payout - exceeds Tier1 single tx limit of 10M VND
+        let req = CreatePayoutRequest {
+            tenant_id: TenantId::new("tenant1"),
+            user_id: UserId::new("user1"),
+            amount_vnd: VndAmount::from_i64(15_000_000),
+            rails_provider: RailsProvider::new("VIETCOMBANK"),
+            bank_account: BankAccount {
+                bank_code: "VCB".to_string(),
+                account_number: "123456789".to_string(),
+                account_name: "NGUYEN VAN A".to_string(),
+            },
+            idempotency_key: None,
+            metadata: serde_json::json!({}),
+        };
+
+        let res = service.create_payout(req).await.unwrap();
+        // Should be rejected by compliance policy (tier limit exceeded)
+        assert_eq!(res.status, PayoutState::RejectedByPolicy);
+    }
+
+    #[tokio::test]
+    async fn payout_tier0_user_is_rejected() {
+        let intent_repo = Arc::new(MockIntentRepository::new());
+        let ledger_repo = Arc::new(MockLedgerRepository::new());
+        let user_repo = Arc::new(MockUserRepository::new());
+        let event_publisher = Arc::new(InMemoryEventPublisher::new());
+
+        // Setup Tier0 user (cannot withdraw at all)
+        user_repo.add_user(UserRow {
+            id: "user0".to_string(),
+            tenant_id: "tenant1".to_string(),
+            status: "ACTIVE".to_string(),
+            kyc_tier: 0,
+            kyc_status: "VERIFIED".to_string(),
+            kyc_verified_at: Some(Utc::now()),
+            risk_score: None,
+            risk_flags: serde_json::json!({}),
+            daily_payin_limit_vnd: None,
+            daily_payout_limit_vnd: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        });
+
+        ledger_repo.set_balance(
+            &TenantId::new("tenant1"),
+            Some(&UserId::new("user0")),
+            &AccountType::LiabilityUserVnd,
+            &LedgerCurrency::VND,
+            dec!(10_000_000),
+        );
+
+        let service = PayoutService::new(
+            intent_repo.clone(),
+            ledger_repo.clone(),
+            user_repo.clone(),
+            event_publisher.clone(),
+        );
+
+        // Even a small payout should be rejected for Tier0
+        let req = CreatePayoutRequest {
+            tenant_id: TenantId::new("tenant1"),
+            user_id: UserId::new("user0"),
+            amount_vnd: VndAmount::from_i64(100_000),
+            rails_provider: RailsProvider::new("VIETCOMBANK"),
+            bank_account: BankAccount {
+                bank_code: "VCB".to_string(),
+                account_number: "123456789".to_string(),
+                account_name: "NGUYEN VAN A".to_string(),
+            },
+            idempotency_key: None,
+            metadata: serde_json::json!({}),
+        };
+
+        let res = service.create_payout(req).await.unwrap();
+        assert_eq!(res.status, PayoutState::RejectedByPolicy);
     }
 
     #[test]

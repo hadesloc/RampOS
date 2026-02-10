@@ -15,6 +15,7 @@ pub mod licensing;
 pub mod smart_account;
 pub mod tenant;
 pub mod user;
+pub mod offramp;
 pub mod webhook;
 
 pub use audit::PgAuditRepository;
@@ -42,6 +43,7 @@ pub use smart_account::{
 pub use tenant::TenantRepository;
 pub use user::UserRepository;
 pub use webhook::WebhookRepository;
+pub use offramp::{OfframpIntentRepository, OfframpIntentRow, PgOfframpIntentRepository};
 
 /// Shared database pool
 #[derive(Clone)]

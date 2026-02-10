@@ -50,18 +50,35 @@ contract PaymasterFuzz is Test {
         return userOp;
     }
 
+    /// @notice Track nonces per sender for creating paymaster data in tests
+    mapping(address => uint256) internal _testNonces;
+
     function _createPaymasterData(
         bytes32 userOpHash,
         bytes32 tenantId,
         uint48 validUntil,
         uint48 validAfter
-    ) internal view returns (bytes memory) {
+    ) internal returns (bytes memory) {
+        return _createPaymasterDataForSender(userOpHash, tenantId, validUntil, validAfter, makeAddr("sender"));
+    }
+
+    function _createPaymasterDataForSender(
+        bytes32 userOpHash,
+        bytes32 tenantId,
+        uint48 validUntil,
+        uint48 validAfter,
+        address sender
+    ) internal returns (bytes memory) {
+        uint256 nonce = _testNonces[sender];
+        _testNonces[sender]++;
+
         bytes32 hash = keccak256(
             abi.encodePacked(
                 userOpHash,
                 tenantId,
                 validUntil,
                 validAfter,
+                nonce,
                 block.chainid,
                 address(paymaster)
             )
@@ -70,7 +87,7 @@ contract PaymasterFuzz is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, hash);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        return abi.encodePacked(address(paymaster), tenantId, validUntil, validAfter, signature);
+        return abi.encodePacked(address(paymaster), tenantId, validUntil, validAfter, nonce, signature);
     }
 
     // ============ Tenant Limit Fuzz Tests ============
@@ -104,19 +121,20 @@ contract PaymasterFuzz is Test {
         paymaster.setTenantLimit(tenantId, limit);
 
         // First operation
-        PackedUserOperation memory userOp = _createUserOp(makeAddr("sender1"));
+        address sender1 = makeAddr("sender1");
+        PackedUserOperation memory userOp = _createUserOp(sender1);
         bytes32 userOpHash1 = keccak256(abi.encode("userOp1", block.timestamp));
         uint48 validUntil = uint48(block.timestamp + 1 hours);
         uint48 validAfter = uint48(block.timestamp);
 
-        userOp.paymasterAndData = _createPaymasterData(userOpHash1, tenantId, validUntil, validAfter);
+        userOp.paymasterAndData = _createPaymasterDataForSender(userOpHash1, tenantId, validUntil, validAfter, sender1);
 
         vm.prank(address(entryPoint));
         paymaster.validatePaymasterUserOp(userOp, userOpHash1, cost1);
 
         // Second operation should fail if it exceeds limit
         bytes32 userOpHash2 = keccak256(abi.encode("userOp2", block.timestamp));
-        userOp.paymasterAndData = _createPaymasterData(userOpHash2, tenantId, validUntil, validAfter);
+        userOp.paymasterAndData = _createPaymasterDataForSender(userOpHash2, tenantId, validUntil, validAfter, sender1);
 
         vm.prank(address(entryPoint));
         vm.expectRevert(RampOSPaymaster.TenantLimitExceeded.selector);
@@ -312,19 +330,22 @@ contract PaymasterFuzz is Test {
         wrongSignerKey = bound(wrongSignerKey, 1, 115792089237316195423570985008687907852837564279074904382605163141518161494336);
         vm.assume(wrongSignerKey != signerKey);
 
-        PackedUserOperation memory userOp = _createUserOp(makeAddr("sender"));
+        address sender = makeAddr("sender");
+        PackedUserOperation memory userOp = _createUserOp(sender);
         bytes32 userOpHash = keccak256(abi.encode("userOp", block.timestamp));
         bytes32 tenantId = keccak256("tenant");
         uint48 validUntil = uint48(block.timestamp + 1 hours);
         uint48 validAfter = uint48(block.timestamp);
+        uint256 nonce = 0;
 
-        // Sign with wrong key
+        // Sign with wrong key (including nonce)
         bytes32 hash = keccak256(
             abi.encodePacked(
                 userOpHash,
                 tenantId,
                 validUntil,
                 validAfter,
+                nonce,
                 block.chainid,
                 address(paymaster)
             )
@@ -338,6 +359,7 @@ contract PaymasterFuzz is Test {
             tenantId,
             validUntil,
             validAfter,
+            nonce,
             signature
         );
 
@@ -351,20 +373,33 @@ contract PaymasterFuzz is Test {
      * @dev Tests that same signature can't be used twice
      */
     function testFuzz_SignatureReplayPrevention(bytes32 tenantId) public {
-        PackedUserOperation memory userOp = _createUserOp(makeAddr("sender"));
+        address sender = makeAddr("sender");
+        PackedUserOperation memory userOp = _createUserOp(sender);
         bytes32 userOpHash = keccak256(abi.encode("userOp", tenantId, block.timestamp));
         uint48 validUntil = uint48(block.timestamp + 1 hours);
         uint48 validAfter = uint48(block.timestamp);
 
-        userOp.paymasterAndData = _createPaymasterData(userOpHash, tenantId, validUntil, validAfter);
+        // Create paymaster data with nonce 0
+        uint256 nonce = 0;
+        bytes32 hash = keccak256(
+            abi.encodePacked(
+                userOpHash, tenantId, validUntil, validAfter,
+                nonce, block.chainid, address(paymaster)
+            )
+        ).toEthSignedMessageHash();
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, hash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        userOp.paymasterAndData = abi.encodePacked(
+            address(paymaster), tenantId, validUntil, validAfter, nonce, signature
+        );
 
         // First use should succeed
         vm.prank(address(entryPoint));
         paymaster.validatePaymasterUserOp(userOp, userOpHash, 0.01 ether);
 
-        // Second use should fail (signature already used)
+        // Second use with same nonce 0 should fail (nonce already consumed)
         vm.prank(address(entryPoint));
-        vm.expectRevert("Signature already used");
+        vm.expectRevert(RampOSPaymaster.InvalidNonce.selector);
         paymaster.validatePaymasterUserOp(userOp, userOpHash, 0.01 ether);
     }
 

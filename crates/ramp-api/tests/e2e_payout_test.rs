@@ -395,7 +395,9 @@ async fn test_payout_insufficient_balance() {
 #[tokio::test]
 async fn test_payout_aml_block() {
     let app = setup_app().await;
-    let amount = 200_000_000i64; // 200M VND > 100M limit in policy check
+    // 15M VND: passes early daily limit check (Tier1 daily = 20M)
+    // but exceeds compliance single-transaction limit (Tier1 = 10M)
+    let amount = 15_000_000i64;
 
     // Fund the user so balance isn't the issue
     app.ledger_repo.set_balance(

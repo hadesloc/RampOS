@@ -72,6 +72,8 @@ contract RampOSAccount is BaseAccount, Initializable, IERC1271, IERC721Receiver,
         SessionKey metadata;
         address[] allowedTargets;
         bytes4[] allowedSelectors;
+        mapping(address => bool) allowedTargetMap;
+        mapping(bytes4 => bool) allowedSelectorMap;
         uint256 spendingLimit;
         uint256 dailyLimit;
         uint256 dailySpent;
@@ -248,16 +250,24 @@ contract RampOSAccount is BaseAccount, Initializable, IERC1271, IERC721Receiver,
         SessionKeyStorage storage storage_ = _sessionKeyStorage[key];
         storage_.metadata = sessionKeys[key];
 
-        // Clear and update allowed targets
+        // Clear old allowed targets (array + mapping)
+        for (uint256 i = 0; i < storage_.allowedTargets.length; i++) {
+            storage_.allowedTargetMap[storage_.allowedTargets[i]] = false;
+        }
         delete storage_.allowedTargets;
         for (uint256 i = 0; i < permissions.allowedTargets.length; i++) {
             storage_.allowedTargets.push(permissions.allowedTargets[i]);
+            storage_.allowedTargetMap[permissions.allowedTargets[i]] = true;
         }
 
-        // Clear and update allowed selectors
+        // Clear old allowed selectors (array + mapping)
+        for (uint256 i = 0; i < storage_.allowedSelectors.length; i++) {
+            storage_.allowedSelectorMap[storage_.allowedSelectors[i]] = false;
+        }
         delete storage_.allowedSelectors;
         for (uint256 i = 0; i < permissions.allowedSelectors.length; i++) {
             storage_.allowedSelectors.push(permissions.allowedSelectors[i]);
+            storage_.allowedSelectorMap[permissions.allowedSelectors[i]] = true;
         }
 
         storage_.spendingLimit = permissions.spendingLimit;
@@ -295,7 +305,14 @@ contract RampOSAccount is BaseAccount, Initializable, IERC1271, IERC721Receiver,
         // Store with empty/unlimited permissions
         SessionKeyStorage storage storage_ = _sessionKeyStorage[key];
         storage_.metadata = sessionKeys[key];
+        // Clear old targets/selectors mappings
+        for (uint256 i = 0; i < storage_.allowedTargets.length; i++) {
+            storage_.allowedTargetMap[storage_.allowedTargets[i]] = false;
+        }
         delete storage_.allowedTargets;
+        for (uint256 i = 0; i < storage_.allowedSelectors.length; i++) {
+            storage_.allowedSelectorMap[storage_.allowedSelectors[i]] = false;
+        }
         delete storage_.allowedSelectors;
         storage_.spendingLimit = 0;
         storage_.dailyLimit = 0;
@@ -331,16 +348,24 @@ contract RampOSAccount is BaseAccount, Initializable, IERC1271, IERC721Receiver,
         SessionKeyStorage storage storage_ = _sessionKeyStorage[key];
         storage_.metadata.permissionsHash = permissionsHash;
 
-        // Clear and update allowed targets
+        // Clear old allowed targets (array + mapping)
+        for (uint256 i = 0; i < storage_.allowedTargets.length; i++) {
+            storage_.allowedTargetMap[storage_.allowedTargets[i]] = false;
+        }
         delete storage_.allowedTargets;
         for (uint256 i = 0; i < permissions.allowedTargets.length; i++) {
             storage_.allowedTargets.push(permissions.allowedTargets[i]);
+            storage_.allowedTargetMap[permissions.allowedTargets[i]] = true;
         }
 
-        // Clear and update allowed selectors
+        // Clear old allowed selectors (array + mapping)
+        for (uint256 i = 0; i < storage_.allowedSelectors.length; i++) {
+            storage_.allowedSelectorMap[storage_.allowedSelectors[i]] = false;
+        }
         delete storage_.allowedSelectors;
         for (uint256 i = 0; i < permissions.allowedSelectors.length; i++) {
             storage_.allowedSelectors.push(permissions.allowedSelectors[i]);
+            storage_.allowedSelectorMap[permissions.allowedSelectors[i]] = true;
         }
 
         storage_.spendingLimit = permissions.spendingLimit;
@@ -411,10 +436,7 @@ contract RampOSAccount is BaseAccount, Initializable, IERC1271, IERC721Receiver,
         // If no targets specified, all targets are allowed
         if (storage_.allowedTargets.length == 0) return true;
 
-        for (uint256 i = 0; i < storage_.allowedTargets.length; i++) {
-            if (storage_.allowedTargets[i] == target) return true;
-        }
-        return false;
+        return storage_.allowedTargetMap[target];
     }
 
     /// @notice Check if a selector is allowed for a session key
@@ -424,10 +446,7 @@ contract RampOSAccount is BaseAccount, Initializable, IERC1271, IERC721Receiver,
         // If no selectors specified, all selectors are allowed
         if (storage_.allowedSelectors.length == 0) return true;
 
-        for (uint256 i = 0; i < storage_.allowedSelectors.length; i++) {
-            if (storage_.allowedSelectors[i] == selector) return true;
-        }
-        return false;
+        return storage_.allowedSelectorMap[selector];
     }
 
     /// @notice Validate user operation signature
@@ -527,16 +546,9 @@ contract RampOSAccount is BaseAccount, Initializable, IERC1271, IERC721Receiver,
     ) internal {
         SessionKeyStorage storage storage_ = _sessionKeyStorage[key];
 
-        // Check target is allowed
+        // Check target is allowed (O(1) mapping lookup)
         if (storage_.allowedTargets.length > 0) {
-            bool targetAllowed = false;
-            for (uint256 i = 0; i < storage_.allowedTargets.length; i++) {
-                if (storage_.allowedTargets[i] == target) {
-                    targetAllowed = true;
-                    break;
-                }
-            }
-            if (!targetAllowed) revert TargetNotAllowed(target);
+            if (!storage_.allowedTargetMap[target]) revert TargetNotAllowed(target);
         }
 
         // Check selector is allowed (only if data has a selector)
@@ -547,14 +559,7 @@ contract RampOSAccount is BaseAccount, Initializable, IERC1271, IERC721Receiver,
         }
         if (data.length >= 4 && storage_.allowedSelectors.length > 0) {
             bytes4 selector = bytes4(data[:4]);
-            bool selectorAllowed = false;
-            for (uint256 i = 0; i < storage_.allowedSelectors.length; i++) {
-                if (storage_.allowedSelectors[i] == selector) {
-                    selectorAllowed = true;
-                    break;
-                }
-            }
-            if (!selectorAllowed) revert SelectorNotAllowed(selector);
+            if (!storage_.allowedSelectorMap[selector]) revert SelectorNotAllowed(selector);
         }
 
         // Check spending limit

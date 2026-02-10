@@ -269,11 +269,15 @@ async fn test_e2e_payin_flow_via_api() {
         "rawPayloadHash": "dummy_hash"
     });
 
+    // Set internal secret for auth
+    std::env::set_var("INTERNAL_SERVICE_SECRET", "test-internal-secret");
+
     let req = Request::builder()
         .uri("/v1/intents/payin/confirm")
         .method("POST")
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
+        .header("X-Internal-Secret", "test-internal-secret")
         .body(Body::from(confirm_payload.to_string()))
         .unwrap();
 

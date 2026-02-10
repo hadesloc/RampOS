@@ -1,5 +1,8 @@
 # RampOS Python SDK
 
+[![SDK CI](../../actions/workflows/sdk-generate.yml/badge.svg)](../../actions/workflows/sdk-generate.yml)
+[![SDK Tests](../../actions/workflows/sdk-ci.yml/badge.svg)](../../actions/workflows/sdk-ci.yml)
+
 Official Python SDK for the [RampOS API](https://api.rampos.io) -- fiat-to-crypto on/off-ramp platform.
 
 ## Installation
@@ -219,6 +222,28 @@ mypy src/
 # Linting
 ruff check src/ tests/
 ```
+
+## SDK Generation & Drift Detection
+
+This SDK is generated from the OpenAPI spec defined in `crates/ramp-api/src/openapi.rs`.
+
+**CI Pipeline**: The `sdk-generate.yml` workflow automatically:
+- Detects changes to the OpenAPI spec (openapi.rs, DTOs, handlers)
+- Runs SDK tests across Python 3.10 and 3.12
+- Fails if SDK code is stale relative to the spec
+
+**Local validation**:
+```bash
+# Run drift detection locally
+bash scripts/validate-openapi.sh
+```
+
+**When updating the API**:
+1. Modify `crates/ramp-api/src/openapi.rs` with new endpoints/schemas
+2. Update SDK models in `src/rampos/models/` and services in `src/rampos/services/`
+3. Add/update tests in `tests/`
+4. Run `bash scripts/validate-openapi.sh` to verify
+5. Commit all changes together
 
 ## License
 

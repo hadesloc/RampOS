@@ -29,6 +29,7 @@ use ramp_core::service::{
 };
 use ramp_core::sso::SsoService;
 
+use crate::graphql;
 use crate::handlers;
 use crate::handlers::aa::AAServiceState;
 use crate::handlers::bank_webhooks::BankWebhookState;
@@ -199,6 +200,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/limits/tiers", get(handlers::admin::get_tier_limits))
         .route("/limits/config", get(handlers::admin::get_limit_config).put(handlers::admin::update_limit_config))
         .route("/limits/user/:user_id", get(handlers::admin::get_user_limit_status).put(handlers::admin::set_user_limits).delete(handlers::admin::remove_user_limits))
+        // Off-ramp management
+        .route("/offramp/pending", get(handlers::admin::offramp::list_pending_offramps))
+        .route("/offramp/:id/approve", post(handlers::admin::offramp::approve_offramp))
+        .route("/offramp/:id/reject", post(handlers::admin::offramp::reject_offramp))
         .with_state(state.clone());
 
     // Admin Reports - needs to be separated or use AppState if ReportGenerator is in AppState
@@ -367,6 +372,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/wallet", handlers::portal::wallet::router())
         .nest("/transactions", handlers::portal::transactions::router())
         .nest("/intents", handlers::portal::intents::router())
+        .nest("/offramp", handlers::portal::offramp::router())
         .layer(middleware::from_fn_with_state(
             state.portal_auth_config.clone(),
             portal_auth_middleware,
@@ -458,6 +464,9 @@ pub fn create_router(state: AppState) -> Router {
         Router::new()
     };
 
+    // Build GraphQL router
+    let gql_router = graphql::graphql_router(state.clone());
+
     // Combine all routes
     // Note: More specific routes should be registered first to ensure proper matching
     Router::new()
@@ -465,6 +474,7 @@ pub fn create_router(state: AppState) -> Router {
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
         .route("/openapi.json", get(openapi_json))
         .route("/docs", get(docs_redirect))
+        .nest("/graphql", gql_router)
         .nest("/v1", api_v1)
         // Portal auth routes (no JWT required - these issue tokens)
         .nest(

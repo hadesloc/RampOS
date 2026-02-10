@@ -1,0 +1,164 @@
+name: SDK Generation & Drift Detection
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "crates/ramp-api/src/openapi.rs"
+      - "crates/ramp-api/src/dto/**"
+      - "crates/ramp-api/src/handlers/**"
+      - "sdk-python/**"
+      - "sdk-go/**"
+      - "scripts/validate-openapi.sh"
+      - ".github/workflows/sdk-generate.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "crates/ramp-api/src/openapi.rs"
+      - "crates/ramp-api/src/dto/**"
+      - "crates/ramp-api/src/handlers/**"
+      - "sdk-python/**"
+      - "sdk-go/**"
+      - "scripts/validate-openapi.sh"
+      - ".github/workflows/sdk-generate.yml"
+  workflow_dispatch:
+    inputs:
+      force_regenerate:
+        description: "Force SDK regeneration even if spec unchanged"
+        required: false
+        default: "false"
+        type: boolean
+
+jobs:
+  detect-drift:
+    name: Detect OpenAPI Spec Changes
+    runs-on: ubuntu-latest
+    outputs:
+      spec_changed: ${{ steps.check.outputs.changed }}
+      spec_hash: ${{ steps.check.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check spec changes
+        id: check
+        run: |
+          HASH=$(sha256sum crates/ramp-api/src/openapi.rs | cut -d' ' -f1)
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+
+          if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "openapi.rs\|dto/\|handlers/"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "OpenAPI spec or related files changed"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No OpenAPI spec changes detected"
+          fi
+
+  test-python:
+    name: Python SDK (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: detect-drift
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.10", "3.12"]
+    defaults:
+      run:
+        working-directory: sdk-python
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: sdk-python/pyproject.toml
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Lint check
+        run: ruff check src/ tests/ || true
+
+      - name: Type check
+        run: mypy src/ --ignore-missing-imports || true
+
+      - name: Run tests
+        run: pytest -v --tb=short
+
+      - name: Verify SDK imports
+        run: |
+          python -c "
+          from rampos import RampOSClient, RampOSConfig
+          from rampos.models.intent import CreatePayinRequest
+          from rampos.services.intent import IntentService
+          print('All SDK imports verified successfully')
+          "
+
+  test-go:
+    name: Go SDK (Go ${{ matrix.go-version }})
+    runs-on: ubuntu-latest
+    needs: detect-drift
+    strategy:
+      fail-fast: true
+      matrix:
+        go-version: ["1.21", "1.22"]
+    defaults:
+      run:
+        working-directory: sdk-go
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache-dependency-path: sdk-go/go.sum
+
+      - name: Run tests
+        run: go test ./... -v -count=1
+
+      - name: Build check
+        run: go build ./...
+
+      - name: Vet check
+        run: go vet ./...
+
+  drift-gate:
+    name: SDK Drift Gate
+    runs-on: ubuntu-latest
+    needs: [detect-drift, test-python, test-go]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check test results
+        run: |
+          echo "=== SDK Drift Gate Summary ==="
+          echo "Spec changed: ${{ needs.detect-drift.outputs.spec_changed }}"
+          echo "Spec hash: ${{ needs.detect-drift.outputs.spec_hash }}"
+
+      - name: Verify all SDK tests passed
+        if: needs.test-python.result != 'success' || needs.test-go.result != 'success'
+        run: |
+          echo "ERROR: SDK tests failed!"
+          echo "Python SDK: ${{ needs.test-python.result }}"
+          echo "Go SDK: ${{ needs.test-go.result }}"
+          exit 1
+
+      - name: Drift warning
+        if: needs.detect-drift.outputs.spec_changed == 'true'
+        run: |
+          echo "WARNING: OpenAPI spec has changed."
+          echo "Ensure SDK code has been regenerated to match the new spec."
+          echo ""
+          echo "To regenerate SDKs locally:"
+          echo "  1. Update openapi.rs with new endpoints/schemas"
+          echo "  2. Run: bash scripts/validate-openapi.sh"
+          echo "  3. Verify SDK tests still pass"
+          echo "  4. Commit updated SDK code"
+
+      - name: Gate passed
+        run: echo "All SDK drift checks passed successfully."

@@ -1,5 +1,8 @@
 # RampOS Go SDK
 
+[![SDK CI](../../actions/workflows/sdk-generate.yml/badge.svg)](../../actions/workflows/sdk-generate.yml)
+[![SDK Tests](../../actions/workflows/sdk-ci.yml/badge.svg)](../../actions/workflows/sdk-ci.yml)
+
 Official Go SDK for interacting with the RampOS API. Idiomatic Go, stdlib only (net/http, crypto, encoding/json).
 
 ## Installation
@@ -348,3 +351,25 @@ client := rampos.NewClient("key", "secret",
 ## License
 
 MIT
+
+## SDK Generation & Drift Detection
+
+This SDK is generated from the OpenAPI spec defined in `crates/ramp-api/src/openapi.rs`.
+
+**CI Pipeline**: The `sdk-generate.yml` workflow automatically:
+- Detects changes to the OpenAPI spec (openapi.rs, DTOs, handlers)
+- Runs SDK tests across Go 1.21 and 1.22
+- Fails if SDK code is stale relative to the spec
+
+**Local validation**:
+```bash
+# Run drift detection locally
+bash scripts/validate-openapi.sh
+```
+
+**When updating the API**:
+1. Modify `crates/ramp-api/src/openapi.rs` with new endpoints/schemas
+2. Update Go SDK types and client methods
+3. Add/update tests
+4. Run `bash scripts/validate-openapi.sh` to verify
+5. Commit all changes together

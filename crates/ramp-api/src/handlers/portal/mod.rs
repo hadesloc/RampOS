@@ -10,6 +10,7 @@
 pub mod auth;
 pub mod intents;
 pub mod kyc;
+pub mod offramp;
 pub mod settings;
 pub mod transactions;
 pub mod wallet;

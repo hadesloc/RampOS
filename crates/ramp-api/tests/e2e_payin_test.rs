@@ -264,11 +264,15 @@ async fn test_e2e_payin_flow() {
         "rawPayloadHash": "dummy_hash"
     });
 
+    // Set internal secret for auth
+    std::env::set_var("INTERNAL_SERVICE_SECRET", "test-internal-secret");
+
     let req = Request::builder()
         .uri("/v1/intents/payin/confirm")
         .method("POST")
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
+        .header("X-Internal-Secret", "test-internal-secret")
         .body(Body::from(confirm_payload.to_string()))
         .unwrap();
 
@@ -312,4 +316,213 @@ async fn test_e2e_payin_flow() {
     assert_eq!(user_balance.unwrap().balance, Decimal::from(amount));
 
     println!("E2E Payin Test Passed!");
+}
+
+#[tokio::test]
+async fn confirm_payin_requires_internal_secret_header() {
+    // 1. Setup Database Container
+    let docker = clients::Cli::default();
+    let pg_container = docker.run(Postgres::default());
+    let pg_port = pg_container.get_host_port_ipv4(5432);
+    let db_url = format!(
+        "postgres://postgres:postgres@127.0.0.1:{}/postgres",
+        pg_port
+    );
+
+    // 2. Setup Pool & Migrate
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&db_url)
+        .await
+        .expect("Failed to connect to DB");
+
+    sqlx::migrate!("../../migrations")
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations");
+
+    // 3. Setup Repositories
+    let intent_repo = Arc::new(PgIntentRepository::new(pool.clone()));
+    let ledger_repo = Arc::new(PgLedgerRepository::new(pool.clone()));
+    let tenant_repo = Arc::new(PgTenantRepository::new(pool.clone()));
+    let user_repo = Arc::new(PgUserRepository::new(pool.clone()));
+
+    let event_publisher = Arc::new(InMemoryEventPublisher::new());
+
+    // 4. Setup Seed Data
+    let tenant_id = "tenant_auth_test";
+    let api_key = "secret_api_key_auth";
+    let mut hasher = Sha256::new();
+    hasher.update(api_key.as_bytes());
+    let api_key_hash = hex::encode(hasher.finalize());
+
+    tenant_repo
+        .create(&TenantRow {
+            id: tenant_id.to_string(),
+            name: "Auth Test Tenant".to_string(),
+            status: "ACTIVE".to_string(),
+            api_key_hash: api_key_hash,
+            api_secret_encrypted: None,
+            webhook_secret_hash: "secret".to_string(),
+            webhook_secret_encrypted: None,
+            webhook_url: Some("http://localhost/webhook".to_string()),
+            config: json!({}),
+            daily_payin_limit_vnd: None,
+            daily_payout_limit_vnd: None,
+            api_version: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
+        .await
+        .expect("Failed to create tenant");
+
+    let user_id = "user_auth_test";
+    user_repo
+        .create(&UserRow {
+            id: user_id.to_string(),
+            tenant_id: tenant_id.to_string(),
+            status: "ACTIVE".to_string(),
+            kyc_tier: 1,
+            kyc_status: "VERIFIED".to_string(),
+            kyc_verified_at: Some(Utc::now()),
+            risk_score: Some(Decimal::ZERO),
+            risk_flags: json!([]),
+            daily_payin_limit_vnd: None,
+            daily_payout_limit_vnd: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
+        .await
+        .expect("Failed to create user");
+
+    // 5. Setup Services & App
+    let payin_service = Arc::new(PayinService::new(
+        intent_repo.clone(),
+        ledger_repo.clone(),
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+
+    let payout_service = Arc::new(PayoutService::new(
+        intent_repo.clone(),
+        ledger_repo.clone(),
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+
+    let trade_service = Arc::new(TradeService::new(
+        intent_repo.clone(),
+        ledger_repo.clone(),
+        event_publisher.clone(),
+    ));
+
+    let ledger_service = Arc::new(LedgerService::new(ledger_repo.clone()));
+
+    let onboarding_service = Arc::new(OnboardingService::new(
+        tenant_repo.clone(),
+        ledger_service.clone(),
+    ));
+
+    let user_service = Arc::new(ramp_core::service::user::UserService::new(
+        user_repo.clone(),
+        event_publisher.clone(),
+    ));
+
+    let document_storage = Arc::new(MockDocumentStorage::new());
+    let report_generator = Arc::new(ReportGenerator::new(pool.clone(), document_storage));
+    let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
+
+    let app_state = AppState {
+        payin_service,
+        payout_service,
+        trade_service,
+        ledger_service,
+        onboarding_service,
+        user_service,
+        webhook_service: Arc::new(ramp_core::service::webhook::WebhookService::new(
+            Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
+            tenant_repo.clone(),
+        ).unwrap()),
+        tenant_repo: tenant_repo.clone(),
+        intent_repo: intent_repo.clone(),
+        report_generator: report_generator,
+        case_manager,
+        rule_manager: None,
+        rate_limiter: None,
+        idempotency_handler: None,
+        aa_service: None,
+        portal_auth_config: Arc::new(PortalAuthConfig {
+            jwt_secret: "test-secret-key-for-testing".to_string(),
+            issuer: None,
+            audience: None,
+            allow_missing_tenant: false,
+        }),
+        bank_confirmation_repo: None,
+        licensing_repo: None,
+        compliance_audit_service: None,
+        sso_service: Arc::new(ramp_core::sso::SsoService::new()),
+        billing_service: Arc::new(ramp_core::billing::BillingService::new(
+            ramp_core::billing::BillingConfig::default(),
+            Arc::new(ramp_core::billing::mock::MockBillingDataProvider::new()),
+        )),
+        vnst_protocol: Arc::new(ramp_core::stablecoin::vnst_protocol::VnstProtocolService::new(
+            ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
+            Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
+        )),
+        db_pool: None,
+        ctr_service: None,
+        ws_state: None,
+    };
+
+    let app = create_router(app_state);
+
+    // Set internal secret env var
+    std::env::set_var("INTERNAL_SERVICE_SECRET", "real-secret-value");
+
+    // 6. Attempt to confirm payin WITHOUT X-Internal-Secret header
+    let confirm_payload = json!({
+        "tenantId": tenant_id,
+        "referenceCode": "REF_FAKE_123",
+        "status": "FUNDS_CONFIRMED",
+        "bankTxId": "BANK_FAKE",
+        "amountVnd": 100_000,
+        "settledAt": Utc::now().to_rfc3339(),
+        "rawPayloadHash": "dummy_hash"
+    });
+
+    let req = Request::builder()
+        .uri("/v1/intents/payin/confirm")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        // Deliberately NOT including X-Internal-Secret header
+        .body(Body::from(confirm_payload.to_string()))
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    // Should be 403 Forbidden without the internal secret
+    assert_eq!(
+        response.status(),
+        StatusCode::FORBIDDEN,
+        "Confirm payin without X-Internal-Secret should be rejected with 403"
+    );
+
+    // 7. Attempt with WRONG X-Internal-Secret
+    let req = Request::builder()
+        .uri("/v1/intents/payin/confirm")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .header("X-Internal-Secret", "wrong-secret")
+        .body(Body::from(confirm_payload.to_string()))
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::FORBIDDEN,
+        "Confirm payin with wrong X-Internal-Secret should be rejected with 403"
+    );
+
+    println!("Payin Auth Test Passed!");
 }

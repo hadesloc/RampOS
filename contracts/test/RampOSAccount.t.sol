@@ -516,6 +516,119 @@ contract RampOSAccountTest is Test {
         assertTrue(account.isValidSessionKey(sessionKey));
     }
 
+    function test_SessionKeyLookupIsConstantTimeMapping() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        address[] memory allowedTargets = new address[](0);
+        bytes4[] memory allowedSelectors = new bytes4[](0);
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0,
+            dailyLimit: 0
+        });
+
+        // Add multiple session keys
+        uint48 validAfter = uint48(block.timestamp);
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+
+        for (uint256 i = 1; i <= 10; i++) {
+            (address sk,) = makeAddrAndKey(string(abi.encodePacked("sk", i)));
+            vm.prank(owner);
+            account.addSessionKey(sk, validAfter, validUntil, permissions);
+        }
+
+        // All keys should be valid via mapping lookup (O(1))
+        for (uint256 i = 1; i <= 10; i++) {
+            (address sk,) = makeAddrAndKey(string(abi.encodePacked("sk", i)));
+            assertTrue(account.isValidSessionKey(sk));
+        }
+
+        // Non-existent key returns false
+        (address fakeSk,) = makeAddrAndKey("fake");
+        assertFalse(account.isValidSessionKey(fakeSk));
+
+        // Remove a key in the middle - should not affect others
+        (address sk5,) = makeAddrAndKey(string(abi.encodePacked("sk", uint256(5))));
+        vm.prank(owner);
+        account.removeSessionKey(sk5);
+        assertFalse(account.isValidSessionKey(sk5));
+
+        // Other keys still valid
+        (address sk3,) = makeAddrAndKey(string(abi.encodePacked("sk", uint256(3))));
+        (address sk7,) = makeAddrAndKey(string(abi.encodePacked("sk", uint256(7))));
+        assertTrue(account.isValidSessionKey(sk3));
+        assertTrue(account.isValidSessionKey(sk7));
+    }
+
+    function test_TargetAllowedUsesMapping() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        (address sessionKey,) = makeAddrAndKey("session");
+        uint48 validAfter = uint48(block.timestamp);
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+
+        // Add 5 allowed targets
+        address[] memory allowedTargets = new address[](5);
+        for (uint256 i = 0; i < 5; i++) {
+            allowedTargets[i] = makeAddr(string(abi.encodePacked("target", i)));
+        }
+        bytes4[] memory allowedSelectors = new bytes4[](0);
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0,
+            dailyLimit: 0
+        });
+
+        vm.prank(owner);
+        account.addSessionKey(sessionKey, validAfter, validUntil, permissions);
+
+        // All targets should be allowed
+        for (uint256 i = 0; i < 5; i++) {
+            assertTrue(account.isTargetAllowed(sessionKey, allowedTargets[i]));
+        }
+
+        // Non-allowed target should be rejected
+        assertFalse(account.isTargetAllowed(sessionKey, makeAddr("notAllowed")));
+    }
+
+    function test_SelectorAllowedUsesMapping() public {
+        uint256 salt = 12345;
+        RampOSAccount account = factory.createAccount(owner, salt);
+
+        (address sessionKey,) = makeAddrAndKey("session");
+        uint48 validAfter = uint48(block.timestamp);
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+
+        address[] memory allowedTargets = new address[](0);
+        bytes4[] memory allowedSelectors = new bytes4[](3);
+        allowedSelectors[0] = MockTarget.setValue.selector;
+        allowedSelectors[1] = MockTarget.increment.selector;
+        allowedSelectors[2] = MockTarget.decrement.selector;
+
+        RampOSAccount.SessionKeyPermissions memory permissions = RampOSAccount.SessionKeyPermissions({
+            allowedTargets: allowedTargets,
+            allowedSelectors: allowedSelectors,
+            spendingLimit: 0,
+            dailyLimit: 0
+        });
+
+        vm.prank(owner);
+        account.addSessionKey(sessionKey, validAfter, validUntil, permissions);
+
+        // All selectors should be allowed
+        assertTrue(account.isSelectorAllowed(sessionKey, MockTarget.setValue.selector));
+        assertTrue(account.isSelectorAllowed(sessionKey, MockTarget.increment.selector));
+        assertTrue(account.isSelectorAllowed(sessionKey, MockTarget.decrement.selector));
+
+        // Non-allowed selector should be rejected
+        assertFalse(account.isSelectorAllowed(sessionKey, bytes4(0xdeadbeef)));
+    }
+
     function test_PermissionsHashConsistency() public {
         uint256 salt = 12345;
         RampOSAccount account = factory.createAccount(owner, salt);

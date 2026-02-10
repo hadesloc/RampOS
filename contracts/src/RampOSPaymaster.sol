@@ -47,8 +47,8 @@ contract RampOSPaymaster is IPaymaster, Ownable {
     mapping(address => uint256) public userLastResetDay;
     uint256 public maxOpsPerUserPerDay = 100;
 
-    /// @notice Used signatures to prevent replay attacks
-    mapping(bytes32 => bool) public usedSignatures;
+    /// @notice Per-sender nonces for replay prevention (replaces unbounded usedSignatures)
+    mapping(address => uint256) public senderNonces;
 
     /// @notice Timelock configuration
     uint256 public constant WITHDRAW_DELAY = 24 hours;
@@ -69,6 +69,7 @@ contract RampOSPaymaster is IPaymaster, Ownable {
 
     /// @notice Errors
     error InvalidSignature();
+    error InvalidNonce();
     error TenantLimitExceeded();
     error UserRateLimitExceeded();
     error PaymasterDepositTooLow();
@@ -97,24 +98,26 @@ contract RampOSPaymaster is IPaymaster, Ownable {
     ) external override returns (bytes memory context, uint256 validationData) {
         require(msg.sender == address(ENTRY_POINT), "Only entry point");
 
-        // Decode paymaster data: tenantId (32) + validUntil (6) + validAfter (6) + signature (65)
+        // Decode paymaster data: tenantId (32) + validUntil (6) + validAfter (6) + nonce (32) + signature (65)
         bytes calldata paymasterData = userOp.paymasterAndData[20:];
-        require(paymasterData.length >= 109, "Invalid paymaster data length");
+        require(paymasterData.length >= 141, "Invalid paymaster data length");
 
         bytes32 tenantId = bytes32(paymasterData[0:32]);
         uint48 validUntil = uint48(bytes6(paymasterData[32:38]));
         uint48 validAfter = uint48(bytes6(paymasterData[38:44]));
-        bytes calldata signature = paymasterData[44:109];
+        uint256 nonce = uint256(bytes32(paymasterData[44:76]));
+        bytes calldata signature = paymasterData[76:141];
 
-        // Verify signature (includes chainid and contract address to prevent cross-chain replay)
+        // Validate and increment nonce (prevents replay, bounded storage)
+        if (nonce != senderNonces[userOp.sender]) revert InvalidNonce();
+        senderNonces[userOp.sender] = nonce + 1;
+
+        // Verify signature (includes chainid, contract address, and nonce to prevent cross-chain and replay)
         bytes32 hash = keccak256(abi.encodePacked(
             userOpHash, tenantId, validUntil, validAfter,
+            nonce,
             block.chainid, address(this)
         )).toEthSignedMessageHash();
-
-        // Prevent signature replay attacks
-        require(!usedSignatures[hash], "Signature already used");
-        usedSignatures[hash] = true;
 
         if (hash.recover(signature) != verifyingSigner) {
             revert InvalidSignature();

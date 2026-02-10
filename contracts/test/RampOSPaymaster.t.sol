@@ -44,18 +44,24 @@ contract RampOSPaymasterTest is Test {
         bytes32 tenantId = keccak256("tenant1");
         uint48 validUntil = uint48(block.timestamp + 1 hours);
         uint48 validAfter = uint48(block.timestamp);
+        uint256 nonce = 0;
 
-        // Construct signature
-        bytes32 hash = keccak256(abi.encodePacked(userOpHash, tenantId, validUntil, validAfter))
-            .toEthSignedMessageHash();
+        // Construct signature (now includes nonce, chainid, and paymaster address)
+        bytes32 hash = keccak256(
+            abi.encodePacked(
+                userOpHash, tenantId, validUntil, validAfter,
+                nonce,
+                block.chainid, address(paymaster)
+            )
+        ).toEthSignedMessageHash();
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, hash);
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Construct paymasterAndData
-        // address(20) + tenantId(32) + validUntil(6) + validAfter(6) + signature(65)
+        // address(20) + tenantId(32) + validUntil(6) + validAfter(6) + nonce(32) + signature(65)
         bytes memory paymasterAndData =
-            abi.encodePacked(address(paymaster), tenantId, validUntil, validAfter, signature);
+            abi.encodePacked(address(paymaster), tenantId, validUntil, validAfter, nonce, signature);
         userOp.paymasterAndData = paymasterAndData;
 
         // Mock entry point call
@@ -75,6 +81,9 @@ contract RampOSPaymasterTest is Test {
         assertEq(sender, userOp.sender);
         assertEq(tid, tenantId);
         assertEq(cost, 1e18);
+
+        // Verify nonce was incremented
+        assertEq(paymaster.senderNonces(userOp.sender), 1);
     }
 
     function test_TenantLimit() public {
@@ -83,33 +92,19 @@ contract RampOSPaymasterTest is Test {
         vm.prank(owner);
         paymaster.setTenantLimit(tenantId, 1 ether);
 
-        // Test usage
-        PackedUserOperation memory userOp;
-        userOp.sender = makeAddr("sender");
-        bytes32 userOpHash = keccak256("userOp");
+        address sender = makeAddr("sender");
         uint48 validUntil = uint48(block.timestamp + 1 hours);
         uint48 validAfter = uint48(block.timestamp);
 
-        bytes32 hash = keccak256(abi.encodePacked(userOpHash, tenantId, validUntil, validAfter))
-            .toEthSignedMessageHash();
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, hash);
-        bytes memory signature = abi.encodePacked(r, s, v);
+        // First op ok (0.5 eth) - nonce 0
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 0, 0.5 ether);
 
-        userOp.paymasterAndData =
-            abi.encodePacked(address(paymaster), tenantId, validUntil, validAfter, signature);
+        // Second op ok (0.5 eth) - nonce 1
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 1, 0.5 ether);
 
-        // First op ok (0.5 eth)
-        vm.prank(address(entryPoint));
-        paymaster.validatePaymasterUserOp(userOp, userOpHash, 0.5 ether);
-
-        // Second op ok (0.5 eth)
-        vm.prank(address(entryPoint));
-        paymaster.validatePaymasterUserOp(userOp, userOpHash, 0.5 ether);
-
-        // Third op fails (> 1 eth total)
-        vm.prank(address(entryPoint));
+        // Third op fails (> 1 eth total) - nonce 2
         vm.expectRevert(RampOSPaymaster.TenantLimitExceeded.selector);
-        paymaster.validatePaymasterUserOp(userOp, userOpHash, 0.1 ether);
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 2, 0.1 ether);
     }
 
     // ============ Timelock Tests ============
@@ -330,5 +325,105 @@ contract RampOSPaymasterTest is Test {
 
     function test_WITHDRAW_DELAY_Is24Hours() public view {
         assertEq(paymaster.WITHDRAW_DELAY(), 24 hours);
+    }
+
+    // ============ Nonce-Based Replay Prevention Tests ============
+
+    function test_PaymasterNonceReplayPrevention() public {
+        bytes32 tenantId = keccak256("tenant1");
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+        uint48 validAfter = uint48(block.timestamp);
+        address sender = makeAddr("sender");
+
+        // Nonce 0 should work
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 0, 0.1 ether);
+
+        // Check nonce incremented
+        assertEq(paymaster.senderNonces(sender), 1);
+
+        // Nonce 1 should work
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 1, 0.1 ether);
+
+        // Check nonce incremented again
+        assertEq(paymaster.senderNonces(sender), 2);
+    }
+
+    function test_PaymasterNonceRejectsReplay() public {
+        bytes32 tenantId = keccak256("tenant1");
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+        uint48 validAfter = uint48(block.timestamp);
+        address sender = makeAddr("sender");
+
+        // Nonce 0 should work
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 0, 0.1 ether);
+
+        // Trying nonce 0 again should fail (replay)
+        vm.expectRevert(RampOSPaymaster.InvalidNonce.selector);
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 0, 0.1 ether);
+    }
+
+    function test_PaymasterNonceRejectsOutOfOrder() public {
+        bytes32 tenantId = keccak256("tenant1");
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+        uint48 validAfter = uint48(block.timestamp);
+        address sender = makeAddr("sender");
+
+        // Trying nonce 1 before nonce 0 should fail
+        vm.expectRevert(RampOSPaymaster.InvalidNonce.selector);
+        _validateWithNonce(sender, tenantId, validUntil, validAfter, 1, 0.1 ether);
+    }
+
+    function test_PaymasterNoncesPerSenderIsolation() public {
+        bytes32 tenantId = keccak256("tenant1");
+        uint48 validUntil = uint48(block.timestamp + 1 hours);
+        uint48 validAfter = uint48(block.timestamp);
+        address sender1 = makeAddr("sender1");
+        address sender2 = makeAddr("sender2");
+
+        // Sender1 nonce 0
+        _validateWithNonce(sender1, tenantId, validUntil, validAfter, 0, 0.1 ether);
+
+        // Sender2 nonce 0 should also work (independent nonce tracking)
+        _validateWithNonce(sender2, tenantId, validUntil, validAfter, 0, 0.1 ether);
+
+        assertEq(paymaster.senderNonces(sender1), 1);
+        assertEq(paymaster.senderNonces(sender2), 1);
+    }
+
+    /// @dev Helper to construct and validate a paymaster op with a nonce
+    function _validateWithNonce(
+        address sender,
+        bytes32 tenantId,
+        uint48 validUntil,
+        uint48 validAfter,
+        uint256 nonce,
+        uint256 maxCost
+    ) internal {
+        PackedUserOperation memory userOp;
+        userOp.sender = sender;
+        userOp.nonce = 0;
+
+        bytes32 userOpHash = keccak256(abi.encodePacked("userOp", nonce, sender));
+
+        // Construct signature including nonce
+        bytes32 hash = keccak256(
+            abi.encodePacked(
+                userOpHash, tenantId, validUntil, validAfter,
+                nonce,
+                block.chainid, address(paymaster)
+            )
+        ).toEthSignedMessageHash();
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, hash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // paymasterAndData: address(20) + tenantId(32) + validUntil(6) + validAfter(6) + nonce(32) + signature(65)
+        bytes memory paymasterAndData = abi.encodePacked(
+            address(paymaster), tenantId, validUntil, validAfter, nonce, signature
+        );
+        userOp.paymasterAndData = paymasterAndData;
+
+        vm.prank(address(entryPoint));
+        paymaster.validatePaymasterUserOp(userOp, userOpHash, maxCost);
     }
 }

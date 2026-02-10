@@ -1,23 +1,934 @@
 # RampOS Next-Gen: Master Implementation Plan
-# 15 World-Class Features - Ultra-Detailed Task Breakdown
+# 16 World-Class Features + Production Rebaseline Execution Plan
 
-**Date:** 2026-02-09
-**Version:** 1.0
-**Status:** APPROVED - Ready for Development
-**Source:** 4-agent parallel analysis (backend, frontend, contracts/infra, trends)
-**Total Tasks:** 16 features → 139 sub-tasks
+**Date:** 2026-02-10
+**Version:** 1.2
+**Status:** REBASELINED - Single source-of-truth includes feature catalog + production rebaseline execution
+**Source:** 4-agent parallel analysis + 2026-02-10 audit consolidation
+**Total Tasks:** 16 features -> 139 sub-tasks + 9 rebaseline execution tracks
 
 ---
 
+## 2026-02-10 Production Rebaseline (Integrated Source-Of-Truth)
+**Goal:** Rebaseline NEXT-GEN execution against audited code reality, then close production-critical gaps so F01-F16 can be reported with evidence-based maturity instead of optimistic completion labels.
+
+**Architecture:** Two-track delivery. Track A is truth-sync (status ledger, maturity labels, acceptance gates). Track B is implementation hardening focused on P0/P1 blockers from the 2026-02-10 audit (F11, F16, F09, F14, F08, and integration drift in F13/F16). Each task is executed test-first and promoted only after explicit verification.
+
+**Tech Stack:** Rust (Axum/sqlx/tower), Solidity (Foundry), PostgreSQL migrations, GitHub Actions, Next.js/TypeScript frontend, Python/Go SDK CI, Napas/VietQR adapter layer.
+
+---
+
+## Inputs And Decision Rules
+
+- Source plans: `NEXT-GEN-MASTER-PLAN.md`, `NEXT-GEN-ROADMAP.md`
+- Audit input: 4-agent consolidated report received on 2026-02-10
+- Maturity labels:
+  - `Complete`: acceptance criteria satisfied with passing tests and non-simulated runtime behavior
+  - `Partial`: meaningful implementation exists but acceptance criteria not fully met
+  - `Simulated`: placeholder/mock/stub logic on critical path
+  - `Blocked`: dependency or architectural decision prevents implementation completion
+
+---
+
+## Reality Baseline (2026-02-10)
+
+| Feature | Rebaseline Status | Notes |
+|---|---|---|
+| F01 Rate limiting | Partial | Middleware exists, tenant DB override + acceptance gaps remain |
+| F02 Versioning | Partial | Core versioning exists, full transformer/pinning acceptance incomplete |
+| F03 OpenAPI docs | Partial | OpenAPI + docs endpoints exist, completeness/CI diff gate incomplete |
+| F04 Webhook v2 | Partial | Retry/signing exists, SDK and full v2 operational contract still incomplete |
+| F05 AI Fraud | Partial | Rule/decision engine exists, production ML pipeline maturity incomplete |
+| F06 Passkey | Partial | Backend/contracts present, full frontend and E2E parity incomplete |
+| F07 GraphQL | Partial | GraphQL module exists, router mount and acceptance not complete |
+| F08 Python/Go SDK | Partial | SDK code and tests exist, auto-generate CI workflow gap remains |
+| F09 ZK-KYC | Simulated | Verifier path still simulated; full circuit/proof pipeline incomplete |
+| F10 Chain abstraction | Partial | Significant building blocks exist; full API/UI parity incomplete |
+| F11 MPC custody | Simulated | Custody module still simulated, no production MPC integration |
+| F12 Widget SDK | Partial | Package exists; production runtime/distribution evidence incomplete |
+| F13 Backend fixes | Partial | Multiple fixes landed; payout policy and integration gaps remain |
+| F14 Contract upgrades | Partial | Session key O(1) and paymaster nonce acceptance incomplete |
+| F15 Frontend DX | Partial | Good progress, still not fully real-time/real-data end-to-end |
+| F16 Off-ramp VND | Partial | Core flow exists but still hybrid with in-memory/simulated components |
+
+---
+
+## Execution Sequence (Rebaseline)
+
+### Task 1: Establish Source-Of-Truth Status Ledger
+
+**Files:**
+- Create: `docs/plans/2026-02-10-next-gen-status-ledger.md`
+- Modify: `.claude/dashboard.md`
+- Modify: `NEXT-GEN-MASTER-PLAN.md`
+- Modify: `NEXT-GEN-ROADMAP.md`
+
+**Step 1: Write failing validation script test for maturity label schema**
+
+```bash
+python scripts/validate-plan.py docs/plans/2026-02-10-next-gen-status-ledger.md
+```
+
+Expected: FAIL because file does not exist yet.
+
+**Step 2: Create status ledger with F01-F16 rows and evidence anchors**
+
+```markdown
+| Feature | Label | Evidence | Last Verified |
+|---|---|---|---|
+| F11 | Simulated | crates/ramp-core/src/custody/mod.rs | 2026-02-10 |
+```
+
+**Step 3: Update dashboard from optimistic completion to evidence-based counts**
+
+- Replace `16/16 COMPLETE` style aggregate with label counts (`Complete`, `Partial`, `Simulated`, `Blocked`).
+
+**Step 4: Run validation and format checks**
+
+```bash
+python scripts/validate-plan.py docs/plans/2026-02-10-next-gen-status-ledger.md
+```
+
+Expected: PASS.
+
+**Step 5: Commit**
+
+```bash
+git add docs/plans/2026-02-10-next-gen-status-ledger.md .claude/dashboard.md NEXT-GEN-MASTER-PLAN.md NEXT-GEN-ROADMAP.md
+git commit -m "docs: rebaseline next-gen status with evidence-based maturity labels"
+```
+
+---
+
+### Task 2: F16 Persistence Parity (Remove In-Memory Off-Ramp Intents)
+
+**Files:**
+- Modify: `crates/ramp-core/src/service/offramp.rs`
+- Create: `crates/ramp-core/src/repository/offramp.rs`
+- Create: `migrations/027_offramp_intents.sql`
+- Create: `crates/ramp-core/src/repository/offramp_tests.rs`
+
+**Step 1: Write failing repository-backed off-ramp persistence test**
+
+```rust
+#[tokio::test]
+async fn offramp_intent_persists_across_service_restart() {
+    // create, drop service, recreate, fetch by id -> must exist
+}
+```
+
+**Step 2: Run the test and verify failure**
+
+Run: `cargo test -p ramp-core offramp_intent_persists_across_service_restart -- --nocapture`
+Expected: FAIL while service still depends on in-memory state.
+
+**Step 3: Implement SQL-backed repository and wire into OffRampService**
+
+- Move intent storage from in-memory map to repository calls.
+- Keep backward-compatible service API surface.
+
+**Step 4: Run target tests**
+
+Run: `cargo test -p ramp-core offramp -- --nocapture`
+Expected: PASS.
+
+**Step 5: Commit**
+
+```bash
+git add migrations/027_offramp_intents.sql crates/ramp-core/src/repository/offramp.rs crates/ramp-core/src/service/offramp.rs crates/ramp-core/src/repository/offramp_tests.rs
+git commit -m "feat(offramp): persist intents in db instead of in-memory state"
+```
+
+---
+
+### Task 3: F16 API And Settlement Completion (Portal/Admin/Settlement)
+
+**Files:**
+- Create: `crates/ramp-api/src/handlers/portal/offramp.rs`
+- Create: `crates/ramp-api/src/handlers/admin/offramp.rs`
+- Modify: `crates/ramp-api/src/router.rs`
+- Create: `crates/ramp-core/src/service/settlement.rs`
+- Create: `crates/ramp-api/tests/e2e_offramp_test.rs`
+
+**Step 1: Write failing E2E tests for missing off-ramp endpoints**
+
+```rust
+#[tokio::test]
+async fn portal_offramp_quote_create_status_confirm_flow() {}
+
+#[tokio::test]
+async fn admin_offramp_pending_approve_reject_flow() {}
+```
+
+**Step 2: Run E2E tests and verify route-not-found failure**
+
+Run: `cargo test -p ramp-api e2e_offramp_test -- --nocapture`
+Expected: FAIL (404 or unimplemented).
+
+**Step 3: Implement handlers + router wiring + settlement service integration points**
+
+- Add portal routes.
+- Add admin review routes.
+- Add settlement trigger path for completed transactions.
+
+**Step 4: Re-run off-ramp E2E tests**
+
+Run: `cargo test -p ramp-api e2e_offramp_test -- --nocapture`
+Expected: PASS.
+
+**Step 5: Commit**
+
+```bash
+git add crates/ramp-api/src/handlers/portal/offramp.rs crates/ramp-api/src/handlers/admin/offramp.rs crates/ramp-api/src/router.rs crates/ramp-core/src/service/settlement.rs crates/ramp-api/tests/e2e_offramp_test.rs
+git commit -m "feat(offramp): add portal/admin endpoints and settlement integration"
+```
+
+---
+
+### Task 4: F13/F16 Policy Hardening + Payin Auth Drift Fix
+
+**Files:**
+- Modify: `crates/ramp-core/src/service/payout.rs`
+- Modify: `crates/ramp-compliance/src/withdraw_policy.rs`
+- Modify: `crates/ramp-api/tests/e2e_payin_test.rs`
+- Modify: `crates/ramp-api/src/handlers/payin.rs`
+- Modify: `.github/workflows/deploy-prod.yml`
+
+**Step 1: Write failing tests for payout policy enforcement**
+
+```rust
+#[tokio::test]
+async fn payout_above_tier_limit_is_rejected() {}
+```
+
+**Step 2: Write failing E2E test for payin confirmation auth contract**
+
+```rust
+#[tokio::test]
+async fn confirm_payin_requires_internal_secret_header() {}
+```
+
+**Step 3: Run tests to verify failures**
+
+Run:
+```bash
+cargo test -p ramp-core payout_above_tier_limit_is_rejected -- --nocapture
+cargo test -p ramp-api confirm_payin_requires_internal_secret_header -- --nocapture
+```
+Expected: FAIL.
+
+**Step 4: Implement real policy checks and align E2E auth headers with handler contract**
+
+- Replace placeholder payout policy with compliance-backed logic.
+- Ensure tests include required `X-Internal-Secret`.
+- Change production deploy health gate to fail-fast.
+
+**Step 5: Re-run focused tests**
+
+Run:
+```bash
+cargo test -p ramp-core payout -- --nocapture
+cargo test -p ramp-api e2e_payin_test -- --nocapture
+```
+Expected: PASS.
+
+**Step 6: Commit**
+
+```bash
+git add crates/ramp-core/src/service/payout.rs crates/ramp-compliance/src/withdraw_policy.rs crates/ramp-api/src/handlers/payin.rs crates/ramp-api/tests/e2e_payin_test.rs .github/workflows/deploy-prod.yml
+git commit -m "fix(policy): replace payout placeholder and align payin confirm auth contract"
+```
+
+---
+
+### Task 5: F14 Contract Security Acceptance Completion
+
+**Files:**
+- Modify: `contracts/src/RampOSAccount.sol`
+- Modify: `contracts/src/RampOSPaymaster.sol`
+- Modify: `contracts/test/RampOSAccount.t.sol`
+- Modify: `contracts/test/RampOSPaymaster.t.sol`
+
+**Step 1: Write failing contract tests**
+
+```solidity
+function testSessionKeyLookupIsConstantTimeMapping() public {}
+function testPaymasterNonceReplayPrevention() public {}
+```
+
+**Step 2: Run tests to verify failure**
+
+Run: `cd contracts && forge test --match-test "testSessionKeyLookupIsConstantTimeMapping|testPaymasterNonceReplayPrevention" -vv`
+Expected: FAIL.
+
+**Step 3: Implement O(1) session key lookup and nonce-based replay prevention**
+
+- Replace linear scan structures for session key permissions.
+- Replace unbounded `usedSignatures` replay guard with nonce model.
+
+**Step 4: Run full paymaster/account test suites**
+
+Run: `cd contracts && forge test --match-path test/RampOSAccount.t.sol --match-path test/RampOSPaymaster.t.sol -vv`
+Expected: PASS.
+
+**Step 5: Commit**
+
+```bash
+git add contracts/src/RampOSAccount.sol contracts/src/RampOSPaymaster.sol contracts/test/RampOSAccount.t.sol contracts/test/RampOSPaymaster.t.sol
+git commit -m "feat(contracts): complete session key O(1) and paymaster nonce replay protection"
+```
+
+---
+
+### Task 6: F08 SDK Generation CI And Drift Prevention
+
+**Files:**
+- Create: `.github/workflows/sdk-generate.yml`
+- Modify: `sdk-python/README.md`
+- Modify: `sdk-go/README.md`
+- Modify: `scripts/validate-openapi.sh`
+
+**Step 1: Write failing CI smoke check for generated SDK drift**
+
+```bash
+bash scripts/validate-openapi.sh
+```
+
+Expected: FAIL when SDKs are stale or generator output differs.
+
+**Step 2: Add generator workflow with matrix (python, go) and drift check**
+
+- Trigger on OpenAPI spec changes and manual dispatch.
+- Enforce test run for TS/Python/Go SDK.
+
+**Step 3: Run local validation**
+
+Run:
+```bash
+bash scripts/validate-openapi.sh
+pytest -q sdk-python/tests
+go test ./... ./sdk-go/...
+```
+Expected: PASS.
+
+**Step 4: Commit**
+
+```bash
+git add .github/workflows/sdk-generate.yml scripts/validate-openapi.sh sdk-python/README.md sdk-go/README.md
+git commit -m "ci(sdk): add auto-generate workflow and sdk drift guard"
+```
+
+---
+
+### Task 7: F07 GraphQL Runtime Parity And Acceptance
+
+**Files:**
+- Modify: `crates/ramp-api/src/router.rs`
+- Modify: `crates/ramp-api/src/graphql/mod.rs`
+- Create: `crates/ramp-api/tests/graphql_runtime_tests.rs`
+
+**Step 1: Write failing test to assert `/graphql` route availability**
+
+```rust
+#[tokio::test]
+async fn graphql_endpoint_is_mounted() {}
+```
+
+**Step 2: Run test and verify failure if route not mounted**
+
+Run: `cargo test -p ramp-api graphql_endpoint_is_mounted -- --nocapture`
+Expected: FAIL.
+
+**Step 3: Wire schema endpoints and playground route in main router**
+
+- Mount GraphQL route.
+- Mount playground route.
+- Validate auth middleware behavior for query/mutation/subscription.
+
+**Step 4: Re-run GraphQL runtime tests**
+
+Run: `cargo test -p ramp-api graphql_runtime_tests -- --nocapture`
+Expected: PASS.
+
+**Step 5: Commit**
+
+```bash
+git add crates/ramp-api/src/router.rs crates/ramp-api/src/graphql/mod.rs crates/ramp-api/tests/graphql_runtime_tests.rs
+git commit -m "feat(graphql): mount runtime endpoints and add acceptance tests"
+```
+
+---
+
+### Task 8: F09/F11 Decision Gate (Real Integration Or Explicit Scope Downgrade)
+
+**Files:**
+- Modify: `crates/ramp-core/src/custody/mod.rs`
+- Modify: `contracts/src/zk/ZkKycVerifier.sol`
+- Create: `.claude/research/mpc-evaluation.md`
+- Create: `docs/plans/2026-02-10-f09-f11-decision-record.md`
+
+**Step 1: Write decision criteria document before implementation**
+
+```markdown
+## Decision Criteria
+- Security model
+- Auditability
+- Performance SLO
+- Integration cost
+```
+
+**Step 2: For each feature, choose one path**
+
+- Path A: implement real integration now and add production acceptance tests.
+- Path B: relabel as `planned-only` and remove from production-complete claims.
+
+**Step 3: If Path A selected, write failing tests first**
+
+- ZK proof verification integration test.
+- MPC threshold signing integration test.
+
+**Step 4: Implement selected path and update status ledger**
+
+- Keep label transitions evidence-based.
+
+**Step 5: Commit**
+
+```bash
+git add crates/ramp-core/src/custody/mod.rs contracts/src/zk/ZkKycVerifier.sol .claude/research/mpc-evaluation.md docs/plans/2026-02-10-f09-f11-decision-record.md docs/plans/2026-02-10-next-gen-status-ledger.md
+git commit -m "chore(rebaseline): formalize F09/F11 decision gate and update maturity labels"
+```
+
+---
+
+### Task 9: Final Production Readiness Gate For F01-F16
+
+**Files:**
+- Create: `docs/plans/2026-02-10-next-gen-go-live-checklist.md`
+- Modify: `scripts/run-full-suite.sh`
+- Modify: `FINAL_STATUS_REPORT.md`
+
+**Step 1: Create failing go-live checklist with strict exit criteria**
+
+```markdown
+- [ ] No feature labeled Complete without passing acceptance tests
+- [ ] No Simulated module on production critical path
+- [ ] Cross-feature E2E green
+```
+
+**Step 2: Add a full-suite command that fails on any missing gate**
+
+Run: `bash scripts/run-full-suite.sh`
+Expected: FAIL until all gates are satisfied.
+
+**Step 3: Execute verification bundle**
+
+Run:
+```bash
+cargo test --workspace
+cd contracts && forge test -vv
+npm test --workspace frontend
+pytest -q sdk-python/tests
+go test ./... ./sdk-go/...
+```
+Expected: PASS.
+
+**Step 4: Publish final status with evidence links**
+
+- Update `FINAL_STATUS_REPORT.md` with exact pass/fail evidence and command timestamps.
+
+**Step 5: Commit**
+
+```bash
+git add docs/plans/2026-02-10-next-gen-go-live-checklist.md scripts/run-full-suite.sh FINAL_STATUS_REPORT.md
+git commit -m "chore(release): enforce production-readiness gate for next-gen features"
+```
+
+---
+
+## Delivery Cadence
+
+| Week | Focus |
+|---|---|
+| Week 1 | Task 1, Task 2 |
+| Week 2 | Task 3, Task 4 |
+| Week 3 | Task 5, Task 6 |
+| Week 4 | Task 7, Task 8 |
+| Week 5 | Task 9 and release decision |
+
+---
+
+## Exit Criteria For "Production-Ready"
+
+- No feature in F01-F16 is reported `Complete` without acceptance-test evidence.
+- F09/F11 are either real integrations with tests or explicitly downgraded from production scope.
+- F16 is no longer hybrid due to in-memory/simulated components.
+- Contract hardening gaps (session key lookup, paymaster replay model) are closed.
+- SDK generation is automated and protected by CI drift checks.
+- Cross-feature E2E and deploy health checks are fail-fast.
+
+---
+
+## Rebaseline Agent Runbook (RB01-RB09) - Anti-Misexecution
+
+This section is mandatory for all agents. If any rule below is violated, task status must be reverted to `In Progress` and cannot be marked done.
+
+### Global Execution Contract (Mandatory)
+
+1. Execute exactly one RB task at a time (`RB01` to `RB09`).
+2. Every code change must follow TDD order:
+   - Add/adjust failing test first.
+   - Confirm test fails for the expected reason.
+   - Implement minimal code to pass.
+   - Run focused tests.
+   - Run regression tests for affected module.
+3. Never mark any feature `Complete` without all acceptance tests passing and non-simulated behavior verified.
+4. Never leave placeholder logic (`TODO`, `panic!`, simulated branch on production path) in merged code.
+5. Every DB schema change must include:
+   - Forward migration.
+   - Down migration.
+   - Repository/service wiring.
+   - Migration safety note in PR.
+6. Every status change in dashboard must reference evidence (test command + file path + timestamp).
+7. Any failed required command means task remains `In Progress` (no partial-merge exceptions).
+
+### Universal PR Evidence Pack (Required For Every RB Task)
+
+- Scope statement: what changed and what did not change.
+- File list touched with rationale per file.
+- Command log with timestamp (local timezone or UTC).
+- Test results summary (focused + regression).
+- Risk assessment (functional, performance, security).
+- Rollback plan (exact files/commits to revert if needed).
+
+### Universal Merge Gate (All RB Tasks Must Pass)
+
+- [ ] Task-level Must-do checklist is fully complete.
+- [ ] Task-level Must-not-do checklist has zero violations.
+- [ ] Focused tests pass.
+- [ ] Regression tests for impacted module pass.
+- [ ] No placeholder/simulated code added to production path.
+- [ ] Dashboard + status ledger updated with evidence.
+- [ ] At least one reviewer can reproduce command results.
+
+---
+
+### RB01 - Establish Source-Of-Truth Status Ledger
+
+**Purpose:** Replace optimistic status reporting with evidence-based maturity tracking.
+
+**Scope (In):**
+- `docs/plans/2026-02-10-next-gen-status-ledger.md`
+- `.claude/dashboard.md`
+- `NEXT-GEN-MASTER-PLAN.md`
+- `NEXT-GEN-ROADMAP.md`
+
+**Scope (Out):**
+- Business logic changes in Rust/Solidity/frontend.
+
+**Must do:**
+- Create ledger with F01-F16 rows and four labels only: `Complete`, `Partial`, `Simulated`, `Blocked`.
+- Add one evidence anchor per feature (`file:line` or test name).
+- Align dashboard summary with ledger counts.
+- Add last-verified date per feature.
+
+**Should do:**
+- Keep evidence entries short and machine-greppable.
+- Keep one row per feature, no duplicates.
+
+**Must not do:**
+- Do not use unsupported labels (`Done`, `Almost`, `WIP-ish`).
+- Do not claim `Complete` without acceptance evidence.
+
+**Required tests/commands:**
+- `python scripts/validate-plan.py docs/plans/2026-02-10-next-gen-status-ledger.md`
+- `rg -n "Summary|F01|F16|Simulated|Partial" .claude/dashboard.md docs/plans/2026-02-10-next-gen-status-ledger.md`
+
+**Task success criteria:**
+- Ledger exists and validates.
+- Dashboard numbers equal ledger numbers exactly.
+- No contradiction between dashboard and master plan baseline.
+
+**Task merge gate:**
+- [ ] Validation script passes.
+- [ ] F01-F16 all present exactly once.
+- [ ] Summary counts match.
+
+---
+
+### RB02 - F16 Persistence Parity (Remove In-Memory Off-Ramp Intents)
+
+**Purpose:** Eliminate in-memory state as source-of-truth for off-ramp intents.
+
+**Scope (In):**
+- `migrations/027_offramp_intents.sql`
+- `migrations/down/027_offramp_intents_down.sql` (or next valid index if already used)
+- `crates/ramp-core/src/repository/offramp.rs`
+- `crates/ramp-core/src/service/offramp.rs`
+- `crates/ramp-core/src/repository/offramp_tests.rs`
+
+**Scope (Out):**
+- UI redesign.
+- New provider integrations.
+
+**Must do:**
+- Add persistent storage model for off-ramp intent lifecycle.
+- Replace in-memory CRUD in service path with repository calls.
+- Keep idempotency and state transition integrity.
+- Add restart-survivability test.
+
+**Should do:**
+- Add index on `(tenant_id, created_at)` or equivalent query path.
+- Keep repository API explicit (`create`, `get`, `update_state`, `list_by_status`).
+
+**Must not do:**
+- No fallback to in-memory map for production route.
+- No silent state transition on invalid previous state.
+
+**Required tests/commands:**
+- `cargo test -p ramp-core offramp_intent_persists_across_service_restart -- --nocapture`
+- `cargo test -p ramp-core offramp -- --nocapture`
+- `cargo check -p ramp-core`
+
+**Task success criteria:**
+- Intent data survives service restart.
+- State transitions remain deterministic and auditable.
+- All off-ramp core tests pass.
+
+**Task merge gate:**
+- [ ] Migration up/down exists and is reversible.
+- [ ] In-memory store removed from production path.
+- [ ] Focused tests pass.
+
+---
+
+### RB03 - F16 API + Settlement Completion
+
+**Purpose:** Close missing API surfaces and settlement wiring for off-ramp.
+
+**Scope (In):**
+- `crates/ramp-api/src/handlers/portal/offramp.rs`
+- `crates/ramp-api/src/handlers/admin/offramp.rs`
+- `crates/ramp-api/src/router.rs`
+- `crates/ramp-core/src/service/settlement.rs`
+- `crates/ramp-api/tests/e2e_offramp_test.rs`
+
+**Scope (Out):**
+- unrelated admin modules.
+
+**Must do:**
+- Implement portal endpoints: quote/create/status/confirm.
+- Implement admin endpoints: pending/approve/reject.
+- Register routes in router with correct auth middleware.
+- Wire settlement trigger for completed off-ramp flow.
+- Add E2E tests for both portal and admin flows.
+
+**Should do:**
+- Return consistent response envelope and error codes.
+- Emit event/audit record on approve/reject.
+
+**Must not do:**
+- No route that bypasses auth/tenant boundary.
+- No endpoint with partial handler stub returning 200.
+
+**Required tests/commands:**
+- `cargo test -p ramp-api e2e_offramp_test -- --nocapture`
+- `cargo test -p ramp-api offramp -- --nocapture`
+- `cargo check -p ramp-api`
+
+**Task success criteria:**
+- Portal flow works end-to-end via API.
+- Admin moderation flow works with auditability.
+- Settlement service has executable path and tests.
+
+**Task merge gate:**
+- [ ] All new routes appear in router.
+- [ ] E2E tests pass for create->confirm->status + approve/reject.
+- [ ] No auth bypass in new handlers.
+
+---
+
+### RB04 - F13/F16 Policy Hardening + Payin Auth Drift Fix
+
+**Purpose:** Replace placeholder payout policy and eliminate handler/test auth drift.
+
+**Scope (In):**
+- `crates/ramp-core/src/service/payout.rs`
+- `crates/ramp-compliance/src/withdraw_policy.rs`
+- `crates/ramp-api/src/handlers/payin.rs`
+- `crates/ramp-api/tests/e2e_payin_test.rs`
+- `.github/workflows/deploy-prod.yml`
+
+**Scope (Out):**
+- Non-payment domains.
+
+**Must do:**
+- Replace placeholder payout policy with compliance-backed checks:
+  - Tier limits.
+  - Velocity rules.
+  - Sanctions result integration.
+  - Manual-review threshold.
+- Align E2E payin confirm test with `X-Internal-Secret` contract.
+- Make deploy health check fail-fast on health probe failure.
+
+**Should do:**
+- Add clear rejection reason codes (machine-readable).
+- Add policy decision logging with request id.
+
+**Must not do:**
+- No fallback `allow` when compliance engine errors.
+- No soft-fail deploy gate for production.
+
+**Required tests/commands:**
+- `cargo test -p ramp-core payout_above_tier_limit_is_rejected -- --nocapture`
+- `cargo test -p ramp-api confirm_payin_requires_internal_secret_header -- --nocapture`
+- `cargo test -p ramp-api e2e_payin_test -- --nocapture`
+
+**Task success criteria:**
+- Payout policy is deterministic and test-covered.
+- Payin confirm auth behavior and E2E are consistent.
+- Production deploy health gate blocks on failure.
+
+**Task merge gate:**
+- [ ] Placeholder branch removed.
+- [ ] Compliance checks executed before payout creation.
+- [ ] E2E auth contract test passes.
+
+---
+
+### RB05 - F14 Contract Security Acceptance Completion
+
+**Purpose:** Close contract acceptance gaps on session-key complexity and replay prevention.
+
+**Scope (In):**
+- `contracts/src/RampOSAccount.sol`
+- `contracts/src/RampOSPaymaster.sol`
+- `contracts/test/RampOSAccount.t.sol`
+- `contracts/test/RampOSPaymaster.t.sol`
+
+**Scope (Out):**
+- Tokenomics or unrelated contract refactors.
+
+**Must do:**
+- Replace session-key linear lookup path with O(1) mapping-based checks.
+- Replace unbounded `usedSignatures` replay guard with nonce-based mechanism.
+- Add tests proving replay rejection and nonce progression.
+
+**Should do:**
+- Keep storage layout upgrade-safe.
+- Add comments for nonce domain/encoding strategy.
+
+**Must not do:**
+- No behavior-breaking storage collision for upgradeable contracts.
+- No replay path that passes with old signatures.
+
+**Required tests/commands:**
+- `cd contracts && forge test --match-test "testSessionKeyLookupIsConstantTimeMapping|testPaymasterNonceReplayPrevention" -vv`
+- `cd contracts && forge test --match-path test/RampOSAccount.t.sol --match-path test/RampOSPaymaster.t.sol -vv`
+
+**Task success criteria:**
+- Session-key path has no O(n) target scanning.
+- Replay protection enforced by nonce with passing tests.
+- Contract test suites pass for impacted modules.
+
+**Task merge gate:**
+- [ ] New tests fail before implementation and pass after.
+- [ ] No storage-layout regression evidence.
+- [ ] Replay tests cover duplicate signature attempts.
+
+---
+
+### RB06 - F08 SDK Generation CI + Drift Prevention
+
+**Purpose:** Make Python/Go SDK generation reproducible and CI-enforced.
+
+**Scope (In):**
+- `.github/workflows/sdk-generate.yml`
+- `scripts/validate-openapi.sh`
+- `sdk-python/README.md`
+- `sdk-go/README.md`
+
+**Scope (Out):**
+- business logic changes in API handlers.
+
+**Must do:**
+- Add workflow trigger on OpenAPI changes + manual dispatch.
+- Add matrix generation/test for python and go SDK.
+- Add drift detection (generated output mismatch fails CI).
+- Document regeneration steps in both SDK READMEs.
+
+**Should do:**
+- Cache generator dependencies to reduce CI runtime.
+- Upload generated artifacts on CI for inspection.
+
+**Must not do:**
+- No best-effort warning-only mode; drift must fail.
+- No hidden local-only generation step.
+
+**Required tests/commands:**
+- `bash scripts/validate-openapi.sh`
+- `pytest -q sdk-python/tests`
+- `go test ./... ./sdk-go/...`
+
+**Task success criteria:**
+- SDK generation is deterministic in CI.
+- Drift is detected automatically.
+- Python and Go SDK test suites pass.
+
+**Task merge gate:**
+- [ ] Workflow file exists and validates.
+- [ ] Drift check is blocking.
+- [ ] README instructions match workflow behavior.
+
+---
+
+### RB07 - F07 GraphQL Runtime Parity
+
+**Purpose:** Ensure GraphQL module is truly exposed and testable in main runtime router.
+
+**Scope (In):**
+- `crates/ramp-api/src/router.rs`
+- `crates/ramp-api/src/graphql/mod.rs`
+- `crates/ramp-api/tests/graphql_runtime_tests.rs`
+
+**Scope (Out):**
+- unrelated REST endpoint logic.
+
+**Must do:**
+- Mount `/graphql` and `/graphql/playground` in main router.
+- Confirm auth + tenant extraction behavior for GraphQL operations.
+- Add runtime test verifying endpoint availability and basic query path.
+
+**Should do:**
+- Add introspection policy toggle by env for non-prod/prod.
+
+**Must not do:**
+- No disconnected module that compiles but is unreachable.
+- No unauthenticated mutation endpoint in production mode.
+
+**Required tests/commands:**
+- `cargo test -p ramp-api graphql_endpoint_is_mounted -- --nocapture`
+- `cargo test -p ramp-api graphql_runtime_tests -- --nocapture`
+- `cargo check -p ramp-api`
+
+**Task success criteria:**
+- GraphQL route is reachable in runtime.
+- Playground route works per environment policy.
+- Runtime tests pass.
+
+**Task merge gate:**
+- [ ] Route registration visible in router.
+- [ ] Runtime test coverage includes query path.
+- [ ] Auth policy for mutation/subscription verified.
+
+---
+
+### RB08 - F09/F11 Decision Gate (Real Integration vs Scope Downgrade)
+
+**Purpose:** Prevent simulated features from being misreported as production-complete.
+
+**Scope (In):**
+- `docs/plans/2026-02-10-f09-f11-decision-record.md`
+- `.claude/research/mpc-evaluation.md`
+- `contracts/src/zk/ZkKycVerifier.sol` (if Path A)
+- `crates/ramp-core/src/custody/mod.rs` (if Path A)
+- `docs/plans/2026-02-10-next-gen-status-ledger.md`
+- `.claude/dashboard.md`
+
+**Scope (Out):**
+- broad refactor outside F09/F11.
+
+**Must do:**
+- Choose explicit path for each feature:
+  - Path A: real integration now + tests.
+  - Path B: planned-only / out-of-production-scope label.
+- Record decision criteria and rationale.
+- Update dashboard and status ledger immediately after decision.
+
+**Should do:**
+- Include effort/risk estimate for deferred path.
+
+**Must not do:**
+- No ambiguous status like "almost complete".
+- No production claim while simulated path remains.
+
+**Required tests/commands (if Path A):**
+- ZK proof verification integration test command(s).
+- MPC threshold signing integration test command(s).
+
+**Required checks (if Path B):**
+- Dashboard label reflects non-production maturity.
+- Merge message explicitly states scope downgrade.
+
+**Task success criteria:**
+- F09 and F11 each has explicit, auditable decision.
+- Status reporting is honest and evidence-linked.
+
+**Task merge gate:**
+- [ ] Decision record committed.
+- [ ] Ledger + dashboard synchronized.
+- [ ] No simulated feature labeled `Complete`.
+
+---
+
+### RB09 - Final Production Readiness Gate
+
+**Purpose:** Enforce final go-live bar across all rebaseline work.
+
+**Scope (In):**
+- `docs/plans/2026-02-10-next-gen-go-live-checklist.md`
+- `scripts/run-full-suite.sh`
+- `FINAL_STATUS_REPORT.md`
+- `.claude/dashboard.md`
+
+**Scope (Out):**
+- new feature development unrelated to readiness closure.
+
+**Must do:**
+- Define non-negotiable checklist entries (all blocking).
+- Make `scripts/run-full-suite.sh` fail on any missing gate.
+- Run full verification bundle and capture timestamped results.
+- Publish final report with evidence links.
+
+**Should do:**
+- Include p95/p99 latency and flaky-test summary.
+- Attach command snippets used to reproduce.
+
+**Must not do:**
+- No "manual override" for failing mandatory checks.
+- No completion claim with unresolved simulated critical path.
+
+**Required tests/commands:**
+- `bash scripts/run-full-suite.sh`
+- `cargo test --workspace`
+- `cd contracts && forge test -vv`
+- `npm test --workspace frontend`
+- `pytest -q sdk-python/tests`
+- `go test ./... ./sdk-go/...`
+
+**Task success criteria:**
+- All mandatory verification commands pass.
+- Final report and dashboard are consistent with command outputs.
+- Production-readiness claim is evidence-backed.
+
+**Task merge gate:**
+- [ ] Go-live checklist fully checked.
+- [ ] Full suite passes with no blocking failures.
+- [ ] Final status report references exact evidence.
+- [ ] Dashboard summary equals final report summary.
+
+---
+
+
 ## How to Use This Document
 
-1. **Each feature** has a unique ID (F01-F15)
-2. **Each sub-task** has format `F{XX}.{YY}` (e.g., F01.03)
-3. **Model assignment**: `opus` = precise code logic, `sonnet` = frontend/UI/research
-4. **Effort**: S(1-2h), M(3-6h), L(1-2d), XL(3-5d)
-5. **Dependencies** listed per task
-6. **Files to modify** listed per task
-7. Sessions can pick any feature and start immediately
+1. **Execution first:** run `RB01-RB09` in `Rebaseline Agent Runbook` before claiming any feature completion.
+2. **Each feature** has a unique ID (F01-F16)
+3. **Each sub-task** has format `F{XX}.{YY}` (e.g., F01.03)
+4. **Model assignment**: `opus` = precise code logic, `sonnet` = frontend/UI/research
+5. **Effort**: S(1-2h), M(3-6h), L(1-2d), XL(3-5d)
+6. **Dependencies** listed per task
+7. **Files to modify** listed per task
+8. Status updates are valid only when `Global Execution Contract` + `Universal Merge Gate` are satisfied.
 
 ---
 
@@ -615,3 +1526,4 @@
 *Source: 4-agent parallel analysis (backend, frontend, contracts/infra, trends)*
 *Updated: F16 Off-Ramp VND added with 12 sub-tasks*
 *Ready for Ultimate Workflow execution via `/build` command*
+

@@ -22,6 +22,7 @@ pub mod exchange_rate;
 pub mod offramp;
 pub mod offramp_fees;
 pub mod escrow;
+pub mod settlement;
 #[cfg(test)]
 mod offramp_tests;
 pub mod withdraw_policy_provider;
@@ -43,3 +44,4 @@ pub use withdraw_policy_provider::IntentBasedWithdrawPolicyDataProvider;
 pub use crypto::CryptoService;
 pub use fees::FeeCalculator;
 pub use passkey::PasskeyService;
+pub use settlement::SettlementService;
