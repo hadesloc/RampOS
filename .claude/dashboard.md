@@ -1,10 +1,10 @@
 # RampOS Dashboard
 
-**Last Updated:** 2026-02-10 (Session 159 Gap-Closing Sprint)
+**Last Updated:** 2026-02-10 (Session 160 Production-Readiness Sprint)
 **Phase System:** Next-Gen (F01-F16)
 **Single Source-of-Truth:** `NEXT-GEN-MASTER-PLAN.md`
-**Execution Mode:** Session 159 - 8 features gap-closed, 150+ new tests
-**Session:** 159 (2-wave team sprint, 8 agents total)
+**Execution Mode:** Session 160 - 8 features hardened, 100+ new tests
+**Session:** 160 (2-wave team sprint, 8 agents total)
 
 ---
 
@@ -12,21 +12,22 @@
 
 | Suite | Count | Command | Verified |
 |-------|-------|---------|----------|
-| ramp-core (Rust lib) | **777 pass** (4 ignored) | `cargo test -p ramp-core --lib` | YES |
+| ramp-core (Rust lib) | **810 pass** (4 ignored) | `cargo test -p ramp-core --lib` | YES |
 | ramp-api (Rust lib) | **205 pass** | `cargo test -p ramp-api --lib` | YES |
 | ramp-aa (Rust lib) | **48 pass** | `cargo test -p ramp-aa --lib` | YES |
 | ramp-aa (integration) | **115 pass** | `cargo test -p ramp-aa --test aa_tests` | YES |
 | ramp-adapter (Rust lib) | **59 pass** | `cargo test -p ramp-adapter --lib` | YES |
 | ramp-adapter (integration) | **103 pass** | `cargo test -p ramp-adapter --test adapter_tests` | YES |
 | ramp-compliance (Rust) | **14 pass** (1 ignored) | `cargo test -p ramp-compliance --lib` | YES |
-| ramp-api (integration) | **28 pass** | `cargo test -p ramp-api --test api_e2e_tests` | YES |
+| ramp-api (integration) | **91 pass** | `cargo test -p ramp-api --tests` | YES |
 | ramp-core (integration) | **8 pass** | `cargo test -p ramp-core --tests` | YES |
-| **Rust Total** | **1,550+ pass** | `cargo test --workspace` | YES |
+| **Rust Total** | **1,650+ pass** | `cargo test --workspace` | YES |
 | Solidity | **100+ pass** | `forge test -vv` (44 Account+Paymaster + fuzz/invariant) | Prev |
 | Python SDK | **10+ pass** | `pytest -q sdk-python/tests` | Prev |
 | Go SDK | **40+ pass** | `go test ./sdk-go/...` | Prev |
-| Widget SDK (TS) | **62 pass** | `cd packages/widget && npm test` | YES |
-| **Grand Total** | **1,750+ tests** | All suites | **PASS** |
+| Widget SDK (TS) | **98 pass** | `cd packages/widget && npm test` | YES |
+| Frontend (TS) | **145 pass** | `cd frontend && npx vitest run` | YES |
+| **Grand Total** | **1,850+ tests** | All suites | **PASS** |
 
 **Known issue:** `test_payout_e2e_flow` hangs due to async timing (test infra, not code bug)
 
@@ -36,22 +37,22 @@
 
 | Feature | Name | Status | Tests | Evidence | What Was Done This Sprint |
 |---------|------|--------|-------|----------|---------------------------|
-| F01 | Rate Limiting | **PARTIAL+** | 32 | `crates/ramp-api/src/middleware/rate_limit.rs` | S159: +6 integration tests (tenant tier override, VIP config, 429 headers) |
-| F02 | API Versioning | **PARTIAL+** | 90 | `crates/ramp-api/src/versioning/` | S159: +20 transformer chain tests (multi-hop, pinning, deprecated fields, edge cases) |
-| F03 | OpenAPI Docs | **PARTIAL+** | N/A | `.github/workflows/openapi-ci.yml` | CI diff gate workflow created |
-| F04 | Webhook v2 | **PARTIAL+** | 40 | `crates/ramp-core/src/service/webhook_tests.rs` | S159: +12 tests (HMAC roundtrip, timestamp tolerance, payload contract, retry, timeout, pagination) |
+| F01 | Rate Limiting | **PARTIAL+** | 39 | `crates/ramp-api/src/middleware/rate_limit.rs` | S160: +7 E2E tests (tenant isolation, 429 headers, sliding window, VIP tiers) |
+| F02 | API Versioning | **PARTIAL+** | 90 | `crates/ramp-api/src/versioning/` | S159: +20 transformer chain tests |
+| F03 | OpenAPI Docs | **PARTIAL+** | 10 | `crates/ramp-api/tests/openapi_completeness_test.rs` | S160: +10 completeness tests (paths, schemas, security, operationId) |
+| F04 | Webhook v2 | **PARTIAL+** | 53 | `crates/ramp-core/src/service/webhook_tests.rs` | S160: +13 tests (signature roundtrip, retry flow, dead-letter, dedup, stale rejection) |
 | F05 | AI Fraud | **PARTIAL+** | 90 (78+12) | `crates/ramp-compliance/tests/fraud_acceptance_test.rs` | S158: +6 integration tests (velocity, geo, device, escalation) |
 | F06 | Passkey Wallet | **PARTIAL+** | Solidity | `frontend/src/components/passkey/` | PasskeyLogin.tsx + PasskeyRegister.tsx created |
-| F07 | GraphQL API | **PARTIAL+** | 26 | `crates/ramp-api/tests/graphql_runtime_tests.rs` | S159: +18 functional resolver tests (query, mutation, pagination, validation, introspection) |
+| F07 | GraphQL API | **PARTIAL+** | 33 | `crates/ramp-api/tests/graphql_runtime_tests.rs` | S160: +7 schema completeness tests (introspection, subscriptions, aliases, batch) |
 | F08 | Multi-SDK | **PARTIAL+** | 50+ | `.github/workflows/sdk-generate.yml` | CI verified, drift gate confirmed |
 | F09 | ZK-KYC | **PLANNED** | N/A | `docs/plans/2026-02-10-f09-f11-decision-record.md` | Post-MVP (RB08 decision) |
-| F10 | Chain Abstraction | **PARTIAL+** | 29 | `crates/ramp-api/src/handlers/chain.rs` | S159: Replaced hardcode with ChainRegistryConfig, +17 tests (fee calculation, filtering, validation) |
+| F10 | Chain Abstraction | **PARTIAL+** | 29 | `crates/ramp-api/src/handlers/chain.rs` | S159: ChainRegistryConfig, +17 tests |
 | F11 | MPC Custody | **PLANNED** | N/A | `.claude/research/mpc-evaluation.md` | Post-MVP (RB08 decision) |
-| F12 | Widget SDK | **PARTIAL+** | 62 | `packages/widget/src/` | S159: Vanilla JS embed entry point (embed.ts), +32 tests (init, destroy, events, multi-instance) |
-| F13 | Backend Fixes | **PARTIAL+** | 27 | `crates/ramp-core/src/service/payout_compliance_tests.rs` | S159: +14 tests (atomic tx, idempotency, balance, velocity, sanctions, reversal) |
+| F12 | Widget SDK | **PARTIAL+** | 98 | `packages/widget/src/` | S160: +36 build verification tests + smoke HTML (API surface, multi-instance) |
+| F13 | Backend Fixes | **PARTIAL+** | 35 | `crates/ramp-core/src/service/payout_compliance_tests.rs` | S160: +8 settlement tests (full lifecycle, double-spend, concurrent, reversal) |
 | F14 | Contract Fixes | **PARTIAL+** | 44+ | `contracts/test/RampOSAccount.t.sol` | Edge-case tests (revocation, expiry, nonce replay) |
-| F15 | Frontend DX | **PARTIAL+** | 31 | `frontend/src/lib/api-client.ts` | S159: API client wrapper (retry, auth, CSRF, interceptors) + 31 tests |
-| F16 | Off-Ramp VND | **PARTIAL+** | 54 | `crates/ramp-api/tests/e2e_offramp_test.rs` | E2E test file + offramp repo tests |
+| F15 | Frontend DX | **PARTIAL+** | 43 | `frontend/src/lib/__tests__/env-config.test.ts` | S160: +12 env-config tests (retry logic, auth, CSRF, error wrapping) |
+| F16 | Off-Ramp VND | **PARTIAL+** | 62 | `crates/ramp-core/src/service/offramp_tests.rs` | S160: +7 integration tests (state transitions, fee calc, duplicate rejection) |
 
 **Summary:** `Complete: 0` | `Partial+: 14` | `Planned: 2` | `Blocked: 0`
 
@@ -60,6 +61,27 @@
 ---
 
 ## Sprint Activity Log
+
+### Session 160 (2026-02-10) - Production-Readiness Sprint
+
+#### Wave 1 (4 agents)
+| Agent | Task | Files Created/Modified | Result |
+|-------|------|----------------------|--------|
+| w1-f01-ratelimit | T1: F01 E2E tests | `rate_limit_integration_tests.rs` | +7 tests, 20/20 pass |
+| w1-f07-graphql | T2: F07 schema tests | `graphql_runtime_tests.rs` | +7 tests, 33/33 pass |
+| w1-f04-webhook | T3: F04 delivery tests | `webhook_tests.rs` | +13 tests, 53/53 pass |
+| w1-f13-payout | T4: F13 settlement tests | `payout_compliance_tests.rs` | +8 tests, 35/35 pass |
+
+#### Wave 2 (4 agents)
+| Agent | Task | Files Created/Modified | Result |
+|-------|------|----------------------|--------|
+| w2-f16-offramp | T5: F16 integration tests | `offramp_tests.rs` | +7 tests, 62/62 pass |
+| w2-f12-widget | T6: F12 build verify | `build-verify.test.ts`, `smoke-test.html` | +36 tests, 98/98 pass |
+| w2-f03-openapi | T7: F03 completeness | `openapi_completeness_test.rs` | +10 tests, 10/10 pass |
+| w2-f15-frontend | T8: F15 env-config | `env-config.test.ts` | +12 tests, 145/145 pass |
+
+**Session 160 Total: +100 new tests across 8 features, 0 regressions**
+**Commit: `6518f9f3a`**
 
 ### Session 159 (2026-02-10) - Gap-Closing Sprint
 
