@@ -6,6 +6,7 @@ import { RampOSAccountFactory } from "../src/RampOSAccountFactory.sol";
 import { RampOSPaymaster } from "../src/RampOSPaymaster.sol";
 import { IEntryPoint } from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import { VNDToken } from "../src/VNDToken.sol";
+import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /**
  * @title DeployLayers
@@ -39,8 +40,13 @@ contract DeployLayers is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // 1. Deploy VND Token (if not exists or forced)
-        VNDToken vndToken = new VNDToken(deployer);
+        // 1. Deploy VND Token (UUPS proxy)
+        VNDToken vndImpl = new VNDToken();
+        ERC1967Proxy vndProxy = new ERC1967Proxy(
+            address(vndImpl),
+            abi.encodeCall(VNDToken.initialize, (deployer))
+        );
+        VNDToken vndToken = VNDToken(address(vndProxy));
         console.log("VND Token:       ", address(vndToken));
 
         // 2. Deploy Factory

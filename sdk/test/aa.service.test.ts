@@ -83,30 +83,6 @@ describe('AAService', () => {
     });
   });
 
-  describe('addSessionKey', () => {
-    it('should add a session key', async () => {
-      const accountAddress = '0x123...';
-      const sessionKey = {
-        publicKey: '0xpub...',
-        permissions: ['mock-permission'],
-        validUntil: 1234567890,
-      };
-      await expect(
-        aaService.addSessionKey({ accountAddress, sessionKey })
-      ).rejects.toThrow('Session key management is not exposed via the API');
-    });
-  });
-
-  describe('removeSessionKey', () => {
-    it('should remove a session key', async () => {
-      const accountAddress = '0x123...';
-      const keyId = 'session-1';
-
-      await expect(
-        aaService.removeSessionKey({ accountAddress, keyId })
-      ).rejects.toThrow('Session key management is not exposed via the API');
-    });
-  });
 
   describe('sendUserOperation', () => {
     it('should send a user operation', async () => {

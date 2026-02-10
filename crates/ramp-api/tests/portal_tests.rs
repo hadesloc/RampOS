@@ -95,6 +95,7 @@ async fn setup_portal_test_app() -> PortalTestApp {
         config: serde_json::json!({}),
         daily_payin_limit_vnd: None,
         daily_payout_limit_vnd: None,
+        api_version: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     });

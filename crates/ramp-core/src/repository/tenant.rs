@@ -26,6 +26,10 @@ pub struct TenantRow {
     pub config: serde_json::Value,
     pub daily_payin_limit_vnd: Option<Decimal>,
     pub daily_payout_limit_vnd: Option<Decimal>,
+    /// Pinned API version for this tenant (Stripe-style YYYY-MM-DD format).
+    /// When set, requests without an explicit `RampOS-Version` header will use this version.
+    #[sqlx(default)]
+    pub api_version: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -58,6 +62,8 @@ pub trait TenantRepository: Send + Sync {
         daily_payout: Option<Decimal>,
     ) -> Result<()>;
     async fn update_config(&self, id: &TenantId, config: &serde_json::Value) -> Result<()>;
+    /// Update the tenant's pinned API version.
+    async fn update_api_version(&self, id: &TenantId, version: Option<String>) -> Result<()>;
     async fn list_ids(&self) -> Result<Vec<TenantId>>;
 }
 
@@ -218,6 +224,17 @@ impl TenantRepository for PgTenantRepository {
     async fn update_config(&self, id: &TenantId, config: &serde_json::Value) -> Result<()> {
         sqlx::query("UPDATE tenants SET config = $1 WHERE id = $2")
             .bind(config)
+            .bind(&id.0)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn update_api_version(&self, id: &TenantId, version: Option<String>) -> Result<()> {
+        sqlx::query("UPDATE tenants SET api_version = $1, updated_at = NOW() WHERE id = $2")
+            .bind(version)
             .bind(&id.0)
             .execute(&self.pool)
             .await

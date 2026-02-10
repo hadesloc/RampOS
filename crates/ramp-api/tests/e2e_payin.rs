@@ -88,6 +88,7 @@ async fn test_e2e_payin_flow_via_api() {
             config: json!({}),
             daily_payin_limit_vnd: None,
             daily_payout_limit_vnd: None,
+            api_version: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         })

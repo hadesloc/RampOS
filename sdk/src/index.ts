@@ -8,5 +8,7 @@ export * from './services/intent.service';
 export * from './services/user.service';
 export * from './services/ledger.service';
 export * from './services/aa.service';
+export * from './services/passkey.service';
 export * from './multichain/provider';
 export * from './types/aa';
+export * from './types/passkey';

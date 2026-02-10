@@ -67,6 +67,7 @@ impl OnboardingService {
             config,
             daily_payin_limit_vnd: None,
             daily_payout_limit_vnd: None,
+            api_version: None,
             created_at: now,
             updated_at: now,
         };

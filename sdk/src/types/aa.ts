@@ -99,26 +99,3 @@ export const UserOpReceiptSchema = z.object({
 
 export type UserOpReceipt = z.infer<typeof UserOpReceiptSchema>;
 
-export const SessionKeySchema = z.object({
-  id: z.string().optional(),
-  publicKey: z.string(),
-  permissions: z.array(z.string()),
-  validUntil: z.number(),
-  validAfter: z.number().optional(),
-});
-
-export type SessionKey = z.infer<typeof SessionKeySchema>;
-
-export const AddSessionKeyParamsSchema = z.object({
-  accountAddress: z.string(),
-  sessionKey: SessionKeySchema,
-});
-
-export type AddSessionKeyParams = z.infer<typeof AddSessionKeyParamsSchema>;
-
-export const RemoveSessionKeyParamsSchema = z.object({
-  accountAddress: z.string(),
-  keyId: z.string(),
-});
-
-export type RemoveSessionKeyParams = z.infer<typeof RemoveSessionKeyParamsSchema>;

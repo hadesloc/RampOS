@@ -9,6 +9,7 @@ pub mod ledger;
 pub mod license;
 pub mod onboarding;
 pub mod payin;
+pub mod passkey;
 pub mod payout;
 pub mod timeout;
 pub mod trade;
@@ -17,6 +18,12 @@ pub mod webhook;
 #[cfg(test)]
 mod webhook_tests;
 pub mod withdraw;
+pub mod exchange_rate;
+pub mod offramp;
+pub mod offramp_fees;
+pub mod escrow;
+#[cfg(test)]
+mod offramp_tests;
 pub mod withdraw_policy_provider;
 
 pub use bridge::BridgeService;
@@ -35,3 +42,4 @@ pub use withdraw::WithdrawService;
 pub use withdraw_policy_provider::IntentBasedWithdrawPolicyDataProvider;
 pub use crypto::CryptoService;
 pub use fees::FeeCalculator;
+pub use passkey::PasskeyService;

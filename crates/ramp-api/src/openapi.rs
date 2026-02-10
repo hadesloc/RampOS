@@ -1,5 +1,8 @@
 //! OpenAPI documentation for RampOS API
 
+use axum::http::{header, StatusCode};
+use axum::response::{IntoResponse, Redirect};
+use axum::Json;
 use utoipa::OpenApi;
 
 use crate::dto::*;
@@ -110,6 +113,21 @@ use crate::handlers::trade::*;
     modifiers(&SecurityAddon)
 )]
 pub struct ApiDoc;
+
+/// Serve the raw OpenAPI JSON spec at /openapi.json
+pub async fn openapi_json() -> impl IntoResponse {
+    let spec = ApiDoc::openapi();
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json")],
+        Json(spec),
+    )
+}
+
+/// Redirect /docs to /swagger-ui/
+pub async fn docs_redirect() -> Redirect {
+    Redirect::permanent("/swagger-ui/")
+}
 
 /// Security addon for API authentication
 struct SecurityAddon;

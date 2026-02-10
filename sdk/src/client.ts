@@ -3,6 +3,7 @@ import { IntentService } from './services/intent.service';
 import { UserService } from './services/user.service';
 import { LedgerService } from './services/ledger.service';
 import { AAService } from './services/aa.service';
+import { PasskeyWalletService } from './services/passkey.service';
 import { MultichainProvider } from './multichain/provider';
 import { WebhookVerifier } from './utils/webhook';
 import { signRequest } from './utils/crypto';
@@ -37,6 +38,7 @@ export class RampOSClient {
   public readonly users: UserService;
   public readonly ledger: LedgerService;
   public readonly aa: AAService;
+  public readonly passkey: PasskeyWalletService;
   public readonly webhooks: WebhookVerifier;
 
   constructor(config: RampOSConfig) {
@@ -121,6 +123,7 @@ export class RampOSClient {
     this.users = new UserService(this.httpClient);
     this.ledger = new LedgerService(this.httpClient);
     this.aa = new AAService(this.httpClient);
+    this.passkey = new PasskeyWalletService(this.httpClient);
     this.webhooks = new WebhookVerifier();
   }
 

@@ -45,7 +45,17 @@
     "assets": "Tài sản",
     "overview": "Tổng quan",
     "finance": "Tài chính",
-    "account": "Tài khoản"
+    "account": "Tài khoản",
+    "webhooks": "Webhooks",
+    "intents": "Giao dịch",
+    "ledger": "Sổ cái",
+    "swap": "Hoán đổi",
+    "bridge": "Cầu nối",
+    "yield": "Sinh lời",
+    "section_overview": "Tổng quan",
+    "section_operations": "Vận hành",
+    "section_defi": "DeFi",
+    "section_system": "Hệ thống"
   },
   "Common": {
     "loading": "Đang tải...",

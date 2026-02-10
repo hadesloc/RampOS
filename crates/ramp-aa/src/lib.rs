@@ -5,6 +5,7 @@
 pub mod bundler;
 pub mod eip7702;
 pub mod gas;
+pub mod passkey;
 pub mod paymaster;
 pub mod policy;
 pub mod smart_account;
@@ -23,5 +24,6 @@ pub use paymaster::{
     SponsorshipPolicy, SupportedChain, TenantGasLimits,
 };
 pub use smart_account::SmartAccountService;
+pub use passkey::{PasskeySigner, signer::{P256Signature, WebAuthnAssertion, PasskeyPublicKey}};
 pub use types::*;
 pub use user_operation::UserOperation;

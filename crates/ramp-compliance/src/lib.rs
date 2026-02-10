@@ -5,6 +5,7 @@ pub mod aml;
 pub mod case;
 pub mod config;
 pub mod documents;
+pub mod fraud;
 pub mod history;
 pub mod kyc;
 pub mod kyt;
@@ -22,6 +23,7 @@ pub mod store;
 pub mod transaction_history;
 pub mod types;
 pub mod withdraw_policy;
+pub mod zkkyc;
 
 pub use actions::{ActionTrigger, ComplianceAction, EscalationLevel};
 pub use aml::AmlEngine;

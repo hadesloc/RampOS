@@ -14,14 +14,17 @@
 //! - DEX aggregator swap engine (1inch, ParaSwap)
 //! - Chain abstraction layer (EVM, Solana, TON)
 //! - Cross-chain intent execution
+//! - Chain abstraction protocol (intent-based)
 
 pub mod bridge;
 pub mod billing;
 pub mod chain;
 pub mod config;
 pub mod crosschain;
+pub mod custody;
 pub mod domain;
 pub mod event;
+pub mod intents;
 pub mod jobs;
 pub mod oracle;
 pub mod repository;
@@ -69,6 +72,4 @@ pub use crosschain::{
     ExecutionStep, StepType, StepStatus, GasEstimate,
     IntentExecutor, ExecutionConfig, ExecutionResult, CrossChainExecutor,
     CrossChainRelayer, RelayerConfig, MessageStatus,
-    // CrossChainMessage is accessible via relayer module if needed, or re-export it from there
-    // CrossChainMessage,
 };

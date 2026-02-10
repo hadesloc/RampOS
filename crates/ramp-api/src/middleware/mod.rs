@@ -12,6 +12,7 @@ pub mod tiered_rate_limit;
 mod rate_limit_test;
 
 pub mod billing;
+pub mod versioning;
 
 pub use auth::*;
 pub use idempotency::*;
@@ -20,3 +21,4 @@ pub use rate_limit::*;
 pub use request_id::*;
 pub use tenant::*;
 pub use tiered_rate_limit::*;
+pub use versioning::*;

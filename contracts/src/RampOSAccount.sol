@@ -13,6 +13,11 @@ import {
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import { IERC1271 } from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import { IERC721Receiver } from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+import { IERC1155Receiver } from "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
+import { IERC165 } from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import { P256Verifier } from "./passkey/PasskeySigner.sol";
 
 /**
  * @title RampOSAccount
@@ -22,17 +27,21 @@ import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable
  *
  * Features:
  *  - Single owner ECDSA signature validation
+ *  - Passkey (P256/secp256r1) signature validation for WebAuthn
  *  - Batch transaction execution for gas efficiency
  *  - Session keys with granular permissions (target, selector, spending limits)
  *  - Gasless transactions via paymaster integration
+ *  - ERC-1271 signature validation
+ *  - ERC-721 and ERC-1155 token receiving support
  *
  * Security considerations:
  *  - Only owner or EntryPoint can execute transactions
  *  - Session keys have time-bounded validity
  *  - Per-transaction and daily spending limits for session keys
  *  - Target and function selector restrictions for session keys
+ *  - Passkey signatures are verified using P256 curve verification
  */
-contract RampOSAccount is BaseAccount, Initializable {
+contract RampOSAccount is BaseAccount, Initializable, IERC1271, IERC721Receiver, IERC1155Receiver {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 
@@ -96,6 +105,21 @@ contract RampOSAccount is BaseAccount, Initializable {
     error SpendingLimitExceeded(uint256 requested, uint256 limit);
     error DailyLimitExceeded(uint256 requested, uint256 remaining);
     error TargetNotContract(address target);
+    error InvalidPasskeyPublicKey();
+    error PasskeySignatureInvalid();
+
+    /// @notice Passkey signer state - P256 public key coordinates
+    uint256 public passkeyPubKeyX;
+    uint256 public passkeyPubKeyY;
+    bool public isPasskeySignerSet;
+
+    /// @notice Passkey signature type byte prefixes
+    uint8 internal constant SIG_TYPE_ECDSA = 0x00;
+    uint8 internal constant SIG_TYPE_PASSKEY = 0x01;
+
+    /// @notice Events for passkey signer
+    event PasskeySignerSet(uint256 indexed pubKeyX, uint256 indexed pubKeyY);
+    event PasskeySignerRemoved();
 
     /// @notice Modifier for owner-only functions
     modifier onlyOwner() {
@@ -407,6 +431,10 @@ contract RampOSAccount is BaseAccount, Initializable {
     }
 
     /// @notice Validate user operation signature
+    /// @dev Supports two signature formats based on type byte prefix:
+    ///      - Type 0x00 (ECDSA): Standard secp256k1 ECDSA signature (65 bytes after type byte)
+    ///      - Type 0x01 (Passkey): P256 signature [type(1) || r(32) || s(32)]
+    ///      If no type byte prefix is present, falls back to ECDSA for backward compatibility.
     function _validateSignature(PackedUserOperation calldata userOp, bytes32 userOpHash)
         internal
         virtual
@@ -416,8 +444,34 @@ contract RampOSAccount is BaseAccount, Initializable {
         // Clear pending session key at start to prevent state pollution
         _pendingSessionKey = address(0);
 
+        bytes calldata sig = userOp.signature;
+
+        // Check if signature has a type prefix
+        if (sig.length > 0) {
+            uint8 sigType = uint8(sig[0]);
+
+            // Type 0x01: Passkey P256 signature
+            if (sigType == SIG_TYPE_PASSKEY && sig.length == 65) {
+                return _validatePasskeySignature(userOpHash, sig);
+            }
+
+            // Type 0x00: Explicit ECDSA (strip type byte)
+            if (sigType == SIG_TYPE_ECDSA && sig.length == 66) {
+                return _validateEcdsaSignature(userOpHash, sig[1:]);
+            }
+        }
+
+        // Default: treat entire signature as ECDSA (backward compatible)
+        return _validateEcdsaSignature(userOpHash, sig);
+    }
+
+    /// @dev Validate an ECDSA signature against owner or session keys
+    function _validateEcdsaSignature(bytes32 userOpHash, bytes calldata sig)
+        internal
+        returns (uint256 validationData)
+    {
         bytes32 hash = userOpHash.toEthSignedMessageHash();
-        address signer = hash.recover(userOp.signature);
+        address signer = hash.recover(sig);
 
         // Check if signer is owner
         if (signer == owner) {
@@ -439,6 +493,26 @@ contract RampOSAccount is BaseAccount, Initializable {
 
             // Return validation data with time range
             return _packValidationData(false, session.validUntil, session.validAfter);
+        }
+
+        return SIG_VALIDATION_FAILED;
+    }
+
+    /// @dev Validate a P256 passkey signature
+    function _validatePasskeySignature(bytes32 userOpHash, bytes calldata sig)
+        internal
+        view
+        returns (uint256 validationData)
+    {
+        if (!isPasskeySignerSet) return SIG_VALIDATION_FAILED;
+
+        // Parse signature: [type(1) || r(32) || s(32)]
+        uint256 r = uint256(bytes32(sig[1:33]));
+        uint256 s = uint256(bytes32(sig[33:65]));
+
+        // Verify P256 signature over the userOpHash
+        if (P256Verifier.verify(userOpHash, r, s, passkeyPubKeyX, passkeyPubKeyY)) {
+            return 0; // Valid with no restrictions (passkey == owner-level)
         }
 
         return SIG_VALIDATION_FAILED;
@@ -538,6 +612,120 @@ contract RampOSAccount is BaseAccount, Initializable {
                 revert(add(result, 32), mload(result))
             }
         }
+    }
+
+    // ============ Passkey Signer Management ============
+
+    /// @notice Set a passkey signer for this account
+    /// @dev Only the owner can set a passkey signer. The passkey acts as an
+    ///      alternative signer alongside the ECDSA owner key.
+    /// @param _pubKeyX The x coordinate of the P256 public key
+    /// @param _pubKeyY The y coordinate of the P256 public key
+    function setPasskeySigner(uint256 _pubKeyX, uint256 _pubKeyY) external onlyOwner {
+        if (_pubKeyX == 0 || _pubKeyY == 0) revert InvalidPasskeyPublicKey();
+        if (_pubKeyX >= P256Verifier.P256_P || _pubKeyY >= P256Verifier.P256_P) {
+            revert InvalidPasskeyPublicKey();
+        }
+
+        passkeyPubKeyX = _pubKeyX;
+        passkeyPubKeyY = _pubKeyY;
+        isPasskeySignerSet = true;
+
+        emit PasskeySignerSet(_pubKeyX, _pubKeyY);
+    }
+
+    /// @notice Remove the passkey signer from this account
+    function removePasskeySigner() external onlyOwner {
+        passkeyPubKeyX = 0;
+        passkeyPubKeyY = 0;
+        isPasskeySignerSet = false;
+
+        emit PasskeySignerRemoved();
+    }
+
+    /// @notice Get passkey signer public key
+    /// @return x The x coordinate
+    /// @return y The y coordinate
+    /// @return isSet Whether a passkey signer is configured
+    function getPasskeySigner() external view returns (uint256 x, uint256 y, bool isSet) {
+        return (passkeyPubKeyX, passkeyPubKeyY, isPasskeySignerSet);
+    }
+
+    // ============ ERC-1271 Signature Validation ============
+
+    /// @notice ERC-1271 magic value for valid signatures
+    bytes4 internal constant ERC1271_MAGIC_VALUE = 0x1626ba7e;
+
+    /// @notice Validate a signature for ERC-1271 compliance
+    /// @dev Supports owner signatures and valid session key signatures
+    /// @param hash The hash of the data to validate
+    /// @param signature The signature to validate
+    /// @return magicValue ERC1271_MAGIC_VALUE if valid, 0xffffffff if invalid
+    function isValidSignature(bytes32 hash, bytes calldata signature)
+        external
+        view
+        override
+        returns (bytes4 magicValue)
+    {
+        bytes32 ethSignedHash = hash.toEthSignedMessageHash();
+        address signer = ethSignedHash.recover(signature);
+
+        // Check if signer is the owner
+        if (signer == owner) {
+            return ERC1271_MAGIC_VALUE;
+        }
+
+        // Check if signer is a valid session key
+        if (isValidSessionKey(signer)) {
+            return ERC1271_MAGIC_VALUE;
+        }
+
+        return bytes4(0xffffffff);
+    }
+
+    // ============ Token Receivers (ERC-721, ERC-1155) ============
+
+    /// @notice Handle receiving an ERC-721 token
+    function onERC721Received(
+        address /* operator */,
+        address /* from */,
+        uint256 /* tokenId */,
+        bytes calldata /* data */
+    ) external pure override returns (bytes4) {
+        return IERC721Receiver.onERC721Received.selector;
+    }
+
+    /// @notice Handle receiving a single ERC-1155 token
+    function onERC1155Received(
+        address /* operator */,
+        address /* from */,
+        uint256 /* id */,
+        uint256 /* value */,
+        bytes calldata /* data */
+    ) external pure override returns (bytes4) {
+        return IERC1155Receiver.onERC1155Received.selector;
+    }
+
+    /// @notice Handle receiving a batch of ERC-1155 tokens
+    function onERC1155BatchReceived(
+        address /* operator */,
+        address /* from */,
+        uint256[] calldata /* ids */,
+        uint256[] calldata /* values */,
+        bytes calldata /* data */
+    ) external pure override returns (bytes4) {
+        return IERC1155Receiver.onERC1155BatchReceived.selector;
+    }
+
+    // ============ ERC-165 Introspection ============
+
+    /// @notice Check if this contract supports a given interface
+    function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
+        return
+            interfaceId == type(IERC165).interfaceId ||
+            interfaceId == type(IERC1271).interfaceId ||
+            interfaceId == type(IERC721Receiver).interfaceId ||
+            interfaceId == type(IERC1155Receiver).interfaceId;
     }
 
     /// @notice Receive ETH

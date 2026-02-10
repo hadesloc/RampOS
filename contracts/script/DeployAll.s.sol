@@ -6,6 +6,7 @@ import { VNDToken } from "../src/VNDToken.sol";
 import { RampOSAccountFactory } from "../src/RampOSAccountFactory.sol";
 import { RampOSPaymaster } from "../src/RampOSPaymaster.sol";
 import { IEntryPoint } from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /**
  * @title DeployAllScript
@@ -38,9 +39,15 @@ contract DeployAllScript is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // 1. Deploy VND Token
-        VNDToken vndToken = new VNDToken(deployer);
-        console.log("VND Token deployed at:", address(vndToken));
+        // 1. Deploy VND Token (UUPS proxy pattern)
+        VNDToken vndImpl = new VNDToken();
+        ERC1967Proxy vndProxy = new ERC1967Proxy(
+            address(vndImpl),
+            abi.encodeCall(VNDToken.initialize, (deployer))
+        );
+        VNDToken vndToken = VNDToken(address(vndProxy));
+        console.log("VND Token (proxy) deployed at:", address(vndToken));
+        console.log("VND Token (impl) deployed at:", address(vndImpl));
 
         // 2. Deploy Account Factory
         RampOSAccountFactory factory = new RampOSAccountFactory(IEntryPoint(ENTRY_POINT));
@@ -80,15 +87,21 @@ contract DeployVNDOnly is Script {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
 
-        console.log("Deploying VND Token...");
+        console.log("Deploying VND Token (UUPS proxy)...");
         console.log("Deployer:", deployer);
 
         vm.startBroadcast(deployerPrivateKey);
 
-        VNDToken vndToken = new VNDToken(deployer);
+        VNDToken vndImpl = new VNDToken();
+        ERC1967Proxy vndProxy = new ERC1967Proxy(
+            address(vndImpl),
+            abi.encodeCall(VNDToken.initialize, (deployer))
+        );
+        VNDToken vndToken = VNDToken(address(vndProxy));
 
         vm.stopBroadcast();
 
-        console.log("VND Token deployed at:", address(vndToken));
+        console.log("VND Token (proxy) deployed at:", address(vndToken));
+        console.log("VND Token (impl) deployed at:", address(vndImpl));
     }
 }

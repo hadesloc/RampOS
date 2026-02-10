@@ -859,6 +859,14 @@ impl TenantRepository for MockTenantRepository {
         Ok(())
     }
 
+    async fn update_api_version(&self, id: &TenantId, version: Option<String>) -> Result<()> {
+        let mut tenants = self.tenants.lock().unwrap();
+        if let Some(tenant) = tenants.iter_mut().find(|t| t.id == id.0) {
+            tenant.api_version = version;
+        }
+        Ok(())
+    }
+
     async fn list_ids(&self) -> Result<Vec<TenantId>> {
         let tenants = self.tenants.lock().unwrap();
         Ok(tenants.iter().map(|t| TenantId(t.id.clone())).collect())
@@ -1110,6 +1118,7 @@ mod tests {
             config: serde_json::json!({}),
             daily_payin_limit_vnd: None,
             daily_payout_limit_vnd: None,
+            api_version: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };

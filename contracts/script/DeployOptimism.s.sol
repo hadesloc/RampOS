@@ -6,6 +6,7 @@ import { VNDToken } from "../src/VNDToken.sol";
 import { RampOSAccountFactory } from "../src/RampOSAccountFactory.sol";
 import { RampOSPaymaster } from "../src/RampOSPaymaster.sol";
 import { IEntryPoint } from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /**
  * @title DeployOptimism
@@ -88,8 +89,13 @@ contract DeployOptimism is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // 1. Deploy VND Token
-        VNDToken vndToken = new VNDToken(deployer);
+        // 1. Deploy VND Token (UUPS proxy)
+        VNDToken vndImpl = new VNDToken();
+        ERC1967Proxy vndProxy = new ERC1967Proxy(
+            address(vndImpl),
+            abi.encodeCall(VNDToken.initialize, (deployer))
+        );
+        VNDToken vndToken = VNDToken(address(vndProxy));
         console.log("[1/3] VND Token deployed at:", address(vndToken));
 
         // 2. Deploy Account Factory

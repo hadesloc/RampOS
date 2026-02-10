@@ -42,6 +42,7 @@ mock! {
         async fn update_api_credentials(&self, id: &TenantId, api_key_hash: &str, api_secret_encrypted: &[u8]) -> Result<()>;
         async fn update_limits(&self, id: &TenantId, daily_payin: Option<rust_decimal::Decimal>, daily_payout: Option<rust_decimal::Decimal>) -> Result<()>;
         async fn update_config(&self, id: &TenantId, config: &serde_json::Value) -> Result<()>;
+        async fn update_api_version(&self, id: &TenantId, version: Option<String>) -> Result<()>;
         async fn list_ids(&self) -> Result<Vec<TenantId>>;
     }
 }
@@ -87,6 +88,7 @@ mod tests {
             config: json!({}),
             daily_payin_limit_vnd: None,
             daily_payout_limit_vnd: None,
+            api_version: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }

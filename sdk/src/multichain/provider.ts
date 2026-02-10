@@ -63,13 +63,4 @@ export class MultichainProvider {
     return provider;
   }
 
-  /**
-   * Execute a cross-chain intent directly via smart contract (if applicable)
-   * This is a placeholder for direct contract interaction
-   */
-  async executeIntent(intent: CrossChainIntent, signer: Wallet): Promise<string> {
-      // Logic to interact with RampOS Intent Contract would go here
-      // For now, we'll just mock it or throw not implemented as it depends on contract ABIs
-      throw new Error("Direct intent execution via provider not yet implemented. Use API service.");
-  }
 }

@@ -36,10 +36,11 @@ use crate::handlers::ws::WsState;
 use crate::middleware::{
     auth_middleware, billing::usage_metering_middleware, idempotency_middleware,
     portal_auth_middleware, rate_limit_middleware, request_id_middleware,
-    tiered_rate_limit_middleware, IdempotencyHandler, PortalAuthConfig, RateLimiter,
+    tiered_rate_limit_middleware, versioning::version_negotiation_middleware,
+    IdempotencyHandler, PortalAuthConfig, RateLimiter,
     TieredRateLimitState,
 };
-use crate::openapi::ApiDoc;
+use crate::openapi::{ApiDoc, docs_redirect, openapi_json};
 
 use ramp_compliance::case::CaseManager;
 use ramp_compliance::reports::ctr::CtrService;
@@ -386,6 +387,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/admin", admin_routes)
         .nest("/yield", yield_routes)
         .nest("/aa", aa_routes)
+        .layer(middleware::from_fn(version_negotiation_middleware))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             usage_metering_middleware,
@@ -459,6 +461,8 @@ pub fn create_router(state: AppState) -> Router {
     Router::new()
         .merge(health_routes)
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
+        .route("/openapi.json", get(openapi_json))
+        .route("/docs", get(docs_redirect))
         .nest("/v1", api_v1)
         // Portal auth routes (no JWT required - these issue tokens)
         .nest(
@@ -542,6 +546,7 @@ pub fn create_router(state: AppState) -> Router {
                 HeaderName::from_static("x-timestamp"),
                 HeaderName::from_static("x-request-id"),
                 HeaderName::from_static("x-idempotency-key"),
+                HeaderName::from_static("rampos-version"),
             ]);
 
             // Explicit list of allowed methods (required when credentials are enabled)
@@ -562,6 +567,7 @@ pub fn create_router(state: AppState) -> Router {
                 .expose_headers([
                     header::CONTENT_TYPE,
                     HeaderName::from_static("x-request-id"),
+                    HeaderName::from_static("rampos-version"),
                 ])
         })
 }

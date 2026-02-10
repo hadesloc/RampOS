@@ -38,8 +38,10 @@
 
 pub mod adapters;
 pub mod factory;
+pub mod napas_offramp;
 pub mod traits;
 pub mod types;
+pub mod vietqr_offramp;
 
 // Re-export main types for convenience
 pub use factory::{create_adapters_from_env, create_test_adapters, AdapterFactory};

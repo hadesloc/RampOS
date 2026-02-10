@@ -45,7 +45,17 @@
     "assets": "Assets",
     "overview": "Overview",
     "finance": "Finance",
-    "account": "Account"
+    "account": "Account",
+    "webhooks": "Webhooks",
+    "intents": "Intents",
+    "ledger": "Ledger",
+    "swap": "Swap",
+    "bridge": "Bridge",
+    "yield": "Yield",
+    "section_overview": "Overview",
+    "section_operations": "Operations",
+    "section_defi": "DeFi",
+    "section_system": "System"
   },
   "Common": {
     "loading": "Loading...",

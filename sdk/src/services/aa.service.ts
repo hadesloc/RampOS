@@ -15,8 +15,6 @@ import {
   GasEstimateSchema,
   UserOpReceipt,
   UserOpReceiptSchema,
-  AddSessionKeyParams,
-  RemoveSessionKeyParams,
 } from '../types/aa';
 
 export class AAService {
@@ -40,26 +38,6 @@ export class AAService {
   async getSmartAccount(address: string): Promise<SmartAccount> {
     const response = await this.httpClient.get(`/aa/accounts/${address}`);
     return SmartAccountSchema.parse(response.data);
-  }
-
-  /**
-   * Add a session key to an account.
-   * @param params Add Session Key Params
-   * @returns Void (throws on error)
-   */
-  async addSessionKey(params: AddSessionKeyParams): Promise<void> {
-    void params;
-    throw new Error('Session key management is not exposed via the API');
-  }
-
-  /**
-   * Remove a session key from an account.
-   * @param params Remove Session Key Params
-   * @returns Void (throws on error)
-   */
-  async removeSessionKey(params: RemoveSessionKeyParams): Promise<void> {
-    void params;
-    throw new Error('Session key management is not exposed via the API');
   }
 
   /**

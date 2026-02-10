@@ -58,6 +58,11 @@ futures = "0.3"
 utoipa = { version = "4", features = ["axum_extras", "chrono", "uuid", "decimal"] }
 utoipa-swagger-ui = { version = "6", features = ["axum"] }
 
+# GraphQL
+async-graphql = { version = "7", features = ["dataloader", "chrono", "decimal"] }
+async-stream = "0.3"
+tokio-stream = { version = "0.1", features = ["sync"] }
+
 [dev-dependencies]
 testcontainers = "0.15"
 testcontainers-modules = { version = "0.3", features = ["postgres", "redis"] }

@@ -49,6 +49,7 @@ async fn test_get_intent_endpoint() {
         config: serde_json::json!({}),
         daily_payin_limit_vnd: None,
         daily_payout_limit_vnd: None,
+        api_version: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     });
@@ -214,6 +215,7 @@ async fn test_get_intent_not_found() {
         config: serde_json::json!({}),
         daily_payin_limit_vnd: None,
         daily_payout_limit_vnd: None,
+        api_version: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     });
@@ -336,6 +338,7 @@ async fn test_get_intent_wrong_tenant() {
         config: serde_json::json!({}),
         daily_payin_limit_vnd: None,
         daily_payout_limit_vnd: None,
+        api_version: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     });
@@ -358,6 +361,7 @@ async fn test_get_intent_wrong_tenant() {
         config: serde_json::json!({}),
         daily_payin_limit_vnd: None,
         daily_payout_limit_vnd: None,
+        api_version: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     });
