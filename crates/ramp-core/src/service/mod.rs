@@ -29,6 +29,7 @@ pub mod offramp_fees;
 pub mod escrow;
 pub mod metrics;
 pub mod settlement;
+pub mod reconciliation;
 #[cfg(test)]
 mod offramp_tests;
 #[cfg(test)]
