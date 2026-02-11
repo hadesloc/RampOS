@@ -317,3 +317,406 @@ fn spec_endpoints_have_response_schemas() {
         }
     }
 }
+
+// ============================================================================
+// NEW TESTS: Tag completeness
+// ============================================================================
+
+#[test]
+fn spec_tags_cover_all_endpoint_groups() {
+    let spec = get_spec();
+    let tags = spec
+        .get("tags")
+        .and_then(|v| v.as_array())
+        .expect("Spec must have 'tags' array");
+
+    let tag_names: Vec<&str> = tags
+        .iter()
+        .filter_map(|t| t.get("name").and_then(|v| v.as_str()))
+        .collect();
+
+    let required_tags = [
+        "intents",
+        "events",
+        "users",
+        "admin",
+        "health",
+        "account-abstraction",
+    ];
+
+    for tag in &required_tags {
+        assert!(
+            tag_names.contains(tag),
+            "Tag '{}' must be defined. Available tags: {:?}",
+            tag,
+            tag_names
+        );
+    }
+}
+
+#[test]
+fn spec_tags_have_descriptions() {
+    let spec = get_spec();
+    let tags = spec
+        .get("tags")
+        .and_then(|v| v.as_array())
+        .expect("Spec must have 'tags' array");
+
+    for tag in tags {
+        let name = tag.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let description = tag.get("description").and_then(|v| v.as_str());
+        assert!(
+            description.is_some() && !description.unwrap().is_empty(),
+            "Tag '{}' must have a non-empty description",
+            name
+        );
+    }
+}
+
+// ============================================================================
+// NEW TESTS: Security scheme detailed validation
+// ============================================================================
+
+#[test]
+fn spec_has_idempotency_key_scheme() {
+    let spec = get_spec();
+    let security_schemes = &spec["components"]["securitySchemes"];
+
+    assert!(
+        security_schemes.get("idempotency_key").is_some(),
+        "Security scheme 'idempotency_key' must be defined for safe retries"
+    );
+
+    let idem = &security_schemes["idempotency_key"];
+    assert_eq!(
+        idem.get("type").and_then(|v| v.as_str()),
+        Some("apiKey"),
+        "idempotency_key should be type 'apiKey'"
+    );
+    assert_eq!(
+        idem.get("in").and_then(|v| v.as_str()),
+        Some("header"),
+        "idempotency_key should be in 'header'"
+    );
+}
+
+#[test]
+fn spec_hmac_signature_scheme_details() {
+    let spec = get_spec();
+    let hmac = &spec["components"]["securitySchemes"]["hmac_signature"];
+
+    assert_eq!(
+        hmac.get("type").and_then(|v| v.as_str()),
+        Some("apiKey"),
+        "hmac_signature should be type 'apiKey'"
+    );
+    assert_eq!(
+        hmac.get("in").and_then(|v| v.as_str()),
+        Some("header"),
+        "hmac_signature should be in 'header'"
+    );
+    assert_eq!(
+        hmac.get("name").and_then(|v| v.as_str()),
+        Some("X-Signature"),
+        "hmac_signature header name should be 'X-Signature'"
+    );
+}
+
+// ============================================================================
+// NEW TESTS: Server definitions
+// ============================================================================
+
+#[test]
+fn spec_servers_have_descriptions() {
+    let spec = get_spec();
+    let servers = spec
+        .get("servers")
+        .and_then(|v| v.as_array())
+        .expect("Spec must have 'servers' array");
+
+    for server in servers {
+        let url = server.get("url").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let description = server.get("description").and_then(|v| v.as_str());
+        assert!(
+            description.is_some() && !description.unwrap().is_empty(),
+            "Server '{}' must have a non-empty description",
+            url
+        );
+    }
+}
+
+#[test]
+fn spec_has_production_server() {
+    let spec = get_spec();
+    let servers = spec
+        .get("servers")
+        .and_then(|v| v.as_array())
+        .expect("Spec must have 'servers' array");
+
+    let has_production = servers.iter().any(|s| {
+        let url = s.get("url").and_then(|v| v.as_str()).unwrap_or("");
+        url.starts_with("https://") && !url.contains("staging") && !url.contains("localhost")
+    });
+
+    assert!(
+        has_production,
+        "Spec must include a production HTTPS server"
+    );
+}
+
+// ============================================================================
+// NEW TESTS: Operation-level validation
+// ============================================================================
+
+#[test]
+fn spec_all_operations_have_tags() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("Spec must have 'paths'");
+
+    let http_methods = ["get", "post", "put", "patch", "delete"];
+
+    for (path, path_item) in paths {
+        let path_obj = path_item.as_object().unwrap();
+        for method in &http_methods {
+            if let Some(operation) = path_obj.get(*method) {
+                let tags = operation.get("tags").and_then(|v| v.as_array());
+                assert!(
+                    tags.is_some() && !tags.unwrap().is_empty(),
+                    "Operation {} {} must have at least one tag",
+                    method.to_uppercase(),
+                    path
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn spec_post_operations_have_request_body() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("Spec must have 'paths'");
+
+    for (path, path_item) in paths {
+        let path_obj = path_item.as_object().unwrap();
+        if let Some(operation) = path_obj.get("post") {
+            let has_request_body = operation.get("requestBody").is_some();
+            assert!(
+                has_request_body,
+                "POST {} must have a 'requestBody' defined",
+                path
+            );
+        }
+    }
+}
+
+#[test]
+fn spec_operation_ids_are_unique() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("Spec must have 'paths'");
+
+    let http_methods = ["get", "post", "put", "patch", "delete"];
+    let mut seen_ids: Vec<String> = Vec::new();
+
+    for (_path, path_item) in paths {
+        let path_obj = path_item.as_object().unwrap();
+        for method in &http_methods {
+            if let Some(operation) = path_obj.get(*method) {
+                if let Some(op_id) = operation.get("operationId").and_then(|v| v.as_str()) {
+                    assert!(
+                        !seen_ids.contains(&op_id.to_string()),
+                        "Duplicate operationId found: '{}'",
+                        op_id
+                    );
+                    seen_ids.push(op_id.to_string());
+                }
+            }
+        }
+    }
+
+    assert!(
+        !seen_ids.is_empty(),
+        "Spec should have at least one operation with an operationId"
+    );
+}
+
+// ============================================================================
+// NEW TESTS: Schema completeness
+// ============================================================================
+
+#[test]
+fn spec_admin_dto_schemas_registered() {
+    let spec = get_spec();
+    let schemas = spec["components"]["schemas"]
+        .as_object()
+        .expect("components.schemas must exist");
+
+    let admin_schemas = [
+        "CreateTenantRequest",
+        "UpdateTenantRequest",
+        "SuspendTenantRequest",
+        "TierChangeRequest",
+    ];
+
+    for name in &admin_schemas {
+        assert!(
+            schemas.contains_key(*name),
+            "Admin schema '{}' must be registered in components.schemas",
+            name
+        );
+    }
+}
+
+#[test]
+fn spec_aa_dto_schemas_registered() {
+    let spec = get_spec();
+    let schemas = spec["components"]["schemas"]
+        .as_object()
+        .expect("components.schemas must exist");
+
+    let aa_schemas = [
+        "CreateAccountRequest",
+        "CreateAccountResponse",
+        "GetAccountResponse",
+        "UserOperationDto",
+        "SendUserOpRequest",
+        "SendUserOpResponse",
+        "EstimateGasRequest",
+        "EstimateGasResponse",
+        "UserOpReceiptDto",
+    ];
+
+    for name in &aa_schemas {
+        assert!(
+            schemas.contains_key(*name),
+            "Account Abstraction schema '{}' must be registered",
+            name
+        );
+    }
+}
+
+#[test]
+fn spec_pagination_schemas_registered() {
+    let spec = get_spec();
+    let schemas = spec["components"]["schemas"]
+        .as_object()
+        .expect("components.schemas must exist");
+
+    assert!(
+        schemas.contains_key("PaginationInfo"),
+        "PaginationInfo schema must be registered for paginated responses"
+    );
+    assert!(
+        schemas.contains_key("ListIntentsResponse"),
+        "ListIntentsResponse schema must be registered"
+    );
+}
+
+#[test]
+fn spec_schema_properties_have_types() {
+    let spec = get_spec();
+    let schemas = spec["components"]["schemas"]
+        .as_object()
+        .expect("components.schemas must exist");
+
+    // Check a few key schemas have proper properties with types
+    let schemas_to_check = ["CreatePayinRequest", "HealthResponse", "ErrorBody"];
+
+    for schema_name in &schemas_to_check {
+        let schema = schemas
+            .get(*schema_name)
+            .unwrap_or_else(|| panic!("Schema '{}' must exist", schema_name));
+        let properties = schema.get("properties").and_then(|v| v.as_object());
+        assert!(
+            properties.is_some() && !properties.unwrap().is_empty(),
+            "Schema '{}' must have non-empty properties",
+            schema_name
+        );
+
+        for (prop_name, prop_def) in properties.unwrap() {
+            let has_type = prop_def.get("type").is_some()
+                || prop_def.get("$ref").is_some()
+                || prop_def.get("allOf").is_some()
+                || prop_def.get("oneOf").is_some()
+                || prop_def.get("anyOf").is_some();
+            assert!(
+                has_type,
+                "Property '{}' in schema '{}' must have a type or $ref",
+                prop_name, schema_name
+            );
+        }
+    }
+}
+
+// ============================================================================
+// NEW TESTS: Response content-type and status codes
+// ============================================================================
+
+#[test]
+fn spec_success_responses_have_content_type() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("Spec must have 'paths'");
+
+    let http_methods = ["get", "post", "put", "patch", "delete"];
+
+    for (path, path_item) in paths {
+        let path_obj = path_item.as_object().unwrap();
+        for method in &http_methods {
+            if let Some(operation) = path_obj.get(*method) {
+                if let Some(responses) = operation.get("responses").and_then(|v| v.as_object()) {
+                    // Check 200 or 201 response has content type
+                    for code in &["200", "201"] {
+                        if let Some(response) = responses.get(*code) {
+                            if let Some(content) =
+                                response.get("content").and_then(|v| v.as_object())
+                            {
+                                assert!(
+                                    content.contains_key("application/json"),
+                                    "Response {} for {} {} should have application/json content type",
+                                    code,
+                                    method.to_uppercase(),
+                                    path
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn spec_info_has_contact_url() {
+    let spec = get_spec();
+    let contact = spec["info"]
+        .get("contact")
+        .expect("info.contact must exist");
+
+    let url = contact.get("url").and_then(|v| v.as_str());
+    assert!(
+        url.is_some() && !url.unwrap().is_empty(),
+        "info.contact.url must be present and non-empty"
+    );
+}
+
+#[test]
+fn spec_openapi_version_is_3x() {
+    let spec = get_spec();
+    let version = spec["openapi"]
+        .as_str()
+        .expect("openapi version must be a string");
+
+    assert!(
+        version.starts_with("3.0") || version.starts_with("3.1"),
+        "OpenAPI version should be 3.0.x or 3.1.x, got: {}",
+        version
+    );
+}
