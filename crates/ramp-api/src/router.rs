@@ -23,9 +23,9 @@ use ramp_core::repository::BankConfirmationRepository;
 use ramp_core::billing::BillingService;
 use ramp_core::stablecoin::VnstProtocolService;
 use ramp_core::service::{
-    ledger::LedgerService, onboarding::OnboardingService, payin::PayinService,
-    payout::PayoutService, trade::TradeService, user::UserService, webhook::WebhookService,
-    ComplianceAuditService,
+    ledger::LedgerService, metrics::MetricsRegistry, onboarding::OnboardingService,
+    payin::PayinService, payout::PayoutService, trade::TradeService, user::UserService,
+    webhook::WebhookService, ComplianceAuditService,
 };
 use ramp_core::sso::SsoService;
 
@@ -77,6 +77,7 @@ pub struct AppState {
     pub db_pool: Option<sqlx::PgPool>,
     pub ctr_service: Option<Arc<CtrService>>,
     pub ws_state: Option<Arc<WsState>>,
+    pub metrics_registry: Arc<MetricsRegistry>,
 }
 
 /// Create the API router with full middleware stack
@@ -85,6 +86,22 @@ pub fn create_router(state: AppState) -> Router {
     let health_routes = Router::new()
         .route("/health", get(handlers::health_check))
         .route("/ready", get(handlers::readiness_check));
+
+    // Prometheus metrics endpoint (no auth required)
+    let metrics_route = Router::new()
+        .route("/metrics", get(metrics_handler))
+        .with_state(state.metrics_registry.clone());
+
+    // Metrics handler - serves Prometheus text format
+    async fn metrics_handler(
+        axum::extract::State(registry): axum::extract::State<Arc<MetricsRegistry>>,
+    ) -> ([(axum::http::HeaderName, &'static str); 1], String) {
+        let body = registry.export_metrics();
+        (
+            [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
+            body,
+        )
+    }
 
     // Intent routes (auth required)
     // Split into sub-routers because they require different state types
@@ -204,6 +221,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/offramp/pending", get(handlers::admin::offramp::list_pending_offramps))
         .route("/offramp/:id/approve", post(handlers::admin::offramp::approve_offramp))
         .route("/offramp/:id/reject", post(handlers::admin::offramp::reject_offramp))
+        // Fraud score management
+        .route("/fraud/scores", get(handlers::admin::fraud::list_fraud_scores))
+        .route("/fraud/scores/:id", get(handlers::admin::fraud::get_fraud_score))
+        .route("/fraud/review", post(handlers::admin::fraud::submit_fraud_review))
         .with_state(state.clone());
 
     // Admin Reports - needs to be separated or use AppState if ReportGenerator is in AppState
@@ -480,6 +501,7 @@ pub fn create_router(state: AppState) -> Router {
     // Note: More specific routes should be registered first to ensure proper matching
     Router::new()
         .merge(health_routes)
+        .merge(metrics_route)
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
         .route("/openapi.json", get(openapi_json))
         .route("/docs", get(docs_handler))

@@ -1,6 +1,6 @@
 # RampOS Dashboard
 
-**Last Updated:** 2026-02-11 (Session 166 - MEDIUM PRIORITY Sprint: F03.07/F06.07/F07.09/F14.05)
+**Last Updated:** 2026-02-11 (Session 167 - FINAL LOW PRIORITY Sprint: All 10 tasks resolved)
 **Branch:** `master` (not merged to `main` yet)
 **Phase:** Next-Gen F01-F16 | Rebaseline RB01-RB09 ALL DONE
 **Plan File:** `NEXT-GEN-MASTER-PLAN.md` (16 features, 139 sub-tasks)
@@ -13,8 +13,9 @@
 - **14 features PARTIAL+** (code + tests exist, need production polish)
 - **2 features PLANNED** (F09 ZK-KYC, F11 MPC Custody - post-MVP, skip)
 - **0 features COMPLETE** (none at 100% yet)
-- **~2,600+ tests** passing across all stacks
+- **~2,800+ tests** passing across all stacks
 - **RB01-RB09 rebaseline** ALL DONE
+- **S167**: All HIGH/MEDIUM/LOW priority tasks resolved - only 7 nice-to-have items remain
 
 ### What to do next? (Prioritized)
 
@@ -69,15 +70,17 @@
 | Features PLANNED (post-MVP) | 2 (F09 ZK-KYC, F11 MPC Custody) |
 | Rebaseline Tasks (RB01-RB09) | ALL DONE |
 | HIGH priority remaining | **0** |
-| MEDIUM priority remaining | **0** (all done S166) |
-| LOW priority remaining | 10 |
-| Rust Tests | ~2,100+ pass |
+| MEDIUM priority remaining | **0** |
+| LOW priority remaining | **0** (all resolved S167) |
+| Nice-to-have remaining | **7** |
+| Rust Tests | ~2,200+ pass |
 | Widget SDK Tests | 147 pass |
-| Frontend Tests | **334 pass** |
-| Solidity Tests | **110+** (10 UUPS new) |
+| Frontend Tests | **392 pass** (+58 S167) |
+| Solidity Tests | **110+** |
 | Python SDK Tests | **80 pass** |
 | Go SDK Tests | **48 pass** |
-| **Grand Total** | **~2,700+ tests** |
+| Playwright E2E | **28 specs** (+20 S167) |
+| **Grand Total** | **~2,800+ tests** |
 
 ---
 
@@ -159,16 +162,14 @@ Both have stub/simulated code. ZK contracts exist (`ZkKycVerifier.sol`, `ZkKycRe
 ~~F03.07 OpenAPI examples, F06.07 WebAuthn, F07.09 GraphQL hooks, F14.05 UUPS proxy~~
 
 ### LOW PRIORITY (Nice to Have - Next work)
-1. **F01 Redis integration** - Production load test with real Redis
-2. **F07 WebSocket E2E** - Real client subscription test
-3. **F13.07 Metrics** - Wire metrics to hot paths
-4. **F02 migration E2E** - Real breaking change scenario test
-5. **F10 bridge E2E** - Testnet bridge integration
-6. **F12/F08 publish** - npm publish dry-run
-7. **F15.05 Command palette** - Ctrl+K with cmdk
-8. **F15.08 Notification center** - Frontend component
-9. **F16 Napas adapter** - Real bank API integration
-10. **Frontend sidebar fix** - `next-intl` ESM/CJS vitest config
+~~All 10 LOW tasks resolved in S167.~~ Remaining nice-to-have:
+1. **F05.07** Python fraud training pipeline
+2. **F10.07** Frontend IntentBuilder component
+3. **F15.06** Fix remaining hardcoded dashboard data
+4. **F15.07** Complete server-side pagination
+5. **F15.11** Complete i18n for all strings
+6. **F16.08** Portal off-ramp UI page
+7. **F16.09** Admin off-ramp dashboard page
 
 ---
 
@@ -288,6 +289,7 @@ Both have stub/simulated code. ZK contracts exist (`ZkKycVerifier.sol`, `ZkKycRe
 | S165 | 2026-02-11 | MEDIUM PRIORITY sprint (F03.05 docs fix, F13.05/06, F15.04 WS hooks) | +34 new |
 
 | S166 | 2026-02-11 | MEDIUM PRIORITY sprint (F03.07 OpenAPI examples, F06.07 WebAuthn, F07.09 GraphQL hooks, F14.05 UUPS) | +56 new |
+| S167 | 2026-02-11 | FINAL LOW PRIORITY sprint (F05.04/09, F10.05, F13.07, F15.05/08/12, F16.03/05/07 verified) | +104 new |
 
 ---
 

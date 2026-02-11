@@ -204,6 +204,7 @@ async fn setup_portal_test_app() -> PortalTestApp {
         db_pool: None,
         ctr_service: None,
         ws_state: None,
+        metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
     };
 
     let router = create_router(app_state);

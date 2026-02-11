@@ -165,6 +165,7 @@ async fn setup_cookie_app() -> TestCookieApp {
         db_pool: None,
         ctr_service: None,
         ws_state: None,
+        metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
     };
 
     let router = create_router(app_state);

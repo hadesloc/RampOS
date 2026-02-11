@@ -235,6 +235,7 @@ async fn main() -> anyhow::Result<()> {
         db_pool: Some(pool.clone()),
         ctr_service: None,
         ws_state: Some(ws_state),
+        metrics_registry: Arc::new(ramp_core::service::MetricsRegistry::new()),
     };
 
     // Graceful shutdown flag

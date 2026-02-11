@@ -27,6 +27,8 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       '@rampos/widget': path.resolve(__dirname, '../packages/widget/src/index'),
       'server-only': path.resolve(__dirname, './src/test/server-only.ts'),
+      'next-intl/navigation': path.resolve(__dirname, './src/test/next-intl-navigation-mock.ts'),
+      'next-intl': path.resolve(__dirname, './src/test/next-intl-mock.ts'),
     },
   },
 })

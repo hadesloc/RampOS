@@ -174,6 +174,7 @@ async fn setup_app() -> axum::Router {
         db_pool: None,
         ctr_service: None,
         ws_state: None,
+        metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
     };
 
     create_router(app_state)
@@ -584,6 +585,7 @@ fn setup_app_state_with_data() -> (
         db_pool: None,
         ctr_service: None,
         ws_state: None,
+        metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
     };
 
     (app_state, intent_repo, user_repo)

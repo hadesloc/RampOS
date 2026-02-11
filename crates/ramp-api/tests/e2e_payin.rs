@@ -218,6 +218,7 @@ async fn test_e2e_payin_flow_via_api() {
         db_pool: None,
         ctr_service: None,
         ws_state: None,
+        metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
     };
 
     let app = create_router(app_state);

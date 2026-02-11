@@ -188,6 +188,7 @@ async fn build_test_app(pool: sqlx::PgPool) -> (axum::Router, String, String) {
         db_pool: None,
         ctr_service: None,
         ws_state: None,
+        metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
     };
 
     let jwt = build_portal_jwt(user_id, tenant_id, jwt_secret);

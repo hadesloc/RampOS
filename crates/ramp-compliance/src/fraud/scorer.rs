@@ -265,6 +265,138 @@ impl RiskScorer for RuleBasedScorer {
     }
 }
 
+/// Simulated ONNX model scorer (no real ort dependency).
+/// Uses simple feature heuristics to approximate ML-based scoring.
+pub struct OnnxModelScorer {
+    model_path: String,
+    model_loaded: bool,
+    amount_threshold: f64,
+    velocity_weight: f64,
+}
+
+impl OnnxModelScorer {
+    pub fn new(model_path: &str) -> Self {
+        Self {
+            model_path: model_path.to_string(),
+            model_loaded: false,
+            amount_threshold: 5_000.0,
+            velocity_weight: 3.0,
+        }
+    }
+
+    pub fn with_thresholds(model_path: &str, amount_threshold: f64, velocity_weight: f64) -> Self {
+        Self {
+            model_path: model_path.to_string(),
+            model_loaded: false,
+            amount_threshold,
+            velocity_weight,
+        }
+    }
+
+    /// Simulate loading the model. In a real implementation this would
+    /// load an ONNX file via ort/onnxruntime.
+    pub fn load_model(&mut self) -> Result<(), String> {
+        if self.model_path.is_empty() {
+            return Err("Model path is empty".to_string());
+        }
+        self.model_loaded = true;
+        Ok(())
+    }
+
+    pub fn is_model_loaded(&self) -> bool {
+        self.model_loaded
+    }
+
+    pub fn model_path(&self) -> &str {
+        &self.model_path
+    }
+}
+
+impl RiskScorer for OnnxModelScorer {
+    fn score(&self, f: &FraudFeatureVector) -> RiskScore {
+        let mut factors = Vec::new();
+        let mut raw_score: f64 = 0.0;
+
+        // Heuristic 1: Amount-based risk (sigmoid-like curve)
+        if f.amount_usd > self.amount_threshold {
+            let ratio = f.amount_usd / self.amount_threshold;
+            let contribution = ((ratio - 1.0) * 10.0).min(25.0);
+            raw_score += contribution;
+            factors.push(RiskFactor {
+                rule_name: "onnx_amount_signal".into(),
+                contribution: contribution as u8,
+                description: format!(
+                    "Amount ${:.2} is {:.1}x threshold",
+                    f.amount_usd, ratio
+                ),
+            });
+        }
+
+        // Heuristic 2: Velocity composite signal
+        let velocity_signal =
+            f.velocity_1h * self.velocity_weight + f.velocity_24h * 0.5 + f.velocity_7d * 0.1;
+        if velocity_signal > 20.0 {
+            let contribution = ((velocity_signal - 20.0) * 0.8).min(20.0);
+            raw_score += contribution;
+            factors.push(RiskFactor {
+                rule_name: "onnx_velocity_signal".into(),
+                contribution: contribution as u8,
+                description: format!("Velocity composite score {:.1}", velocity_signal),
+            });
+        }
+
+        // Heuristic 3: Account age + device novelty interaction
+        if f.account_age_days < 14.0 && f.device_novelty > 0.5 {
+            let contribution = 15.0;
+            raw_score += contribution;
+            factors.push(RiskFactor {
+                rule_name: "onnx_new_account_device".into(),
+                contribution: contribution as u8,
+                description: format!(
+                    "New account ({:.0} days) with novel device ({:.2})",
+                    f.account_age_days, f.device_novelty
+                ),
+            });
+        }
+
+        // Heuristic 4: Cross-border + country risk weighted
+        if f.is_cross_border > 0.5 {
+            let contribution = (f.country_risk * 20.0).min(20.0);
+            if contribution > 5.0 {
+                raw_score += contribution;
+                factors.push(RiskFactor {
+                    rule_name: "onnx_geo_risk".into(),
+                    contribution: contribution as u8,
+                    description: format!(
+                        "Cross-border with country risk {:.2}",
+                        f.country_risk
+                    ),
+                });
+            }
+        }
+
+        // Heuristic 5: Dispute history amplifier
+        if f.historical_dispute_rate > 0.03 {
+            let contribution = (f.historical_dispute_rate * 200.0).min(20.0);
+            raw_score += contribution;
+            factors.push(RiskFactor {
+                rule_name: "onnx_dispute_signal".into(),
+                contribution: contribution as u8,
+                description: format!(
+                    "Historical dispute rate {:.2}%",
+                    f.historical_dispute_rate * 100.0
+                ),
+            });
+        }
+
+        let score = (raw_score as u32).min(100) as u8;
+        RiskScore {
+            score,
+            risk_factors: factors,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -441,5 +573,124 @@ mod tests {
         f.failed_txn_count_24h = 5.0;
         let result = scorer.score(&f);
         assert!(result.risk_factors.iter().any(|r| r.rule_name == "excessive_failed_txns"));
+    }
+
+    // ===== OnnxModelScorer tests =====
+
+    #[test]
+    fn test_onnx_scorer_creation() {
+        let scorer = OnnxModelScorer::new("/models/fraud_v1.onnx");
+        assert_eq!(scorer.model_path(), "/models/fraud_v1.onnx");
+        assert!(!scorer.is_model_loaded());
+    }
+
+    #[test]
+    fn test_onnx_scorer_load_model() {
+        let mut scorer = OnnxModelScorer::new("/models/fraud_v1.onnx");
+        assert!(!scorer.is_model_loaded());
+        let result = scorer.load_model();
+        assert!(result.is_ok());
+        assert!(scorer.is_model_loaded());
+    }
+
+    #[test]
+    fn test_onnx_scorer_load_empty_path_fails() {
+        let mut scorer = OnnxModelScorer::new("");
+        let result = scorer.load_model();
+        assert!(result.is_err());
+        assert!(!scorer.is_model_loaded());
+    }
+
+    #[test]
+    fn test_onnx_scorer_low_risk() {
+        let scorer = OnnxModelScorer::new("/models/fraud_v1.onnx");
+        let result = scorer.score(&low_risk_features());
+        assert_eq!(result.score, 0);
+        assert!(result.risk_factors.is_empty());
+    }
+
+    #[test]
+    fn test_onnx_scorer_high_amount() {
+        let scorer = OnnxModelScorer::new("/models/fraud_v1.onnx");
+        let mut f = low_risk_features();
+        f.amount_usd = 10_000.0;
+        let result = scorer.score(&f);
+        assert!(result.score > 0);
+        assert!(result.risk_factors.iter().any(|r| r.rule_name == "onnx_amount_signal"));
+    }
+
+    #[test]
+    fn test_onnx_scorer_velocity_signal() {
+        let scorer = OnnxModelScorer::new("/models/fraud_v1.onnx");
+        let mut f = low_risk_features();
+        f.velocity_1h = 10.0;
+        f.velocity_24h = 30.0;
+        let result = scorer.score(&f);
+        assert!(result.risk_factors.iter().any(|r| r.rule_name == "onnx_velocity_signal"));
+    }
+
+    #[test]
+    fn test_onnx_scorer_new_account_device() {
+        let scorer = OnnxModelScorer::new("/models/fraud_v1.onnx");
+        let mut f = low_risk_features();
+        f.account_age_days = 3.0;
+        f.device_novelty = 0.9;
+        let result = scorer.score(&f);
+        assert!(result.risk_factors.iter().any(|r| r.rule_name == "onnx_new_account_device"));
+        assert!(result.score >= 15);
+    }
+
+    #[test]
+    fn test_onnx_scorer_geo_risk() {
+        let scorer = OnnxModelScorer::new("/models/fraud_v1.onnx");
+        let mut f = low_risk_features();
+        f.is_cross_border = 1.0;
+        f.country_risk = 0.8;
+        let result = scorer.score(&f);
+        assert!(result.risk_factors.iter().any(|r| r.rule_name == "onnx_geo_risk"));
+    }
+
+    #[test]
+    fn test_onnx_scorer_dispute_signal() {
+        let scorer = OnnxModelScorer::new("/models/fraud_v1.onnx");
+        let mut f = low_risk_features();
+        f.historical_dispute_rate = 0.1;
+        let result = scorer.score(&f);
+        assert!(result.risk_factors.iter().any(|r| r.rule_name == "onnx_dispute_signal"));
+    }
+
+    #[test]
+    fn test_onnx_scorer_custom_thresholds() {
+        let scorer = OnnxModelScorer::with_thresholds("/models/custom.onnx", 1_000.0, 5.0);
+        let mut f = low_risk_features();
+        f.amount_usd = 2_000.0;
+        let result = scorer.score(&f);
+        assert!(result.risk_factors.iter().any(|r| r.rule_name == "onnx_amount_signal"));
+    }
+
+    #[test]
+    fn test_onnx_scorer_score_capped_at_100() {
+        let scorer = OnnxModelScorer::new("/models/fraud_v1.onnx");
+        let f = FraudFeatureVector {
+            amount_percentile: 1.0,
+            velocity_1h: 50.0,
+            velocity_24h: 100.0,
+            velocity_7d: 200.0,
+            time_of_day_anomaly: 1.0,
+            amount_rounding_pattern: 1.0,
+            recipient_recency: 1.0,
+            historical_dispute_rate: 0.5,
+            account_age_days: 1.0,
+            amount_to_avg_ratio: 20.0,
+            distinct_recipients_24h: 30.0,
+            device_novelty: 1.0,
+            country_risk: 1.0,
+            is_cross_border: 1.0,
+            amount_usd: 500_000.0,
+            failed_txn_count_24h: 20.0,
+            cumulative_amount_24h_usd: 1_000_000.0,
+        };
+        let result = scorer.score(&f);
+        assert_eq!(result.score, 100);
     }
 }

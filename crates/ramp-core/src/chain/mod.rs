@@ -23,11 +23,15 @@ pub mod evm;
 pub mod solana;
 pub mod ton;
 pub mod abstraction;
+pub mod swap;
+pub mod bridge;
 
 pub use evm::{EvmChain, EvmChainConfig};
 pub use solana::{SolanaChain, SolanaChainConfig};
 pub use ton::{TonChain, TonChainConfig};
 pub use abstraction::ChainAbstractionLayer;
+pub use swap::{SwapAdapter, SwapQuote, SwapResult, SwapStatus, SwapToken, RouteStep, MockDexSwapAdapter};
+pub use bridge::{BridgeAdapter, BridgeQuote, BridgeTransferStatus, BridgeTransferResult, BridgeStatusResponse, MockBridgeAdapter};
 
 /// Chain abstraction errors
 #[derive(Debug, Error)]
