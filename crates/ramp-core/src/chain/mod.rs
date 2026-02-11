@@ -25,6 +25,8 @@ pub mod ton;
 pub mod abstraction;
 pub mod swap;
 pub mod bridge;
+pub mod solver;
+pub mod execution;
 
 pub use evm::{EvmChain, EvmChainConfig};
 pub use solana::{SolanaChain, SolanaChainConfig};
@@ -32,6 +34,8 @@ pub use ton::{TonChain, TonChainConfig};
 pub use abstraction::ChainAbstractionLayer;
 pub use swap::{SwapAdapter, SwapQuote, SwapResult, SwapStatus, SwapToken, RouteStep, MockDexSwapAdapter};
 pub use bridge::{BridgeAdapter, BridgeQuote, BridgeTransferStatus, BridgeTransferResult, BridgeStatusResponse, MockBridgeAdapter};
+pub use solver::{IntentSolver, Intent, ExecutionRoute, RouteAction};
+pub use execution::{ExecutionEngine, ExecutionResult, ExecutionStatus, ExecutionStep, StepStatus};
 
 /// Chain abstraction errors
 #[derive(Debug, Error)]
