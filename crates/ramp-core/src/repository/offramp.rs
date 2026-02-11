@@ -69,6 +69,16 @@ pub trait OfframpIntentRepository: Send + Sync {
         status: &str,
         limit: i64,
     ) -> Result<Vec<OfframpIntentRow>>;
+
+    /// List intents for a tenant using cursor-based pagination.
+    /// Cursor is the ID of the last item from the previous page.
+    /// Uses (created_at, id) keyset for stable ordering.
+    async fn list_by_cursor(
+        &self,
+        tenant_id: &TenantId,
+        cursor: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<OfframpIntentRow>>;
 }
 
 /// PostgreSQL implementation
@@ -307,6 +317,62 @@ impl OfframpIntentRepository for PgOfframpIntentRepository {
         .fetch_all(&mut *tx)
         .await
         .map_err(|e| Error::Database(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+        Ok(rows)
+    }
+
+    #[instrument(skip(self), fields(tenant_id = %tenant_id.0))]
+    async fn list_by_cursor(
+        &self,
+        tenant_id: &TenantId,
+        cursor: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<OfframpIntentRow>> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+        let rows = if let Some(cursor_id) = cursor {
+            sqlx::query_as::<_, OfframpIntentRow>(
+                r#"
+                SELECT * FROM offramp_intents
+                WHERE tenant_id = $1
+                  AND (created_at, id) < (
+                    SELECT created_at, id FROM offramp_intents WHERE id = $2 AND tenant_id = $1
+                  )
+                ORDER BY created_at DESC, id DESC
+                LIMIT $3
+                "#,
+            )
+            .bind(&tenant_id.0)
+            .bind(cursor_id)
+            .bind(limit)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?
+        } else {
+            sqlx::query_as::<_, OfframpIntentRow>(
+                r#"
+                SELECT * FROM offramp_intents
+                WHERE tenant_id = $1
+                ORDER BY created_at DESC, id DESC
+                LIMIT $2
+                "#,
+            )
+            .bind(&tenant_id.0)
+            .bind(limit)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?
+        };
 
         tx.commit()
             .await

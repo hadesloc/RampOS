@@ -43,6 +43,15 @@ pub trait SettlementRepository: Send + Sync {
 
     /// List all settlements
     async fn list_all(&self, limit: i64, offset: i64) -> Result<Vec<SettlementRow>>;
+
+    /// List settlements using cursor-based pagination.
+    /// Cursor is the ID of the last item from the previous page.
+    /// Uses (created_at, id) keyset for stable ordering.
+    async fn list_by_cursor(
+        &self,
+        cursor: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<SettlementRow>>;
 }
 
 /// PostgreSQL implementation
@@ -172,6 +181,45 @@ impl SettlementRepository for PgSettlementRepository {
 
         Ok(rows)
     }
+
+    #[instrument(skip(self))]
+    async fn list_by_cursor(
+        &self,
+        cursor: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<SettlementRow>> {
+        let rows = if let Some(cursor_id) = cursor {
+            sqlx::query_as::<_, SettlementRow>(
+                r#"
+                SELECT * FROM settlements
+                WHERE (created_at, id) < (
+                    SELECT created_at, id FROM settlements WHERE id = $1
+                )
+                ORDER BY created_at DESC, id DESC
+                LIMIT $2
+                "#,
+            )
+            .bind(cursor_id)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?
+        } else {
+            sqlx::query_as::<_, SettlementRow>(
+                r#"
+                SELECT * FROM settlements
+                ORDER BY created_at DESC, id DESC
+                LIMIT $1
+                "#,
+            )
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?
+        };
+
+        Ok(rows)
+    }
 }
 
 /// In-memory implementation for tests
@@ -258,6 +306,34 @@ impl SettlementRepository for InMemorySettlementRepository {
         let offset = offset as usize;
         let limit = limit as usize;
         let rows = rows.into_iter().skip(offset).take(limit).collect();
+        Ok(rows)
+    }
+
+    async fn list_by_cursor(
+        &self,
+        cursor: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<SettlementRow>> {
+        let store = self.store.lock().map_err(|e| {
+            Error::Internal(format!("Settlement store lock poisoned: {}", e))
+        })?;
+        let mut rows: Vec<_> = store.values().cloned().collect();
+
+        // Sort by created_at DESC, id DESC
+        rows.sort_by(|a, b| {
+            b.created_at
+                .cmp(&a.created_at)
+                .then_with(|| b.id.cmp(&a.id))
+        });
+
+        // If cursor is provided, skip items until we pass the cursor
+        if let Some(cursor_id) = cursor {
+            if let Some(pos) = rows.iter().position(|r| r.id == cursor_id) {
+                rows = rows[pos + 1..].to_vec();
+            }
+        }
+
+        rows.truncate(limit as usize);
         Ok(rows)
     }
 }
@@ -412,5 +488,116 @@ mod tests {
         assert_eq!(deserialized.id, row.id);
         assert_eq!(deserialized.status, row.status);
         assert_eq!(deserialized.offramp_intent_id, row.offramp_intent_id);
+    }
+
+    fn make_row_at(id: &str, offramp_id: &str, status: &str, created_at: DateTime<Utc>) -> SettlementRow {
+        SettlementRow {
+            id: id.to_string(),
+            offramp_intent_id: offramp_id.to_string(),
+            status: status.to_string(),
+            bank_reference: Some(format!("RAMP-{}", &id[..8.min(id.len())])),
+            error_message: None,
+            created_at,
+            updated_at: created_at,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_list_by_cursor_no_cursor() {
+        let repo = InMemorySettlementRepository::new();
+        let base = Utc::now();
+        for i in 0..5 {
+            let t = base + chrono::Duration::seconds(i);
+            repo.create(&make_row_at(
+                &format!("stl_{:03}", i),
+                &format!("ofr_{}", i),
+                "PROCESSING",
+                t,
+            ))
+            .await
+            .unwrap();
+        }
+
+        // Without cursor, returns first page (most recent first)
+        let page1 = repo.list_by_cursor(None, 3).await.unwrap();
+        assert_eq!(page1.len(), 3);
+        // Most recent first: stl_004, stl_003, stl_002
+        assert_eq!(page1[0].id, "stl_004");
+        assert_eq!(page1[1].id, "stl_003");
+        assert_eq!(page1[2].id, "stl_002");
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_list_by_cursor_with_cursor() {
+        let repo = InMemorySettlementRepository::new();
+        let base = Utc::now();
+        for i in 0..5 {
+            let t = base + chrono::Duration::seconds(i);
+            repo.create(&make_row_at(
+                &format!("stl_{:03}", i),
+                &format!("ofr_{}", i),
+                "PROCESSING",
+                t,
+            ))
+            .await
+            .unwrap();
+        }
+
+        // First page
+        let page1 = repo.list_by_cursor(None, 3).await.unwrap();
+        assert_eq!(page1.len(), 3);
+
+        // Use last item of page1 as cursor for page2
+        let cursor = page1.last().unwrap().id.as_str();
+        let page2 = repo.list_by_cursor(Some(cursor), 3).await.unwrap();
+        assert_eq!(page2.len(), 2); // stl_001, stl_000
+        assert_eq!(page2[0].id, "stl_001");
+        assert_eq!(page2[1].id, "stl_000");
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_list_by_cursor_empty() {
+        let repo = InMemorySettlementRepository::new();
+        let page = repo.list_by_cursor(None, 10).await.unwrap();
+        assert!(page.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_list_by_cursor_last_page() {
+        let repo = InMemorySettlementRepository::new();
+        let base = Utc::now();
+        for i in 0..3 {
+            let t = base + chrono::Duration::seconds(i);
+            repo.create(&make_row_at(
+                &format!("stl_{:03}", i),
+                &format!("ofr_{}", i),
+                "PROCESSING",
+                t,
+            ))
+            .await
+            .unwrap();
+        }
+
+        // Get all in first page
+        let page1 = repo.list_by_cursor(None, 3).await.unwrap();
+        assert_eq!(page1.len(), 3);
+
+        // Cursor at last item => no more items
+        let cursor = page1.last().unwrap().id.as_str();
+        let page2 = repo.list_by_cursor(Some(cursor), 3).await.unwrap();
+        assert!(page2.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_list_by_cursor_invalid_cursor() {
+        let repo = InMemorySettlementRepository::new();
+        let base = Utc::now();
+        repo.create(&make_row_at("stl_001", "ofr_001", "PROCESSING", base))
+            .await
+            .unwrap();
+
+        // Invalid cursor ID - should return all items (cursor not found, no skip)
+        let page = repo.list_by_cursor(Some("nonexistent"), 10).await.unwrap();
+        assert_eq!(page.len(), 1);
     }
 }

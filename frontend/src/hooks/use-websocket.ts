@@ -1,75 +1,152 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 
-type WebSocketStatus = 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
+export type WebSocketStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
-interface UseWebSocketOptions {
+export interface UseWebSocketOptions {
   url?: string;
-  onMessage?: (event: MessageEvent) => void;
+  protocols?: string | string[];
+  onMessage?: (data: unknown) => void;
   onOpen?: (event: Event) => void;
   onClose?: (event: CloseEvent) => void;
   onError?: (event: Event) => void;
+  reconnect?: boolean;
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
+  authToken?: string | null;
+}
+
+export interface UseWebSocketReturn {
+  status: WebSocketStatus;
+  isConnected: boolean;
+  sendMessage: (data: string | object) => void;
+  disconnect: () => void;
+  reconnect: () => void;
+  lastMessage: unknown | null;
 }
 
 export function useWebSocket({
   url,
+  protocols,
   onMessage,
   onOpen,
   onClose,
   onError,
-  reconnectInterval = 3000,
+  reconnect: shouldReconnect = true,
+  reconnectInterval = 1000,
   maxReconnectAttempts = 5,
-}: UseWebSocketOptions) {
-  const [status, setStatus] = useState<WebSocketStatus>('CLOSED');
+  authToken,
+}: UseWebSocketOptions): UseWebSocketReturn {
+  const [status, setStatus] = useState<WebSocketStatus>('disconnected');
+  const [lastMessage, setLastMessage] = useState<unknown | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const reconnectAttempts = useRef(0);
-  const reconnectTimer = useRef<NodeJS.Timeout>();
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
+  const manualDisconnect = useRef(false);
+
+  const onMessageRef = useRef(onMessage);
+  const onOpenRef = useRef(onOpen);
+  const onCloseRef = useRef(onClose);
+  const onErrorRef = useRef(onError);
+
+  useEffect(() => { onMessageRef.current = onMessage; }, [onMessage]);
+  useEffect(() => { onOpenRef.current = onOpen; }, [onOpen]);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => { onErrorRef.current = onError; }, [onError]);
+
+  const getBackoffDelay = useCallback((attempt: number) => {
+    return Math.min(reconnectInterval * Math.pow(2, attempt), 30000);
+  }, [reconnectInterval]);
 
   const connect = useCallback(() => {
     if (!url) return;
 
+    if (ws.current) {
+      ws.current.onopen = null;
+      ws.current.onclose = null;
+      ws.current.onerror = null;
+      ws.current.onmessage = null;
+      ws.current.close();
+      ws.current = null;
+    }
+
     try {
-      setStatus('CONNECTING');
-      ws.current = new WebSocket(url);
+      const wsUrl = authToken ? `${url}${url.includes('?') ? '&' : '?'}token=${authToken}` : url;
+      setStatus('connecting');
+      ws.current = new WebSocket(wsUrl, protocols);
 
       ws.current.onopen = (event) => {
-        setStatus('OPEN');
+        setStatus('connected');
         reconnectAttempts.current = 0;
-        onOpen?.(event);
+        onOpenRef.current?.(event);
       };
 
       ws.current.onclose = (event) => {
-        setStatus('CLOSED');
-        onClose?.(event);
+        setStatus('disconnected');
+        onCloseRef.current?.(event);
 
-        if (reconnectAttempts.current < maxReconnectAttempts) {
+        if (!manualDisconnect.current && shouldReconnect && reconnectAttempts.current < maxReconnectAttempts) {
+          const delay = getBackoffDelay(reconnectAttempts.current);
           reconnectTimer.current = setTimeout(() => {
             reconnectAttempts.current++;
             connect();
-          }, reconnectInterval);
+          }, delay);
         }
       };
 
       ws.current.onerror = (event) => {
-        onError?.(event);
+        setStatus('error');
+        onErrorRef.current?.(event);
       };
 
       ws.current.onmessage = (event) => {
-        onMessage?.(event);
+        try {
+          const data = JSON.parse(event.data);
+          setLastMessage(data);
+          onMessageRef.current?.(data);
+        } catch {
+          setLastMessage(event.data);
+          onMessageRef.current?.(event.data);
+        }
       };
-    } catch (error) {
-      console.error('WebSocket connection error:', error);
-      setStatus('CLOSED');
+    } catch {
+      setStatus('error');
     }
-  }, [url, onMessage, onOpen, onClose, onError, reconnectInterval, maxReconnectAttempts]);
+  }, [url, protocols, authToken, shouldReconnect, maxReconnectAttempts, getBackoffDelay]);
+
+  const disconnect = useCallback(() => {
+    manualDisconnect.current = true;
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current);
+    }
+    if (ws.current) {
+      ws.current.close();
+      ws.current = null;
+    }
+    setStatus('disconnected');
+  }, []);
+
+  const reconnectFn = useCallback(() => {
+    manualDisconnect.current = false;
+    reconnectAttempts.current = 0;
+    connect();
+  }, [connect]);
+
+  const sendMessage = useCallback((data: string | object) => {
+    if (ws.current?.readyState === WebSocket.OPEN) {
+      const payload = typeof data === 'string' ? data : JSON.stringify(data);
+      ws.current.send(payload);
+    }
+  }, []);
 
   useEffect(() => {
+    manualDisconnect.current = false;
     connect();
 
     return () => {
+      manualDisconnect.current = true;
       if (ws.current) {
         ws.current.close();
+        ws.current = null;
       }
       if (reconnectTimer.current) {
         clearTimeout(reconnectTimer.current);
@@ -77,40 +154,12 @@ export function useWebSocket({
     };
   }, [connect]);
 
-  const sendMessage = useCallback((data: string | ArrayBufferLike | Blob | ArrayBufferView) => {
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(data);
-    } else {
-      console.warn('WebSocket is not open. Unable to send message.');
-    }
-  }, []);
-
-  return { status, sendMessage };
-}
-
-// Specialized hook for dashboard real-time updates
-export function useRealtimeDashboard() {
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-
-  // In a real app, this would point to the actual WS endpoint
-  // For now, we'll simulate connection to a dummy endpoint or allow it to fail gracefully
-  const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'wss://api.rampos.io/v1/ws/dashboard';
-
-  const { status } = useWebSocket({
-    url: wsUrl,
-    onMessage: (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'dashboard_update') {
-          setLastUpdate(new Date());
-        }
-      } catch (e) {
-        console.error('Failed to parse WS message', e);
-      }
-    },
-    // Don't reconnect too aggressively for this demo
-    maxReconnectAttempts: 3
-  });
-
-  return { isConnected: status === 'OPEN', lastUpdate };
+  return {
+    status,
+    isConnected: status === 'connected',
+    sendMessage,
+    disconnect,
+    reconnect: reconnectFn,
+    lastMessage,
+  };
 }

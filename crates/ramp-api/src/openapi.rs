@@ -223,7 +223,7 @@ pub async fn docs_handler() -> Html<String> {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 </head>
 <body>
-    <script id="api-reference" data-url="/api/openapi.json"></script>
+    <script id="api-reference" data-url="/openapi.json"></script>
     <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
 </body>
 </html>"#.to_string())

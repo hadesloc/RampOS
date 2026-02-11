@@ -1,6 +1,6 @@
 # RampOS Dashboard
 
-**Last Updated:** 2026-02-11 (Session 164 - HIGH PRIORITY Sprint: F13/F03/F04/F15)
+**Last Updated:** 2026-02-11 (Session 165 - MEDIUM PRIORITY Sprint: F03.05/F13.05/F13.06/F15.04)
 **Branch:** `master` (not merged to `main` yet)
 **Phase:** Next-Gen F01-F16 | Rebaseline RB01-RB09 ALL DONE
 **Plan File:** `NEXT-GEN-MASTER-PLAN.md` (16 features, 139 sub-tasks)
@@ -23,12 +23,16 @@
 2. ~~`F03` OpenAPI annotations~~ **DONE (S164)** - 40 endpoints annotated, Scalar UI at `/docs` (231 tests)
 3. ~~`F04` Webhook HTTP delivery~~ **DONE (S164)** - wiremock E2E, HMAC signature, retry + DLQ (71 tests)
 4. ~~`F15` SDK integration~~ **DONE (S164)** - `sdk-client.ts` + `api-adapter.ts`, api.ts deprecated (259 tests)
+5. ~~`F13.05` Graceful shutdown~~ **DONE (already existed)** - Ctrl+C, SIGTERM, `with_graceful_shutdown()`
+6. ~~`F13.06` Cursor pagination~~ **DONE (S165)** - `list_by_cursor()` on settlement + offramp repos (5 tests)
+7. ~~`F03.05` Scalar docs URL~~ **DONE (S165)** - Fixed `/api/openapi.json` -> `/openapi.json`
+8. ~~`F15.04` WebSocket hooks~~ **DONE (S165)** - 3 hooks + 29 tests
 
 **MEDIUM - Production polish (Next priority):**
-5. `F01` Redis load test with real Redis connection
-6. `F07` WebSocket subscription E2E with real client
-7. `F14` Install `forge` or verify Solidity tests on Linux CI
-8. `F06` Playwright WebAuthn E2E test
+5. `F07` Frontend GraphQL hooks integration
+6. `F06` Frontend WebAuthn components
+7. `F14` UUPS proxy pattern + `forge` verification
+8. `F03.07` OpenAPI request/response examples
 9. Frontend sidebar test fix (`next-intl` ESM/CJS vitest config)
 
 **LOW - Nice to have:**
@@ -91,7 +95,7 @@
 | Python SDK | **80** | `pytest -q sdk-python/tests` |
 | Go SDK | **48** | `go test ./sdk-go/...` |
 | Widget SDK (TS) | 147 | `cd packages/widget && npx vitest run` |
-| Frontend (TS) | 259 | `cd frontend && npx vitest run` |
+| Frontend (TS) | 288 | `cd frontend && npx vitest run` |
 
 **Known issues:**
 - `test_payout_e2e_flow` hangs (async timing, test infra issue)
@@ -278,6 +282,7 @@ Both have stub/simulated code. ZK contracts exist (`ZkKycVerifier.sol`, `ZkKycRe
 | S162 | 2026-02-11 | Hardening (F02,F03,F04,F05,F10,F12,F13,F15) | +219 |
 | S163 | 2026-02-11 | Codebase audit & plan consolidation | 0 (audit only) |
 | S164 | 2026-02-11 | HIGH PRIORITY sprint (F13 DB, F03 OpenAPI, F04 Webhook HTTP, F15 SDK) | +~50 new |
+| S165 | 2026-02-11 | MEDIUM PRIORITY sprint (F03.05 docs fix, F13.05/06, F15.04 WS hooks) | +34 new |
 
 ---
 
