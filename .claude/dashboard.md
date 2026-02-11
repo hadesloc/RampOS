@@ -1,6 +1,6 @@
 # RampOS Dashboard
 
-**Last Updated:** 2026-02-11 (Session 167 - FINAL LOW PRIORITY Sprint: All 10 tasks resolved)
+**Last Updated:** 2026-02-11 (Session 168 - Wave 3 Chain Abstraction COMMITTED)
 **Branch:** `master` (not merged to `main` yet)
 **Phase:** Next-Gen F01-F16 | Rebaseline RB01-RB09 ALL DONE
 **Plan File:** `NEXT-GEN-MASTER-PLAN.md` (16 features, 139 sub-tasks)
@@ -10,37 +10,27 @@
 ## SESSION GUIDE (Read This First)
 
 ### Where are you?
-- **14 features PARTIAL+** (code + tests exist, need production polish)
+- **6 features COMPLETE** (F01, F02, F03, F07, F08, F13 - all sub-tasks DONE)
+- **8 features PARTIAL+** (F04, F05, F06, F10, F12, F14, F15, F16 - code + tests, minor gaps)
 - **2 features PLANNED** (F09 ZK-KYC, F11 MPC Custody - post-MVP, skip)
-- **0 features COMPLETE** (none at 100% yet)
 - **~2,800+ tests** passing across all stacks
 - **RB01-RB09 rebaseline** ALL DONE
-- **S167**: All HIGH/MEDIUM/LOW priority tasks resolved - only 7 nice-to-have items remain
+- **S167 COMMITTED**: `6ca495387` - All HIGH/MEDIUM/LOW tasks resolved, only 7 nice-to-have items remain
 
 ### What to do next? (Prioritized)
 
-**HIGH - Move features to COMPLETE:**
-1. ~~`F13` Settlement DB persistence~~ **DONE (S164)** - SQL-backed `SettlementRepository` + migration `032_settlements.sql` (68 tests)
-2. ~~`F03` OpenAPI annotations~~ **DONE (S164)** - 40 endpoints annotated, Scalar UI at `/docs` (231 tests)
-3. ~~`F04` Webhook HTTP delivery~~ **DONE (S164)** - wiremock E2E, HMAC signature, retry + DLQ (71 tests)
-4. ~~`F15` SDK integration~~ **DONE (S164)** - `sdk-client.ts` + `api-adapter.ts`, api.ts deprecated (259 tests)
-5. ~~`F13.05` Graceful shutdown~~ **DONE (already existed)** - Ctrl+C, SIGTERM, `with_graceful_shutdown()`
-6. ~~`F13.06` Cursor pagination~~ **DONE (S165)** - `list_by_cursor()` on settlement + offramp repos (5 tests)
-7. ~~`F03.05` Scalar docs URL~~ **DONE (S165)** - Fixed `/api/openapi.json` -> `/openapi.json`
-8. ~~`F15.04` WebSocket hooks~~ **DONE (S165)** - 3 hooks + 29 tests
+**ALL HIGH/MEDIUM/LOW PRIORITIES DONE.**
 
-**MEDIUM - Production polish (Next priority):**
-5. ~~`F07` Frontend GraphQL hooks integration~~ **DONE (S166)** - urql client + 7 hooks + 23 tests
-6. ~~`F06` Frontend WebAuthn components~~ **DONE (S166)** - PasskeyLogin/Register wired to backend + PasskeyManagement + 23 tests
-7. ~~`F14` UUPS proxy pattern + `forge` verification~~ **DONE (S166)** - RampOSAccount UUPSUpgradeable + factory createUpgradeableAccount + 10 tests
-8. ~~`F03.07` OpenAPI request/response examples~~ **DONE (S166)** - 29 handlers, 9 files, json!() examples
-9. Frontend sidebar test fix (`next-intl` ESM/CJS vitest config)
+Remaining 7 nice-to-have items (no urgency):
+1. `F05.07` Python fraud training pipeline (L)
+2. `F10.07` Frontend IntentBuilder component (M)
+3. `F15.06` Fix remaining hardcoded dashboard data (M)
+4. `F15.07` Complete server-side pagination (M)
+5. `F15.11` Complete i18n for all strings (M)
+6. `F16.08` Portal off-ramp UI page (M)
+7. `F16.09` Admin off-ramp dashboard page (M)
 
-**LOW - Nice to have:**
-10. `F02` Real breaking change migration E2E
-11. `F10` Testnet bridge integration
-12. `F12`/`F08` npm publish dry-run
-13. `F16` Napas/VietQR real bank adapter
+**Or: Merge `master` -> `main`, deploy, production validation.**
 
 ### What NOT to read (save context)
 - `NEXT-GEN-MASTER-PLAN.md` (1400+ lines) - THIS dashboard is the quick reference
@@ -50,8 +40,8 @@
 
 ### Exact task-level tracking
 - **`TASK-TRACKER.md`** (project root) has every sub-task ID (F01.01 - F16.12) with DONE/PARTIAL/TODO status
-- Use this to pick specific tasks to work on in any session
-- Summary at bottom: HIGH (4), MEDIUM (8), LOW (10), POST-MVP (F09/F11 skip)
+- **6 features COMPLETE**: F01 (7/7), F02 (8/8), F03 (8/8), F07 (10/10), F08 (9/9), F13 (8/8)
+- **7 nice-to-have items**: F05.07, F10.07, F15.06, F15.07, F15.11, F16.08, F16.09
 
 ### What TO read if you need deep context
 - `TASK-TRACKER.md` for sub-task level status (which exact task ID to work on)
@@ -65,8 +55,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Features Complete | 0 |
-| Features PARTIAL+ | 14 (F01-F08, F10, F12-F16) |
+| Features Complete | **6** (F01, F02, F03, F07, F08, F13) |
+| Features PARTIAL+ | **8** (F04, F05, F06, F10, F12, F14, F15, F16) |
 | Features PLANNED (post-MVP) | 2 (F09 ZK-KYC, F11 MPC Custody) |
 | Rebaseline Tasks (RB01-RB09) | ALL DONE |
 | HIGH priority remaining | **0** |
@@ -80,7 +70,8 @@
 | Python SDK Tests | **80 pass** |
 | Go SDK Tests | **48 pass** |
 | Playwright E2E | **28 specs** (+20 S167) |
-| **Grand Total** | **~2,800+ tests** |
+| **Grand Total** | **~2,900+ tests** |
+| **Last Commit** | Session 168 (Wave 3) |
 
 ---
 
@@ -111,36 +102,41 @@
 
 ## Feature Status & Remaining Work
 
-### PARTIAL+ Features (14) - What's Done vs What's Left
+### COMPLETE Features (6) - All Sub-Tasks DONE
+
+| Feature | Summary | Tests |
+|---------|---------|-------|
+| **F01** Rate Limiting | `rate_limit.rs` 441 lines, tower-governor, dashmap fallback, tenant overrides, migration 030 | 19 unit + 7 E2E |
+| **F02** API Versioning | `versioning/` mod, version, transformers, response; migration 031 | 20 E2E + 18 deprecation |
+| **F03** OpenAPI Docs | `openapi.rs`, 40 endpoints, Scalar UI `/docs`, json!() examples, CI diff check | 26 completeness |
+| **F07** GraphQL API | `graphql/` query, mutation, subscription, types, loaders, pagination; urql client + 7 hooks | 27 sub + 33 runtime + 23 hooks |
+| **F08** Multi-SDK | Python SDK (38 files, 80 tests), Go SDK (13 files, 48 tests), CI pipelines | 80 Python + 48 Go |
+| **F13** Backend Fixes | DB transactions, idempotency, error sanitization, compliance, graceful shutdown, pagination, metrics, settlement DB | 38 settlement E2E + 9 metrics |
+
+### PARTIAL+ Features (8) - What's Done vs What's Left
 
 #### TIER 1: TABLE STAKES
 
 | Feature | What EXISTS | What's LEFT to Complete |
 |---------|-----------|----------------------|
-| **F01** Rate Limiting | `rate_limit.rs` (441 lines, 19 unit tests), migration `030_tenant_rate_limits.sql`, 7 E2E tests, tenant-specific overrides | Production load test with real Redis; Redis fallback E2E verification |
-| **F02** API Versioning | `versioning/` (mod, version, transformers), migration `031_tenant_api_version.sql`, 20 E2E + 18 deprecation tests | Production version migration with real breaking changes; response transformer E2E |
-| **F03** OpenAPI Docs | `openapi.rs`, 40 endpoints annotated, Scalar UI at `/docs`, 26 completeness tests, `openapi-ci.yml` CI workflow, **29 handlers with json!() examples (S166)** | All sub-tasks DONE |
-| **F04** Webhook v2 | `webhook.rs` (HTTP delivery via reqwest), `webhook_delivery.rs`, `webhook_dlq.rs`, `webhook_signing.rs`, 14 config + 18 delivery E2E tests (wiremock), HMAC signature verified | Background retry worker as standalone process |
-| **F13** Backend Fixes | `settlement.rs` (SQL-backed via `SettlementRepository`), `repository/settlement.rs`, migration `032_settlements.sql`, `payout.rs` (6 base + 8 compliance tests), 38 settlement E2E + 30 lib tests | Graceful shutdown; cursor pagination on all lists |
+| **F04** Webhook v2 | `webhook.rs` (HTTP delivery via reqwest), `webhook_delivery.rs`, `webhook_dlq.rs`, `webhook_signing.rs`, 14 config + 18 delivery E2E tests (wiremock), HMAC signature verified | F04.07: SDK webhook verifier for v1/v2 |
 | **F14** Contract Fixes | `RampOSAccount.sol` (O(1) session key, **UUPSUpgradeable S166**), `RampOSPaymaster.sol` (nonce replay), `PasskeySigner.sol`, `PasskeyAccountFactory.sol`, VNDToken upgrades, **factory createUpgradeableAccount + 10 UUPS tests** | F14.04 multi-sig RBAC; `forge` not in PATH on Windows |
-| **F16** Off-Ramp VND | `offramp.rs`, `repository/offramp.rs`, migration `027_offramp_intents.sql`, 50 payout E2E tests | Settlement E2E with Napas/VietQR test adapter; real bank integration |
+| **F16** Off-Ramp VND | `offramp.rs`, `repository/offramp.rs`, migration `027_offramp_intents.sql`, 50 payout E2E tests, escrow (8 tests), Napas adapter (14 tests), VietQR (4 tests) | F16.08 Portal UI, F16.09 Admin dashboard |
 
 #### TIER 2: DIFFERENTIATION
 
 | Feature | What EXISTS | What's LEFT to Complete |
 |---------|-----------|----------------------|
-| **F05** AI Fraud | `fraud/` (scorer, decision, features, analytics, mod), 29 fraud acceptance tests | Production ML model (ONNX) integration (rule-based is fine for MVP); admin fraud score API |
-| **F06** Passkey Wallet | `passkey.rs` backend, `PasskeySigner.sol` + `PasskeyAccountFactory.sol` contracts, 22 E2E tests, **PasskeyLogin/Register wired to backend + PasskeyManagement + 23 tests (S166)** | Bundler passkey-signed UserOp E2E; SDK PasskeyWalletService |
-| **F07** GraphQL API | `graphql/` (mod, query, mutation, subscription, types, loaders, pagination, tests), 27 subscription + 33 runtime tests, **urql client + 7 hooks + 23 tests (S166)** | WebSocket subscription with real client E2E |
-| **F08** Multi-SDK | Python SDK (38 files, **80 tests**), Go SDK (13 files, **48 tests**), `sdk-generate.yml`, `sdk-ci.yml` | npm publish dry-run; CDN distribution test; full drift detection CI |
+| **F05** AI Fraud | `fraud/` (scorer, decision, features, analytics), OnnxModelScorer (12 tests), admin fraud API (8 tests), 29 fraud acceptance tests | F05.07 Python training pipeline (post-MVP) |
+| **F06** Passkey Wallet | `passkey.rs` backend, `PasskeySigner.sol` + `PasskeyAccountFactory.sol` contracts, 22 E2E tests, PasskeyLogin/Register/Management wired (S166) | F06.06 Bundler E2E; F06.09 SDK passkey service |
+| **F10** Chain Abstraction | `chain/` (abstraction, evm, solana, ton, swap, bridge), MockDex/MockBridge (17 tests), **IntentSolver + ExecutionEngine (S168)**, 48 multi-adapter E2E tests | F10.07 Frontend IntentBuilder |
 
 #### TIER 3: MOAT
 
 | Feature | What EXISTS | What's LEFT to Complete |
 |---------|-----------|----------------------|
-| **F10** Chain Abstraction | `chain/` (abstraction, evm, solana, ton, mod), 48 multi-adapter E2E tests | Multi-chain bridge E2E with testnet; intent solver + execution engine |
 | **F12** Widget SDK | `packages/widget/` (React components, web components, embed, checkout API), 147 tests | npm publish dry-run; CDN distribution; Web Component E2E |
-| **F15** Frontend DX | Admin components (57 tests), data-flow (57 tests), env-config, `sdk-client.ts` + `api-adapter.ts` (SDK integration), `api.ts` deprecated, sidebar tests | Playwright E2E for full dashboard; real-time WebSocket |
+| **F15** Frontend DX | Admin components (57 tests), data-flow (57 tests), env-config, SDK integration, command palette (17 tests), notification center (21 tests), Playwright E2E (28 specs), WebSocket hooks (29 tests) | F15.06 hardcoded data, F15.07 pagination, F15.11 i18n |
 
 ### PLANNED Features (2) - Post-MVP
 
@@ -155,14 +151,11 @@ Both have stub/simulated code. ZK contracts exist (`ZkKycVerifier.sol`, `ZkKycRe
 
 ## Priority Action Items (Next Sessions)
 
-### HIGH PRIORITY - All DONE (S164+S165)
-~~All high priority items completed.~~
+### ALL PRIORITIES DONE (S164-S167)
 
-### MEDIUM PRIORITY - All DONE (S166)
-~~F03.07 OpenAPI examples, F06.07 WebAuthn, F07.09 GraphQL hooks, F14.05 UUPS proxy~~
+All HIGH, MEDIUM, and LOW priority tasks completed and committed.
 
-### LOW PRIORITY (Nice to Have - Next work)
-~~All 10 LOW tasks resolved in S167.~~ Remaining nice-to-have:
+### NICE TO HAVE (7 items - no urgency)
 1. **F05.07** Python fraud training pipeline
 2. **F10.07** Frontend IntentBuilder component
 3. **F15.06** Fix remaining hardcoded dashboard data
@@ -170,6 +163,12 @@ Both have stub/simulated code. ZK contracts exist (`ZkKycVerifier.sol`, `ZkKycRe
 5. **F15.11** Complete i18n for all strings
 6. **F16.08** Portal off-ramp UI page
 7. **F16.09** Admin off-ramp dashboard page
+
+### PRODUCTION READINESS
+- Merge `master` -> `main`
+- CI/CD pipeline verification
+- `forge` install for Solidity CI
+- `FINAL_STATUS_REPORT.md` needs update (outdated from S158)
 
 ---
 
@@ -290,15 +289,18 @@ Both have stub/simulated code. ZK contracts exist (`ZkKycVerifier.sol`, `ZkKycRe
 
 | S166 | 2026-02-11 | MEDIUM PRIORITY sprint (F03.07 OpenAPI examples, F06.07 WebAuthn, F07.09 GraphQL hooks, F14.05 UUPS) | +56 new |
 | S167 | 2026-02-11 | FINAL LOW PRIORITY sprint (F05.04/09, F10.05, F13.07, F15.05/08/12, F16.03/05/07 verified) | +104 new |
+| S168 | 2026-02-11 | Wave 3 Chain Abstraction (F10.02 IntentSolver, F10.04 ExecutionEngine) | +66 new |
 
 ---
 
 ## Notes for Next Session
 
-1. All Rust tests pass (0 failures, ~5 ignored) as of S162
-2. `cargo check --workspace` compiles cleanly (warnings only)
-3. `forge` not in PATH - Solidity tests need Linux CI or manual install
-4. Branch `master` needs merge to `main`
-5. `FINAL_STATUS_REPORT.md` is outdated (from S158, pre-rebaseline) - needs update
-6. `NEXT-GEN-MASTER-PLAN.md` is the source-of-truth but very long (1400+ lines) - this dashboard is the quick reference
-7. F09/F11 are explicitly post-MVP - do NOT work on them unless user requests
+1. **6 features COMPLETE** (F01, F02, F03, F07, F08, F13) - all sub-tasks DONE
+2. All Rust tests pass (0 failures, ~5 ignored) as of S167
+3. `cargo check --workspace` compiles cleanly (warnings only)
+4. `forge` not in PATH - Solidity tests need Linux CI or manual install
+5. Branch `master` needs merge to `main` - **ready for merge**
+6. `FINAL_STATUS_REPORT.md` is outdated (from S158, pre-rebaseline) - needs update
+7. `NEXT-GEN-MASTER-PLAN.md` is the source-of-truth but very long (1400+ lines) - this dashboard is the quick reference
+8. F09/F11 are explicitly post-MVP - do NOT work on them unless user requests
+9. Last commit: `6ca495387` feat(next-gen): session-167 FINAL LOW priority sprint

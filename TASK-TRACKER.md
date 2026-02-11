@@ -188,9 +188,9 @@
 | ID | Task | Status | Evidence |
 |----|------|--------|----------|
 | F10.01 | Intent DSL spec | DONE | In chain module |
-| F10.02 | IntentSolver | PARTIAL | Basic solver, no optimization |
+| F10.02 | IntentSolver | DONE | `chain/solver.rs` IntentSolver + Route optimization (S168) |
 | F10.03 | UnifiedBalanceService | DONE | `chain/abstraction.rs` |
-| F10.04 | ExecutionEngine | PARTIAL | Basic execution, no rollback |
+| F10.04 | ExecutionEngine | DONE | `chain/execution.rs` ExecutionEngine + Rollback support (S168) |
 | F10.05 | Swap/bridge backends | DONE | `chain/swap.rs` MockDexSwapAdapter + `chain/bridge.rs` MockBridgeAdapter + 17 tests (S167) |
 | F10.06 | API endpoints | DONE | Intent handlers exist |
 | F10.07 | Frontend IntentBuilder | TODO | No component |
