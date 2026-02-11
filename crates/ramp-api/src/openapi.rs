@@ -1,18 +1,37 @@
 //! OpenAPI documentation for RampOS API
 
 use axum::http::{header, StatusCode};
-use axum::response::{IntoResponse, Redirect};
+use axum::response::{Html, IntoResponse};
 use axum::Json;
 use utoipa::OpenApi;
 
 use crate::dto::*;
 use crate::handlers::aa::*;
 use crate::handlers::balance::*;
+use crate::handlers::chain::*;
+use crate::handlers::domain::*;
 use crate::handlers::health::*;
 use crate::handlers::intent::*;
 use crate::handlers::payin::*;
 use crate::handlers::payout::*;
+use crate::handlers::stablecoin::*;
 use crate::handlers::trade::*;
+// Import admin and bank_webhook handlers + utoipa __path_xxx generated types via re-export
+#[allow(unused_imports)]
+use crate::handlers::{
+    list_cases, get_case, update_case, get_case_stats,
+    list_users, get_user, get_dashboard,
+    handle_bank_webhook,
+    __path_list_cases, __path_get_case, __path_update_case, __path_get_case_stats,
+    __path_list_users, __path_get_user, __path_get_dashboard,
+    __path_handle_bank_webhook,
+};
+// Admin types with aliases to avoid name conflicts
+use crate::handlers::admin::{
+    CaseResponse, ListCasesResponse, UpdateCaseRequest, CaseStats, SeverityStats,
+    UserResponse as AdminUserResponse, ListUsersResponse,
+    DashboardStats, IntentStats as AdminIntentStats, UserStats, VolumeStats,
+};
 
 /// RampOS API Documentation
 #[derive(OpenApi)]
@@ -42,7 +61,11 @@ use crate::handlers::trade::*;
         (name = "users", description = "User management and balances"),
         (name = "admin", description = "Administrative endpoints for tenant and user management"),
         (name = "health", description = "Health check endpoints"),
-        (name = "account-abstraction", description = "ERC-4337 Account Abstraction endpoints for smart accounts and UserOperations")
+        (name = "account-abstraction", description = "ERC-4337 Account Abstraction endpoints for smart accounts and UserOperations"),
+        (name = "chains", description = "Multi-chain operations and cross-chain bridging"),
+        (name = "stablecoin", description = "VNST stablecoin mint, burn, reserves, and peg status"),
+        (name = "domains", description = "Custom domain management for tenants"),
+        (name = "webhooks", description = "Incoming bank webhook processing")
     ),
     paths(
         // Intents
@@ -51,10 +74,12 @@ use crate::handlers::trade::*;
         create_payout,
         get_intent,
         list_intents,
+        list_intents_cursor,
         // Events
         record_trade,
         // Users
         get_user_balances,
+        get_user_balances_for_tenant,
         // Health
         health_check,
         readiness_check,
@@ -64,7 +89,35 @@ use crate::handlers::trade::*;
         send_user_operation,
         estimate_gas,
         get_user_operation,
-        get_user_operation_receipt
+        get_user_operation_receipt,
+        // Chains
+        list_chains,
+        get_chain_detail,
+        get_bridge_quote,
+        initiate_bridge,
+        // Stablecoin
+        mint_vnst,
+        burn_vnst,
+        get_vnst_reserves,
+        get_vnst_peg_status,
+        get_vnst_config,
+        // Domains
+        list_domains,
+        create_domain,
+        get_domain,
+        delete_domain,
+        verify_dns,
+        provision_ssl,
+        // Webhooks
+        handle_bank_webhook,
+        // Admin
+        list_cases,
+        get_case,
+        update_case,
+        get_case_stats,
+        list_users,
+        get_user,
+        get_dashboard
     ),
     components(
         schemas(
@@ -92,6 +145,17 @@ use crate::handlers::trade::*;
             UpdateTenantRequest,
             SuspendTenantRequest,
             TierChangeRequest,
+            CaseResponse,
+            ListCasesResponse,
+            UpdateCaseRequest,
+            CaseStats,
+            SeverityStats,
+            AdminUserResponse,
+            ListUsersResponse,
+            DashboardStats,
+            AdminIntentStats,
+            UserStats,
+            VolumeStats,
             // Account Abstraction DTOs
             CreateAccountRequest,
             CreateAccountResponse,
@@ -102,6 +166,31 @@ use crate::handlers::trade::*;
             EstimateGasRequest,
             EstimateGasResponse,
             UserOpReceiptDto,
+            // Chain DTOs
+            ChainListResponse,
+            ChainDetailResponse,
+            BridgeQuoteRequest,
+            BridgeQuoteResponse,
+            FeeBreakdown,
+            BridgeRequest,
+            BridgeResponse,
+            // Stablecoin DTOs
+            VnstMintApiRequest,
+            VnstMintApiResponse,
+            VnstBurnApiRequest,
+            VnstBurnApiResponse,
+            VnstReservesApiResponse,
+            ReserveAssetResponse,
+            VnstPegStatusResponse,
+            VnstConfigResponse,
+            // Domain DTOs
+            CreateDomainRequest,
+            DomainResponse,
+            SslCertificateInfoResponse,
+            DomainListResponse,
+            DnsVerificationResponse,
+            SslProvisioningResponse,
+            DeleteDomainResponse,
             // Error responses
             ErrorResponse,
             ErrorBody,
@@ -124,9 +213,20 @@ pub async fn openapi_json() -> impl IntoResponse {
     )
 }
 
-/// Redirect /docs to /swagger-ui/
-pub async fn docs_redirect() -> Redirect {
-    Redirect::permanent("/swagger-ui/")
+/// Serve Scalar API reference UI at /docs
+pub async fn docs_handler() -> Html<String> {
+    Html(r#"<!DOCTYPE html>
+<html>
+<head>
+    <title>RampOS API Documentation</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+    <script id="api-reference" data-url="/api/openapi.json"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+</body>
+</html>"#.to_string())
 }
 
 /// Security addon for API authentication

@@ -218,6 +218,7 @@ impl WebhookService {
             .header("Content-Type", "application/json")
             .header("X-Webhook-Signature", &signature)
             .header("X-Webhook-Id", &event.id)
+            .header("X-Webhook-Timestamp", timestamp.to_string())
             .body(payload_bytes)
             .send()
             .await;

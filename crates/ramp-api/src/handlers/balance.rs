@@ -55,6 +55,23 @@ pub async fn get_user_balances(
 }
 
 /// GET /v1/users/{tenant_id}/{user_id}/balances - Alias for balance endpoint
+#[utoipa::path(
+    get,
+    path = "/v1/users/{tenant_id}/{user_id}/balances",
+    tag = "users",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID"),
+        ("user_id" = String, Path, description = "User ID")
+    ),
+    responses(
+        (status = 200, description = "User balances", body = UserBalancesResponse),
+        (status = 403, description = "Tenant mismatch", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_user_balances_for_tenant(
     State(service): State<LedgerServiceState>,
     Extension(tenant_ctx): Extension<TenantContext>,

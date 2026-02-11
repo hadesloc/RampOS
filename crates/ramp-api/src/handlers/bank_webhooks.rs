@@ -208,6 +208,23 @@ pub struct GenericWebhookResponse {
 /// Handle incoming bank webhook
 ///
 /// POST /v1/webhooks/bank/:provider
+#[utoipa::path(
+    post,
+    path = "/v1/webhooks/bank/{provider}",
+    tag = "webhooks",
+    params(
+        ("provider" = String, Path, description = "Bank provider name (e.g., vietqr, napas)")
+    ),
+    responses(
+        (status = 200, description = "Webhook processed", body = Object),
+        (status = 400, description = "Invalid payload", body = ErrorResponse),
+        (status = 401, description = "Invalid signature", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("hmac_signature" = [])
+    )
+)]
 #[instrument(skip_all, fields(provider = %provider))]
 pub async fn handle_bank_webhook(
     State(state): State<BankWebhookState>,

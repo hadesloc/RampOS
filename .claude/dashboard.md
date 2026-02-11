@@ -1,308 +1,292 @@
 # RampOS Dashboard
 
-**Last Updated:** 2026-02-11 (Session 162 Hardening Sprint)
-**Phase System:** Next-Gen (F01-F16)
-**Single Source-of-Truth:** `NEXT-GEN-MASTER-PLAN.md`
-**Execution Mode:** Session 162 - 8 features hardened, 190+ new tests
-**Session:** 162 (2-wave team sprint, 8 agents total)
+**Last Updated:** 2026-02-11 (Session 164 - HIGH PRIORITY Sprint: F13/F03/F04/F15)
+**Branch:** `master` (not merged to `main` yet)
+**Phase:** Next-Gen F01-F16 | Rebaseline RB01-RB09 ALL DONE
+**Plan File:** `NEXT-GEN-MASTER-PLAN.md` (16 features, 139 sub-tasks)
 
 ---
 
-## Test Suite Summary (Verified 2026-02-11)
+## SESSION GUIDE (Read This First)
 
-| Suite | Count | Command | Verified |
-|-------|-------|---------|----------|
-| ramp-core (Rust lib) | **821 pass** (4 ignored) | `cargo test -p ramp-core --lib` | YES |
-| ramp-core (integration) | **183 pass** | `cargo test -p ramp-core --tests` | YES |
-| ramp-api (Rust lib) | **205 pass** | `cargo test -p ramp-api --lib` | YES |
-| ramp-api (integration) | **189 pass** | `cargo test -p ramp-api --tests` | YES |
-| ramp-aa (Rust lib) | **48 pass** | `cargo test -p ramp-aa --lib` | YES |
-| ramp-aa (integration) | **115 pass** | `cargo test -p ramp-aa --test aa_tests` | YES |
-| ramp-adapter (Rust lib) | **59 pass** | `cargo test -p ramp-adapter --lib` | YES |
-| ramp-adapter (integration) | **103 pass** | `cargo test -p ramp-adapter --test adapter_tests` | YES |
-| ramp-compliance (Rust) | **201 pass** (1 ignored) | `cargo test -p ramp-compliance` | YES |
-| **Rust Total** | **2,100+ pass** | `cargo test --workspace` | YES |
-| Solidity | **100+ pass** | `forge test -vv` (44 Account+Paymaster + fuzz/invariant) | Prev |
-| Python SDK | **10+ pass** | `pytest -q sdk-python/tests` | Prev |
-| Go SDK | **40+ pass** | `go test ./sdk-go/...` | Prev |
-| Widget SDK (TS) | **147 pass** | `cd packages/widget && npm test` | YES |
-| Frontend (TS) | **259 pass** | `cd frontend && npx vitest run` | YES |
-| **Grand Total** | **2,500+ tests** | All suites | **PASS** |
+### Where are you?
+- **14 features PARTIAL+** (code + tests exist, need production polish)
+- **2 features PLANNED** (F09 ZK-KYC, F11 MPC Custody - post-MVP, skip)
+- **0 features COMPLETE** (none at 100% yet)
+- **~2,600+ tests** passing across all stacks
+- **RB01-RB09 rebaseline** ALL DONE
 
-**Known issue:** `test_payout_e2e_flow` hangs due to async timing (test infra, not code bug)
+### What to do next? (Prioritized)
 
----
+**HIGH - Move features to COMPLETE:**
+1. ~~`F13` Settlement DB persistence~~ **DONE (S164)** - SQL-backed `SettlementRepository` + migration `032_settlements.sql` (68 tests)
+2. ~~`F03` OpenAPI annotations~~ **DONE (S164)** - 40 endpoints annotated, Scalar UI at `/docs` (231 tests)
+3. ~~`F04` Webhook HTTP delivery~~ **DONE (S164)** - wiremock E2E, HMAC signature, retry + DLQ (71 tests)
+4. ~~`F15` SDK integration~~ **DONE (S164)** - `sdk-client.ts` + `api-adapter.ts`, api.ts deprecated (259 tests)
 
-## Next-Gen Feature Status (Post-Sprint)
+**MEDIUM - Production polish (Next priority):**
+5. `F01` Redis load test with real Redis connection
+6. `F07` WebSocket subscription E2E with real client
+7. `F14` Install `forge` or verify Solidity tests on Linux CI
+8. `F06` Playwright WebAuthn E2E test
+9. Frontend sidebar test fix (`next-intl` ESM/CJS vitest config)
 
-| Feature | Name | Status | Tests | Evidence | What Was Done This Sprint |
-|---------|------|--------|-------|----------|---------------------------|
-| F01 | Rate Limiting | **PARTIAL+** | 46 | `crates/ramp-api/tests/rate_limit_e2e_test.rs` | S161: +7 E2E tests (real Axum HTTP server, 429 headers, tenant isolation, sliding window, VIP tiers, concurrent) |
-| F02 | API Versioning | **PARTIAL+** | 128 | `crates/ramp-api/tests/versioning_e2e_test.rs` | S162: +18 E2E tests (deprecation headers, sunset, lifecycle states, concurrent, version fallback, breaking change detection) |
-| F03 | OpenAPI Docs | **PARTIAL+** | 26 | `crates/ramp-api/tests/openapi_completeness_test.rs` | S162: +16 tests (tag coverage, schema completeness, security schemes, server config, operation validation) |
-| F04 | Webhook v2 | **PARTIAL+** | 78 | `crates/ramp-core/tests/webhook_config_e2e_test.rs` | S162: +14 E2E tests (config CRUD, event filtering, secret rotation, batch delivery, tenant isolation, state machine) |
-| F05 | AI Fraud | **PARTIAL+** | 107 (78+29) | `crates/ramp-compliance/tests/fraud_acceptance_test.rs` | S162: +17 tests (threshold edge cases, batch scoring, analytics aggregation, full pipeline E2E, custom scorer config) |
-| F06 | Passkey Wallet | **PARTIAL+** | 22+ | `crates/ramp-core/tests/passkey_webauthn_e2e_test.rs` | S161: +22 E2E tests (registration/auth ceremony, multi-credential, revocation, challenge expiry, cross-origin, replay prevention, concurrent) |
-| F07 | GraphQL API | **PARTIAL+** | 60 | `crates/ramp-api/tests/graphql_subscription_e2e_test.rs` | S161: +27 E2E tests (pub/sub, tenant filtering, lifecycle, concurrent, ordering, channel capacity, Unicode) |
-| F08 | Multi-SDK | **PARTIAL+** | 50+ | `.github/workflows/sdk-generate.yml` | No change |
-| F09 | ZK-KYC | **PLANNED** | N/A | `docs/plans/2026-02-10-f09-f11-decision-record.md` | Post-MVP (RB08 decision) |
-| F10 | Chain Abstraction | **PARTIAL+** | 82 | `crates/ramp-core/tests/chain_multi_adapter_e2e_test.rs` | S162: +48 tests (unified interface, address validation EVM/Solana/TON, registry, explorer URLs, cross-chain rejection) |
-| F11 | MPC Custody | **PLANNED** | N/A | `.claude/research/mpc-evaluation.md` | Post-MVP (RB08 decision) |
-| F12 | Widget SDK | **PARTIAL+** | 147 | `packages/widget/tests/packaging.test.ts` | S162: +39 tests (package.json validation, exports, vite config, CSP compatibility, dependencies, TypeScript config) |
-| F13 | Backend Fixes | **PARTIAL+** | 83 | `crates/ramp-core/src/service/settlement.rs` | S162: +10 tests + settlement state tracking upgrade (in-memory store, state machine, list/update/query) |
-| F14 | Contract Fixes | **PARTIAL+** | 44+ | `contracts/test/RampOSAccount.t.sol` | No change |
-| F15 | Frontend DX | **PARTIAL+** | 157 | `frontend/src/lib/__tests__/admin-components.test.ts` | S162: +57 tests (admin routes, auth guard, sidebar, CSRF, error boundary, locale, session token, API config) |
-| F16 | Off-Ramp VND | **PARTIAL+** | 112 | `crates/ramp-core/tests/offramp_payout_e2e_test.rs` | S161: +50 E2E tests (quote creation, KYC tier limits, payout lifecycle, multi-currency, concurrent, fee calculation, state machine, cancellation) |
+**LOW - Nice to have:**
+10. `F02` Real breaking change migration E2E
+11. `F10` Testnet bridge integration
+12. `F12`/`F08` npm publish dry-run
+13. `F16` Napas/VietQR real bank adapter
 
-**Summary:** `Complete: 0` | `Partial+: 14` | `Planned: 2` | `Blocked: 0`
+### What NOT to read (save context)
+- `NEXT-GEN-MASTER-PLAN.md` (1400+ lines) - THIS dashboard is the quick reference
+- `PHASES.md` - Old Phase A-G, already completed
+- `FINAL_STATUS_REPORT.md` - Outdated from S158
+- `.claude/archive/` - Old sprint logs, archived
 
-**Note:** `PARTIAL+` means substantial progress beyond baseline - tests added, CI gates created, acceptance coverage improved. These features need final E2E integration verification to become `Complete`.
+### Exact task-level tracking
+- **`TASK-TRACKER.md`** (project root) has every sub-task ID (F01.01 - F16.12) with DONE/PARTIAL/TODO status
+- Use this to pick specific tasks to work on in any session
+- Summary at bottom: HIGH (4), MEDIUM (8), LOW (10), POST-MVP (F09/F11 skip)
+
+### What TO read if you need deep context
+- `TASK-TRACKER.md` for sub-task level status (which exact task ID to work on)
+- Feature tables below (EXISTS vs LEFT columns)
+- `crates/` source files listed in Key Source Files section
+- Test files listed in Integration Test Files section
 
 ---
 
-## Sprint Activity Log
+## Quick Status
 
-### Session 162 (2026-02-11) - Hardening Sprint
-
-#### Wave 1 (4 agents)
-| Agent | Task | Files Created/Modified | Result |
-|-------|------|----------------------|--------|
-| w1-f03-openapi | T1: F03 OpenAPI spec completeness | `openapi_completeness_test.rs` (MOD) | +16 tests, 26/26 pass |
-| w1-f05-fraud | T2: F05 Fraud pipeline E2E | `fraud_acceptance_test.rs` (MOD) | +17 tests, 29/29 pass |
-| w1-f13-settlement | T3: F13 Settlement upgrade | `settlement.rs` (MOD) - state tracking + store | +10 tests, 12/12 pass |
-| w1-f15-frontend | T4: F15 Admin component tests | `admin-components.test.ts` (NEW) | +57 tests, 259/259 pass |
-
-#### Wave 2 (4 agents)
-| Agent | Task | Files Created/Modified | Result |
-|-------|------|----------------------|--------|
-| w2-f10-chain | T5: F10 Multi-chain adapter E2E | `chain_multi_adapter_e2e_test.rs` (NEW) | +48 tests, 48/48 pass |
-| w2-f12-widget | T6: F12 Widget packaging | `packaging.test.ts` (NEW) | +39 tests, 147/147 pass |
-| w2-f04-webhook | T7: F04 Webhook config E2E | `webhook_config_e2e_test.rs` (NEW) | +14 tests, 14/14 pass |
-| w2-f02-versioning | T8: F02 Versioning deprecation | `versioning_deprecation_e2e_test.rs` (NEW) | +18 tests, 18/18 pass |
-
-**Session 162 Total: +219 new tests across 8 features, 0 regressions**
-**Commit: `cc49a975d`**
-
-### Session 161 (2026-02-11) - Feature Completion Sprint
-
-#### Wave 1 (4 agents)
-| Agent | Task | Files Created/Modified | Result |
-|-------|------|----------------------|--------|
-| w1-f12-widget | T1: F12 real API | `checkout-api.ts` (NEW), `checkout-api.test.ts` (NEW), `Checkout.tsx` (MOD) | +10 tests, 108/108 pass |
-| w1-f10-ton | T2: F10 to_raw_address | `ton.rs` (MOD) - base64url decode + CRC16-XMODEM | +5 tests, 13/13 pass |
-| w1-f01-ratelimit | T3: F01 E2E tests | `rate_limit_e2e_test.rs` (NEW) | +7 tests, 7/7 pass |
-| w1-f04-webhook | T4: F04 E2E tests | `webhook_delivery_e2e_test.rs` (NEW) | +11 tests, 11/11 pass |
-
-#### Wave 2 (4 agents)
-| Agent | Task | Files Created/Modified | Result |
-|-------|------|----------------------|--------|
-| w2-f02-versioning | T5: F02 E2E tests | `versioning_e2e_test.rs` (NEW) | +20 tests, 20/20 pass |
-| w2-f07-graphql | T6: F07 subscription E2E | `graphql_subscription_e2e_test.rs` (NEW) | +27 tests, 27/27 pass |
-| w2-f13-settlement | T7: F13 settlement E2E | `settlement_e2e_test.rs` (NEW) | +38 tests, 38/38 pass |
-| w2-f16-offramp | T8: F16 off-ramp E2E | `offramp_payout_e2e_test.rs` (NEW) | +50 tests, 50/50 pass |
-
-#### Wave 3 (2 agents)
-| Agent | Task | Files Created/Modified | Result |
-|-------|------|----------------------|--------|
-| w3-f15-frontend | T9: F15 data flow | `data-flow.test.ts` (NEW) | +57 tests, 57/57 pass |
-| w3-f06-passkey | T10: F06 passkey E2E | `passkey_webauthn_e2e_test.rs` (NEW) | +22 tests, 22/22 pass |
-
-**Session 161 Total: +255 new tests across 10 features, 0 regressions**
-
-### Session 160 (2026-02-10) - Production-Readiness Sprint
-
-#### Wave 1 (4 agents)
-| Agent | Task | Files Created/Modified | Result |
-|-------|------|----------------------|--------|
-| w1-f01-ratelimit | T1: F01 E2E tests | `rate_limit_integration_tests.rs` | +7 tests, 20/20 pass |
-| w1-f07-graphql | T2: F07 schema tests | `graphql_runtime_tests.rs` | +7 tests, 33/33 pass |
-| w1-f04-webhook | T3: F04 delivery tests | `webhook_tests.rs` | +13 tests, 53/53 pass |
-| w1-f13-payout | T4: F13 settlement tests | `payout_compliance_tests.rs` | +8 tests, 35/35 pass |
-
-#### Wave 2 (4 agents)
-| Agent | Task | Files Created/Modified | Result |
-|-------|------|----------------------|--------|
-| w2-f16-offramp | T5: F16 integration tests | `offramp_tests.rs` | +7 tests, 62/62 pass |
-| w2-f12-widget | T6: F12 build verify | `build-verify.test.ts`, `smoke-test.html` | +36 tests, 98/98 pass |
-| w2-f03-openapi | T7: F03 completeness | `openapi_completeness_test.rs` | +10 tests, 10/10 pass |
-| w2-f15-frontend | T8: F15 env-config | `env-config.test.ts` | +12 tests, 145/145 pass |
-
-**Session 160 Total: +100 new tests across 8 features, 0 regressions**
-**Commit: `6518f9f3a`**
-
-### Session 159 (2026-02-10) - Gap-Closing Sprint
-
-#### Wave 1 (4 agents)
-| Agent | Task | Files Created/Modified | Result |
-|-------|------|----------------------|--------|
-| w1-f01-ratelimit | T1: F01 integration tests | `rate_limit_integration_tests.rs` | +6 tests, 13/13 pass |
-| w1-f04-webhook | T2: F04 delivery tests | `webhook_tests.rs` | +12 tests, 40/40 pass |
-| w1-f07-graphql | T3: F07 resolver tests | `graphql_runtime_tests.rs` | +18 tests, 26/26 pass |
-| w1-f13-payout | T4: F13 transaction tests | `payout_compliance_tests.rs` | +14 tests, 27/27 pass |
-
-#### Wave 2 (4 agents)
-| Agent | Task | Files Created/Modified | Result |
-|-------|------|----------------------|--------|
-| w2-f02-versioning | T5: F02 transformer tests | `versioning_tests.rs` | +20 tests, 46/46 pass |
-| w2-f10-chain | T6: F10 config-backed | `chain.rs`, `chain_abstraction_test.rs` | +17 tests, 29/29 pass |
-| w2-f12-widget | T7: F12 vanilla embed | `embed.ts`, `embed.test.ts`, `vite.embed.config.ts` | +32 tests, 62/62 pass |
-| w2-f15-frontend | T8: F15 API client | `api-client.ts`, `api-client.test.ts` | +31 tests, 31/31 pass |
-
-**Session 159 Total: +150 new tests across 8 features, 0 regressions**
-
-### Session 158 (2026-02-10) - Completion Sprint
-
-#### Wave 1 (4 agents)
-| Agent | Task | Files Created/Modified | Result |
-|-------|------|----------------------|--------|
-| w1-f01-ratelimit | F01 tests + migration | `rate_limit.rs`, `migrations/030_*` | 19 tests pass |
-| w1-f04-webhook | F04 tests + SDK helpers | `webhook_tests.rs`, `sdk-python/webhook_verifier.py`, `sdk-go/webhook.go` | 24 tests pass |
-| w1-f03-f07-f08 | F03 CI + F07 auth + F08 verify | `openapi-ci.yml`, `graphql_runtime_tests.rs` | 21 GraphQL tests pass |
-| w1-f16-f02 | F16 E2E + F02 migration | `e2e_offramp_test.rs`, `migrations/031_*` | 54 offramp tests pass |
-
-#### Wave 2 (4 agents)
-| Agent | Task | Files Created/Modified | Result |
-|-------|------|----------------------|--------|
-| w2-f05-f06-f10 | F05 fraud + F06 passkey + F10 chain | `fraud_acceptance_test.rs`, `passkey/`, `chain_abstraction_test.rs` | 6 fraud tests pass |
-| w2-f12-f13-f15 | F12 widget + F13 compliance + F15 data | `payout_compliance_tests.rs`, `api-health.ts` | 8 compliance tests pass |
-| w2-f14-contracts | F14 edge-case tests | `RampOSAccount.t.sol`, `RampOSPaymaster.t.sol` | Tests added |
-| w2-rb09-final | RB09 gate + reports | `go-live-checklist.md`, dashboard, ledger | Reports updated |
-
-### Orchestrator Fixes (S158)
-- Fixed `security_tests.rs` missing `list_by_cursor` trait method (compilation error)
-- Fixed `payout_compliance_tests.rs` assertion (mock state tracking)
+| Metric | Value |
+|--------|-------|
+| Features Complete | 0 |
+| Features PARTIAL+ | 14 (F01-F08, F10, F12-F16) |
+| Features PLANNED (post-MVP) | 2 (F09 ZK-KYC, F11 MPC Custody) |
+| Rebaseline Tasks (RB01-RB09) | ALL DONE |
+| Rust Tests | ~2,100+ pass |
+| Widget SDK Tests | 147 pass |
+| Frontend Tests | 259 pass |
+| Solidity Tests | 100+ (needs forge verification) |
+| Python SDK Tests | **80 pass** |
+| Go SDK Tests | **48 pass** |
+| **Grand Total** | **~2,600+ tests** |
 
 ---
 
-## Rebaseline Task Tracker (RB01-RB09)
+## Test Suite Summary
 
-| Task | Name | Status | Evidence |
-|------|------|--------|----------|
-| RB00 | Plan hardening | **DONE** | Dashboard synced |
-| RB01 | Status ledger | **DONE** | `docs/plans/2026-02-10-next-gen-status-ledger.md` |
-| RB02 | F16 persistence | **DONE** | SQL-backed, 54/54 tests |
-| RB03 | F16 API + settlement | **DONE** | Portal/admin endpoints + E2E test |
-| RB04 | Policy hardening | **DONE** | 8 compliance tests, tier limits |
-| RB05 | F14 contracts | **DONE** | O(1) session key + nonce replay, edge-case tests |
-| RB06 | F08 SDK CI | **DONE** | `sdk-generate.yml` + `validate-openapi.sh` |
-| RB07 | F07 GraphQL | **DONE** | 21 tests, auth verified |
-| RB08 | F09/F11 decision | **DONE** | Path B: Planned (post-MVP) |
-| RB09 | Final gate | **DONE** | 1,300+ Rust tests pass (verified), go-live checklist created, `FINAL_STATUS_REPORT.md` updated |
+| Suite | Count | Command |
+|-------|-------|---------|
+| ramp-core (lib) | 821 (4 ignored) | `cargo test -p ramp-core --lib` |
+| ramp-core (integration) | 183 | `cargo test -p ramp-core --tests` |
+| ramp-api (lib) | 205 | `cargo test -p ramp-api --lib` |
+| ramp-api (integration) | 189 | `cargo test -p ramp-api --tests` |
+| ramp-aa (lib) | 48 | `cargo test -p ramp-aa --lib` |
+| ramp-aa (integration) | 115 | `cargo test -p ramp-aa --test aa_tests` |
+| ramp-adapter (lib) | 59 | `cargo test -p ramp-adapter --lib` |
+| ramp-adapter (integration) | 103 | `cargo test -p ramp-adapter --test adapter_tests` |
+| ramp-compliance | 201 (1 ignored) | `cargo test -p ramp-compliance` |
+| Solidity | 100+ | `cd contracts && forge test -vv` |
+| Python SDK | **80** | `pytest -q sdk-python/tests` |
+| Go SDK | **48** | `go test ./sdk-go/...` |
+| Widget SDK (TS) | 147 | `cd packages/widget && npx vitest run` |
+| Frontend (TS) | 259 | `cd frontend && npx vitest run` |
+
+**Known issues:**
+- `test_payout_e2e_flow` hangs (async timing, test infra issue)
+- Frontend: 2 test suites fail (`portal-sidebar.test.tsx`, `sidebar.test.tsx`) due to `next-intl` ESM/CJS import mismatch with `next/navigation` - not a code bug, needs vitest config fix
 
 ---
 
-## Key Files Reference (For Next Session)
+## Feature Status & Remaining Work
 
-### Source Code
-- **Rate limiting**: `crates/ramp-api/src/middleware/rate_limit.rs` (441 lines, 19 tests)
-- **Versioning**: `crates/ramp-api/src/versioning/` (mod.rs, version.rs, transformers.rs)
-- **OpenAPI**: `crates/ramp-api/src/openapi.rs` (234 lines)
-- **Webhook**: `crates/ramp-core/src/service/webhook.rs` (290 lines, 24 tests)
-- **Fraud**: `crates/ramp-compliance/src/fraud/` (scorer.rs, decision.rs, features.rs, analytics.rs)
-- **Passkey**: `contracts/src/passkey/PasskeySigner.sol`, `frontend/src/components/passkey/`
-- **GraphQL**: `crates/ramp-api/src/graphql/` (mod, query, mutation, subscription, types, loaders)
-- **Chain**: `crates/ramp-core/src/chain/` (abstraction.rs, evm.rs, solana.rs, ton.rs)
-- **Widget SDK**: `sdk/` (TypeScript, tsup build)
-- **Off-ramp**: `crates/ramp-core/src/service/offramp.rs`, `crates/ramp-core/src/repository/offramp.rs`
-- **Settlement**: `crates/ramp-core/src/service/settlement.rs` (102 lines)
-- **Payout**: `crates/ramp-core/src/service/payout.rs` (6 base + 8 compliance tests)
-- **Contracts**: `contracts/src/RampOSAccount.sol`, `contracts/src/RampOSPaymaster.sol`
+### PARTIAL+ Features (14) - What's Done vs What's Left
+
+#### TIER 1: TABLE STAKES
+
+| Feature | What EXISTS | What's LEFT to Complete |
+|---------|-----------|----------------------|
+| **F01** Rate Limiting | `rate_limit.rs` (441 lines, 19 unit tests), migration `030_tenant_rate_limits.sql`, 7 E2E tests, tenant-specific overrides | Production load test with real Redis; Redis fallback E2E verification |
+| **F02** API Versioning | `versioning/` (mod, version, transformers), migration `031_tenant_api_version.sql`, 20 E2E + 18 deprecation tests | Production version migration with real breaking changes; response transformer E2E |
+| **F03** OpenAPI Docs | `openapi.rs`, 40 endpoints annotated, Scalar UI at `/docs`, 26 completeness tests, `openapi-ci.yml` CI workflow | CI diff gate for spec changes |
+| **F04** Webhook v2 | `webhook.rs` (HTTP delivery via reqwest), `webhook_delivery.rs`, `webhook_dlq.rs`, `webhook_signing.rs`, 14 config + 18 delivery E2E tests (wiremock), HMAC signature verified | Background retry worker as standalone process |
+| **F13** Backend Fixes | `settlement.rs` (SQL-backed via `SettlementRepository`), `repository/settlement.rs`, migration `032_settlements.sql`, `payout.rs` (6 base + 8 compliance tests), 38 settlement E2E + 30 lib tests | Graceful shutdown; cursor pagination on all lists |
+| **F14** Contract Fixes | `RampOSAccount.sol` (O(1) session key), `RampOSPaymaster.sol` (nonce replay), `PasskeySigner.sol`, `PasskeyAccountFactory.sol`, VNDToken upgrades | `forge` not in PATH - Solidity tests unverified on this machine; UUPS proxy pattern; VNDToken pausable/blacklist |
+| **F16** Off-Ramp VND | `offramp.rs`, `repository/offramp.rs`, migration `027_offramp_intents.sql`, 50 payout E2E tests | Settlement E2E with Napas/VietQR test adapter; real bank integration |
+
+#### TIER 2: DIFFERENTIATION
+
+| Feature | What EXISTS | What's LEFT to Complete |
+|---------|-----------|----------------------|
+| **F05** AI Fraud | `fraud/` (scorer, decision, features, analytics, mod), 29 fraud acceptance tests | Production ML model (ONNX) integration (rule-based is fine for MVP); admin fraud score API |
+| **F06** Passkey Wallet | `passkey.rs` backend, `PasskeySigner.sol` + `PasskeyAccountFactory.sol` contracts, 22 E2E tests | Frontend WebAuthn E2E (Playwright with browser API mock); bundler passkey-signed UserOp E2E |
+| **F07** GraphQL API | `graphql/` (mod, query, mutation, subscription, types, loaders, pagination, tests), 27 subscription + 33 runtime tests | WebSocket subscription with real client E2E; frontend GraphQL hooks integration |
+| **F08** Multi-SDK | Python SDK (38 files, **80 tests**), Go SDK (13 files, **48 tests**), `sdk-generate.yml`, `sdk-ci.yml` | npm publish dry-run; CDN distribution test; full drift detection CI |
+
+#### TIER 3: MOAT
+
+| Feature | What EXISTS | What's LEFT to Complete |
+|---------|-----------|----------------------|
+| **F10** Chain Abstraction | `chain/` (abstraction, evm, solana, ton, mod), 48 multi-adapter E2E tests | Multi-chain bridge E2E with testnet; intent solver + execution engine |
+| **F12** Widget SDK | `packages/widget/` (React components, web components, embed, checkout API), 147 tests | npm publish dry-run; CDN distribution; Web Component E2E |
+| **F15** Frontend DX | Admin components (57 tests), data-flow (57 tests), env-config, `sdk-client.ts` + `api-adapter.ts` (SDK integration), `api.ts` deprecated, sidebar tests | Playwright E2E for full dashboard; real-time WebSocket |
+
+### PLANNED Features (2) - Post-MVP
+
+| Feature | Decision | Reference |
+|---------|----------|-----------|
+| **F09** ZK-KYC | Post-MVP (RB08 Path B) | `docs/plans/2026-02-10-f09-f11-decision-record.md` |
+| **F11** MPC Custody | Post-MVP (RB08 Path B) | `.claude/research/mpc-evaluation.md` |
+
+Both have stub/simulated code. ZK contracts exist (`ZkKycVerifier.sol`, `ZkKycRegistry.sol`). Custody modules exist (`mpc_key.rs`, `mpc_signing.rs`, `policy.rs`). Not production-ready.
+
+---
+
+## Priority Action Items (Next Sessions)
+
+### HIGH PRIORITY (Move to Complete)
+1. **F13 settlement DB persistence** - Replace in-memory store with SQL-backed (currently `SettlementStore` is HashMap)
+2. **F03 OpenAPI annotations** - Annotate remaining handlers with `#[utoipa::path()]`
+3. **F04 webhook HTTP delivery** - Implement actual HTTP POST to external endpoints
+4. **F15 SDK integration** - Replace `frontend/src/lib/api.ts` (1683 lines) with `@rampos/sdk`
+
+### MEDIUM PRIORITY (Production Polish)
+5. **F01 Redis integration** - Production load test with real Redis
+6. **F07 WebSocket E2E** - Real client subscription test
+7. **F14 forge verification** - Install forge on Windows or run on Linux CI
+8. **F06 frontend passkey** - Playwright E2E with WebAuthn mock
+
+### LOW PRIORITY (Nice to Have)
+9. **F02 migration E2E** - Real breaking change scenario test
+10. **F10 bridge E2E** - Testnet bridge integration
+11. **F12/F08 publish** - npm publish dry-run
+12. **F16 Napas adapter** - Real bank API integration
+
+---
+
+## Key Source Files
+
+### Backend (Rust - 7 crates)
+| Path | Feature | Notes |
+|------|---------|-------|
+| `crates/ramp-api/src/middleware/rate_limit.rs` | F01 | 441 lines, 19 tests |
+| `crates/ramp-api/src/versioning/` | F02 | mod, version, transformers |
+| `crates/ramp-api/src/openapi.rs` | F03 | 234 lines |
+| `crates/ramp-core/src/service/webhook*.rs` | F04 | webhook, delivery, dlq, signing, tests |
+| `crates/ramp-compliance/src/fraud/` | F05 | scorer, decision, features, analytics |
+| `crates/ramp-core/src/service/passkey.rs` | F06 | Backend passkey service |
+| `crates/ramp-api/src/graphql/` | F07 | mod, query, mutation, subscription, types, loaders |
+| `crates/ramp-core/src/chain/` | F10 | abstraction, evm, solana, ton |
+| `crates/ramp-core/src/custody/` | F11 | mod, mpc_key, mpc_signing, policy (PLANNED) |
+| `crates/ramp-core/src/service/settlement.rs` | F13 | State machine, SQL-backed via SettlementRepository |
+| `crates/ramp-core/src/service/payout.rs` | F13 | 6 base + 8 compliance tests |
+| `crates/ramp-core/src/service/offramp.rs` | F16 | Off-ramp service |
+| `crates/ramp-core/src/repository/offramp.rs` | F16 | SQL-backed repository |
+
+### Smart Contracts (Solidity - Foundry)
+| Path | Feature | Notes |
+|------|---------|-------|
+| `contracts/src/RampOSAccount.sol` | F14 | O(1) session key lookup |
+| `contracts/src/RampOSPaymaster.sol` | F14 | Nonce-based replay prevention |
+| `contracts/src/VNDToken.sol` | F14 | Stablecoin |
+| `contracts/src/passkey/PasskeySigner.sol` | F06 | P256 verification |
+| `contracts/src/passkey/PasskeyAccountFactory.sol` | F06 | Factory |
+| `contracts/src/zk/ZkKycVerifier.sol` | F09 | ZK verifier (PLANNED) |
+| `contracts/src/zk/ZkKycRegistry.sol` | F09 | ZK registry (PLANNED) |
+
+### Frontend (TypeScript - Next.js)
+| Path | Feature | Notes |
+|------|---------|-------|
+| `frontend/` | F15 | Admin dashboard + portal |
+| `frontend-landing/` | N/A | Landing page |
+| `packages/widget/` | F12 | Widget SDK (147 tests) |
+
+### SDKs
+| Path | Feature | Notes |
+|------|---------|-------|
+| `sdk-python/` | F08 | 38 .py files, 10 test files |
+| `sdk-go/` | F08 | 13 .go files |
+
+### Integration Test Files
+| Path | Feature | Added |
+|------|---------|-------|
+| `crates/ramp-api/tests/rate_limit_e2e_test.rs` | F01 | S161 |
+| `crates/ramp-api/tests/rate_limit_integration_tests.rs` | F01 | S159 |
+| `crates/ramp-api/tests/versioning_e2e_test.rs` | F02 | S161 |
+| `crates/ramp-api/tests/versioning_deprecation_e2e_test.rs` | F02 | S162 |
+| `crates/ramp-api/tests/versioning_tests.rs` | F02 | S159 |
+| `crates/ramp-api/tests/openapi_completeness_test.rs` | F03 | S160/S162 |
+| `crates/ramp-core/tests/webhook_config_e2e_test.rs` | F04 | S162 |
+| `crates/ramp-core/tests/webhook_delivery_e2e_test.rs` | F04 | S161 |
+| `crates/ramp-compliance/tests/fraud_acceptance_test.rs` | F05 | S158/S162 |
+| `crates/ramp-core/tests/passkey_webauthn_e2e_test.rs` | F06 | S161 |
+| `crates/ramp-api/tests/graphql_runtime_tests.rs` | F07 | S159 |
+| `crates/ramp-api/tests/graphql_subscription_e2e_test.rs` | F07 | S161 |
+| `crates/ramp-api/tests/chain_abstraction_test.rs` | F10 | S159 |
+| `crates/ramp-core/tests/chain_multi_adapter_e2e_test.rs` | F10 | S162 |
+| `packages/widget/tests/packaging.test.ts` | F12 | S162 |
+| `crates/ramp-core/tests/settlement_e2e_test.rs` | F13 | S161 |
+| `crates/ramp-core/tests/offramp_payout_e2e_test.rs` | F16 | S161 |
+| `crates/ramp-api/tests/e2e_offramp_test.rs` | F16 | S158 |
+| `frontend/src/lib/__tests__/data-flow.test.ts` | F15 | S161 |
+| `frontend/src/lib/__tests__/admin-components.test.ts` | F15 | S162 |
 
 ### Migrations
-- `migrations/027_offramp_intents.sql` (F16)
-- `migrations/030_tenant_rate_limits.sql` (F01) - NEW
-- `migrations/031_tenant_api_version.sql` (F02) - NEW
+| File | Feature |
+|------|---------|
+| `migrations/027_offramp_intents.sql` | F16 |
+| `migrations/030_tenant_rate_limits.sql` | F01 |
+| `migrations/031_tenant_api_version.sql` | F02 |
+| `migrations/032_settlements.sql` | F13 |
 
 ### CI/CD Workflows
-- `.github/workflows/sdk-generate.yml` (F08)
-- `.github/workflows/sdk-ci.yml` (F08)
-- `.github/workflows/openapi-ci.yml` (F03) - NEW
-
-### Test Files
-- `crates/ramp-api/tests/rate_limit_e2e_test.rs` (F01) - NEW S161
-- `crates/ramp-api/tests/versioning_e2e_test.rs` (F02) - NEW S161
-- `crates/ramp-api/tests/graphql_runtime_tests.rs` (F07)
-- `crates/ramp-api/tests/graphql_subscription_e2e_test.rs` (F07) - NEW S161
-- `crates/ramp-api/tests/e2e_offramp_test.rs` (F16)
-- `crates/ramp-api/tests/chain_abstraction_test.rs` (F10)
-- `crates/ramp-compliance/tests/fraud_acceptance_test.rs` (F05)
-- `crates/ramp-core/tests/webhook_delivery_e2e_test.rs` (F04) - NEW S161
-- `crates/ramp-core/tests/settlement_e2e_test.rs` (F13) - NEW S161
-- `crates/ramp-core/tests/offramp_payout_e2e_test.rs` (F16) - NEW S161
-- `crates/ramp-core/tests/passkey_webauthn_e2e_test.rs` (F06) - NEW S161
-- `crates/ramp-core/src/service/payout_compliance_tests.rs` (F13)
-- `packages/widget/tests/checkout-api.test.ts` (F12) - NEW S161
-- `frontend/src/lib/__tests__/data-flow.test.ts` (F15) - NEW S161
-- `crates/ramp-api/tests/versioning_deprecation_e2e_test.rs` (F02) - NEW S162
-- `crates/ramp-api/tests/openapi_completeness_test.rs` (F03) - UPDATED S162
-- `crates/ramp-core/tests/chain_multi_adapter_e2e_test.rs` (F10) - NEW S162
-- `crates/ramp-core/tests/webhook_config_e2e_test.rs` (F04) - NEW S162
-- `crates/ramp-compliance/tests/fraud_acceptance_test.rs` (F05) - UPDATED S162
-- `packages/widget/tests/packaging.test.ts` (F12) - NEW S162
-- `frontend/src/lib/__tests__/admin-components.test.ts` (F15) - NEW S162
-
-### SDK Additions
-- `sdk-python/src/rampos/utils/webhook_verifier.py` (F04) - NEW
-- `sdk-go/webhook.go` (F04) - MODIFIED
+| File | Feature |
+|------|---------|
+| `.github/workflows/sdk-generate.yml` | F08 |
+| `.github/workflows/sdk-ci.yml` | F08 |
+| `.github/workflows/openapi-ci.yml` | F03 |
+| `.github/workflows/ci.yml` | Core CI |
+| `.github/workflows/contracts-ci.yml` | F14 |
 
 ---
 
-## Remaining Gaps to Complete
+## Rebaseline Tracker (ALL DONE)
 
-To move features from `PARTIAL+` to `COMPLETE`, each needs:
-
-1. **F01**: Production load testing with real Redis cluster
-2. **F02**: Production version migration with real breaking changes
-3. **F03**: Full OpenAPI spec coverage (all endpoints documented)
-4. **F04**: HTTP webhook delivery with external endpoint (currently in-memory repo)
-5. **F05**: Production ML model integration (currently rule-based, which is fine for MVP)
-6. **F06**: Frontend E2E test (Playwright/Cypress) with WebAuthn browser API mock
-7. **F07**: WebSocket subscription endpoint test with real client
-8. **F08**: npm publish dry-run + CDN distribution test
-9. **F10**: Multi-chain bridge E2E with testnet
-10. **F12**: npm publish dry-run + CDN distribution test
-11. **F14**: forge test run confirmation (forge not in PATH on this Windows machine)
-12. **F13**: Database-backed settlement persistence (currently in-memory)
-13. **F15**: Playwright E2E for full admin dashboard data flow
-14. **F16**: Settlement E2E with Napas/VietQR test adapter
+| Task | Status | Summary |
+|------|--------|---------|
+| RB01 Status ledger | DONE | Evidence-based maturity labels |
+| RB02 F16 persistence | DONE | SQL-backed off-ramp intents |
+| RB03 F16 API + settlement | DONE | Portal/admin endpoints |
+| RB04 Policy hardening | DONE | Compliance-backed payout policy |
+| RB05 F14 contracts | DONE | O(1) session key + nonce replay |
+| RB06 F08 SDK CI | DONE | sdk-generate.yml + drift guard |
+| RB07 F07 GraphQL | DONE | Runtime mount + auth verified |
+| RB08 F09/F11 decision | DONE | Path B: post-MVP |
+| RB09 Final gate | DONE | Go-live checklist created |
 
 ---
 
-## Verification Commands (Updated)
+## Sprint History (Summary)
 
-```bash
-# Rust (primary - 1,174 tests)
-cargo test -p ramp-core --lib            # 742 tests
-cargo test -p ramp-api --lib             # 183 tests
-cargo test -p ramp-compliance --lib      # 201 tests
-cargo test -p ramp-aa --lib              # 48 tests
-
-# Specific modules
-cargo test -p ramp-api rate_limit        # 19 tests (F01)
-cargo test -p ramp-core webhook          # 24 tests (F04)
-cargo test -p ramp-api graphql           # 21 tests (F07)
-cargo test -p ramp-core offramp          # 54 tests (F16)
-cargo test -p ramp-compliance --test fraud_acceptance_test  # 6 tests (F05)
-cargo test -p ramp-core payout_compliance  # 8 tests (F13)
-
-# Solidity
-cd contracts && forge test -vv           # 100+ tests
-
-# SDKs
-pytest -q sdk-python/tests              # 10+ tests
-go test ./sdk-go/...                    # 40+ tests
-
-# Full suite
-bash scripts/run-full-suite.sh
-```
+| Session | Date | Focus | Tests Added |
+|---------|------|-------|-------------|
+| S158 | 2026-02-10 | Completion sprint, RB tasks | ~100 |
+| S159 | 2026-02-10 | Gap-closing (F01,F02,F04,F07,F10,F12,F15) | +150 |
+| S160 | 2026-02-10 | Production-readiness (F01,F03,F04,F07,F12,F13,F15,F16) | +100 |
+| S161 | 2026-02-11 | Feature completion (F01,F02,F04,F06,F07,F10,F12,F13,F15,F16) | +255 |
+| S162 | 2026-02-11 | Hardening (F02,F03,F04,F05,F10,F12,F13,F15) | +219 |
+| S163 | 2026-02-11 | Codebase audit & plan consolidation | 0 (audit only) |
+| S164 | 2026-02-11 | HIGH PRIORITY sprint (F13 DB, F03 OpenAPI, F04 Webhook HTTP, F15 SDK) | +~50 new |
 
 ---
 
-## Notes
+## Notes for Next Session
 
-- All Rust tests pass with 0 failures as of 2026-02-11 (ramp-core: 821 lib + 183 integration, ramp-api: 205 lib + 189 integration)
-- `cargo check --workspace` compiles cleanly (warnings only, no errors)
-- `forge` is not in PATH on this Windows machine - Solidity tests need separate verification
-- Branch: `master` (not merged to `main` yet)
-- S162: Rust 1,900+ -> **2,100+** (+200 tests), Widget 108 -> **147** (+39), Frontend 202 -> **259** (+57)
-- Grand total: 2,100+ -> **2,500+** (+219 new tests in Session 162, +474 cumulative S161+S162)
+1. All Rust tests pass (0 failures, ~5 ignored) as of S162
+2. `cargo check --workspace` compiles cleanly (warnings only)
+3. `forge` not in PATH - Solidity tests need Linux CI or manual install
+4. Branch `master` needs merge to `main`
+5. `FINAL_STATUS_REPORT.md` is outdated (from S158, pre-rebaseline) - needs update
+6. `NEXT-GEN-MASTER-PLAN.md` is the source-of-truth but very long (1400+ lines) - this dashboard is the quick reference
+7. F09/F11 are explicitly post-MVP - do NOT work on them unless user requests

@@ -57,7 +57,7 @@ pub use yield_strategy::*;
 // Case Management DTOs
 // ============================================================================
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::IntoParams)]
 pub struct PaginationParams {
     #[serde(default = "default_limit")]
     pub limit: i64,
@@ -74,7 +74,7 @@ impl PaginationParams {
 
 const MAX_PAGINATION_LIMIT: i64 = 100;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CaseResponse {
     pub id: String,
@@ -109,7 +109,7 @@ fn default_limit() -> i64 {
     20
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ListCasesResponse {
     pub data: Vec<CaseResponse>,
@@ -118,7 +118,7 @@ pub struct ListCasesResponse {
     pub offset: i64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateCaseRequest {
     pub status: Option<String>,
@@ -127,7 +127,7 @@ pub struct UpdateCaseRequest {
     pub note: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CaseStats {
     pub total: i64,
@@ -139,7 +139,7 @@ pub struct CaseStats {
     pub avg_resolution_hours: f64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SeverityStats {
     pub low: i64,
@@ -152,7 +152,7 @@ pub struct SeverityStats {
 // User Management DTOs
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UserResponse {
     pub id: String,
@@ -179,7 +179,7 @@ pub struct ListUsersQuery {
     pub search: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ListUsersResponse {
     pub data: Vec<UserResponse>,
@@ -236,7 +236,7 @@ pub struct ResolveDiscrepancyRequest {
 // Dashboard DTOs
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DashboardStats {
     pub intents: IntentStats,
@@ -245,7 +245,7 @@ pub struct DashboardStats {
     pub volume: VolumeStats,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct IntentStats {
     pub total_today: i64,
@@ -256,7 +256,7 @@ pub struct IntentStats {
     pub failed_count: i64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UserStats {
     pub total: i64,
@@ -265,7 +265,7 @@ pub struct UserStats {
     pub new_today: i64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VolumeStats {
     pub total_payin_vnd: String,
@@ -279,6 +279,19 @@ pub struct VolumeStats {
 // ============================================================================
 
 /// GET /v1/admin/cases - List AML cases
+#[utoipa::path(
+    get,
+    path = "/v1/admin/cases",
+    tag = "admin",
+    responses(
+        (status = 200, description = "List of AML cases", body = ListCasesResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn list_cases(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -343,6 +356,22 @@ pub async fn list_cases(
 }
 
 /// GET /v1/admin/cases/:id - Get case by ID
+#[utoipa::path(
+    get,
+    path = "/v1/admin/cases/{id}",
+    tag = "admin",
+    params(
+        ("id" = String, Path, description = "Case ID")
+    ),
+    responses(
+        (status = 200, description = "AML case details", body = CaseResponse),
+        (status = 404, description = "Case not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_case(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -368,6 +397,23 @@ pub async fn get_case(
 
 /// PATCH /v1/admin/cases/:id - Update case
 /// Requires Operator role or higher
+#[utoipa::path(
+    patch,
+    path = "/v1/admin/cases/{id}",
+    tag = "admin",
+    params(
+        ("id" = String, Path, description = "Case ID")
+    ),
+    request_body = UpdateCaseRequest,
+    responses(
+        (status = 200, description = "Case updated", body = CaseResponse),
+        (status = 404, description = "Case not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn update_case(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -466,6 +512,19 @@ pub async fn update_case(
 }
 
 /// GET /v1/admin/cases/stats - Get case statistics
+#[utoipa::path(
+    get,
+    path = "/v1/admin/cases/stats",
+    tag = "admin",
+    responses(
+        (status = 200, description = "Case statistics", body = CaseStats),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_case_stats(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -617,6 +676,19 @@ pub async fn get_case_stats(
 }
 
 /// GET /v1/admin/users - List users
+#[utoipa::path(
+    get,
+    path = "/v1/admin/users",
+    tag = "admin",
+    responses(
+        (status = 200, description = "List of users", body = ListUsersResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn list_users(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -658,6 +730,22 @@ pub async fn list_users(
 }
 
 /// GET /v1/admin/users/:id - Get user by ID
+#[utoipa::path(
+    get,
+    path = "/v1/admin/users/{id}",
+    tag = "admin",
+    params(
+        ("id" = String, Path, description = "User ID")
+    ),
+    responses(
+        (status = 200, description = "User details", body = UserResponse),
+        (status = 404, description = "User not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_user(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -722,6 +810,19 @@ pub async fn update_user(
 }
 
 /// GET /v1/admin/dashboard - Get dashboard stats
+#[utoipa::path(
+    get,
+    path = "/v1/admin/dashboard",
+    tag = "admin",
+    responses(
+        (status = 200, description = "Dashboard statistics", body = DashboardStats),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_dashboard(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,

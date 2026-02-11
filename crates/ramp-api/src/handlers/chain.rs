@@ -23,7 +23,7 @@ use ramp_core::chain::{ChainId, ChainInfo, ChainType};
 // ============================================================================
 
 /// Query parameters for chain listing with optional filtering
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default, utoipa::IntoParams)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainListQuery {
     /// Filter by chain type (evm, solana, ton)
@@ -32,22 +32,24 @@ pub struct ChainListQuery {
     pub testnet: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainListResponse {
+    #[schema(value_type = Vec<Object>)]
     pub chains: Vec<ChainInfo>,
     pub total: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainDetailResponse {
     #[serde(flatten)]
+    #[schema(value_type = Object)]
     pub info: ChainInfo,
     pub status: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct BridgeQuoteRequest {
     pub source_chain_id: u64,
@@ -58,7 +60,7 @@ pub struct BridgeQuoteRequest {
     pub recipient_address: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct BridgeQuoteResponse {
     pub source_chain_id: u64,
@@ -73,7 +75,7 @@ pub struct BridgeQuoteResponse {
     pub quote_id: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct FeeBreakdown {
     pub bridge_fee: String,
@@ -81,7 +83,7 @@ pub struct FeeBreakdown {
     pub protocol_fee: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct BridgeRequest {
     pub quote_id: String,
@@ -93,7 +95,7 @@ pub struct BridgeRequest {
     pub recipient_address: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct BridgeResponse {
     pub bridge_id: String,
@@ -112,6 +114,20 @@ pub struct BridgeResponse {
 // ============================================================================
 
 /// GET /v1/chains - List all supported chains (with optional filtering)
+#[utoipa::path(
+    get,
+    path = "/v1/chains",
+    tag = "chains",
+    params(ChainListQuery),
+    responses(
+        (status = 200, description = "List of supported chains", body = ChainListResponse),
+        (status = 400, description = "Invalid query parameters", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn list_chains(
     Extension(tenant_ctx): Extension<TenantContext>,
     State(_app_state): State<AppState>,
@@ -153,6 +169,22 @@ pub async fn list_chains(
 }
 
 /// GET /v1/chains/:chain_id - Get chain details/status
+#[utoipa::path(
+    get,
+    path = "/v1/chains/{chain_id}",
+    tag = "chains",
+    params(
+        ("chain_id" = u64, Path, description = "Chain ID")
+    ),
+    responses(
+        (status = 200, description = "Chain details", body = ChainDetailResponse),
+        (status = 404, description = "Chain not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_chain_detail(
     Extension(tenant_ctx): Extension<TenantContext>,
     State(_app_state): State<AppState>,
@@ -174,6 +206,24 @@ pub async fn get_chain_detail(
 }
 
 /// POST /v1/chains/:chain_id/quote - Get cross-chain bridging quote
+#[utoipa::path(
+    post,
+    path = "/v1/chains/{chain_id}/quote",
+    tag = "chains",
+    params(
+        ("chain_id" = u64, Path, description = "Source chain ID")
+    ),
+    request_body = BridgeQuoteRequest,
+    responses(
+        (status = 200, description = "Bridge quote", body = BridgeQuoteResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 404, description = "Chain not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_bridge_quote(
     Extension(tenant_ctx): Extension<TenantContext>,
     State(_app_state): State<AppState>,
@@ -271,6 +321,21 @@ pub async fn get_bridge_quote(
 }
 
 /// POST /v1/chains/bridge - Initiate bridge transaction
+#[utoipa::path(
+    post,
+    path = "/v1/chains/bridge",
+    tag = "chains",
+    request_body = BridgeRequest,
+    responses(
+        (status = 200, description = "Bridge transaction initiated", body = BridgeResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 404, description = "Chain not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn initiate_bridge(
     Extension(tenant_ctx): Extension<TenantContext>,
     State(_app_state): State<AppState>,

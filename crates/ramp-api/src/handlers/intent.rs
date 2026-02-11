@@ -244,6 +244,22 @@ pub async fn list_intents(
 ///
 /// List intents with cursor-based pagination (keyset pagination).
 /// More efficient than offset-based for large datasets.
+#[utoipa::path(
+    get,
+    path = "/v1/intents/cursor",
+    tag = "intents",
+    params(
+        ("cursor" = Option<String>, Query, description = "Cursor for pagination"),
+        ("limit" = Option<usize>, Query, description = "Number of items per page (default 20, max 100)")
+    ),
+    responses(
+        (status = 200, description = "Paginated list of intents", body = PaginatedResponse<IntentResponse>),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[instrument(skip(intent_repo, tenant_ctx), fields(tenant_id = %tenant_ctx.tenant_id.0))]
 pub async fn list_intents_cursor(
     State(intent_repo): State<Arc<dyn IntentRepository>>,

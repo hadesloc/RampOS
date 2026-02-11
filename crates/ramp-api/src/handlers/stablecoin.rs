@@ -23,7 +23,7 @@ use ramp_common::types::UserId;
 // Request/Response DTOs
 // ============================================================================
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VnstMintApiRequest {
     /// Amount in VND to mint
@@ -41,7 +41,7 @@ fn default_chain_id() -> u64 {
     56 // BSC
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VnstMintApiResponse {
     pub mint_id: String,
@@ -55,7 +55,7 @@ pub struct VnstMintApiResponse {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VnstBurnApiRequest {
     /// Amount in VNST to burn (in display units, not base units)
@@ -69,7 +69,7 @@ pub struct VnstBurnApiRequest {
     pub idempotency_key: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VnstBurnApiResponse {
     pub burn_id: String,
@@ -84,7 +84,7 @@ pub struct VnstBurnApiResponse {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VnstReservesApiResponse {
     pub total_supply: String,
@@ -98,7 +98,7 @@ pub struct VnstReservesApiResponse {
     pub peg_deviation_bps: i32,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ReserveAssetResponse {
     pub asset_type: String,
@@ -107,7 +107,7 @@ pub struct ReserveAssetResponse {
     pub custodian: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VnstPegStatusResponse {
     pub is_healthy: bool,
@@ -119,7 +119,7 @@ pub struct VnstPegStatusResponse {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VnstConfigResponse {
     pub min_mint_vnd: String,
@@ -137,6 +137,21 @@ pub struct VnstConfigResponse {
 // ============================================================================
 
 /// POST /v1/stablecoin/vnst/mint - Mint VNST with VND deposit
+#[utoipa::path(
+    post,
+    path = "/v1/stablecoin/vnst/mint",
+    tag = "stablecoin",
+    request_body = VnstMintApiRequest,
+    responses(
+        (status = 200, description = "VNST mint initiated", body = VnstMintApiResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn mint_vnst(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -200,6 +215,21 @@ pub async fn mint_vnst(
 }
 
 /// POST /v1/stablecoin/vnst/burn - Burn VNST for VND withdrawal
+#[utoipa::path(
+    post,
+    path = "/v1/stablecoin/vnst/burn",
+    tag = "stablecoin",
+    request_body = VnstBurnApiRequest,
+    responses(
+        (status = 200, description = "VNST burn initiated", body = VnstBurnApiResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn burn_vnst(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -261,6 +291,19 @@ pub async fn burn_vnst(
 }
 
 /// GET /v1/stablecoin/vnst/reserves - Get VNST reserve information
+#[utoipa::path(
+    get,
+    path = "/v1/stablecoin/vnst/reserves",
+    tag = "stablecoin",
+    responses(
+        (status = 200, description = "VNST reserve information", body = VnstReservesApiResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_vnst_reserves(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -303,6 +346,19 @@ pub async fn get_vnst_reserves(
 }
 
 /// GET /v1/stablecoin/vnst/peg - Get VNST peg status
+#[utoipa::path(
+    get,
+    path = "/v1/stablecoin/vnst/peg",
+    tag = "stablecoin",
+    responses(
+        (status = 200, description = "VNST peg status", body = VnstPegStatusResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_vnst_peg_status(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -334,6 +390,19 @@ pub async fn get_vnst_peg_status(
 }
 
 /// GET /v1/stablecoin/vnst/config - Get VNST protocol configuration
+#[utoipa::path(
+    get,
+    path = "/v1/stablecoin/vnst/config",
+    tag = "stablecoin",
+    responses(
+        (status = 200, description = "VNST protocol configuration", body = VnstConfigResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_vnst_config(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,

@@ -25,6 +25,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@rampos/widget': path.resolve(__dirname, '../packages/widget/src/index'),
       'server-only': path.resolve(__dirname, './src/test/server-only.ts'),
     },
   },

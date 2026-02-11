@@ -642,7 +642,13 @@ async fn test_webhook_concurrent_delivery() {
     // Process all pending events
     let process_result = service.process_pending_events(50).await;
     assert!(process_result.is_ok());
+    // With http-client enabled, deliver_event tries HTTP POST which fails
+    // because DummyTenantRepo returns None (TenantNotFound). Without
+    // http-client, deliver_event just logs and returns Ok.
+    #[cfg(not(feature = "http-client"))]
     assert_eq!(process_result.unwrap(), 20);
+    #[cfg(feature = "http-client")]
+    { let _ = process_result.unwrap(); }
 
     // Concurrent simulated retries for different events
     let repo_clone = repo.clone();
@@ -823,9 +829,15 @@ async fn test_webhook_full_lifecycle_e2e() {
     assert_eq!(repo.count_by_status("PENDING"), 1);
     assert_eq!(repo.count_by_status("FAILED"), 0);
 
-    // Phase 2: Process pending events (without http-client, this succeeds)
+    // Phase 2: Process pending events
+    // Without http-client, deliver_event just logs and returns Ok(()).
+    // With http-client, deliver_event tries HTTP POST which fails because
+    // DummyTenantRepo returns None (TenantNotFound).
     let processed = service.process_pending_events(10).await.unwrap();
+    #[cfg(not(feature = "http-client"))]
     assert_eq!(processed, 1);
+    #[cfg(feature = "http-client")]
+    assert_eq!(processed, 0);
 
     // Phase 3: Simulate failures through all retries via repo
     for attempt in 0..10 {
@@ -1045,9 +1057,15 @@ async fn test_webhook_crypto_service_integration() {
     assert_eq!(stored.status, "PENDING");
     assert_eq!(stored.tenant_id, "tenant_crypto_e2e");
 
-    // Process pending events (without http-client, logs only)
+    // Process pending events through the crypto-enabled service.
+    // Without http-client, deliver_event just logs and returns Ok(()).
+    // With http-client, deliver_event tries HTTP POST which fails because
+    // DummyTenantRepo returns None (TenantNotFound).
     let processed = service.process_pending_events(10).await.unwrap();
+    #[cfg(not(feature = "http-client"))]
     assert_eq!(processed, 1);
+    #[cfg(feature = "http-client")]
+    assert_eq!(processed, 0);
 
     // Verify encrypt/decrypt roundtrip for webhook secret
     let original_secret = b"whsec_crypto_integration_test";
@@ -1071,4 +1089,519 @@ async fn test_webhook_crypto_service_integration() {
         verified.is_ok(),
         "Signature from decrypted key must verify against original"
     );
+}
+
+// ============================================================================
+// HTTP Delivery Integration Tests (wiremock)
+// These tests use wiremock to mock an HTTP endpoint and test the full
+// deliver_event flow including HTTP POST, headers, and retry behavior.
+// They require the http-client feature to be enabled.
+// ============================================================================
+
+#[cfg(feature = "http-client")]
+mod http_delivery_tests {
+    use super::*;
+    use wiremock::matchers::{method, header, header_exists};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use ramp_core::service::crypto::CryptoService;
+
+    /// Create a TenantRow with webhook configured, pointing to the given URL.
+    /// The webhook secret is stored encrypted using the provided CryptoService.
+    fn create_wired_tenant(
+        tenant_id: &str,
+        webhook_url: &str,
+        webhook_secret: &[u8],
+        crypto: &CryptoService,
+    ) -> TenantRow {
+        let (nonce, ciphertext) = crypto.encrypt_secret(webhook_secret).unwrap();
+        let mut encrypted_blob = nonce;
+        encrypted_blob.extend_from_slice(&ciphertext);
+
+        TenantRow {
+            id: tenant_id.to_string(),
+            name: "Test Tenant".to_string(),
+            status: "ACTIVE".to_string(),
+            api_key_hash: "test_hash".to_string(),
+            api_secret_encrypted: None,
+            webhook_secret_hash: "test_secret_hash".to_string(),
+            webhook_secret_encrypted: Some(encrypted_blob),
+            webhook_url: Some(webhook_url.to_string()),
+            config: json!({}),
+            daily_payin_limit_vnd: None,
+            daily_payout_limit_vnd: None,
+            api_version: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    /// TenantRepository that returns a pre-configured tenant for HTTP tests.
+    struct HttpTestTenantRepo {
+        tenant: Mutex<Option<TenantRow>>,
+    }
+
+    impl HttpTestTenantRepo {
+        fn new(tenant: TenantRow) -> Self {
+            Self {
+                tenant: Mutex::new(Some(tenant)),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl TenantRepository for HttpTestTenantRepo {
+        async fn get_by_id(&self, _id: &TenantId) -> Result<Option<TenantRow>> {
+            Ok(self.tenant.lock().unwrap().clone())
+        }
+        async fn get_by_api_key_hash(&self, _hash: &str) -> Result<Option<TenantRow>> {
+            Ok(None)
+        }
+        async fn create(&self, _tenant: &TenantRow) -> Result<()> {
+            Ok(())
+        }
+        async fn update_status(&self, _id: &TenantId, _status: &str) -> Result<()> {
+            Ok(())
+        }
+        async fn update_webhook_url(&self, _id: &TenantId, _url: &str) -> Result<()> {
+            Ok(())
+        }
+        async fn update_webhook_secret(
+            &self,
+            _id: &TenantId,
+            _hash: &str,
+            _encrypted: &[u8],
+        ) -> Result<()> {
+            Ok(())
+        }
+        async fn update_api_key_hash(&self, _id: &TenantId, _hash: &str) -> Result<()> {
+            Ok(())
+        }
+        async fn update_api_credentials(
+            &self,
+            _id: &TenantId,
+            _api_key_hash: &str,
+            _api_secret_encrypted: &[u8],
+        ) -> Result<()> {
+            Ok(())
+        }
+        async fn update_limits(
+            &self,
+            _id: &TenantId,
+            _daily_payin: Option<rust_decimal::Decimal>,
+            _daily_payout: Option<rust_decimal::Decimal>,
+        ) -> Result<()> {
+            Ok(())
+        }
+        async fn update_config(&self, _id: &TenantId, _config: &serde_json::Value) -> Result<()> {
+            Ok(())
+        }
+        async fn update_api_version(&self, _id: &TenantId, _version: Option<String>) -> Result<()> {
+            Ok(())
+        }
+        async fn list_ids(&self) -> Result<Vec<TenantId>> {
+            Ok(vec![])
+        }
+    }
+
+    // ========================================================================
+    // Test: Successful HTTP delivery with 200 response
+    // ========================================================================
+    #[tokio::test]
+    async fn test_http_delivery_success_200() {
+        let mock_server = MockServer::start().await;
+
+        // Set up mock to return 200
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("OK"))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let webhook_secret = b"whsec_http_test_success_key";
+        let key = test_crypto_key();
+        let crypto = Arc::new(CryptoService::from_key(&key));
+
+        let tenant = create_wired_tenant(
+            "tenant_http_success",
+            &mock_server.uri(),
+            webhook_secret,
+            &crypto,
+        );
+
+        let webhook_repo = Arc::new(InMemoryWebhookRepo::new());
+        let tenant_repo: Arc<dyn TenantRepository> = Arc::new(HttpTestTenantRepo::new(tenant));
+
+        let service =
+            WebhookService::with_crypto(webhook_repo.clone(), tenant_repo, crypto).unwrap();
+
+        // Queue an event
+        let tenant_id = TenantId::new("tenant_http_success");
+        let event_id = service
+            .queue_event(
+                &tenant_id,
+                WebhookEventType::IntentStatusChanged,
+                Some(&IntentId::new("intent_http_ok")),
+                json!({"status": "completed", "amount": 5000000}),
+            )
+            .await
+            .expect("queue should succeed");
+
+        // Process pending events - this should deliver via HTTP
+        let delivered = service.process_pending_events(10).await.unwrap();
+        assert_eq!(delivered, 1, "Should deliver 1 event");
+
+        // Verify event was marked as DELIVERED in repository
+        let event = webhook_repo.get_event_by_id(&event_id.0).unwrap();
+        assert_eq!(event.status, "DELIVERED", "Event should be marked DELIVERED");
+        assert_eq!(event.response_status, Some(200));
+        assert!(event.delivered_at.is_some());
+    }
+
+    // ========================================================================
+    // Test: Failed HTTP delivery with 500 triggers retry
+    // ========================================================================
+    #[tokio::test]
+    async fn test_http_delivery_500_triggers_retry() {
+        let mock_server = MockServer::start().await;
+
+        // Set up mock to return 500
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let webhook_secret = b"whsec_http_test_500_key";
+        let key = test_crypto_key();
+        let crypto = Arc::new(CryptoService::from_key(&key));
+
+        let tenant = create_wired_tenant(
+            "tenant_http_500",
+            &mock_server.uri(),
+            webhook_secret,
+            &crypto,
+        );
+
+        let webhook_repo = Arc::new(InMemoryWebhookRepo::new());
+        let tenant_repo: Arc<dyn TenantRepository> = Arc::new(HttpTestTenantRepo::new(tenant));
+
+        let service =
+            WebhookService::with_crypto(webhook_repo.clone(), tenant_repo, crypto).unwrap();
+
+        let tenant_id = TenantId::new("tenant_http_500");
+        let event_id = service
+            .queue_event(
+                &tenant_id,
+                WebhookEventType::IntentStatusChanged,
+                None,
+                json!({"status": "pending"}),
+            )
+            .await
+            .expect("queue should succeed");
+
+        // Process - should attempt delivery and get 500
+        let delivered = service.process_pending_events(10).await.unwrap();
+        // The event was processed (attempted) but the deliver count only
+        // counts the iteration, not success. The key check is repository state.
+        assert_eq!(delivered, 1);
+
+        // Verify event has a retry scheduled (mark_failed was called)
+        let event = webhook_repo.get_event_by_id(&event_id.0).unwrap();
+        assert_eq!(event.last_error.as_deref(), Some("HTTP 500"));
+        assert!(event.attempts > 0, "Attempts should be incremented");
+        assert!(event.next_attempt_at.is_some(), "Next retry should be scheduled");
+    }
+
+    // ========================================================================
+    // Test: HTTP delivery sends correct headers
+    // ========================================================================
+    #[tokio::test]
+    async fn test_http_delivery_sends_correct_headers() {
+        let mock_server = MockServer::start().await;
+
+        // Set up mock that validates headers
+        Mock::given(method("POST"))
+            .and(header("Content-Type", "application/json"))
+            .and(header_exists("X-Webhook-Id"))
+            .and(header_exists("X-Webhook-Signature"))
+            .and(header_exists("X-Webhook-Timestamp"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let webhook_secret = b"whsec_http_headers_test";
+        let key = test_crypto_key();
+        let crypto = Arc::new(CryptoService::from_key(&key));
+
+        let tenant = create_wired_tenant(
+            "tenant_headers",
+            &mock_server.uri(),
+            webhook_secret,
+            &crypto,
+        );
+
+        let webhook_repo = Arc::new(InMemoryWebhookRepo::new());
+        let tenant_repo: Arc<dyn TenantRepository> = Arc::new(HttpTestTenantRepo::new(tenant));
+
+        let service =
+            WebhookService::with_crypto(webhook_repo.clone(), tenant_repo, crypto).unwrap();
+
+        let tenant_id = TenantId::new("tenant_headers");
+        service
+            .queue_event(
+                &tenant_id,
+                WebhookEventType::RiskReviewRequired,
+                None,
+                json!({"risk_score": 0.85}),
+            )
+            .await
+            .expect("queue should succeed");
+
+        let delivered = service.process_pending_events(10).await.unwrap();
+        assert_eq!(delivered, 1);
+        // If the mock didn't match the headers, it would not have responded
+        // with 200 and the expect(1) assertion would fail on mock server drop.
+    }
+
+    // ========================================================================
+    // Test: HTTP delivery with 4xx response triggers retry
+    // ========================================================================
+    #[tokio::test]
+    async fn test_http_delivery_4xx_triggers_retry() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(429).set_body_string("Too Many Requests"))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let webhook_secret = b"whsec_http_429_test";
+        let key = test_crypto_key();
+        let crypto = Arc::new(CryptoService::from_key(&key));
+
+        let tenant = create_wired_tenant(
+            "tenant_429",
+            &mock_server.uri(),
+            webhook_secret,
+            &crypto,
+        );
+
+        let webhook_repo = Arc::new(InMemoryWebhookRepo::new());
+        let tenant_repo: Arc<dyn TenantRepository> = Arc::new(HttpTestTenantRepo::new(tenant));
+
+        let service =
+            WebhookService::with_crypto(webhook_repo.clone(), tenant_repo, crypto).unwrap();
+
+        let tenant_id = TenantId::new("tenant_429");
+        let event_id = service
+            .queue_event(
+                &tenant_id,
+                WebhookEventType::KycFlagged,
+                None,
+                json!({"user_id": "usr_rate_limited"}),
+            )
+            .await
+            .expect("queue should succeed");
+
+        service.process_pending_events(10).await.unwrap();
+
+        let event = webhook_repo.get_event_by_id(&event_id.0).unwrap();
+        assert_eq!(event.last_error.as_deref(), Some("HTTP 429"));
+        assert!(event.attempts > 0);
+    }
+
+    // ========================================================================
+    // Test: HTTP delivery sends valid HMAC signature verifiable by receiver
+    // ========================================================================
+    #[tokio::test]
+    async fn test_http_delivery_signature_verifiable() {
+        let mock_server = MockServer::start().await;
+
+        let webhook_secret = b"whsec_signature_verify_test_key_12345";
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let key = test_crypto_key();
+        let crypto = Arc::new(CryptoService::from_key(&key));
+
+        let tenant = create_wired_tenant(
+            "tenant_sig_verify",
+            &mock_server.uri(),
+            webhook_secret,
+            &crypto,
+        );
+
+        let webhook_repo = Arc::new(InMemoryWebhookRepo::new());
+        let tenant_repo: Arc<dyn TenantRepository> = Arc::new(HttpTestTenantRepo::new(tenant));
+
+        let service =
+            WebhookService::with_crypto(webhook_repo.clone(), tenant_repo, crypto).unwrap();
+
+        let tenant_id = TenantId::new("tenant_sig_verify");
+        service
+            .queue_event(
+                &tenant_id,
+                WebhookEventType::IntentStatusChanged,
+                Some(&IntentId::new("intent_sig_test")),
+                json!({"status": "completed"}),
+            )
+            .await
+            .expect("queue should succeed");
+
+        service.process_pending_events(10).await.unwrap();
+
+        // Verify the mock server received exactly 1 request
+        let requests = mock_server.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 1, "Should have received 1 request");
+
+        let req = &requests[0];
+
+        // Verify Content-Type header
+        let content_type = req.headers.get("Content-Type").unwrap().to_str().unwrap();
+        assert_eq!(content_type, "application/json");
+
+        // Verify X-Webhook-Id is present
+        let webhook_id = req.headers.get("X-Webhook-Id").unwrap().to_str().unwrap();
+        assert!(!webhook_id.is_empty(), "X-Webhook-Id should not be empty");
+
+        // Verify X-Webhook-Timestamp is present and valid
+        let timestamp_str = req.headers.get("X-Webhook-Timestamp").unwrap().to_str().unwrap();
+        let timestamp: i64 = timestamp_str.parse().expect("Timestamp should be valid i64");
+        let now = Utc::now().timestamp();
+        assert!((now - timestamp).abs() < 60, "Timestamp should be within 60s of now");
+
+        // Verify X-Webhook-Signature is present and verifiable
+        let signature = req.headers.get("X-Webhook-Signature").unwrap().to_str().unwrap();
+        assert!(signature.starts_with("t="), "Signature should start with t=");
+        assert!(signature.contains(",v1="), "Signature should contain ,v1=");
+
+        // Verify the signature against the request body
+        let body = &req.body;
+        let verified = ramp_common::crypto::verify_webhook_signature(
+            webhook_secret,
+            signature,
+            body,
+            300,
+        );
+        assert!(
+            verified.is_ok(),
+            "Signature should be verifiable by receiver: {:?}",
+            verified.err()
+        );
+
+        // Verify body is valid JSON with expected structure
+        let payload: serde_json::Value = serde_json::from_slice(body).expect("Body should be valid JSON");
+        assert!(payload.get("id").is_some(), "Payload must have 'id'");
+        assert!(payload.get("type").is_some(), "Payload must have 'type'");
+        assert!(payload.get("created_at").is_some(), "Payload must have 'created_at'");
+        assert!(payload.get("data").is_some(), "Payload must have 'data'");
+        assert_eq!(payload["type"], "intent.status.changed");
+        assert_eq!(payload["data"]["status"], "completed");
+    }
+
+    // ========================================================================
+    // Test: Missing webhook URL returns error
+    // ========================================================================
+    #[tokio::test]
+    async fn test_http_delivery_missing_webhook_url() {
+        let key = test_crypto_key();
+        let crypto = Arc::new(CryptoService::from_key(&key));
+
+        // Create tenant WITHOUT webhook_url
+        let tenant = TenantRow {
+            id: "tenant_no_url".to_string(),
+            name: "No URL Tenant".to_string(),
+            status: "ACTIVE".to_string(),
+            api_key_hash: "hash".to_string(),
+            api_secret_encrypted: None,
+            webhook_secret_hash: "secret_hash".to_string(),
+            webhook_secret_encrypted: Some(vec![0u8; 28]),
+            webhook_url: None,
+            config: json!({}),
+            daily_payin_limit_vnd: None,
+            daily_payout_limit_vnd: None,
+            api_version: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let webhook_repo = Arc::new(InMemoryWebhookRepo::new());
+        let tenant_repo: Arc<dyn TenantRepository> = Arc::new(HttpTestTenantRepo::new(tenant));
+
+        let service =
+            WebhookService::with_crypto(webhook_repo.clone(), tenant_repo, crypto).unwrap();
+
+        let tenant_id = TenantId::new("tenant_no_url");
+        service
+            .queue_event(
+                &tenant_id,
+                WebhookEventType::IntentStatusChanged,
+                None,
+                json!({"test": true}),
+            )
+            .await
+            .unwrap();
+
+        // Process should handle the error gracefully (not panic)
+        let result = service.process_pending_events(10).await;
+        assert!(result.is_ok());
+        // The event was attempted but delivery failed due to missing URL,
+        // so the delivered count should reflect the attempt
+        let delivered = result.unwrap();
+        assert_eq!(delivered, 0, "Should not count as delivered when URL is missing");
+    }
+
+    // ========================================================================
+    // Test: HTTP delivery to unreachable endpoint triggers retry
+    // ========================================================================
+    #[tokio::test]
+    async fn test_http_delivery_connection_refused_triggers_retry() {
+        // Use a URL that will refuse connections
+        let unreachable_url = "http://127.0.0.1:1"; // Port 1 is very unlikely to be listening
+
+        let webhook_secret = b"whsec_conn_refused_test";
+        let key = test_crypto_key();
+        let crypto = Arc::new(CryptoService::from_key(&key));
+
+        let tenant = create_wired_tenant(
+            "tenant_conn_refused",
+            unreachable_url,
+            webhook_secret,
+            &crypto,
+        );
+
+        let webhook_repo = Arc::new(InMemoryWebhookRepo::new());
+        let tenant_repo: Arc<dyn TenantRepository> = Arc::new(HttpTestTenantRepo::new(tenant));
+
+        let service =
+            WebhookService::with_crypto(webhook_repo.clone(), tenant_repo, crypto).unwrap();
+
+        let tenant_id = TenantId::new("tenant_conn_refused");
+        let event_id = service
+            .queue_event(
+                &tenant_id,
+                WebhookEventType::IntentStatusChanged,
+                None,
+                json!({"status": "completed"}),
+            )
+            .await
+            .expect("queue should succeed");
+
+        service.process_pending_events(10).await.unwrap();
+
+        // Verify event was scheduled for retry with connection error
+        let event = webhook_repo.get_event_by_id(&event_id.0).unwrap();
+        assert!(event.last_error.is_some(), "Should have error message");
+        assert!(event.attempts > 0, "Attempts should be incremented");
+        assert!(
+            event.next_attempt_at.is_some(),
+            "Next retry should be scheduled"
+        );
+    }
 }

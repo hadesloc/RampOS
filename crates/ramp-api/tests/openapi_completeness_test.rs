@@ -500,9 +500,18 @@ fn spec_post_operations_have_request_body() {
         .as_object()
         .expect("Spec must have 'paths'");
 
+    // Action endpoints that trigger operations without a request body
+    let action_endpoints: Vec<&str> = vec![
+        "/v1/admin/domains/{domain_id}/verify-dns",
+        "/v1/admin/domains/{domain_id}/provision-ssl",
+    ];
+
     for (path, path_item) in paths {
         let path_obj = path_item.as_object().unwrap();
         if let Some(operation) = path_obj.get("post") {
+            if action_endpoints.iter().any(|e| path == e) {
+                continue;
+            }
             let has_request_body = operation.get("requestBody").is_some();
             assert!(
                 has_request_body,

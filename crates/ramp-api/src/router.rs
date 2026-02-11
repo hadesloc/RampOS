@@ -42,7 +42,7 @@ use crate::middleware::{
     IdempotencyHandler, PortalAuthConfig, RateLimiter,
     TieredRateLimitState,
 };
-use crate::openapi::{ApiDoc, docs_redirect, openapi_json};
+use crate::openapi::{ApiDoc, docs_handler, openapi_json};
 
 use ramp_compliance::case::CaseManager;
 use ramp_compliance::reports::ctr::CtrService;
@@ -482,7 +482,7 @@ pub fn create_router(state: AppState) -> Router {
         .merge(health_routes)
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
         .route("/openapi.json", get(openapi_json))
-        .route("/docs", get(docs_redirect))
+        .route("/docs", get(docs_handler))
         .nest("/graphql", gql_router)
         .nest("/v1", api_v1)
         // Portal auth routes (no JWT required - these issue tokens)

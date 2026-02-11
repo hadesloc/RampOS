@@ -2,6 +2,11 @@
  * RampOS API Client
  *
  * Connects the Next.js admin dashboard to the RampOS backend API.
+ *
+ * @deprecated Prefer importing from `@/lib/api-adapter` or `@/lib/sdk-client`.
+ * This monolithic module is being migrated to the @rampos/widget SDK.
+ * New code should use `api-adapter.ts` which provides the same exports
+ * plus the SDK client for checkout/KYC/wallet operations.
  */
 
 // API Configuration

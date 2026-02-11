@@ -25,7 +25,7 @@ use crate::middleware::tenant::TenantContext;
 // Request/Response DTOs
 // ============================================================================
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateDomainRequest {
     /// Domain name to register (e.g., "app.example.com")
@@ -37,7 +37,7 @@ pub struct CreateDomainRequest {
     pub health_check_path: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DomainResponse {
     pub id: String,
@@ -54,7 +54,7 @@ pub struct DomainResponse {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SslCertificateInfoResponse {
     pub certificate_id: String,
@@ -65,14 +65,14 @@ pub struct SslCertificateInfoResponse {
     pub auto_renew: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DomainListResponse {
     pub domains: Vec<DomainResponse>,
     pub total: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DnsVerificationResponse {
     pub domain_id: String,
@@ -81,7 +81,7 @@ pub struct DnsVerificationResponse {
     pub verified_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SslProvisioningResponse {
     pub domain_id: String,
@@ -91,7 +91,7 @@ pub struct SslProvisioningResponse {
     pub valid_until: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteDomainResponse {
     pub id: String,
@@ -104,6 +104,19 @@ pub struct DeleteDomainResponse {
 // ============================================================================
 
 /// GET /v1/admin/domains - List all domains for the authenticated tenant
+#[utoipa::path(
+    get,
+    path = "/v1/admin/domains",
+    tag = "domains",
+    responses(
+        (status = 200, description = "List of domains", body = DomainListResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn list_domains(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -145,6 +158,21 @@ pub async fn list_domains(
 }
 
 /// POST /v1/admin/domains - Register a new custom domain
+#[utoipa::path(
+    post,
+    path = "/v1/admin/domains",
+    tag = "domains",
+    request_body = CreateDomainRequest,
+    responses(
+        (status = 200, description = "Domain registered", body = DomainResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn create_domain(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -192,6 +220,22 @@ pub async fn create_domain(
 }
 
 /// GET /v1/admin/domains/:domain_id - Get domain details
+#[utoipa::path(
+    get,
+    path = "/v1/admin/domains/{domain_id}",
+    tag = "domains",
+    params(
+        ("domain_id" = String, Path, description = "Domain ID")
+    ),
+    responses(
+        (status = 200, description = "Domain details", body = DomainResponse),
+        (status = 404, description = "Domain not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_domain(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -233,6 +277,22 @@ pub async fn get_domain(
 }
 
 /// DELETE /v1/admin/domains/:domain_id - Delete a domain
+#[utoipa::path(
+    delete,
+    path = "/v1/admin/domains/{domain_id}",
+    tag = "domains",
+    params(
+        ("domain_id" = String, Path, description = "Domain ID")
+    ),
+    responses(
+        (status = 200, description = "Domain deleted", body = DeleteDomainResponse),
+        (status = 404, description = "Domain not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn delete_domain(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -256,6 +316,22 @@ pub async fn delete_domain(
 }
 
 /// POST /v1/admin/domains/:domain_id/verify-dns - Trigger DNS verification
+#[utoipa::path(
+    post,
+    path = "/v1/admin/domains/{domain_id}/verify-dns",
+    tag = "domains",
+    params(
+        ("domain_id" = String, Path, description = "Domain ID")
+    ),
+    responses(
+        (status = 200, description = "DNS verification initiated", body = DnsVerificationResponse),
+        (status = 404, description = "Domain not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn verify_dns(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -280,6 +356,22 @@ pub async fn verify_dns(
 }
 
 /// POST /v1/admin/domains/:domain_id/provision-ssl - Trigger SSL provisioning
+#[utoipa::path(
+    post,
+    path = "/v1/admin/domains/{domain_id}/provision-ssl",
+    tag = "domains",
+    params(
+        ("domain_id" = String, Path, description = "Domain ID")
+    ),
+    responses(
+        (status = 200, description = "SSL provisioning initiated", body = SslProvisioningResponse),
+        (status = 404, description = "Domain not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn provision_ssl(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
