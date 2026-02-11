@@ -299,16 +299,48 @@ impl TonChain {
         }
     }
 
-    /// Convert to raw address format (placeholder)
+    /// Convert user-friendly TON address to raw format (workchain:hex_hash).
+    /// If already raw, returns as-is.
     pub fn to_raw_address(&self, address: &str) -> Result<String> {
         let format = Self::validate_ton_address(address)?;
         match format {
             TonAddressFormat::Raw => Ok(address.to_string()),
             _ => {
-                // Would need base64 decoding and parsing
-                Err(ChainError::NotSupported(
-                    "User-friendly to raw address conversion not yet implemented".to_string(),
-                ))
+                use base64::Engine;
+                // Try URL_SAFE (with padding) first, then URL_SAFE_NO_PAD
+                let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+                    .decode(address)
+                    .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(address))
+                    .map_err(|e| {
+                        ChainError::InvalidAddress(format!(
+                            "Failed to base64url-decode TON address: {}",
+                            e
+                        ))
+                    })?;
+
+                if bytes.len() != 36 {
+                    return Err(ChainError::InvalidAddress(format!(
+                        "Decoded TON address has invalid length {}, expected 36",
+                        bytes.len()
+                    )));
+                }
+
+                // Verify CRC16-XMODEM of first 34 bytes
+                let computed_crc = crc16_xmodem(&bytes[..34]);
+                let stored_crc = u16::from_be_bytes([bytes[34], bytes[35]]);
+                if computed_crc != stored_crc {
+                    return Err(ChainError::InvalidAddress(format!(
+                        "CRC16 mismatch: computed 0x{:04X}, stored 0x{:04X}",
+                        computed_crc, stored_crc
+                    )));
+                }
+
+                // Byte 1 = workchain (signed)
+                let workchain = bytes[1] as i8;
+                // Bytes 2..34 = 32-byte hash
+                let hash = hex::encode(&bytes[2..34]);
+
+                Ok(format!("{}:{}", workchain, hash))
             }
         }
     }
@@ -756,6 +788,22 @@ impl Chain for TonChain {
     }
 }
 
+/// CRC16-XMODEM checksum used by TON user-friendly addresses.
+fn crc16_xmodem(data: &[u8]) -> u16 {
+    let mut crc: u16 = 0;
+    for &byte in data {
+        crc ^= (byte as u16) << 8;
+        for _ in 0..8 {
+            if crc & 0x8000 != 0 {
+                crc = (crc << 1) ^ 0x1021;
+            } else {
+                crc <<= 1;
+            }
+        }
+    }
+    crc
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -867,5 +915,97 @@ mod tests {
         let block = chain.get_block_number().await;
         assert!(block.is_ok());
         assert_eq!(block.unwrap(), 0);
+    }
+
+    /// Helper: build a user-friendly address from workchain + hash + flags for testing
+    fn build_user_friendly(workchain: i8, hash: &[u8; 32], bounceable: bool, testnet: bool) -> String {
+        use base64::Engine;
+        let mut data = [0u8; 36];
+        // TON flag bytes: bounceable=0x11, non-bounceable=0x51, testnet adds 0x80
+        let mut flags: u8 = if bounceable { 0x11 } else { 0x51 };
+        if testnet {
+            flags |= 0x80;
+        }
+        data[0] = flags;
+        data[1] = workchain as u8;
+        data[2..34].copy_from_slice(hash);
+        let crc = crc16_xmodem(&data[..34]);
+        data[34] = (crc >> 8) as u8;
+        data[35] = (crc & 0xFF) as u8;
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data)
+    }
+
+    #[test]
+    fn test_to_raw_address_from_bounceable() {
+        let chain = TonChain::new(TonChainConfig::mainnet("https://api.example.com")).unwrap();
+        let hash: [u8; 32] = [
+            0x83, 0xdf, 0xd5, 0x52, 0xe6, 0x37, 0x29, 0xb4,
+            0x72, 0xfc, 0xbc, 0xc8, 0xc4, 0x5e, 0xbc, 0xc6,
+            0x69, 0x17, 0x02, 0x55, 0x8b, 0x68, 0xec, 0x75,
+            0x27, 0xe1, 0xba, 0x40, 0x3a, 0x0f, 0x31, 0xa8,
+        ];
+        let addr = build_user_friendly(0, &hash, true, false);
+        assert_eq!(addr.len(), 48);
+        let raw = chain.to_raw_address(&addr).unwrap();
+        assert_eq!(
+            raw,
+            "0:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8"
+        );
+    }
+
+    #[test]
+    fn test_to_raw_address_from_non_bounceable() {
+        let chain = TonChain::new(TonChainConfig::mainnet("https://api.example.com")).unwrap();
+        let hash: [u8; 32] = [
+            0x83, 0xdf, 0xd5, 0x52, 0xe6, 0x37, 0x29, 0xb4,
+            0x72, 0xfc, 0xbc, 0xc8, 0xc4, 0x5e, 0xbc, 0xc6,
+            0x69, 0x17, 0x02, 0x55, 0x8b, 0x68, 0xec, 0x75,
+            0x27, 0xe1, 0xba, 0x40, 0x3a, 0x0f, 0x31, 0xa8,
+        ];
+        let addr = build_user_friendly(0, &hash, false, false);
+        assert_eq!(addr.len(), 48);
+        let raw = chain.to_raw_address(&addr).unwrap();
+        assert_eq!(
+            raw,
+            "0:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8"
+        );
+    }
+
+    #[test]
+    fn test_to_raw_address_already_raw_passthrough() {
+        let chain = TonChain::new(TonChainConfig::mainnet("https://api.example.com")).unwrap();
+        let raw_addr = "0:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8";
+        let result = chain.to_raw_address(raw_addr).unwrap();
+        assert_eq!(result, raw_addr);
+    }
+
+    #[test]
+    fn test_to_raw_address_invalid_crc() {
+        use base64::Engine;
+        // Build a valid address then corrupt the CRC bytes
+        let hash: [u8; 32] = [0xAA; 32];
+        let mut data = [0u8; 36];
+        data[0] = 0x11; // bounceable mainnet
+        data[1] = 0x00; // workchain 0
+        data[2..34].copy_from_slice(&hash);
+        let crc = crc16_xmodem(&data[..34]);
+        // Store WRONG CRC
+        data[34] = ((crc >> 8) as u8).wrapping_add(1);
+        data[35] = (crc & 0xFF) as u8;
+        let bad_addr = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data);
+
+        let chain = TonChain::new(TonChainConfig::mainnet("https://api.example.com")).unwrap();
+        let result = chain.to_raw_address(&bad_addr);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("CRC16"));
+    }
+
+    #[test]
+    fn test_to_raw_address_invalid_length() {
+        let chain = TonChain::new(TonChainConfig::mainnet("https://api.example.com")).unwrap();
+        // Too short for user-friendly (not 48 chars) and not raw format
+        let result = chain.to_raw_address("EQDtFpEwcFAE");
+        assert!(result.is_err());
     }
 }

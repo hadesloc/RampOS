@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { WidgetTheme, CheckoutResult } from '../types';
 import { RampOSEventEmitter } from '../utils/communication';
+import { createPayinIntent } from '../api/checkout-api';
 
 export interface CheckoutProps {
   apiKey: string;
@@ -135,16 +136,11 @@ const Checkout: React.FC<CheckoutProps> = ({
   const handleConfirm = async () => {
     setStep('processing');
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      const result: CheckoutResult = {
-        transactionId: `tx_${Math.random().toString(36).substring(2, 9)}`,
-        status: 'success',
+      const result = await createPayinIntent({
+        apiKey,
         amount,
         asset,
-        timestamp: Date.now(),
-      };
+      });
 
       setStep('success');
       emitter.emit('CHECKOUT_SUCCESS', result);
