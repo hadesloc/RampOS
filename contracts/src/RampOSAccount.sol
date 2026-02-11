@@ -13,6 +13,7 @@ import {
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import { UUPSUpgradeable } from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import { IERC1271 } from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import { IERC721Receiver } from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import { IERC1155Receiver } from "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
@@ -41,7 +42,7 @@ import { P256Verifier } from "./passkey/PasskeySigner.sol";
  *  - Target and function selector restrictions for session keys
  *  - Passkey signatures are verified using P256 curve verification
  */
-contract RampOSAccount is BaseAccount, Initializable, IERC1271, IERC721Receiver, IERC1155Receiver {
+contract RampOSAccount is BaseAccount, Initializable, UUPSUpgradeable, IERC1271, IERC721Receiver, IERC1155Receiver {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 
@@ -618,6 +619,16 @@ contract RampOSAccount is BaseAccount, Initializable, IERC1271, IERC721Receiver,
             }
         }
     }
+
+    // ============ UUPS Upgrade (F14.05) ============
+
+    /// @notice Contract version for upgrade tracking
+    function version() external pure virtual returns (string memory) {
+        return "1.0.0";
+    }
+
+    /// @dev Authorize upgrade - only owner can upgrade
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     // ============ Passkey Signer Management ============
 

@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{info, instrument};
 
+use serde_json::json;
+
 use ramp_common::types::IntentId;
 use ramp_core::repository::intent::{IntentRepository, IntentRow};
 
@@ -141,8 +143,28 @@ pub struct PaginationInfo {
         ("id" = String, Path, description = "Intent ID")
     ),
     responses(
-        (status = 200, description = "Intent found", body = IntentResponse),
-        (status = 404, description = "Intent not found", body = ErrorResponse),
+        (status = 200, description = "Intent found", body = IntentResponse,
+         example = json!({
+             "id": "intent_01HX7K9M3NQRST4567890ABC",
+             "userId": "user_vn_12345",
+             "intentType": "PAYIN",
+             "state": "COMPLETED",
+             "amount": "5000000",
+             "currency": "VND",
+             "referenceCode": "REF20260115001",
+             "bankTxId": "VCB_TX_987654321",
+             "metadata": {},
+             "stateHistory": [
+                 {"state": "CREATED", "timestamp": "2026-01-15T08:30:00Z"},
+                 {"state": "PENDING_BANK", "timestamp": "2026-01-15T08:30:01Z"},
+                 {"state": "COMPLETED", "timestamp": "2026-01-15T08:35:22Z"}
+             ],
+             "createdAt": "2026-01-15T08:30:00Z",
+             "updatedAt": "2026-01-15T08:35:22Z",
+             "completedAt": "2026-01-15T08:35:22Z"
+         })),
+        (status = 404, description = "Intent not found", body = ErrorResponse,
+         example = json!({"error": {"code": "NOT_FOUND", "message": "Intent intent_01HX7K9M3N not found"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(
@@ -184,8 +206,28 @@ pub async fn get_intent(
         ListIntentsQuery
     ),
     responses(
-        (status = 200, description = "List of intents", body = ListIntentsResponse),
-        (status = 400, description = "Invalid query", body = ErrorResponse),
+        (status = 200, description = "List of intents", body = ListIntentsResponse,
+         example = json!({
+             "data": [{
+                 "id": "intent_01HX7K9M3NQRST4567890ABC",
+                 "userId": "user_vn_12345",
+                 "intentType": "PAYIN",
+                 "state": "COMPLETED",
+                 "amount": "5000000",
+                 "currency": "VND",
+                 "referenceCode": "REF20260115001",
+                 "metadata": {},
+                 "stateHistory": [
+                     {"state": "CREATED", "timestamp": "2026-01-15T08:30:00Z"},
+                     {"state": "COMPLETED", "timestamp": "2026-01-15T08:35:22Z"}
+                 ],
+                 "createdAt": "2026-01-15T08:30:00Z",
+                 "updatedAt": "2026-01-15T08:35:22Z"
+             }],
+             "pagination": {"limit": 20, "offset": 0, "hasMore": false}
+         })),
+        (status = 400, description = "Invalid query", body = ErrorResponse,
+         example = json!({"error": {"code": "BAD_REQUEST", "message": "user_id query parameter required"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(
@@ -253,7 +295,23 @@ pub async fn list_intents(
         ("limit" = Option<usize>, Query, description = "Number of items per page (default 20, max 100)")
     ),
     responses(
-        (status = 200, description = "Paginated list of intents", body = PaginatedResponse<IntentResponse>),
+        (status = 200, description = "Paginated list of intents", body = PaginatedResponse<IntentResponse>,
+         example = json!({
+             "data": [{
+                 "id": "intent_01HX7K9M3NQRST4567890ABC",
+                 "userId": "user_vn_12345",
+                 "intentType": "PAYOUT",
+                 "state": "PENDING_PAYOUT",
+                 "amount": "10000000",
+                 "currency": "VND",
+                 "metadata": {},
+                 "stateHistory": [{"state": "CREATED", "timestamp": "2026-01-15T10:00:00Z"}],
+                 "createdAt": "2026-01-15T10:00:00Z",
+                 "updatedAt": "2026-01-15T10:00:00Z"
+             }],
+             "nextCursor": "intent_01HX7K9M3NQRST4567890ABD",
+             "hasMore": true
+         })),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(

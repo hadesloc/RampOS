@@ -4,22 +4,47 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  isWebAuthnSupported,
+  toRegistrationOptions,
+  startRegistrationWithAbort,
+  type SerializedCredential,
+} from "@/lib/webauthn";
+import { passkeyApi, PasskeyApiError } from "@/lib/passkey-api";
 
 export interface PasskeyRegisterProps {
-  rpId?: string;
-  rpName?: string;
-  userId?: string;
   userName?: string;
-  onSuccess?: (credential: PublicKeyCredential) => void;
+  onSuccess?: (credential: SerializedCredential) => void;
   onError?: (error: Error) => void;
 }
 
 type RegisterState = "idle" | "loading" | "success" | "error";
 
+function getWebAuthnErrorMessage(err: unknown): string {
+  if (err instanceof DOMException) {
+    switch (err.name) {
+      case "NotAllowedError":
+        return "Dang ky bi huy hoac het thoi gian cho.";
+      case "SecurityError":
+        return "Dang ky that bai do loi bao mat (domain khong khop).";
+      case "AbortError":
+        return "Dang ky da bi huy.";
+      case "InvalidStateError":
+        return "Passkey nay da duoc dang ky truoc do.";
+      default:
+        return `Loi WebAuthn: ${err.message}`;
+    }
+  }
+  if (err instanceof PasskeyApiError) {
+    return `Loi server: ${err.message}`;
+  }
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return "Dang ky passkey that bai.";
+}
+
 export function PasskeyRegister({
-  rpId = window.location.hostname,
-  rpName = "RampOS",
-  userId,
   userName,
   onSuccess,
   onError,
@@ -29,8 +54,10 @@ export function PasskeyRegister({
   const [displayName, setDisplayName] = React.useState(userName ?? "");
 
   const handleRegister = React.useCallback(async () => {
-    if (!window.PublicKeyCredential) {
-      const err = new Error("WebAuthn is not supported in this browser");
+    if (!isWebAuthnSupported()) {
+      const err = new Error(
+        "Trinh duyet khong ho tro WebAuthn. Vui long su dung trinh duyet khac.",
+      );
       setErrorMessage(err.message);
       setState("error");
       onError?.(err);
@@ -38,7 +65,7 @@ export function PasskeyRegister({
     }
 
     if (!displayName.trim()) {
-      const err = new Error("Please enter a display name");
+      const err = new Error("Vui long nhap ten hien thi.");
       setErrorMessage(err.message);
       setState("error");
       onError?.(err);
@@ -49,59 +76,41 @@ export function PasskeyRegister({
     setErrorMessage(null);
 
     try {
-      const challenge = crypto.getRandomValues(new Uint8Array(32));
-      const userIdBytes = userId
-        ? new TextEncoder().encode(userId)
-        : crypto.getRandomValues(new Uint8Array(16));
+      // 1. Fetch registration challenge from backend
+      const challenge = await passkeyApi.getRegistrationChallenge(
+        displayName.trim(),
+      );
 
-      const credential = (await navigator.credentials.create({
-        publicKey: {
-          challenge,
-          rp: { name: rpName, id: rpId },
-          user: {
-            id: userIdBytes,
-            name: displayName.trim(),
-            displayName: displayName.trim(),
-          },
-          pubKeyCredParams: [
-            { alg: -7, type: "public-key" },   // ES256
-            { alg: -257, type: "public-key" },  // RS256
-          ],
-          authenticatorSelection: {
-            authenticatorAttachment: "platform",
-            userVerification: "preferred",
-            residentKey: "preferred",
-          },
-          timeout: 60000,
-          attestation: "none",
-        },
-      })) as PublicKeyCredential | null;
+      // 2. Convert to browser options
+      const options = toRegistrationOptions(challenge);
 
-      if (!credential) {
-        throw new Error("Registration was cancelled");
-      }
+      // 3. Create credential via browser
+      const serialized = await startRegistrationWithAbort(options);
+
+      // 4. Verify with backend
+      await passkeyApi.verifyRegistration(serialized);
 
       setState("success");
-      onSuccess?.(credential);
+      onSuccess?.(serialized);
     } catch (err) {
-      const error =
-        err instanceof Error ? err : new Error("Passkey registration failed");
-      setErrorMessage(error.message);
+      const message = getWebAuthnErrorMessage(err);
+      setErrorMessage(message);
       setState("error");
+      const error = err instanceof Error ? err : new Error(message);
       onError?.(error);
     }
-  }, [rpId, rpName, userId, displayName, onSuccess, onError]);
+  }, [displayName, onSuccess, onError]);
 
   return (
     <div className="flex flex-col gap-4">
       {!userName && (
         <div className="flex flex-col gap-2">
-          <Label htmlFor="passkey-display-name">Display Name</Label>
+          <Label htmlFor="passkey-display-name">Ten hien thi</Label>
           <Input
             id="passkey-display-name"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="Enter your name"
+            placeholder="Nhap ten cua ban"
             disabled={state === "loading"}
           />
         </div>
@@ -113,14 +122,18 @@ export function PasskeyRegister({
         variant={state === "error" ? "destructive" : "default"}
         className="w-full"
       >
-        {state === "success" ? "Passkey Registered" : "Register Passkey"}
+        {state === "loading"
+          ? "Dang dang ky..."
+          : state === "success"
+            ? "Da dang ky Passkey"
+            : "Dang ky Passkey"}
       </Button>
       {state === "error" && errorMessage && (
         <p className="text-sm text-destructive">{errorMessage}</p>
       )}
       {state === "success" && (
         <p className="text-sm text-green-600">
-          Passkey registered successfully. You can now use it to sign in.
+          Dang ky passkey thanh cong. Ban co the su dung passkey de dang nhap.
         </p>
       )}
     </div>

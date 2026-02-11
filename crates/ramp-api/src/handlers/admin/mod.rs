@@ -15,6 +15,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tracing::info;
 
 use crate::error::ApiError;
@@ -284,8 +285,29 @@ pub struct VolumeStats {
     path = "/v1/admin/cases",
     tag = "admin",
     responses(
-        (status = 200, description = "List of AML cases", body = ListCasesResponse),
-        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 200, description = "List of AML cases", body = ListCasesResponse,
+         example = json!({
+             "data": [{
+                 "id": "case_01HX7A1B2C3D4E5F",
+                 "tenantId": "tenant_acme",
+                 "userId": "user_vn_12345",
+                 "intentId": "intent_01HX7K9M3N",
+                 "caseType": "LargeTransaction",
+                 "severity": "High",
+                 "status": "Open",
+                 "assignedTo": "analyst_01",
+                 "details": {"amount": 450000000, "threshold": 400000000},
+                 "resolution": null,
+                 "createdAt": "2026-01-15T08:30:00Z",
+                 "updatedAt": "2026-01-15T08:30:00Z",
+                 "resolvedAt": null
+             }],
+             "total": 42,
+             "limit": 20,
+             "offset": 0
+         })),
+        (status = 401, description = "Unauthorized", body = ErrorResponse,
+         example = json!({"error": {"code": "UNAUTHORIZED", "message": "Invalid or missing admin API key"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(
@@ -364,8 +386,24 @@ pub async fn list_cases(
         ("id" = String, Path, description = "Case ID")
     ),
     responses(
-        (status = 200, description = "AML case details", body = CaseResponse),
-        (status = 404, description = "Case not found", body = ErrorResponse),
+        (status = 200, description = "AML case details", body = CaseResponse,
+         example = json!({
+             "id": "case_01HX7A1B2C3D4E5F",
+             "tenantId": "tenant_acme",
+             "userId": "user_vn_12345",
+             "intentId": "intent_01HX7K9M3N",
+             "caseType": "LargeTransaction",
+             "severity": "High",
+             "status": "Review",
+             "assignedTo": "analyst_01",
+             "details": {"amount": 450000000, "threshold": 400000000, "rule": "daily_limit_exceeded"},
+             "resolution": null,
+             "createdAt": "2026-01-15T08:30:00Z",
+             "updatedAt": "2026-01-15T09:15:00Z",
+             "resolvedAt": null
+         })),
+        (status = 404, description = "Case not found", body = ErrorResponse,
+         example = json!({"error": {"code": "NOT_FOUND", "message": "Case case_01HX7A1B not found"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(
@@ -406,8 +444,24 @@ pub async fn get_case(
     ),
     request_body = UpdateCaseRequest,
     responses(
-        (status = 200, description = "Case updated", body = CaseResponse),
-        (status = 404, description = "Case not found", body = ErrorResponse),
+        (status = 200, description = "Case updated", body = CaseResponse,
+         example = json!({
+             "id": "case_01HX7A1B2C3D4E5F",
+             "tenantId": "tenant_acme",
+             "userId": "user_vn_12345",
+             "intentId": "intent_01HX7K9M3N",
+             "caseType": "LargeTransaction",
+             "severity": "High",
+             "status": "Closed",
+             "assignedTo": "analyst_01",
+             "details": {"amount": 450000000, "threshold": 400000000},
+             "resolution": "Verified as legitimate business transaction",
+             "createdAt": "2026-01-15T08:30:00Z",
+             "updatedAt": "2026-01-15T14:20:00Z",
+             "resolvedAt": "2026-01-15T14:20:00Z"
+         })),
+        (status = 404, description = "Case not found", body = ErrorResponse,
+         example = json!({"error": {"code": "NOT_FOUND", "message": "Case case_01HX7A1B not found"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(
@@ -517,8 +571,18 @@ pub async fn update_case(
     path = "/v1/admin/cases/stats",
     tag = "admin",
     responses(
-        (status = 200, description = "Case statistics", body = CaseStats),
-        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 200, description = "Case statistics", body = CaseStats,
+         example = json!({
+             "total": 156,
+             "open": 23,
+             "inReview": 12,
+             "onHold": 4,
+             "resolved": 117,
+             "bySeverity": {"low": 45, "medium": 67, "high": 38, "critical": 6},
+             "avgResolutionHours": 18.5
+         })),
+        (status = 401, description = "Unauthorized", body = ErrorResponse,
+         example = json!({"error": {"code": "UNAUTHORIZED", "message": "Invalid or missing admin API key"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(
@@ -681,8 +745,26 @@ pub async fn get_case_stats(
     path = "/v1/admin/users",
     tag = "admin",
     responses(
-        (status = 200, description = "List of users", body = ListUsersResponse),
-        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 200, description = "List of users", body = ListUsersResponse,
+         example = json!({
+             "data": [{
+                 "id": "user_vn_12345",
+                 "tenantId": "tenant_acme",
+                 "externalId": "user_vn_12345",
+                 "kycTier": 2,
+                 "kycStatus": "VERIFIED",
+                 "status": "ACTIVE",
+                 "dailyPayinLimitVnd": "100000000",
+                 "dailyPayoutLimitVnd": "50000000",
+                 "createdAt": "2025-12-01T10:00:00Z",
+                 "updatedAt": "2026-01-10T15:30:00Z"
+             }],
+             "total": 1250,
+             "limit": 20,
+             "offset": 0
+         })),
+        (status = 401, description = "Unauthorized", body = ErrorResponse,
+         example = json!({"error": {"code": "UNAUTHORIZED", "message": "Invalid or missing admin API key"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(
@@ -738,8 +820,21 @@ pub async fn list_users(
         ("id" = String, Path, description = "User ID")
     ),
     responses(
-        (status = 200, description = "User details", body = UserResponse),
-        (status = 404, description = "User not found", body = ErrorResponse),
+        (status = 200, description = "User details", body = UserResponse,
+         example = json!({
+             "id": "user_vn_12345",
+             "tenantId": "tenant_acme",
+             "externalId": "user_vn_12345",
+             "kycTier": 2,
+             "kycStatus": "VERIFIED",
+             "status": "ACTIVE",
+             "dailyPayinLimitVnd": "100000000",
+             "dailyPayoutLimitVnd": "50000000",
+             "createdAt": "2025-12-01T10:00:00Z",
+             "updatedAt": "2026-01-10T15:30:00Z"
+         })),
+        (status = 404, description = "User not found", body = ErrorResponse,
+         example = json!({"error": {"code": "NOT_FOUND", "message": "User user_vn_12345 not found"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(
@@ -815,8 +910,40 @@ pub async fn update_user(
     path = "/v1/admin/dashboard",
     tag = "admin",
     responses(
-        (status = 200, description = "Dashboard statistics", body = DashboardStats),
-        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 200, description = "Dashboard statistics", body = DashboardStats,
+         example = json!({
+             "intents": {
+                 "totalToday": 342,
+                 "payinCount": 210,
+                 "payoutCount": 132,
+                 "pendingCount": 15,
+                 "completedCount": 315,
+                 "failedCount": 12
+             },
+             "cases": {
+                 "total": 156,
+                 "open": 23,
+                 "inReview": 12,
+                 "onHold": 4,
+                 "resolved": 117,
+                 "bySeverity": {"low": 45, "medium": 67, "high": 38, "critical": 6},
+                 "avgResolutionHours": 18.5
+             },
+             "users": {
+                 "total": 12500,
+                 "active": 8750,
+                 "kycPending": 340,
+                 "newToday": 28
+             },
+             "volume": {
+                 "totalPayinVnd": "15750000000",
+                 "totalPayoutVnd": "8230000000",
+                 "totalTradeVnd": "42100000000",
+                 "period": "24h"
+             }
+         })),
+        (status = 401, description = "Unauthorized", body = ErrorResponse,
+         example = json!({"error": {"code": "UNAUTHORIZED", "message": "Invalid or missing admin API key"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(

@@ -1,5 +1,6 @@
 use axum::Json;
 use chrono::Utc;
+use serde_json::json;
 
 use crate::dto::HealthResponse;
 
@@ -11,7 +12,12 @@ use crate::dto::HealthResponse;
     path = "/health",
     tag = "health",
     responses(
-        (status = 200, description = "Service is healthy", body = HealthResponse)
+        (status = 200, description = "Service is healthy", body = HealthResponse,
+         example = json!({
+             "status": "healthy",
+             "version": "1.0.0",
+             "timestamp": "2026-01-15T08:30:00Z"
+         }))
     )
 )]
 pub async fn health_check() -> Json<HealthResponse> {
@@ -30,7 +36,12 @@ pub async fn health_check() -> Json<HealthResponse> {
     path = "/ready",
     tag = "health",
     responses(
-        (status = 200, description = "Service is ready", body = HealthResponse)
+        (status = 200, description = "Service is ready", body = HealthResponse,
+         example = json!({
+             "status": "ready",
+             "version": "1.0.0",
+             "timestamp": "2026-01-15T08:30:00Z"
+         }))
     )
 )]
 pub async fn readiness_check() -> Json<HealthResponse> {

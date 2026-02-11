@@ -65,10 +65,10 @@
 | F03.04 | OpenApiDoc struct | DONE | `openapi.rs` (346 lines) |
 | F03.05 | Mount Scalar UI at /docs | DONE | Mounted at `/docs` (S164), URL fixed (S165) |
 | F03.06 | Mount /openapi.json | DONE | Endpoint exists |
-| F03.07 | Request/response examples | TODO | Missing from handlers |
+| F03.07 | Request/response examples | DONE | 29 handlers with json!() examples (S166) |
 | F03.08 | CI diff check | DONE | `openapi-ci.yml` |
 
-**Remaining:** F03.07 (examples) - LOW priority, CI diff gate working
+**Remaining:** All F03 sub-tasks DONE (S166).
 
 ---
 
@@ -119,14 +119,13 @@
 | F06.04 | Backend PasskeyService | DONE | `crates/ramp-core/src/service/passkey.rs` |
 | F06.05 | sign_user_operation() | DONE | In passkey service |
 | F06.06 | Bundler passkey UserOp handling | PARTIAL | Basic support, needs E2E |
-| F06.07 | Frontend PasskeyRegistration | TODO | Component not created |
-| F06.08 | Frontend PasskeySignTransaction | TODO | Component not created |
+| F06.07 | Frontend PasskeyRegistration | DONE | Wired to real backend API, Vietnamese errors (S166) |
+| F06.08 | Frontend PasskeySignTransaction | DONE | PasskeyLogin wired to real backend API (S166) |
 | F06.09 | SDK PasskeyWalletService | TODO | SDK service not created |
 | F06.10 | Foundry tests | DONE | Contract tests exist |
 | F06.11 | Rust tests | DONE | 22 E2E tests |
 
-**MEDIUM PRIORITY remaining:**
-- F06.07/F06.08: Frontend WebAuthn components
+**Remaining (LOW):**
 - F06.06: Bundler E2E with passkey-signed UserOp
 - F06.09: SDK passkey service
 
@@ -144,11 +143,10 @@
 | F07.06 | Schema builder + mount | DONE | `graphql/mod.rs`, `router.rs` |
 | F07.07 | Cursor pagination | DONE | `graphql/pagination.rs` |
 | F07.08 | DataLoader pattern | DONE | `graphql/loaders.rs` |
-| F07.09 | Frontend GraphQL client | TODO | No urql/graphql-request integration |
+| F07.09 | Frontend GraphQL client | DONE | urql client + 7 hooks + 23 tests (S166) |
 | F07.10 | 12+ tests | DONE | 27 subscription + 33 runtime tests |
 
-**MEDIUM PRIORITY remaining:**
-- F07.09: Frontend GraphQL hooks (useIntentSubscription, useDashboardLive)
+**Remaining (LOW):**
 - WebSocket subscription E2E with real client
 
 ---
@@ -263,17 +261,16 @@
 | F14.02 | VNDToken Blacklist | DONE | In VNDToken.sol |
 | F14.03 | VNDToken MAX_SUPPLY increase | DONE | Updated |
 | F14.04 | VNDToken Multi-sig Admin | PARTIAL | AccessControl added, needs full RBAC |
-| F14.05 | UUPS Upgrade Proxy | TODO | Not converted to proxy pattern |
+| F14.05 | UUPS Upgrade Proxy | DONE | UUPSUpgradeable on RampOSAccount + factory createUpgradeableAccount + 10 tests (S166) |
 | F14.06 | RampOSAccount ERC-1271 | DONE | isValidSignature() |
 | F14.07 | RampOSAccount Token Receivers | DONE | ERC721/ERC1155 receivers |
 | F14.08 | Session Key O(1) | DONE | Mapping-based (RB05) |
 | F14.09 | Paymaster Nonce Replay | DONE | Nonce-based (RB05) |
 | F14.10 | 25+ Foundry tests | DONE | 100+ Solidity tests |
 
-**MEDIUM PRIORITY remaining:**
-- F14.05: UUPS proxy pattern (significant work)
+**Remaining (LOW):**
 - F14.04: Complete multi-sig RBAC
-- `forge` not in PATH - tests unverified on this machine
+- `forge` not in PATH - UUPS tests unverified on this machine (CI will verify)
 
 ---
 
@@ -330,14 +327,9 @@
 
 No high priority items remaining.
 
-### MEDIUM PRIORITY (4 items - production polish)
+### MEDIUM PRIORITY (0 items - all done after S166)
 
-| Task ID | Description | Crate/Location | Effort |
-|---------|-------------|----------------|--------|
-| F07.09 | Frontend GraphQL hooks | `frontend/src/hooks/` | L |
-| F06.07 | Frontend WebAuthn components | `frontend/src/components/portal/` | M |
-| F14.05 | UUPS proxy pattern | `contracts/src/*.sol` | L |
-| F03.07 | Request/response examples in OpenAPI | `crates/ramp-api/src/handlers/` | M |
+No medium priority items remaining.
 
 ### LOW PRIORITY (remaining items - nice to have)
 

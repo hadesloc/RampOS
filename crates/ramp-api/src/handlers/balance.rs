@@ -4,6 +4,7 @@ use axum::{
 };
 use ramp_common::types::*;
 use ramp_core::service::ledger::LedgerService;
+use serde_json::json;
 use std::sync::Arc;
 
 use crate::dto::{BalanceDto, UserBalancesResponse};
@@ -23,8 +24,16 @@ pub type LedgerServiceState = Arc<LedgerService>;
         ("user_id" = String, Path, description = "User ID")
     ),
     responses(
-        (status = 200, description = "User balances", body = UserBalancesResponse),
-        (status = 404, description = "User not found", body = ErrorResponse),
+        (status = 200, description = "User balances", body = UserBalancesResponse,
+         example = json!({
+             "balances": [
+                 {"accountType": "SPOT", "currency": "VND", "balance": "15750000.00"},
+                 {"accountType": "SPOT", "currency": "BTC", "balance": "0.05230000"},
+                 {"accountType": "SPOT", "currency": "ETH", "balance": "1.25000000"}
+             ]
+         })),
+        (status = 404, description = "User not found", body = ErrorResponse,
+         example = json!({"error": {"code": "NOT_FOUND", "message": "User user_vn_12345 not found"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(
@@ -64,8 +73,15 @@ pub async fn get_user_balances(
         ("user_id" = String, Path, description = "User ID")
     ),
     responses(
-        (status = 200, description = "User balances", body = UserBalancesResponse),
-        (status = 403, description = "Tenant mismatch", body = ErrorResponse),
+        (status = 200, description = "User balances", body = UserBalancesResponse,
+         example = json!({
+             "balances": [
+                 {"accountType": "SPOT", "currency": "VND", "balance": "15750000.00"},
+                 {"accountType": "SPOT", "currency": "USDT", "balance": "500.00"}
+             ]
+         })),
+        (status = 403, description = "Tenant mismatch", body = ErrorResponse,
+         example = json!({"error": {"code": "FORBIDDEN", "message": "Tenant mismatch"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(

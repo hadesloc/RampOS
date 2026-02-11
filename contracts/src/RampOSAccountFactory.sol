@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
+import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import { RampOSAccount } from "./RampOSAccount.sol";
 import { IEntryPoint } from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
@@ -78,6 +79,67 @@ contract RampOSAccountFactory {
     function getAddress(address owner, uint256 salt) public view returns (address) {
         return Clones.predictDeterministicAddress(
             address(ACCOUNT_IMPLEMENTATION), _getSalt(owner, salt)
+        );
+    }
+
+    /**
+     * @notice Create a new upgradeable account using ERC1967Proxy (UUPS pattern)
+     * @dev Unlike createAccount (EIP-1167 clones), these accounts can be upgraded via UUPS
+     * @param owner The owner of the account
+     * @param salt Salt for CREATE2 deterministic deployment
+     * @return account The created or existing account instance
+     */
+    function createUpgradeableAccount(address owner, uint256 salt)
+        external
+        returns (RampOSAccount account)
+    {
+        require(owner != address(0), "Invalid owner");
+        address addr = getUpgradeableAccountAddress(owner, salt);
+
+        // Check if already deployed - return existing account
+        if (addr.code.length > 0) {
+            return RampOSAccount(payable(addr));
+        }
+
+        // Deploy using ERC1967Proxy for UUPS upgradeability
+        bytes memory initData =
+            abi.encodeWithSelector(RampOSAccount.initialize.selector, owner);
+        ERC1967Proxy proxy = new ERC1967Proxy{ salt: _getSalt(owner, salt) }(
+            address(ACCOUNT_IMPLEMENTATION), initData
+        );
+        account = RampOSAccount(payable(address(proxy)));
+
+        emit AccountCreated(address(account), owner, salt);
+    }
+
+    /**
+     * @notice Get the counterfactual address of an upgradeable account before deployment
+     * @param owner The owner of the account
+     * @param salt Salt for CREATE2 deterministic deployment
+     * @return The predicted address of the upgradeable account
+     */
+    function getUpgradeableAccountAddress(address owner, uint256 salt)
+        public
+        view
+        returns (address)
+    {
+        bytes memory initData =
+            abi.encodeWithSelector(RampOSAccount.initialize.selector, owner);
+        bytes memory proxyBytecode = abi.encodePacked(
+            type(ERC1967Proxy).creationCode,
+            abi.encode(address(ACCOUNT_IMPLEMENTATION), initData)
+        );
+        bytes32 actualSalt = _getSalt(owner, salt);
+        return address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            bytes1(0xff), address(this), actualSalt, keccak256(proxyBytecode)
+                        )
+                    )
+                )
+            )
         );
     }
 

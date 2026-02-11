@@ -5,6 +5,7 @@ use axum::{
 };
 use ramp_common::types::*;
 use ramp_core::service::payout::{CreatePayoutRequest as ServiceRequest, PayoutService};
+use serde_json::json;
 use std::sync::Arc;
 use tracing::{info, instrument};
 
@@ -24,8 +25,13 @@ pub type PayoutServiceState = Arc<PayoutService>;
     tag = "intents",
     request_body = CreatePayoutRequest,
     responses(
-        (status = 200, description = "Pay-out intent created", body = CreatePayoutResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 200, description = "Pay-out intent created", body = CreatePayoutResponse,
+         example = json!({
+             "intentId": "intent_01HX9Z1Y2X3W4V5U6T7S8R9Q0",
+             "status": "PENDING_PAYOUT"
+         })),
+        (status = 400, description = "Invalid request", body = ErrorResponse,
+         example = json!({"error": {"code": "BAD_REQUEST", "message": "Amount must be between 10,000 and 500,000,000 VND"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(

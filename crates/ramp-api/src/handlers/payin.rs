@@ -8,6 +8,7 @@ use ramp_core::service::payin::{
     ConfirmPayinRequest as ServiceConfirmRequest, CreatePayinRequest as ServiceRequest,
     PayinService,
 };
+use serde_json::json;
 use std::sync::Arc;
 use tracing::{info, instrument};
 
@@ -30,8 +31,20 @@ pub type PayinServiceState = Arc<PayinService>;
     tag = "intents",
     request_body = CreatePayinRequest,
     responses(
-        (status = 200, description = "Pay-in intent created", body = CreatePayinResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 200, description = "Pay-in intent created", body = CreatePayinResponse,
+         example = json!({
+             "intentId": "intent_01HX8A2B3C4D5E6F7890GHIJK",
+             "referenceCode": "REF20260115VCB001",
+             "virtualAccount": {
+                 "bank": "VCB",
+                 "accountNumber": "9876543210123",
+                 "accountName": "RAMPOS USER 12345"
+             },
+             "expiresAt": "2026-01-15T09:30:00Z",
+             "status": "PENDING_BANK"
+         })),
+        (status = 400, description = "Invalid request", body = ErrorResponse,
+         example = json!({"error": {"code": "BAD_REQUEST", "message": "Amount must be between 1,000 and 500,000,000 VND"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(
@@ -122,9 +135,15 @@ pub async fn create_payin(
     tag = "intents",
     request_body = ConfirmPayinRequest,
     responses(
-        (status = 200, description = "Pay-in confirmed", body = ConfirmPayinResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-        (status = 404, description = "Intent not found", body = ErrorResponse),
+        (status = 200, description = "Pay-in confirmed", body = ConfirmPayinResponse,
+         example = json!({
+             "intentId": "intent_01HX8A2B3C4D5E6F7890GHIJK",
+             "status": "COMPLETED"
+         })),
+        (status = 400, description = "Invalid request", body = ErrorResponse,
+         example = json!({"error": {"code": "BAD_REQUEST", "message": "Reference code is required"}})),
+        (status = 404, description = "Intent not found", body = ErrorResponse,
+         example = json!({"error": {"code": "NOT_FOUND", "message": "Intent with reference REF123 not found"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(

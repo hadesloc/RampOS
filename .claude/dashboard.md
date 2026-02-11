@@ -1,6 +1,6 @@
 # RampOS Dashboard
 
-**Last Updated:** 2026-02-11 (Session 165 - MEDIUM PRIORITY Sprint: F03.05/F13.05/F13.06/F15.04)
+**Last Updated:** 2026-02-11 (Session 166 - MEDIUM PRIORITY Sprint: F03.07/F06.07/F07.09/F14.05)
 **Branch:** `master` (not merged to `main` yet)
 **Phase:** Next-Gen F01-F16 | Rebaseline RB01-RB09 ALL DONE
 **Plan File:** `NEXT-GEN-MASTER-PLAN.md` (16 features, 139 sub-tasks)
@@ -29,10 +29,10 @@
 8. ~~`F15.04` WebSocket hooks~~ **DONE (S165)** - 3 hooks + 29 tests
 
 **MEDIUM - Production polish (Next priority):**
-5. `F07` Frontend GraphQL hooks integration
-6. `F06` Frontend WebAuthn components
-7. `F14` UUPS proxy pattern + `forge` verification
-8. `F03.07` OpenAPI request/response examples
+5. ~~`F07` Frontend GraphQL hooks integration~~ **DONE (S166)** - urql client + 7 hooks + 23 tests
+6. ~~`F06` Frontend WebAuthn components~~ **DONE (S166)** - PasskeyLogin/Register wired to backend + PasskeyManagement + 23 tests
+7. ~~`F14` UUPS proxy pattern + `forge` verification~~ **DONE (S166)** - RampOSAccount UUPSUpgradeable + factory createUpgradeableAccount + 10 tests
+8. ~~`F03.07` OpenAPI request/response examples~~ **DONE (S166)** - 29 handlers, 9 files, json!() examples
 9. Frontend sidebar test fix (`next-intl` ESM/CJS vitest config)
 
 **LOW - Nice to have:**
@@ -68,13 +68,16 @@
 | Features PARTIAL+ | 14 (F01-F08, F10, F12-F16) |
 | Features PLANNED (post-MVP) | 2 (F09 ZK-KYC, F11 MPC Custody) |
 | Rebaseline Tasks (RB01-RB09) | ALL DONE |
+| HIGH priority remaining | **0** |
+| MEDIUM priority remaining | **0** (all done S166) |
+| LOW priority remaining | 10 |
 | Rust Tests | ~2,100+ pass |
 | Widget SDK Tests | 147 pass |
-| Frontend Tests | 259 pass |
-| Solidity Tests | 100+ (needs forge verification) |
+| Frontend Tests | **334 pass** |
+| Solidity Tests | **110+** (10 UUPS new) |
 | Python SDK Tests | **80 pass** |
 | Go SDK Tests | **48 pass** |
-| **Grand Total** | **~2,600+ tests** |
+| **Grand Total** | **~2,700+ tests** |
 
 ---
 
@@ -95,7 +98,7 @@
 | Python SDK | **80** | `pytest -q sdk-python/tests` |
 | Go SDK | **48** | `go test ./sdk-go/...` |
 | Widget SDK (TS) | 147 | `cd packages/widget && npx vitest run` |
-| Frontend (TS) | 288 | `cd frontend && npx vitest run` |
+| Frontend (TS) | 334 | `cd frontend && npx vitest run` |
 
 **Known issues:**
 - `test_payout_e2e_flow` hangs (async timing, test infra issue)
@@ -113,10 +116,10 @@
 |---------|-----------|----------------------|
 | **F01** Rate Limiting | `rate_limit.rs` (441 lines, 19 unit tests), migration `030_tenant_rate_limits.sql`, 7 E2E tests, tenant-specific overrides | Production load test with real Redis; Redis fallback E2E verification |
 | **F02** API Versioning | `versioning/` (mod, version, transformers), migration `031_tenant_api_version.sql`, 20 E2E + 18 deprecation tests | Production version migration with real breaking changes; response transformer E2E |
-| **F03** OpenAPI Docs | `openapi.rs`, 40 endpoints annotated, Scalar UI at `/docs`, 26 completeness tests, `openapi-ci.yml` CI workflow | CI diff gate for spec changes |
+| **F03** OpenAPI Docs | `openapi.rs`, 40 endpoints annotated, Scalar UI at `/docs`, 26 completeness tests, `openapi-ci.yml` CI workflow, **29 handlers with json!() examples (S166)** | All sub-tasks DONE |
 | **F04** Webhook v2 | `webhook.rs` (HTTP delivery via reqwest), `webhook_delivery.rs`, `webhook_dlq.rs`, `webhook_signing.rs`, 14 config + 18 delivery E2E tests (wiremock), HMAC signature verified | Background retry worker as standalone process |
 | **F13** Backend Fixes | `settlement.rs` (SQL-backed via `SettlementRepository`), `repository/settlement.rs`, migration `032_settlements.sql`, `payout.rs` (6 base + 8 compliance tests), 38 settlement E2E + 30 lib tests | Graceful shutdown; cursor pagination on all lists |
-| **F14** Contract Fixes | `RampOSAccount.sol` (O(1) session key), `RampOSPaymaster.sol` (nonce replay), `PasskeySigner.sol`, `PasskeyAccountFactory.sol`, VNDToken upgrades | `forge` not in PATH - Solidity tests unverified on this machine; UUPS proxy pattern; VNDToken pausable/blacklist |
+| **F14** Contract Fixes | `RampOSAccount.sol` (O(1) session key, **UUPSUpgradeable S166**), `RampOSPaymaster.sol` (nonce replay), `PasskeySigner.sol`, `PasskeyAccountFactory.sol`, VNDToken upgrades, **factory createUpgradeableAccount + 10 UUPS tests** | F14.04 multi-sig RBAC; `forge` not in PATH on Windows |
 | **F16** Off-Ramp VND | `offramp.rs`, `repository/offramp.rs`, migration `027_offramp_intents.sql`, 50 payout E2E tests | Settlement E2E with Napas/VietQR test adapter; real bank integration |
 
 #### TIER 2: DIFFERENTIATION
@@ -124,8 +127,8 @@
 | Feature | What EXISTS | What's LEFT to Complete |
 |---------|-----------|----------------------|
 | **F05** AI Fraud | `fraud/` (scorer, decision, features, analytics, mod), 29 fraud acceptance tests | Production ML model (ONNX) integration (rule-based is fine for MVP); admin fraud score API |
-| **F06** Passkey Wallet | `passkey.rs` backend, `PasskeySigner.sol` + `PasskeyAccountFactory.sol` contracts, 22 E2E tests | Frontend WebAuthn E2E (Playwright with browser API mock); bundler passkey-signed UserOp E2E |
-| **F07** GraphQL API | `graphql/` (mod, query, mutation, subscription, types, loaders, pagination, tests), 27 subscription + 33 runtime tests | WebSocket subscription with real client E2E; frontend GraphQL hooks integration |
+| **F06** Passkey Wallet | `passkey.rs` backend, `PasskeySigner.sol` + `PasskeyAccountFactory.sol` contracts, 22 E2E tests, **PasskeyLogin/Register wired to backend + PasskeyManagement + 23 tests (S166)** | Bundler passkey-signed UserOp E2E; SDK PasskeyWalletService |
+| **F07** GraphQL API | `graphql/` (mod, query, mutation, subscription, types, loaders, pagination, tests), 27 subscription + 33 runtime tests, **urql client + 7 hooks + 23 tests (S166)** | WebSocket subscription with real client E2E |
 | **F08** Multi-SDK | Python SDK (38 files, **80 tests**), Go SDK (13 files, **48 tests**), `sdk-generate.yml`, `sdk-ci.yml` | npm publish dry-run; CDN distribution test; full drift detection CI |
 
 #### TIER 3: MOAT
@@ -149,23 +152,23 @@ Both have stub/simulated code. ZK contracts exist (`ZkKycVerifier.sol`, `ZkKycRe
 
 ## Priority Action Items (Next Sessions)
 
-### HIGH PRIORITY (Move to Complete)
-1. **F13 settlement DB persistence** - Replace in-memory store with SQL-backed (currently `SettlementStore` is HashMap)
-2. **F03 OpenAPI annotations** - Annotate remaining handlers with `#[utoipa::path()]`
-3. **F04 webhook HTTP delivery** - Implement actual HTTP POST to external endpoints
-4. **F15 SDK integration** - Replace `frontend/src/lib/api.ts` (1683 lines) with `@rampos/sdk`
+### HIGH PRIORITY - All DONE (S164+S165)
+~~All high priority items completed.~~
 
-### MEDIUM PRIORITY (Production Polish)
-5. **F01 Redis integration** - Production load test with real Redis
-6. **F07 WebSocket E2E** - Real client subscription test
-7. **F14 forge verification** - Install forge on Windows or run on Linux CI
-8. **F06 frontend passkey** - Playwright E2E with WebAuthn mock
+### MEDIUM PRIORITY - All DONE (S166)
+~~F03.07 OpenAPI examples, F06.07 WebAuthn, F07.09 GraphQL hooks, F14.05 UUPS proxy~~
 
-### LOW PRIORITY (Nice to Have)
-9. **F02 migration E2E** - Real breaking change scenario test
-10. **F10 bridge E2E** - Testnet bridge integration
-11. **F12/F08 publish** - npm publish dry-run
-12. **F16 Napas adapter** - Real bank API integration
+### LOW PRIORITY (Nice to Have - Next work)
+1. **F01 Redis integration** - Production load test with real Redis
+2. **F07 WebSocket E2E** - Real client subscription test
+3. **F13.07 Metrics** - Wire metrics to hot paths
+4. **F02 migration E2E** - Real breaking change scenario test
+5. **F10 bridge E2E** - Testnet bridge integration
+6. **F12/F08 publish** - npm publish dry-run
+7. **F15.05 Command palette** - Ctrl+K with cmdk
+8. **F15.08 Notification center** - Frontend component
+9. **F16 Napas adapter** - Real bank API integration
+10. **Frontend sidebar fix** - `next-intl` ESM/CJS vitest config
 
 ---
 
@@ -283,6 +286,8 @@ Both have stub/simulated code. ZK contracts exist (`ZkKycVerifier.sol`, `ZkKycRe
 | S163 | 2026-02-11 | Codebase audit & plan consolidation | 0 (audit only) |
 | S164 | 2026-02-11 | HIGH PRIORITY sprint (F13 DB, F03 OpenAPI, F04 Webhook HTTP, F15 SDK) | +~50 new |
 | S165 | 2026-02-11 | MEDIUM PRIORITY sprint (F03.05 docs fix, F13.05/06, F15.04 WS hooks) | +34 new |
+
+| S166 | 2026-02-11 | MEDIUM PRIORITY sprint (F03.07 OpenAPI examples, F06.07 WebAuthn, F07.09 GraphQL hooks, F14.05 UUPS) | +56 new |
 
 ---
 

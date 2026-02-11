@@ -9,6 +9,7 @@ use ramp_core::sso::{
     SsoAuthRequest, SsoCallback,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
 
 use crate::AppState;
@@ -34,7 +35,8 @@ pub struct SsoProviderSummary {
     ),
     responses(
         (status = 302, description = "Redirect to Identity Provider"),
-        (status = 404, description = "Provider not found")
+        (status = 404, description = "Provider not found",
+         example = json!({"error": {"code": "NOT_FOUND", "message": "SSO provider 'unknown_idp' not found"}}))
     )
 )]
 pub async fn sso_login(
@@ -126,7 +128,13 @@ pub async fn sso_callback(
     path = "/v1/admin/sso/providers",
     tag = "Admin",
     responses(
-        (status = 200, description = "List of configured IdPs")
+        (status = 200, description = "List of configured IdPs",
+         example = json!([{
+             "providerId": "okta_acme",
+             "providerType": "okta",
+             "protocol": "oidc",
+             "enabled": true
+         }]))
     )
 )]
 pub async fn list_providers(

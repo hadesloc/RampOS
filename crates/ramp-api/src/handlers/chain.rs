@@ -11,6 +11,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tracing::info;
 
 use crate::error::ApiError;
@@ -120,7 +121,15 @@ pub struct BridgeResponse {
     tag = "chains",
     params(ChainListQuery),
     responses(
-        (status = 200, description = "List of supported chains", body = ChainListResponse),
+        (status = 200, description = "List of supported chains", body = ChainListResponse,
+         example = json!({
+             "chains": [
+                 {"chainId": 1, "name": "Ethereum", "chainType": "Evm", "nativeSymbol": "ETH", "isTestnet": false, "explorerUrl": "https://etherscan.io"},
+                 {"chainId": 42161, "name": "Arbitrum One", "chainType": "Evm", "nativeSymbol": "ETH", "isTestnet": false, "explorerUrl": "https://arbiscan.io"},
+                 {"chainId": 56, "name": "BNB Smart Chain", "chainType": "Evm", "nativeSymbol": "BNB", "isTestnet": false, "explorerUrl": "https://bscscan.com"}
+             ],
+             "total": 3
+         })),
         (status = 400, description = "Invalid query parameters", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
@@ -177,8 +186,14 @@ pub async fn list_chains(
         ("chain_id" = u64, Path, description = "Chain ID")
     ),
     responses(
-        (status = 200, description = "Chain details", body = ChainDetailResponse),
-        (status = 404, description = "Chain not found", body = ErrorResponse),
+        (status = 200, description = "Chain details", body = ChainDetailResponse,
+         example = json!({
+             "chainId": 1, "name": "Ethereum", "chainType": "Evm",
+             "nativeSymbol": "ETH", "isTestnet": false,
+             "explorerUrl": "https://etherscan.io", "status": "active"
+         })),
+        (status = 404, description = "Chain not found", body = ErrorResponse,
+         example = json!({"error": {"code": "NOT_FOUND", "message": "Chain 99999 not found"}})),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(
@@ -215,7 +230,19 @@ pub async fn get_chain_detail(
     ),
     request_body = BridgeQuoteRequest,
     responses(
-        (status = 200, description = "Bridge quote", body = BridgeQuoteResponse),
+        (status = 200, description = "Bridge quote", body = BridgeQuoteResponse,
+         example = json!({
+             "sourceChainId": 1,
+             "destinationChainId": 42161,
+             "inputAmount": "1000000000000000000",
+             "outputAmount": "998950000000000000",
+             "fee": "1050000000000000",
+             "feePercentage": "0.15",
+             "feeBreakdown": {"bridgeFee": "1000000000000000", "gasFee": "50000", "protocolFee": "500000000000"},
+             "estimatedTimeSeconds": 300,
+             "expiresAt": "2026-01-15T08:35:00Z",
+             "quoteId": "quote_a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+         })),
         (status = 400, description = "Invalid request", body = ErrorResponse),
         (status = 404, description = "Chain not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
@@ -327,7 +354,18 @@ pub async fn get_bridge_quote(
     tag = "chains",
     request_body = BridgeRequest,
     responses(
-        (status = 200, description = "Bridge transaction initiated", body = BridgeResponse),
+        (status = 200, description = "Bridge transaction initiated", body = BridgeResponse,
+         example = json!({
+             "bridgeId": "bridge_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+             "status": "pending",
+             "sourceChainId": 1,
+             "destinationChainId": 42161,
+             "amount": "1000000000000000000",
+             "sourceTxHash": null,
+             "destinationTxHash": null,
+             "estimatedCompletion": "2026-01-15T08:40:00Z",
+             "createdAt": "2026-01-15T08:30:00Z"
+         })),
         (status = 400, description = "Invalid request", body = ErrorResponse),
         (status = 404, description = "Chain not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)

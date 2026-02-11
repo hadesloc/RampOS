@@ -13,6 +13,7 @@ use axum::{
 use alloy::primitives::{Address, U256};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tracing::info;
 
 use crate::error::ApiError;
@@ -143,7 +144,18 @@ pub struct VnstConfigResponse {
     tag = "stablecoin",
     request_body = VnstMintApiRequest,
     responses(
-        (status = 200, description = "VNST mint initiated", body = VnstMintApiResponse),
+        (status = 200, description = "VNST mint initiated", body = VnstMintApiResponse,
+         example = json!({
+             "mintId": "mint_01HX8A2B3C4D5E6F",
+             "vndAmount": "25000000",
+             "vnstAmount": "25000",
+             "feeVnd": "25000",
+             "chainId": 56,
+             "recipientAddress": "0x742d35Cc6634C0532925a3b844Bc9e7595f3e123",
+             "status": "PENDING",
+             "txHash": null,
+             "createdAt": "2026-01-15T08:30:00Z"
+         })),
         (status = 400, description = "Invalid request", body = ErrorResponse),
         (status = 401, description = "Unauthorized", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
@@ -221,7 +233,19 @@ pub async fn mint_vnst(
     tag = "stablecoin",
     request_body = VnstBurnApiRequest,
     responses(
-        (status = 200, description = "VNST burn initiated", body = VnstBurnApiResponse),
+        (status = 200, description = "VNST burn initiated", body = VnstBurnApiResponse,
+         example = json!({
+             "burnId": "burn_01HX9Z1Y2X3W4V5U",
+             "vnstAmount": "10000",
+             "vndAmount": "9990000",
+             "feeVnst": "10 VNST",
+             "feeVnd": "10000",
+             "chainId": 56,
+             "status": "PENDING",
+             "txHash": null,
+             "estimatedVndArrival": "2026-01-15T09:00:00Z",
+             "createdAt": "2026-01-15T08:30:00Z"
+         })),
         (status = 400, description = "Invalid request", body = ErrorResponse),
         (status = 401, description = "Unauthorized", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
@@ -296,7 +320,21 @@ pub async fn burn_vnst(
     path = "/v1/stablecoin/vnst/reserves",
     tag = "stablecoin",
     responses(
-        (status = 200, description = "VNST reserve information", body = VnstReservesApiResponse),
+        (status = 200, description = "VNST reserve information", body = VnstReservesApiResponse,
+         example = json!({
+             "totalSupply": "1000000000",
+             "totalVndReserves": "1005000000000",
+             "collateralizationRatio": "100.5%",
+             "reserveBreakdown": [
+                 {"assetType": "bank_deposit", "amountVnd": "800000000000", "percentage": "79.6%", "custodian": "Vietcombank"},
+                 {"assetType": "government_bonds", "amountVnd": "205000000000", "percentage": "20.4%", "custodian": "VSD"}
+             ],
+             "lastProofAt": "2026-01-15T00:00:00Z",
+             "proofAttestation": "QmX4z...abc123",
+             "pegHealthy": true,
+             "currentRate": "1.000",
+             "pegDeviationBps": 2
+         })),
         (status = 401, description = "Unauthorized", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
@@ -351,7 +389,16 @@ pub async fn get_vnst_reserves(
     path = "/v1/stablecoin/vnst/peg",
     tag = "stablecoin",
     responses(
-        (status = 200, description = "VNST peg status", body = VnstPegStatusResponse),
+        (status = 200, description = "VNST peg status", body = VnstPegStatusResponse,
+         example = json!({
+             "isHealthy": true,
+             "currentRate": "1.000",
+             "targetRate": "1.000",
+             "deviationBps": 2,
+             "status": "Stable",
+             "lastChecked": "2026-01-15T08:30:00Z",
+             "message": "VNST peg is within acceptable range"
+         })),
         (status = 401, description = "Unauthorized", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
@@ -395,7 +442,17 @@ pub async fn get_vnst_peg_status(
     path = "/v1/stablecoin/vnst/config",
     tag = "stablecoin",
     responses(
-        (status = 200, description = "VNST protocol configuration", body = VnstConfigResponse),
+        (status = 200, description = "VNST protocol configuration", body = VnstConfigResponse,
+         example = json!({
+             "minMintVnd": "100000",
+             "maxMintVnd": "500000000",
+             "minBurnVnst": "100 VNST",
+             "maxBurnVnst": "500000 VNST",
+             "mintFeeBps": 10,
+             "burnFeeBps": 10,
+             "primaryChainId": 56,
+             "supportedChains": [56, 1, 137]
+         })),
         (status = 401, description = "Unauthorized", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
