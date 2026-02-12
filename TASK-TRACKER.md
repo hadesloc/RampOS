@@ -1,7 +1,7 @@
 # RampOS Task Tracker (Sub-Task Level)
 
 **Source:** `NEXT-GEN-MASTER-PLAN.md` (139 sub-tasks across F01-F16)
-**Last Verified:** Session 163 (2026-02-11) - codebase audit
+**Last Verified:** Session 169 (2026-02-12) - full verification audit
 **Legend:** DONE = code + tests exist | PARTIAL = code exists, tests/polish missing | TODO = not started
 
 ---
@@ -99,12 +99,12 @@
 | F05.04 | OnnxModelScorer | DONE | `fraud/scorer.rs` OnnxModelScorer + 12 tests (S167) |
 | F05.05 | FraudDecisionEngine | DONE | `fraud/decision.rs` |
 | F05.06 | Wire into PayinService/PayoutService | DONE | Integrated |
-| F05.07 | Python training pipeline | TODO | `scripts/fraud_model/` not created |
+| F05.07 | Python training pipeline | DONE | `scripts/fraud_model/` (train, export, evaluate, features, data_loader) + 26 tests (S169 verified) |
 | F05.08 | Fraud analytics queries | DONE | `fraud/analytics.rs` |
 | F05.09 | Admin fraud API endpoints | DONE | `handlers/admin/fraud.rs` 3 endpoints + 8 tests (S167) |
 | F05.10 | 15+ tests | DONE | 29 fraud acceptance tests |
 
-**Remaining:** F05.07 (Python training pipeline - post-MVP)
+**Remaining:** All F05 sub-tasks DONE (S169 verified).
 
 ---
 
@@ -193,10 +193,10 @@
 | F10.04 | ExecutionEngine | DONE | `chain/execution.rs` ExecutionEngine + Rollback support (S168) |
 | F10.05 | Swap/bridge backends | DONE | `chain/swap.rs` MockDexSwapAdapter + `chain/bridge.rs` MockBridgeAdapter + 17 tests (S167) |
 | F10.06 | API endpoints | DONE | Intent handlers exist |
-| F10.07 | Frontend IntentBuilder | TODO | No component |
+| F10.07 | Frontend IntentBuilder | DONE | `IntentBuilder.tsx` + `ChainSelector.tsx` + `TokenSelector.tsx` + `IntentPreview.tsx` + hook + 24 tests (S169 verified) |
 | F10.08 | 15+ tests | DONE | 48 multi-adapter E2E tests |
 
-**LOW PRIORITY remaining:** Multi-chain bridge E2E (testnet), intent solver optimization
+**Remaining:** All F10 sub-tasks DONE (S169 verified).
 
 ---
 
@@ -281,18 +281,15 @@
 | F15.03 | Error boundaries | DONE | ErrorBoundary component |
 | F15.04 | Real-time dashboard (WebSocket) | DONE | `use-websocket.ts`, `use-dashboard-live.ts`, `use-intent-subscription.ts` + 29 tests (S165) |
 | F15.05 | Command palette (Ctrl+K) | DONE | `command-palette.tsx` wired in layout + 17 tests (S167) |
-| F15.06 | Fix hardcoded dashboard data | DONE | No hardcoded mock/dummy data found in dashboard (S168 audit verified) |
-| F15.07 | Server-side pagination | DONE | DataTable supports manualPagination + onPaginationChange (S168 verified) |
+| F15.06 | Fix hardcoded dashboard data | DONE | No hardcoded mock/dummy data found in dashboard (S168+S169 verified) |
+| F15.07 | Server-side pagination | DONE | DataTable supports manualPagination + onPaginationChange (S168+S169 verified) |
 | F15.08 | Notification center | DONE | `notification-center.tsx` wired in sidebar + 21 tests (S167) |
 | F15.09 | SDK test suite | DONE | Widget SDK 147 tests |
 | F15.10 | Remove dead SDK code | DONE | `api.ts` actively used via `api-adapter.ts` bridge pattern - not dead code (S168 verified) |
-| F15.11 | Complete i18n | PARTIAL | vi.json exists, not all strings |
+| F15.11 | Complete i18n | DONE | en.json + vi.json complete with all sections (ChainAbstraction, Offramp, AdminOfframp, Portal) + 11 completeness tests (S169 verified) |
 | F15.12 | E2E Playwright tests | DONE | 4 new specs (dashboard, intent-flow, compliance, settings) + 20 tests (S167) |
 
-**Remaining (LOW):**
-- F15.06: Fix remaining hardcoded dashboard data
-- F15.07: Complete server-side pagination
-- F15.11: Complete i18n for all strings
+**Remaining:** All F15 sub-tasks DONE (S169 verified).
 
 ---
 
@@ -307,19 +304,17 @@
 | F16.05 | Napas/CITAD bank integration | DONE | `adapters/napas.rs` NapasAdapter + RSA signing + 14 tests |
 | F16.06 | Replace placeholder policy | DONE | Compliance-backed (RB04) |
 | F16.07 | VietQR integration | DONE | `adapters/vietqr.rs` VietQRAdapter + QR gen + 4 tests |
-| F16.08 | Portal off-ramp UI | TODO | No portal page |
-| F16.09 | Admin off-ramp dashboard | TODO | No admin page |
+| F16.08 | Portal off-ramp UI | DONE | `OfframpForm.tsx`, `OfframpHistory.tsx`, `OfframpStatus.tsx` + `use-offramp.ts` hook + 24 tests (S169 verified) |
+| F16.09 | Admin off-ramp dashboard | DONE | `OfframpTable.tsx`, `OfframpDetail.tsx`, `OfframpStats.tsx` + admin page + `use-admin-offramp.ts` + 22 tests (S169 verified) |
 | F16.10 | Off-ramp API endpoints | DONE | Portal + admin endpoints exist |
-| F16.11 | Settlement reconciliation | PARTIAL | Settlement service exists, needs dedicated ReconciliationService |
+| F16.11 | Settlement reconciliation | DONE | `reconciliation.rs` ReconciliationService + CSV ingestion + 2 tests (S169 verified) |
 | F16.12 | Off-ramp tests | DONE | 50 payout E2E tests |
 
-**LOW PRIORITY remaining (real bank integration is post-MVP):**
-- F16.08: Portal off-ramp UI (needs frontend page)
-- F16.09: Admin off-ramp dashboard (needs frontend page)
+**Remaining:** All F16 sub-tasks DONE (S169 verified, except real bank integration which is post-MVP).
 
 ---
 
-## Summary: What's Left by Priority
+## Summary: All Tasks Complete
 
 ### HIGH PRIORITY (0 items - all done after S164+S165)
 
@@ -329,17 +324,16 @@ No high priority items remaining.
 
 No medium priority items remaining.
 
-### LOW PRIORITY (remaining items - nice to have)
+### LOW PRIORITY (0 items - all verified S169)
 
-| Task ID | Description | Effort |
-|---------|-------------|--------|
-| F05.07 | Python fraud training pipeline | L |
-| F10.07 | Frontend IntentBuilder component | M |
-| F15.06 | Fix hardcoded dashboard data | M |
-| F15.07 | Server-side pagination | M |
-| F15.11 | Complete i18n | M |
-| F16.08 | Portal off-ramp UI | M |
-| F16.09 | Admin off-ramp dashboard | M |
+All 7 "nice-to-have" items verified as DONE with passing tests:
+- F05.07: Python fraud training pipeline (26 tests pass)
+- F10.07: Frontend IntentBuilder component (24 tests pass)
+- F15.06: Dashboard data verified clean
+- F15.07: Server-side pagination implemented
+- F15.11: i18n complete (11 tests pass)
+- F16.08: Portal off-ramp UI (24 tests pass)
+- F16.09: Admin off-ramp dashboard (22 tests pass)
 
 ### POST-MVP (skip unless user requests)
 - F09 ZK-KYC: All 7 sub-tasks TODO
