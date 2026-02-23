@@ -1,0 +1,99 @@
+name: Widget CDN Publish
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - "widget-v*"
+    paths:
+      - "packages/widget/**"
+      - ".github/workflows/widget-cdn-publish.yml"
+  workflow_dispatch:
+    inputs:
+      publish_to_npm:
+        description: "Publish @rampos/widget to npm (requires NPM_TOKEN secret)"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build-widget:
+    name: Build and package widget
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: packages/widget
+    outputs:
+      package_tgz: ${{ steps.pack.outputs.tgz }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: packages/widget/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build widget bundles
+        run: npm run build
+
+      - name: Pack npm package tarball
+        id: pack
+        run: |
+          TARBALL="$(npm pack --silent)"
+          echo "tgz=$TARBALL" >> "$GITHUB_OUTPUT"
+
+      - name: Upload widget build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: widget-cdn-build
+          path: |
+            packages/widget/dist
+            packages/widget/${{ steps.pack.outputs.tgz }}
+          if-no-files-found: error
+
+  publish-widget:
+    name: Publish widget package
+    runs-on: ubuntu-latest
+    needs: [build-widget]
+    if: startsWith(github.ref, 'refs/tags/widget-v') || (github.event_name == 'workflow_dispatch' && inputs.publish_to_npm)
+    permissions:
+      contents: read
+
+    steps:
+      - name: Download packaged widget artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: widget-cdn-build
+          path: widget-cdn-build
+
+      - name: Verify required secret
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NPM_TOKEN:-}" ]; then
+            echo "::error::Missing NPM_TOKEN secret. Add repository secret NPM_TOKEN with npm publish scope."
+            exit 1
+          fi
+
+      - name: Publish @rampos/widget to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm publish --access public "widget-cdn-build/${{ needs.build-widget.outputs.package_tgz }}"
+
+      - name: Publish summary
+        run: |
+          echo "## Widget CDN Publish" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Package: @rampos/widget" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Tarball: \\`widget-cdn-build/${{ needs.build-widget.outputs.package_tgz }}\\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Trigger: \\`${{ github.event_name }}\\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Ref: \\`${{ github.ref }}\\`" >> "$GITHUB_STEP_SUMMARY"

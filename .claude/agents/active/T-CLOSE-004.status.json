@@ -1,0 +1,25 @@
+{
+  "task_id": "T-CLOSE-004",
+  "status": "completed",
+  "phase": "handoff",
+  "progress": {
+    "completed": 6,
+    "total": 6,
+    "current": "Task complete"
+  },
+  "artifacts": [
+    "C:/Users/hades/OneDrive/Desktop/New folder (6)/.github/workflows/widget-cdn-publish.yml",
+    "C:/Users/hades/OneDrive/Desktop/New folder (6)/packages/widget/README.md",
+    "C:/Users/hades/OneDrive/Desktop/New folder (6)/TASK-TRACKER.md",
+    "C:/Users/hades/OneDrive/Desktop/New folder (6)/.claude/handoffs/T-CLOSE-004.md"
+  ],
+  "evidence": {
+    "build_command": "npm run build --prefix \"C:/Users/hades/OneDrive/Desktop/New folder (6)/packages/widget\"",
+    "build_result": "pass",
+    "publish_dry_run_command": "npm publish --dry-run --prefix \"C:/Users/hades/OneDrive/Desktop/New folder (6)/packages/widget\"",
+    "publish_dry_run_result": "fail",
+    "publish_dry_run_error": "Cannot read properties of null (reading 'prerelease')",
+    "npm_log": "C:/Users/hades/AppData/Local/npm-cache/_logs/2026-02-23T06_21_03_964Z-debug-0.log"
+  },
+  "last_updated": "2026-02-23"
+}

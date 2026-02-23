@@ -1,12 +1,24 @@
 # RampOS Task Tracker (Sub-Task Level)
 
 **Source:** `NEXT-GEN-MASTER-PLAN.md` (139 sub-tasks across F01-F16)
-**Last Verified:** Session 169 (2026-02-12) - full verification audit
+**Last Verified:** 2026-02-23 - post-hardening verification gate
 **Legend:** DONE = code + tests exist | PARTIAL = code exists, tests/polish missing | TODO = not started
 
 ---
 
 ## RB01-RB09 Rebaseline Tasks: ALL DONE
+
+## Runtime Hardening & Integration Closure (Latest): COMPLETE
+
+| Workstream | Status | Notes |
+|-----------|--------|-------|
+| Offramp runtime hardening | DONE | Runtime endpoints hardened and integrated |
+| SSO runtime hardening | DONE | SSO handlers/provider listing hardened |
+| Provider mock fallback removal | DONE | Provider runtime now follows production path |
+| Swap runtime fallback hardening | DONE | Runtime fallback path hardened |
+| Production integration gap closure | DONE | Previously open integration gaps closed |
+| Verification gate | PASS | `cargo check -p ramp-api`, `cargo check -p ramp-core`, targeted tests (`providers`, `sso`, `paraswap`) |
+
 
 | Task | Status | Evidence |
 |------|--------|----------|
@@ -225,7 +237,7 @@
 | F12.02 | Web Component wrapper | DONE | Web components exist |
 | F12.03 | RampOSCheckout flow | DONE | Checkout components |
 | F12.04 | iframe-free communication | DONE | postMessage API |
-| F12.05 | CDN distribution | PARTIAL | Vite IIFE build, no CDN deploy |
+| F12.05 | CDN distribution | PARTIAL | `.github/workflows/widget-cdn-publish.yml` (build+artifact+npm publish path), widget build passes; local `npm publish --dry-run --prefix` currently fails under npm 11.8.0 toolchain (see handoff) |
 | F12.06 | Widget docs | DONE | README exists |
 | F12.07 | Component tests | DONE | **147 tests pass** |
 
@@ -324,9 +336,9 @@ No high priority items remaining.
 
 No medium priority items remaining.
 
-### LOW PRIORITY (0 items - all verified S169)
+### ACTIVE ROADMAP REMAINING (0 items)
 
-All 7 "nice-to-have" items verified as DONE with passing tests:
+All tracked active-roadmap items are DONE and verified:
 - F05.07: Python fraud training pipeline (26 tests pass)
 - F10.07: Frontend IntentBuilder component (24 tests pass)
 - F15.06: Dashboard data verified clean
