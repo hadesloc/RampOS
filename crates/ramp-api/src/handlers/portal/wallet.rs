@@ -7,16 +7,17 @@
 //! - Create session keys
 //! - Get deposit info
 
+use alloy::primitives::{Address, keccak256};
 use axum::{
     extract::{Query, State},
     routing::{get, post},
     Json, Router,
 };
 use ramp_common::types::{TenantId, UserId};
+use ramp_core::repository::CreateSmartAccountRequest;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
-use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::middleware::PortalUser;
@@ -123,41 +124,57 @@ pub async fn create_account(
         "Create smart account requested"
     );
 
-    // In production, this would:
-    // 1. Extract user from auth middleware
-    // 2. Check if user already has a smart account
-    // 3. Generate counterfactual address using AA service
-    // 4. Store the account mapping in database
-    // 5. Return the account info (not yet deployed)
+    let aa_service = app_state
+        .aa_service
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Smart account service not configured".to_string()))?;
 
-    // Check if AA service is available
-    if app_state.aa_service.is_none() {
-        return Err(ApiError::Internal(
-            "Smart account service not available".to_string(),
-        ));
+    let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
+    let user_id = UserId::new(&portal_user.user_id.to_string());
+
+    let owner_hash = keccak256(portal_user.user_id.as_bytes());
+    let owner = Address::from_slice(&owner_hash[12..]);
+
+    let account = aa_service
+        .smart_account_service
+        .get_or_create_account(&tenant_id, &user_id, owner)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to resolve smart account");
+            ApiError::Internal("Failed to resolve smart account".to_string())
+        })?;
+
+    if let Some(ref repo) = aa_service.smart_account_repo {
+        let create_req = CreateSmartAccountRequest {
+            tenant_id: portal_user.tenant_id.to_string(),
+            user_id: portal_user.user_id.to_string(),
+            address: format!("{:?}", account.address),
+            owner_address: format!("{:?}", account.owner),
+            account_type: format!("{:?}", account.account_type),
+            chain_id: aa_service.chain_config.chain_id,
+            factory_address: Some(format!("{:?}", aa_service.chain_config.entry_point_address)),
+            entry_point_address: Some(format!("{:?}", aa_service.chain_config.entry_point_address)),
+        };
+
+        if let Err(e) = repo.create(&create_req).await {
+            warn!(error = %e, "Failed to persist smart account mapping");
+        }
     }
 
-    // Mock response - in production would use AAServiceState
-    let account = SmartAccount {
-        address: format!(
-            "0x{}",
-            hex::encode(Uuid::new_v4().as_bytes())[..40].to_string()
-        ),
-        owner: format!(
-            "0x{}",
-            hex::encode(Uuid::new_v4().as_bytes())[..40].to_string()
-        ),
-        factory_address: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789".to_string(),
-        deployed: false,
+    let response = SmartAccount {
+        address: format!("{:?}", account.address),
+        owner: format!("{:?}", account.owner),
+        factory_address: format!("{:?}", aa_service.chain_config.entry_point_address),
+        deployed: account.is_deployed,
         balance: Some("0".to_string()),
     };
 
-    Ok(Json(account))
+    Ok(Json(response))
 }
 
 /// GET /v1/portal/wallet/account - Get smart account info
 pub async fn get_account(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     portal_user: PortalUser,
 ) -> Result<Json<SmartAccount>, ApiError> {
     info!(
@@ -166,22 +183,39 @@ pub async fn get_account(
         "Get smart account requested"
     );
 
-    // In production, this would:
-    // 1. Extract user from auth middleware
-    // 2. Look up user's smart account from database
-    // 3. Query on-chain status if needed
-    // 4. Return account info or 404 if not found
+    let aa_service = app_state
+        .aa_service
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Smart account service not configured".to_string()))?;
 
-    // Mock response
-    let account = SmartAccount {
-        address: "0x742d35Cc6634C0532925a3b844Bc9e7595f3e123".to_string(),
-        owner: "0x1234567890abcdef1234567890abcdef12345678".to_string(),
-        factory_address: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789".to_string(),
-        deployed: true,
-        balance: Some("1000000".to_string()),
-    };
+    let repo = aa_service
+        .smart_account_repo
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Smart account repository not configured".to_string()))?;
 
-    Ok(Json(account))
+    let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
+    let accounts = repo
+        .get_by_user(&tenant_id, &portal_user.user_id.to_string())
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to fetch smart account");
+            ApiError::Internal("Failed to fetch smart account".to_string())
+        })?;
+
+    let account = accounts
+        .into_iter()
+        .next()
+        .ok_or_else(|| ApiError::NotFound("Smart account not found".to_string()))?;
+
+    Ok(Json(SmartAccount {
+        address: account.address,
+        owner: account.owner_address,
+        factory_address: account
+            .factory_address
+            .unwrap_or_else(|| format!("{:?}", aa_service.chain_config.entry_point_address)),
+        deployed: account.is_deployed,
+        balance: Some("0".to_string()),
+    }))
 }
 
 /// GET /v1/portal/wallet/balances - Get wallet balances
@@ -243,7 +277,7 @@ pub async fn get_balances(
 
 /// POST /v1/portal/wallet/session-key - Create session key for smart account
 pub async fn create_session_key(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     portal_user: PortalUser,
     Json(req): Json<CreateSessionKeyRequest>,
 ) -> Result<Json<SessionKey>, ApiError> {
@@ -255,29 +289,52 @@ pub async fn create_session_key(
         "Create session key requested"
     );
 
-    // Validate duration
     if req.duration_hours == 0 || req.duration_hours > 168 {
-        // Max 7 days
         return Err(ApiError::Validation(
             "Duration must be between 1 and 168 hours".to_string(),
         ));
     }
 
-    // In production, this would:
-    // 1. Extract user from auth middleware
-    // 2. Verify user has a smart account
-    // 3. Generate session key with permissions
-    // 4. Sign and register the session key on-chain (or prepare for batch)
-    // 5. Store session key info
+    let aa_service = app_state
+        .aa_service
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Session key service not configured".to_string()))?;
+
+    let repo = aa_service
+        .smart_account_repo
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Smart account repository not configured".to_string()))?;
+
+    let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
+    let accounts = repo
+        .get_by_user(&tenant_id, &portal_user.user_id.to_string())
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to verify smart account before session key creation");
+            ApiError::Internal("Failed to verify smart account".to_string())
+        })?;
+
+    if accounts.is_empty() {
+        return Err(ApiError::NotFound(
+            "Smart account not found for user".to_string(),
+        ));
+    }
 
     let now = chrono::Utc::now();
     let expires_at = now + chrono::Duration::hours(req.duration_hours as i64);
+    let key_hash = keccak256(
+        format!(
+            "{}:{}:{}:{}",
+            portal_user.user_id,
+            portal_user.tenant_id,
+            now.timestamp(),
+            req.duration_hours
+        )
+        .as_bytes(),
+    );
 
     let session_key = SessionKey {
-        key: format!(
-            "0x{}",
-            hex::encode(Uuid::new_v4().as_bytes())[..40].to_string()
-        ),
+        key: format!("0x{}", hex::encode(key_hash)),
         permissions: if req.permissions.is_empty() {
             vec!["transfer".to_string(), "swap".to_string()]
         } else {
@@ -291,7 +348,7 @@ pub async fn create_session_key(
 
 /// GET /v1/portal/wallet/deposit-info - Get deposit information
 pub async fn get_deposit_info(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     portal_user: PortalUser,
     Query(query): Query<DepositInfoQuery>,
 ) -> Result<Json<DepositInfo>, ApiError> {
@@ -302,7 +359,6 @@ pub async fn get_deposit_info(
         "Get deposit info requested"
     );
 
-    // Validate method
     let method = query.method.to_uppercase();
     if method != "VND_BANK" && method != "CRYPTO" {
         return Err(ApiError::Validation(
@@ -310,28 +366,54 @@ pub async fn get_deposit_info(
         ));
     }
 
-    // In production, this would:
-    // 1. Extract user from auth middleware
-    // 2. Generate or retrieve user's deposit details
-    // 3. For VND: Get/create virtual account
-    // 4. For Crypto: Get/create deposit address
+    let aa_service = app_state
+        .aa_service
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Deposit information service not configured".to_string()))?;
+
+    let repo = aa_service
+        .smart_account_repo
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Smart account repository not configured".to_string()))?;
+
+    let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
+    let accounts = repo
+        .get_by_user(&tenant_id, &portal_user.user_id.to_string())
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to fetch smart account for deposit info");
+            ApiError::Internal("Failed to resolve deposit destination".to_string())
+        })?;
+
+    let account = accounts
+        .into_iter()
+        .next()
+        .ok_or_else(|| ApiError::NotFound("Smart account not found for user".to_string()))?;
+
+    let transfer_content = format!(
+        "DP{}",
+        portal_user
+            .user_id
+            .to_string()
+            .chars()
+            .filter(|c| *c != '-')
+            .take(12)
+            .collect::<String>()
+            .to_uppercase()
+    );
 
     let deposit_info = if method == "VND_BANK" {
         DepositInfo {
             method: "VND_BANK".to_string(),
-            bank_name: Some("Vietcombank".to_string()),
-            account_name: Some("RAMPOS PAYMENT".to_string()),
-            account_number: Some("1234567890123".to_string()),
-            transfer_content: Some(format!(
-                "DP{}",
-                Uuid::new_v4().to_string().replace("-", "")[..12].to_uppercase()
-            )),
+            bank_name: Some("RAMPOS BANKING PARTNER".to_string()),
+            account_name: Some("RAMPOS USER DEPOSITS".to_string()),
+            account_number: Some(account.address.clone()),
+            transfer_content: Some(transfer_content),
             network: None,
             deposit_address: None,
             qr_code_url: None,
         }
     } else {
-        // CRYPTO
         DepositInfo {
             method: "CRYPTO".to_string(),
             bank_name: None,
@@ -339,8 +421,8 @@ pub async fn get_deposit_info(
             account_number: None,
             transfer_content: None,
             network: Some("Polygon".to_string()),
-            deposit_address: Some("0x742d35Cc6634C0532925a3b844Bc9e7595f3e123".to_string()),
-            qr_code_url: Some("/api/qr/0x742d35Cc6634C0532925a3b844Bc9e7595f3e123".to_string()),
+            deposit_address: Some(account.address.clone()),
+            qr_code_url: Some(format!("/api/qr/{}", account.address)),
         }
     };
 

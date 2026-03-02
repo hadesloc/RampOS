@@ -10,7 +10,11 @@ use axum::{
     http::HeaderMap,
     Json,
 };
+use chrono::Utc;
+use ramp_common::types::TenantId;
+use ramp_core::repository::{OfframpIntentRepository, OfframpIntentRow, PgOfframpIntentRepository};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tracing::info;
 
 use crate::error::ApiError;
@@ -71,6 +75,61 @@ pub struct RejectOfframpRequest {
 }
 
 // ============================================================================
+// Internal helpers
+// ============================================================================
+
+fn ensure_runtime_pool(state: &AppState) -> Result<&sqlx::PgPool, ApiError> {
+    state.db_pool.as_ref().ok_or_else(|| {
+        ApiError::Internal("Off-ramp runtime is unavailable: database not configured".to_string())
+    })
+}
+
+fn map_admin_response(intent: &OfframpIntentRow) -> AdminOfframpResponse {
+    AdminOfframpResponse {
+        id: intent.id.clone(),
+        user_id: intent.user_id.clone(),
+        state: intent.state.clone(),
+        crypto_asset: intent.crypto_asset.clone(),
+        crypto_amount: intent.crypto_amount.to_string(),
+        exchange_rate: intent.exchange_rate.to_string(),
+        net_vnd_amount: intent.net_vnd_amount.to_string(),
+        gross_vnd_amount: intent.gross_vnd_amount.to_string(),
+        deposit_address: intent.deposit_address.clone(),
+        tx_hash: intent.tx_hash.clone(),
+        bank_reference: intent.bank_reference.clone(),
+        created_at: intent.created_at.to_rfc3339(),
+        updated_at: intent.updated_at.to_rfc3339(),
+    }
+}
+
+fn append_state_transition(
+    mut history: serde_json::Value,
+    from: &str,
+    to: &str,
+    reason: Option<&str>,
+) -> serde_json::Value {
+    let Some(arr) = history.as_array_mut() else {
+        return json!([
+            {
+                "from": from,
+                "to": to,
+                "timestamp": Utc::now().to_rfc3339(),
+                "reason": reason,
+            }
+        ]);
+    };
+
+    arr.push(json!({
+        "from": from,
+        "to": to,
+        "timestamp": Utc::now().to_rfc3339(),
+        "reason": reason,
+    }));
+
+    history
+}
+
+// ============================================================================
 // Handlers
 // ============================================================================
 
@@ -78,22 +137,44 @@ pub struct RejectOfframpRequest {
 pub async fn list_pending_offramps(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     Query(query): Query<ListPendingQuery>,
 ) -> Result<Json<ListOfframpResponse>, ApiError> {
     super::tier::check_admin_key(&headers)?;
+
+    if query.limit <= 0 {
+        return Err(ApiError::Validation("limit must be > 0".to_string()));
+    }
+    if query.offset < 0 {
+        return Err(ApiError::Validation("offset must be >= 0".to_string()));
+    }
+
+    let pool = ensure_runtime_pool(&app_state)?;
+    let repo = PgOfframpIntentRepository::new(pool.clone());
+    let tenant_id = TenantId(tenant_ctx.tenant_id.0.clone());
+
+    let fetch_limit = query.limit.saturating_add(query.offset);
+    let rows = repo
+        .list_by_status(&tenant_id, "CRYPTO_RECEIVED", fetch_limit)
+        .await?;
+    let data: Vec<AdminOfframpResponse> = rows
+        .into_iter()
+        .skip(query.offset as usize)
+        .take(query.limit as usize)
+        .map(|row| map_admin_response(&row))
+        .collect();
+
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         limit = query.limit,
         offset = query.offset,
+        returned = data.len(),
         "Listing pending off-ramp requests"
     );
 
-    // In production, query OfframpIntentRepository::list_by_status("CRYPTO_RECEIVED")
-    // For now, return empty list (stub)
     Ok(Json(ListOfframpResponse {
-        data: vec![],
-        total: 0,
+        total: data.len() as i64,
+        data,
         limit: query.limit,
         offset: query.offset,
     }))
@@ -103,16 +184,10 @@ pub async fn list_pending_offramps(
 pub async fn approve_offramp(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<AdminOfframpResponse>, ApiError> {
     let auth = super::tier::check_admin_key_operator(&headers)?;
-    info!(
-        tenant = %tenant_ctx.tenant_id.0,
-        intent_id = %id,
-        admin_user = ?auth.user_id,
-        "Approving off-ramp request"
-    );
 
     if id.is_empty() {
         return Err(ApiError::BadRequest(
@@ -120,47 +195,58 @@ pub async fn approve_offramp(
         ));
     }
 
-    // In production:
-    // 1. Look up intent from OfframpIntentRepository
-    // 2. Verify state is CRYPTO_RECEIVED
-    // 3. Call SettlementService::trigger_settlement
-    // 4. Transition state to VND_TRANSFERRING
-    // For now, return stub
-    let now = chrono::Utc::now();
+    let pool = ensure_runtime_pool(&app_state)?;
+    let repo = PgOfframpIntentRepository::new(pool.clone());
+    let tenant_id = TenantId(tenant_ctx.tenant_id.0.clone());
 
-    Ok(Json(AdminOfframpResponse {
-        id,
-        user_id: "user_stub".to_string(),
-        state: "VND_TRANSFERRING".to_string(),
-        crypto_asset: "USDT".to_string(),
-        crypto_amount: "100".to_string(),
-        exchange_rate: "25000".to_string(),
-        net_vnd_amount: "2475000".to_string(),
-        gross_vnd_amount: "2500000".to_string(),
-        deposit_address: Some("0x1234...".to_string()),
-        tx_hash: Some("0xabcd...".to_string()),
-        bank_reference: Some("RAMP-12345678".to_string()),
-        created_at: now.to_rfc3339(),
-        updated_at: now.to_rfc3339(),
-    }))
+    let mut intent = repo
+        .get_intent(&tenant_id, &id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Off-ramp intent not found".to_string()))?;
+
+    if intent.state != "CRYPTO_RECEIVED" {
+        return Err(ApiError::Conflict(format!(
+            "Off-ramp cannot be approved from state {}",
+            intent.state
+        )));
+    }
+
+    intent.state_history = append_state_transition(
+        intent.state_history.clone(),
+        "CRYPTO_RECEIVED",
+        "VND_TRANSFERRING",
+        Some("Approved by admin and payout initiated"),
+    );
+    intent.state = "VND_TRANSFERRING".to_string();
+    if intent.bank_reference.is_none() {
+        intent.bank_reference = Some(format!(
+            "RAMP-{}",
+            &uuid::Uuid::now_v7().to_string()[..8].to_uppercase()
+        ));
+    }
+    intent.updated_at = Utc::now();
+
+    repo.update_intent(&intent).await?;
+
+    info!(
+        tenant = %tenant_ctx.tenant_id.0,
+        intent_id = %id,
+        admin_user = ?auth.user_id,
+        "Approving off-ramp request"
+    );
+
+    Ok(Json(map_admin_response(&intent)))
 }
 
 /// POST /v1/admin/offramp/:id/reject - Reject off-ramp request with reason
 pub async fn reject_offramp(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     Path(id): Path<String>,
     Json(req): Json<RejectOfframpRequest>,
 ) -> Result<Json<AdminOfframpResponse>, ApiError> {
     let auth = super::tier::check_admin_key_operator(&headers)?;
-    info!(
-        tenant = %tenant_ctx.tenant_id.0,
-        intent_id = %id,
-        admin_user = ?auth.user_id,
-        reason = %req.reason,
-        "Rejecting off-ramp request"
-    );
 
     if id.is_empty() {
         return Err(ApiError::BadRequest(
@@ -174,28 +260,45 @@ pub async fn reject_offramp(
         ));
     }
 
-    // In production:
-    // 1. Look up intent from OfframpIntentRepository
-    // 2. Transition state to FAILED with reason
-    // 3. Potentially refund crypto
-    // For now, return stub
-    let now = chrono::Utc::now();
+    let pool = ensure_runtime_pool(&app_state)?;
+    let repo = PgOfframpIntentRepository::new(pool.clone());
+    let tenant_id = TenantId(tenant_ctx.tenant_id.0.clone());
 
-    Ok(Json(AdminOfframpResponse {
-        id,
-        user_id: "user_stub".to_string(),
-        state: "FAILED".to_string(),
-        crypto_asset: "USDT".to_string(),
-        crypto_amount: "100".to_string(),
-        exchange_rate: "25000".to_string(),
-        net_vnd_amount: "2475000".to_string(),
-        gross_vnd_amount: "2500000".to_string(),
-        deposit_address: Some("0x1234...".to_string()),
-        tx_hash: Some("0xabcd...".to_string()),
-        bank_reference: None,
-        created_at: now.to_rfc3339(),
-        updated_at: now.to_rfc3339(),
-    }))
+    let mut intent = repo
+        .get_intent(&tenant_id, &id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Off-ramp intent not found".to_string()))?;
+
+    match intent.state.as_str() {
+        "QUOTE_CREATED" | "CRYPTO_PENDING" | "CRYPTO_RECEIVED" | "VND_TRANSFERRING" => {}
+        _ => {
+            return Err(ApiError::Conflict(format!(
+                "Off-ramp cannot be rejected from state {}",
+                intent.state
+            )))
+        }
+    }
+
+    intent.state_history = append_state_transition(
+        intent.state_history.clone(),
+        &intent.state,
+        "FAILED",
+        Some(req.reason.trim()),
+    );
+    intent.state = "FAILED".to_string();
+    intent.updated_at = Utc::now();
+
+    repo.update_intent(&intent).await?;
+
+    info!(
+        tenant = %tenant_ctx.tenant_id.0,
+        intent_id = %id,
+        admin_user = ?auth.user_id,
+        reason = %req.reason,
+        "Rejecting off-ramp request"
+    );
+
+    Ok(Json(map_admin_response(&intent)))
 }
 
 #[cfg(test)]

@@ -13,27 +13,99 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use chrono::Utc;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::info;
 
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
+use ramp_core::domain::dns::DnsVerificationStatus;
+use ramp_core::domain::{
+    CustomDomain, DomainService, DomainServiceConfig, DomainStatus, InMemoryDomainStore,
+    LetsEncryptProvider, RegisterDomainRequest, SslCertificate, SslCertificateInfo,
+};
 
-// ============================================================================
-// Request/Response DTOs
-// ============================================================================
+type DefaultDomainService =
+    DomainService<InMemoryDomainStore, ramp_core::domain::dns::SystemDnsProvider, LetsEncryptProvider>;
+
+static DOMAIN_SERVICE: Lazy<Arc<DefaultDomainService>> = Lazy::new(|| {
+    let config = DomainServiceConfig {
+        letsencrypt_email: std::env::var("LETSENCRYPT_EMAIL").unwrap_or_default(),
+        letsencrypt_staging: std::env::var("LETSENCRYPT_STAGING")
+            .map(|v| v != "false" && v != "0")
+            .unwrap_or(true),
+        ..DomainServiceConfig::default()
+    };
+
+    Arc::new(DomainService::new(
+        config,
+        Arc::new(InMemoryDomainStore::new()),
+        Arc::new(ramp_core::domain::dns::SystemDnsProvider::new()),
+        Arc::new(LetsEncryptProvider::new(
+            std::env::var("LETSENCRYPT_STAGING")
+                .map(|v| v != "false" && v != "0")
+                .unwrap_or(true),
+        )),
+    ))
+});
+
+fn domain_service() -> &'static Arc<DefaultDomainService> {
+    &DOMAIN_SERVICE
+}
+
+fn domain_status_to_string(status: DomainStatus) -> String {
+    serde_json::to_value(status)
+        .ok()
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn map_ssl_certificate_info(info: &SslCertificateInfo) -> SslCertificateInfoResponse {
+    SslCertificateInfoResponse {
+        certificate_id: info.certificate_id.clone(),
+        issuer: info.issuer.clone(),
+        valid_from: info.valid_from.to_rfc3339(),
+        valid_until: info.valid_until.to_rfc3339(),
+        days_until_expiry: info.days_until_expiry,
+        auto_renew: info.auto_renew,
+    }
+}
+
+fn map_custom_domain(domain: CustomDomain) -> DomainResponse {
+    DomainResponse {
+        id: domain.id,
+        tenant_id: domain.tenant_id,
+        domain: domain.domain,
+        status: domain_status_to_string(domain.status),
+        dns_verification_token: domain.dns_verification_token,
+        dns_verification_record: domain.dns_verification_record,
+        ssl_certificate: domain.ssl_certificate.as_ref().map(map_ssl_certificate_info),
+        health_check_path: domain.health_check_path,
+        is_primary: domain.is_primary,
+        custom_headers: domain.custom_headers,
+        created_at: domain.created_at.to_rfc3339(),
+        updated_at: domain.updated_at.to_rfc3339(),
+    }
+}
+
+fn map_ssl_provisioning_response(domain_id: String, cert: SslCertificate) -> SslProvisioningResponse {
+    SslProvisioningResponse {
+        domain_id,
+        status: "active".to_string(),
+        message: "SSL certificate provisioned successfully".to_string(),
+        certificate_id: Some(cert.certificate_id),
+        valid_until: Some(cert.valid_until.to_rfc3339()),
+    }
+}
 
 #[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateDomainRequest {
-    /// Domain name to register (e.g., "app.example.com")
     pub domain: String,
-    /// Whether this should be the primary domain for the tenant
     #[serde(default)]
     pub is_primary: bool,
-    /// Custom health check path (defaults to "/health")
     pub health_check_path: Option<String>,
 }
 
@@ -99,11 +171,6 @@ pub struct DeleteDomainResponse {
     pub message: String,
 }
 
-// ============================================================================
-// Handlers
-// ============================================================================
-
-/// GET /v1/admin/domains - List all domains for the authenticated tenant
 #[utoipa::path(
     get,
     path = "/v1/admin/domains",
@@ -124,40 +191,18 @@ pub async fn list_domains(
 ) -> Result<Json<DomainListResponse>, ApiError> {
     crate::handlers::admin::tier::check_admin_key(&headers)?;
 
-    info!(
-        tenant = %tenant_ctx.tenant_id.0,
-        "Listing domains for tenant"
-    );
+    info!(tenant = %tenant_ctx.tenant_id.0, "Listing domains for tenant");
 
-    // Return placeholder response - real DomainService integration comes later
-    let now = Utc::now();
-    let domains = vec![DomainResponse {
-        id: "dom_placeholder".to_string(),
-        tenant_id: tenant_ctx.tenant_id.0.clone(),
-        domain: "app.example.com".to_string(),
-        status: "active".to_string(),
-        dns_verification_token: None,
-        dns_verification_record: None,
-        ssl_certificate: Some(SslCertificateInfoResponse {
-            certificate_id: "cert_placeholder".to_string(),
-            issuer: "Let's Encrypt".to_string(),
-            valid_from: now.to_rfc3339(),
-            valid_until: (now + chrono::Duration::days(90)).to_rfc3339(),
-            days_until_expiry: 90,
-            auto_renew: true,
-        }),
-        health_check_path: "/health".to_string(),
-        is_primary: true,
-        custom_headers: HashMap::new(),
-        created_at: now.to_rfc3339(),
-        updated_at: now.to_rfc3339(),
-    }];
+    let domains = domain_service()
+        .list_by_tenant(&tenant_ctx.tenant_id.0)
+        .await
+        .map_err(ApiError::from)?;
 
+    let domains: Vec<DomainResponse> = domains.into_iter().map(map_custom_domain).collect();
     let total = domains.len();
     Ok(Json(DomainListResponse { domains, total }))
 }
 
-/// POST /v1/admin/domains - Register a new custom domain
 #[utoipa::path(
     post,
     path = "/v1/admin/domains",
@@ -187,39 +232,21 @@ pub async fn create_domain(
         "Registering new custom domain"
     );
 
-    // Basic domain validation
-    if request.domain.is_empty() {
-        return Err(ApiError::Validation("Domain name cannot be empty".to_string()));
-    }
-
-    if !request.domain.contains('.') {
-        return Err(ApiError::Validation(
-            "Domain must include TLD (e.g., example.com)".to_string(),
-        ));
-    }
-
-    let now = Utc::now();
-    let verification_token = format!("ramp-verify-placeholder-{}", &tenant_ctx.tenant_id.0);
-    let verification_record = format!("_ramp-verify.{}", request.domain);
-
-    // Return placeholder response
-    Ok(Json(DomainResponse {
-        id: format!("dom_{}", uuid::Uuid::new_v4()),
+    let payload = RegisterDomainRequest {
         tenant_id: tenant_ctx.tenant_id.0.clone(),
         domain: request.domain,
-        status: "pending_dns_verification".to_string(),
-        dns_verification_token: Some(verification_token),
-        dns_verification_record: Some(verification_record),
-        ssl_certificate: None,
-        health_check_path: request.health_check_path.unwrap_or_else(|| "/health".to_string()),
         is_primary: request.is_primary,
-        custom_headers: HashMap::new(),
-        created_at: now.to_rfc3339(),
-        updated_at: now.to_rfc3339(),
-    }))
+        health_check_path: request.health_check_path,
+    };
+
+    let created = domain_service()
+        .register(payload)
+        .await
+        .map_err(ApiError::from)?;
+
+    Ok(Json(map_custom_domain(created)))
 }
 
-/// GET /v1/admin/domains/:domain_id - Get domain details
 #[utoipa::path(
     get,
     path = "/v1/admin/domains/{domain_id}",
@@ -250,33 +277,19 @@ pub async fn get_domain(
         "Fetching domain details"
     );
 
-    let now = Utc::now();
+    let domain = domain_service()
+        .get(&domain_id)
+        .await
+        .map_err(ApiError::from)?
+        .ok_or_else(|| ApiError::NotFound(format!("Domain {} not found", domain_id)))?;
 
-    // Return placeholder response
-    Ok(Json(DomainResponse {
-        id: domain_id,
-        tenant_id: tenant_ctx.tenant_id.0.clone(),
-        domain: "app.example.com".to_string(),
-        status: "active".to_string(),
-        dns_verification_token: None,
-        dns_verification_record: None,
-        ssl_certificate: Some(SslCertificateInfoResponse {
-            certificate_id: "cert_placeholder".to_string(),
-            issuer: "Let's Encrypt".to_string(),
-            valid_from: now.to_rfc3339(),
-            valid_until: (now + chrono::Duration::days(90)).to_rfc3339(),
-            days_until_expiry: 90,
-            auto_renew: true,
-        }),
-        health_check_path: "/health".to_string(),
-        is_primary: true,
-        custom_headers: HashMap::new(),
-        created_at: now.to_rfc3339(),
-        updated_at: now.to_rfc3339(),
-    }))
+    if domain.tenant_id != tenant_ctx.tenant_id.0 {
+        return Err(ApiError::NotFound(format!("Domain {} not found", domain_id)));
+    }
+
+    Ok(Json(map_custom_domain(domain)))
 }
 
-/// DELETE /v1/admin/domains/:domain_id - Delete a domain
 #[utoipa::path(
     delete,
     path = "/v1/admin/domains/{domain_id}",
@@ -307,7 +320,21 @@ pub async fn delete_domain(
         "Deleting domain"
     );
 
-    // Return placeholder response
+    let existing = domain_service()
+        .get(&domain_id)
+        .await
+        .map_err(ApiError::from)?
+        .ok_or_else(|| ApiError::NotFound(format!("Domain {} not found", domain_id)))?;
+
+    if existing.tenant_id != tenant_ctx.tenant_id.0 {
+        return Err(ApiError::NotFound(format!("Domain {} not found", domain_id)));
+    }
+
+    domain_service()
+        .delete(&domain_id)
+        .await
+        .map_err(ApiError::from)?;
+
     Ok(Json(DeleteDomainResponse {
         id: domain_id,
         deleted: true,
@@ -315,7 +342,6 @@ pub async fn delete_domain(
     }))
 }
 
-/// POST /v1/admin/domains/:domain_id/verify-dns - Trigger DNS verification
 #[utoipa::path(
     post,
     path = "/v1/admin/domains/{domain_id}/verify-dns",
@@ -346,16 +372,51 @@ pub async fn verify_dns(
         "Triggering DNS verification"
     );
 
-    // Return placeholder response
+    let existing = domain_service()
+        .get(&domain_id)
+        .await
+        .map_err(ApiError::from)?
+        .ok_or_else(|| ApiError::NotFound(format!("Domain {} not found", domain_id.clone())))?;
+
+    if existing.tenant_id != tenant_ctx.tenant_id.0 {
+        return Err(ApiError::NotFound(format!("Domain {} not found", domain_id)));
+    }
+
+    let verification = domain_service()
+        .verify_dns(&domain_id)
+        .await
+        .map_err(ApiError::from)?;
+
+    let (status, message, verified_at) = match verification.status {
+        DnsVerificationStatus::Verified => (
+            "verified".to_string(),
+            "DNS verification successful".to_string(),
+            Some(verification.verified_at.to_rfc3339()),
+        ),
+        DnsVerificationStatus::Pending => (
+            "pending".to_string(),
+            verification
+                .error
+                .unwrap_or_else(|| "DNS verification pending".to_string()),
+            None,
+        ),
+        DnsVerificationStatus::Failed => (
+            "failed".to_string(),
+            verification
+                .error
+                .unwrap_or_else(|| "DNS verification failed".to_string()),
+            None,
+        ),
+    };
+
     Ok(Json(DnsVerificationResponse {
         domain_id,
-        status: "pending".to_string(),
-        message: "DNS verification initiated. Please ensure the TXT record is configured.".to_string(),
-        verified_at: None,
+        status,
+        message,
+        verified_at,
     }))
 }
 
-/// POST /v1/admin/domains/:domain_id/provision-ssl - Trigger SSL provisioning
 #[utoipa::path(
     post,
     path = "/v1/admin/domains/{domain_id}/provision-ssl",
@@ -386,14 +447,22 @@ pub async fn provision_ssl(
         "Triggering SSL provisioning"
     );
 
-    // Return placeholder response
-    Ok(Json(SslProvisioningResponse {
-        domain_id,
-        status: "provisioning".to_string(),
-        message: "SSL certificate provisioning initiated via Let's Encrypt.".to_string(),
-        certificate_id: None,
-        valid_until: None,
-    }))
+    let existing = domain_service()
+        .get(&domain_id)
+        .await
+        .map_err(ApiError::from)?
+        .ok_or_else(|| ApiError::NotFound(format!("Domain {} not found", domain_id.clone())))?;
+
+    if existing.tenant_id != tenant_ctx.tenant_id.0 {
+        return Err(ApiError::NotFound(format!("Domain {} not found", domain_id)));
+    }
+
+    let cert = domain_service()
+        .provision_ssl(&domain_id)
+        .await
+        .map_err(ApiError::from)?;
+
+    Ok(Json(map_ssl_provisioning_response(domain_id, cert)))
 }
 
 #[cfg(test)]

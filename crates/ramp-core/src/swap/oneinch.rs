@@ -108,6 +108,17 @@ impl OneInchAggregator {
             .map_err(|e| Error::Validation(format!("Invalid amount: {}", e)))
     }
 
+    /// Detect production runtime mode from common environment variables.
+    fn is_production_mode() -> bool {
+        ["RAMP_ENV", "APP_ENV", "ENV", "NODE_ENV"]
+            .iter()
+            .filter_map(|k| std::env::var(k).ok())
+            .any(|v| {
+                let normalized = v.trim().to_ascii_lowercase();
+                normalized == "prod" || normalized == "production"
+            })
+    }
+
     /// Format address for API
     fn format_address(address: Address) -> String {
         if address == Address::ZERO {
@@ -223,11 +234,18 @@ impl DexAggregator for OneInchAggregator {
         let api_key = self.config.api_key.clone()
             .or_else(|| std::env::var("ONEINCH_API_KEY").ok());
 
-        // If no API key is available, fall back to mock data (test/dev environments)
+        // Only allow mock fallback in non-production mode.
         let api_key = match api_key {
             Some(key) if !key.is_empty() => key,
             _ => {
-                tracing::warn!("ONEINCH_API_KEY not set, returning mock quote");
+                if Self::is_production_mode() {
+                    return Err(Error::ExternalService {
+                        service: "1inch".to_string(),
+                        message: "ONEINCH_API_KEY is required in production mode".to_string(),
+                    });
+                }
+
+                tracing::warn!("ONEINCH_API_KEY not set, returning mock quote in non-production mode");
                 return self.mock_quote(from, to, amount, slippage_bps, chain_id, now);
             }
         };
@@ -352,11 +370,18 @@ impl DexAggregator for OneInchAggregator {
         let api_key = self.config.api_key.clone()
             .or_else(|| std::env::var("ONEINCH_API_KEY").ok());
 
-        // If no API key is available, fall back to mock tx data
+        // Only allow mock fallback in non-production mode.
         let api_key = match api_key {
             Some(key) if !key.is_empty() => key,
             _ => {
-                tracing::warn!("ONEINCH_API_KEY not set, returning mock swap tx");
+                if Self::is_production_mode() {
+                    return Err(Error::ExternalService {
+                        service: "1inch".to_string(),
+                        message: "ONEINCH_API_KEY is required in production mode".to_string(),
+                    });
+                }
+
+                tracing::warn!("ONEINCH_API_KEY not set, returning mock swap tx in non-production mode");
                 return Ok(SwapTxData {
                     to: quote.swap_contract,
                     data: quote.swap_data.clone(),

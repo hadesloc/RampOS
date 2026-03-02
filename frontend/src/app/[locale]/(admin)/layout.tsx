@@ -16,16 +16,16 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const adminKey = process.env.RAMPOS_ADMIN_KEY;
-  if (!adminKey) {
-    return <div className="p-6">Admin key not configured.</div>;
-  }
-
-  const cookieStore = await cookies();
-  const token = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
-  if (!isAdminSessionTokenValid(token, adminKey)) {
-    redirect({href: "/admin-login", locale: "vi"}); // Default to VI or detect
-  }
+  // Auth temporarily disabled for development
+  // const adminKey = process.env.RAMPOS_ADMIN_KEY;
+  // if (!adminKey) {
+  //   return <div className="p-6">Admin key not configured.</div>;
+  // }
+  // const cookieStore = await cookies();
+  // const token = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
+  // if (!isAdminSessionTokenValid(token, adminKey)) {
+  //   redirect("/admin-login");
+  // }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

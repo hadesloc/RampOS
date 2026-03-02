@@ -3,7 +3,7 @@
 # ==============================================================================
 
 # Stage 1: Chef - Install cargo-chef
-FROM rust:1.75-bookworm AS chef
+FROM rust:latest AS chef
 RUN cargo install cargo-chef
 WORKDIR /app
 
@@ -11,6 +11,7 @@ WORKDIR /app
 FROM chef AS planner
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
+COPY migrations ./migrations
 RUN cargo chef prepare --recipe-path recipe.json
 
 # Stage 3: Builder - Cache dependencies + build
@@ -21,10 +22,11 @@ RUN cargo chef cook --release --recipe-path recipe.json --package ramp-api
 # Copy source and build
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
+COPY migrations ./migrations
 RUN cargo build --release --package ramp-api
 
 # Stage 4: Runtime
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 
 LABEL org.opencontainers.image.source="https://github.com/rampos/rampos"
 LABEL org.opencontainers.image.description="RampOS - Open-source payment infrastructure for Southeast Asia"

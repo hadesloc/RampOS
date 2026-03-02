@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Network,
   TrendingUp,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -92,6 +93,11 @@ export default function Sidebar() {
           title: "Yield",
           href: "/yield",
           icon: TrendingUp,
+        },
+        {
+          title: "Custody",
+          href: "/custody",
+          icon: KeyRound,
         },
       ],
     },

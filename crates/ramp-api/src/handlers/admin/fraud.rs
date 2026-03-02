@@ -8,14 +8,19 @@
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
-    Json,
+    Extension, Json,
 };
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::error::ApiError;
+use crate::middleware::tenant::TenantContext;
 use crate::router::AppState;
-
+use ramp_compliance::{
+    case::AmlCase,
+    case::NoteType,
+    types::CaseStatus,
+};
 // ============================================================================
 // DTOs
 // ============================================================================
@@ -89,85 +94,116 @@ pub struct FraudReviewResponse {
 }
 
 // ============================================================================
-// Mock Data
+// Mapping Helpers
 // ============================================================================
 
-fn mock_fraud_scores() -> Vec<FraudScoreResponse> {
-    vec![
-        FraudScoreResponse {
-            id: "fs_001".to_string(),
-            user_id: "user_vn_12345".to_string(),
-            intent_id: "intent_01HX7K9M3N".to_string(),
-            score: 75,
-            decision: "Review".to_string(),
-            risk_factors: vec![
-                RiskFactorResponse {
-                    rule_name: "velocity_1h_exceeded".to_string(),
-                    contribution: 15,
-                    description: "8 txns in 1h (limit 5)".to_string(),
-                },
-                RiskFactorResponse {
-                    rule_name: "high_value_transaction".to_string(),
-                    contribution: 10,
-                    description: "$7500.00 exceeds $5000.00 threshold".to_string(),
-                },
-                RiskFactorResponse {
-                    rule_name: "new_account".to_string(),
-                    contribution: 12,
-                    description: "Account is 3 days old (threshold 7 days)".to_string(),
-                },
-            ],
-            reviewed: false,
-            reviewed_by: None,
-            review_note: None,
-            created_at: "2026-01-15T08:30:00Z".to_string(),
-        },
-        FraudScoreResponse {
-            id: "fs_002".to_string(),
-            user_id: "user_vn_67890".to_string(),
-            intent_id: "intent_02AB3CD4EF".to_string(),
-            score: 15,
-            decision: "Allow".to_string(),
-            risk_factors: vec![],
-            reviewed: false,
-            reviewed_by: None,
-            review_note: None,
-            created_at: "2026-01-15T09:00:00Z".to_string(),
-        },
-        FraudScoreResponse {
-            id: "fs_003".to_string(),
-            user_id: "user_vn_11111".to_string(),
-            intent_id: "intent_03GH5IJ6KL".to_string(),
-            score: 92,
-            decision: "Block".to_string(),
-            risk_factors: vec![
-                RiskFactorResponse {
-                    rule_name: "very_high_value_transaction".to_string(),
-                    contribution: 25,
-                    description: "$65000.00 exceeds $50000.00 threshold".to_string(),
-                },
-                RiskFactorResponse {
-                    rule_name: "structuring_suspected".to_string(),
-                    contribution: 20,
-                    description: "Multiple round-amount transactions suggest structuring".to_string(),
-                },
-                RiskFactorResponse {
-                    rule_name: "rapid_succession".to_string(),
-                    contribution: 18,
-                    description: "12 txns in 1h indicates rapid-fire activity".to_string(),
-                },
-                RiskFactorResponse {
-                    rule_name: "cross_border_high_risk".to_string(),
-                    contribution: 12,
-                    description: "Cross-border to high-risk country (risk=0.85)".to_string(),
-                },
-            ],
-            reviewed: true,
-            reviewed_by: Some("analyst_01".to_string()),
-            review_note: Some("Confirmed suspicious activity, escalated to compliance".to_string()),
-            created_at: "2026-01-15T07:15:00Z".to_string(),
-        },
-    ]
+fn is_fraud_case(case: &AmlCase) -> bool {
+    use ramp_compliance::types::CaseType;
+
+    match &case.case_type {
+        CaseType::Velocity
+        | CaseType::Structuring
+        | CaseType::LargeTransaction
+        | CaseType::KytHighRisk
+        | CaseType::DeviceAnomaly => true,
+        CaseType::Other(value) => {
+            let lower = value.to_lowercase();
+            lower.contains("risk")
+                || lower.contains("fraud")
+                || lower.contains("review")
+                || lower.contains("block")
+        }
+        _ => false,
+    }
+}
+
+fn extract_score(detection_data: &serde_json::Value) -> u8 {
+    let number = detection_data
+        .get("score")
+        .or_else(|| detection_data.get("riskScore"))
+        .or_else(|| detection_data.get("risk_score"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0)
+        .clamp(0.0, 100.0);
+
+    number.round() as u8
+}
+
+fn map_decision(case: &AmlCase) -> String {
+    if matches!(case.status, CaseStatus::Closed | CaseStatus::Reported) {
+        "Block".to_string()
+    } else if matches!(case.status, CaseStatus::Review | CaseStatus::Open | CaseStatus::Hold) {
+        "Review".to_string()
+    } else {
+        "Allow".to_string()
+    }
+}
+
+fn map_risk_factors(detection_data: &serde_json::Value) -> Vec<RiskFactorResponse> {
+    let Some(factors) = detection_data
+        .get("riskFactors")
+        .or_else(|| detection_data.get("risk_factors"))
+        .and_then(|v| v.as_array())
+    else {
+        return vec![];
+    };
+
+    factors
+        .iter()
+        .map(|factor| {
+            let rule_name = factor
+                .get("ruleName")
+                .or_else(|| factor.get("rule_name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown_rule")
+                .to_string();
+            let contribution = factor
+                .get("contribution")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0)
+                .clamp(0.0, 100.0)
+                .round() as u8;
+            let description = factor
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            RiskFactorResponse {
+                rule_name,
+                contribution,
+                description,
+            }
+        })
+        .collect()
+}
+
+fn map_fraud_score_response(case: AmlCase) -> FraudScoreResponse {
+    let decision = map_decision(&case);
+    let reviewed = matches!(case.status, CaseStatus::Released | CaseStatus::Closed | CaseStatus::Reported)
+        || case.resolution.is_some();
+
+    FraudScoreResponse {
+        id: case.id,
+        user_id: case.user_id.map(|id| id.0).unwrap_or_default(),
+        intent_id: case.intent_id.map(|id| id.0).unwrap_or_default(),
+        score: extract_score(&case.detection_data),
+        decision,
+        risk_factors: map_risk_factors(&case.detection_data),
+        reviewed,
+        reviewed_by: case.assigned_to,
+        review_note: case.resolution,
+        created_at: case.created_at.to_rfc3339(),
+    }
+}
+
+fn parse_review_target_status(decision: &str) -> Option<CaseStatus> {
+    match decision {
+        "ALLOW" => Some(CaseStatus::Released),
+        "REVIEW" => Some(CaseStatus::Review),
+        "BLOCK" => Some(CaseStatus::Closed),
+        _ => None,
+    }
 }
 
 // ============================================================================
@@ -177,35 +213,62 @@ fn mock_fraud_scores() -> Vec<FraudScoreResponse> {
 /// GET /v1/admin/fraud/scores - List recent fraud score results
 pub async fn list_fraud_scores(
     headers: HeaderMap,
-    State(_app_state): State<AppState>,
+    tenant_ctx: Option<Extension<TenantContext>>,
+    State(app_state): State<AppState>,
     Query(query): Query<ListFraudScoresQuery>,
 ) -> Result<Json<ListFraudScoresResponse>, ApiError> {
     super::tier::check_admin_key(&headers)?;
+
+    let tenant_ctx = tenant_ctx
+        .map(|Extension(ctx)| ctx)
+        .ok_or_else(|| ApiError::Internal("Tenant context unavailable for fraud endpoints".to_string()))?;
+
     info!(
+        tenant = %tenant_ctx.tenant_id.0,
         limit = query.limit,
         offset = query.offset,
         decision_filter = ?query.decision,
         "Listing fraud scores"
     );
 
-    let mut scores = mock_fraud_scores();
+    // Query sufficient window then apply fraud-specific mapping/filtering at API layer.
+    let mut cases = app_state
+        .case_manager
+        .list_cases(
+            &tenant_ctx.tenant_id,
+            None,
+            None,
+            None,
+            None,
+            1000,
+            0,
+        )
+        .await
+        .map_err(ApiError::from)?;
 
-    // Filter by decision if specified
+    cases.retain(is_fraud_case);
+
+    let mut scores: Vec<FraudScoreResponse> = cases
+        .into_iter()
+        .map(map_fraud_score_response)
+        .collect();
+
     if let Some(ref decision) = query.decision {
         let decision_upper = decision.to_uppercase();
         scores.retain(|s| s.decision.to_uppercase() == decision_upper);
     }
 
-    // Filter by minimum score if specified
     if let Some(min_score) = query.min_score {
         scores.retain(|s| s.score >= min_score);
     }
 
+    scores.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
     let total = scores.len() as i64;
-    let limit = query.limit.min(100);
+    let limit = query.limit.clamp(1, 100);
     let offset = query.offset.max(0);
 
-    let data: Vec<FraudScoreResponse> = scores
+    let data = scores
         .into_iter()
         .skip(offset as usize)
         .take(limit as usize)
@@ -222,32 +285,48 @@ pub async fn list_fraud_scores(
 /// GET /v1/admin/fraud/scores/:id - Get specific fraud score by ID
 pub async fn get_fraud_score(
     headers: HeaderMap,
-    State(_app_state): State<AppState>,
+    tenant_ctx: Option<Extension<TenantContext>>,
+    State(app_state): State<AppState>,
     Path(score_id): Path<String>,
 ) -> Result<Json<FraudScoreResponse>, ApiError> {
     super::tier::check_admin_key(&headers)?;
+
+    let tenant_ctx = tenant_ctx
+        .map(|Extension(ctx)| ctx)
+        .ok_or_else(|| ApiError::Internal("Tenant context unavailable for fraud endpoints".to_string()))?;
+
     info!(
+        tenant = %tenant_ctx.tenant_id.0,
         score_id = %score_id,
         "Fetching fraud score"
     );
 
-    let scores = mock_fraud_scores();
-    let score = scores
-        .into_iter()
-        .find(|s| s.id == score_id)
+    let case = app_state
+        .case_manager
+        .get_case(&tenant_ctx.tenant_id, &score_id)
+        .await
+        .map_err(ApiError::from)?
+        .filter(is_fraud_case)
         .ok_or_else(|| ApiError::NotFound(format!("Fraud score {} not found", score_id)))?;
 
-    Ok(Json(score))
+    Ok(Json(map_fraud_score_response(case)))
 }
 
 /// POST /v1/admin/fraud/review - Submit manual fraud review decision
 pub async fn submit_fraud_review(
     headers: HeaderMap,
-    State(_app_state): State<AppState>,
+    tenant_ctx: Option<Extension<TenantContext>>,
+    State(app_state): State<AppState>,
     Json(request): Json<FraudReviewRequest>,
 ) -> Result<Json<FraudReviewResponse>, ApiError> {
     let auth = super::tier::check_admin_key_operator(&headers)?;
+
+    let tenant_ctx = tenant_ctx
+        .map(|Extension(ctx)| ctx)
+        .ok_or_else(|| ApiError::Internal("Tenant context unavailable for fraud endpoints".to_string()))?;
+
     info!(
+        tenant = %tenant_ctx.tenant_id.0,
         score_id = %request.score_id,
         decision = %request.decision,
         reviewer = %request.reviewer,
@@ -255,26 +334,70 @@ pub async fn submit_fraud_review(
         "Submitting fraud review"
     );
 
-    // Validate decision
     let decision_upper = request.decision.to_uppercase();
-    if !["ALLOW", "REVIEW", "BLOCK"].contains(&decision_upper.as_str()) {
-        return Err(ApiError::Validation(format!(
+    let target_status = parse_review_target_status(&decision_upper).ok_or_else(|| {
+        ApiError::Validation(format!(
             "Invalid decision '{}'. Must be one of: Allow, Review, Block",
             request.decision
-        )));
-    }
+        ))
+    })?;
 
     if request.note.trim().is_empty() {
-        return Err(ApiError::Validation(
-            "Review note is required".to_string(),
-        ));
+        return Err(ApiError::Validation("Review note is required".to_string()));
     }
 
     if request.score_id.trim().is_empty() {
-        return Err(ApiError::Validation(
-            "Score ID is required".to_string(),
-        ));
+        return Err(ApiError::Validation("Score ID is required".to_string()));
     }
+
+    let Some(case) = app_state
+        .case_manager
+        .get_case(&tenant_ctx.tenant_id, &request.score_id)
+        .await
+        .map_err(ApiError::from)?
+    else {
+        return Err(ApiError::NotFound(format!(
+            "Fraud score {} not found",
+            request.score_id
+        )));
+    };
+
+    if !is_fraud_case(&case) {
+        return Err(ApiError::NotFound(format!(
+            "Fraud score {} not found",
+            request.score_id
+        )));
+    }
+
+    app_state
+        .case_manager
+        .update_status(
+            &tenant_ctx.tenant_id,
+            &request.score_id,
+            target_status,
+            auth.user_id.clone(),
+        )
+        .await
+        .map_err(ApiError::from)?;
+
+    app_state
+        .case_manager
+        .note_manager
+        .add_note(
+            &tenant_ctx.tenant_id,
+            &request.score_id,
+            auth.user_id.clone(),
+            format!(
+                "Fraud review decision: {} by {}. Note: {}",
+                decision_upper,
+                request.reviewer,
+                request.note
+            ),
+            NoteType::Decision,
+            true,
+        )
+        .await
+        .map_err(ApiError::from)?;
 
     let now = chrono::Utc::now();
 
@@ -385,20 +508,11 @@ mod tests {
     }
 
     #[test]
-    fn test_mock_fraud_scores_data() {
-        let scores = mock_fraud_scores();
-        assert_eq!(scores.len(), 3);
-
-        // Verify different decisions are represented
-        let decisions: Vec<&str> = scores.iter().map(|s| s.decision.as_str()).collect();
-        assert!(decisions.contains(&"Review"));
-        assert!(decisions.contains(&"Allow"));
-        assert!(decisions.contains(&"Block"));
-
-        // Verify the blocked score has risk factors
-        let blocked = scores.iter().find(|s| s.decision == "Block").unwrap();
-        assert!(!blocked.risk_factors.is_empty());
-        assert!(blocked.score > 80);
+    fn test_parse_review_target_status() {
+        assert_eq!(parse_review_target_status("ALLOW"), Some(CaseStatus::Released));
+        assert_eq!(parse_review_target_status("REVIEW"), Some(CaseStatus::Review));
+        assert_eq!(parse_review_target_status("BLOCK"), Some(CaseStatus::Closed));
+        assert_eq!(parse_review_target_status("INVALID"), None);
     }
 
     #[test]

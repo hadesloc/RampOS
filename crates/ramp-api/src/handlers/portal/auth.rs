@@ -13,15 +13,12 @@ use axum::{
     Json, Router,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
-use chrono::{Duration, Utc};
-use jsonwebtoken::{encode, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::info;
 use uuid::Uuid;
 use validator::Validate;
 
 use crate::error::ApiError;
-use crate::middleware::portal_auth::PortalClaims;
 use crate::router::AppState;
 
 // Cookie configuration constants
@@ -253,51 +250,20 @@ pub async fn webauthn_register_challenge(
 }
 
 /// POST /v1/auth/webauthn/register/complete - Complete WebAuthn registration
-/// Sets auth cookies and returns user info
+/// Requires real WebAuthn verification backend; does not create mock sessions.
 pub async fn webauthn_register_complete(
     State(_app_state): State<AppState>,
-    jar: CookieJar,
+    _jar: CookieJar,
     Json(req): Json<WebAuthnRegisterCompleteRequest>,
 ) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
-    // Validate request
     req.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    info!(email = %req.email, credential_id = %req.credential.id, "WebAuthn registration completing");
+    info!(email = %req.email, credential_id = %req.credential.id, "WebAuthn registration completion not implemented");
 
-    // In production, this would:
-    // 1. Verify the challenge
-    // 2. Validate the attestation
-    // 3. Store the credential
-    // 4. Create the user if new
-    // 5. Generate JWT tokens
-
-    let now = Utc::now();
-    let expires_at = now + Duration::hours(24);
-    let user_id = Uuid::new_v4().to_string();
-
-    let session = AuthSessionInternal {
-        access_token: generate_mock_jwt(&user_id),
-        refresh_token: Uuid::new_v4().to_string(),
-        expires_at: expires_at.timestamp(),
-        user: AuthUser {
-            id: user_id,
-            email: req.email,
-            kyc_status: "NONE".to_string(),
-            kyc_tier: 0,
-            status: "ACTIVE".to_string(),
-            created_at: now.to_rfc3339(),
-        },
-    };
-
-    // Set cookies and return response
-    let jar = set_auth_cookies(jar, &session);
-    let response = AuthResponse {
-        user: session.user,
-        expires_at: session.expires_at,
-    };
-
-    Ok((jar, Json(response)))
+    Err(ApiError::Unauthorized(
+        "WebAuthn registration completion is not available".to_string(),
+    ))
 }
 
 /// POST /v1/auth/webauthn/login/challenge - Get WebAuthn login challenge
@@ -347,46 +313,17 @@ pub async fn webauthn_login_challenge(
 }
 
 /// POST /v1/auth/webauthn/login/complete - Complete WebAuthn login
-/// Sets auth cookies and returns user info
+/// Requires real WebAuthn verification backend; does not create mock sessions.
 pub async fn webauthn_login_complete(
     State(_app_state): State<AppState>,
-    jar: CookieJar,
+    _jar: CookieJar,
     Json(req): Json<WebAuthnLoginCompleteRequest>,
 ) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
-    info!(credential_id = %req.credential.id, "WebAuthn login completing");
+    info!(credential_id = %req.credential.id, "WebAuthn login completion not implemented");
 
-    // In production, this would:
-    // 1. Verify the challenge
-    // 2. Validate the signature
-    // 3. Look up user by credential
-    // 4. Generate JWT tokens
-
-    let now = Utc::now();
-    let expires_at = now + Duration::hours(24);
-    let user_id = Uuid::new_v4().to_string();
-
-    let session = AuthSessionInternal {
-        access_token: generate_mock_jwt(&user_id),
-        refresh_token: Uuid::new_v4().to_string(),
-        expires_at: expires_at.timestamp(),
-        user: AuthUser {
-            id: user_id,
-            email: "user@example.com".to_string(), // Would come from credential lookup
-            kyc_status: "VERIFIED".to_string(),
-            kyc_tier: 1,
-            status: "ACTIVE".to_string(),
-            created_at: now.to_rfc3339(),
-        },
-    };
-
-    // Set cookies and return response
-    let jar = set_auth_cookies(jar, &session);
-    let response = AuthResponse {
-        user: session.user,
-        expires_at: session.expires_at,
-    };
-
-    Ok((jar, Json(response)))
+    Err(ApiError::Unauthorized(
+        "WebAuthn login completion is not available".to_string(),
+    ))
 }
 
 /// POST /v1/auth/magic-link - Request magic link
@@ -411,112 +348,41 @@ pub async fn request_magic_link(
 }
 
 /// POST /v1/auth/magic-link/verify - Verify magic link token
-/// Sets auth cookies and returns user info
+/// Requires real token verification backend; does not create mock sessions.
 pub async fn verify_magic_link(
     State(_app_state): State<AppState>,
-    jar: CookieJar,
+    _jar: CookieJar,
     Json(req): Json<MagicLinkVerifyRequest>,
 ) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
     req.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    info!("Magic link verification attempted");
+    info!("Magic link verification not implemented");
 
-    // In production, this would:
-    // 1. Look up the token
-    // 2. Verify it hasn't expired
-    // 3. Get or create the user
-    // 4. Invalidate the token (one-time use)
-    // 5. Generate session tokens
-
-    // For now, return an error since we can't actually verify
-    // In a real implementation, we'd check the token against stored values
-    if req.token.is_empty() {
-        return Err(ApiError::Unauthorized(
-            "Invalid or expired token".to_string(),
-        ));
-    }
-
-    let now = Utc::now();
-    let expires_at = now + Duration::hours(24);
-    let user_id = Uuid::new_v4().to_string();
-
-    let session = AuthSessionInternal {
-        access_token: generate_mock_jwt(&user_id),
-        refresh_token: Uuid::new_v4().to_string(),
-        expires_at: expires_at.timestamp(),
-        user: AuthUser {
-            id: user_id,
-            email: "user@example.com".to_string(),
-            kyc_status: "NONE".to_string(),
-            kyc_tier: 0,
-            status: "ACTIVE".to_string(),
-            created_at: now.to_rfc3339(),
-        },
-    };
-
-    // Set cookies and return response
-    let jar = set_auth_cookies(jar, &session);
-    let response = AuthResponse {
-        user: session.user,
-        expires_at: session.expires_at,
-    };
-
-    Ok((jar, Json(response)))
+    Err(ApiError::Unauthorized(
+        "Magic link verification is not available".to_string(),
+    ))
 }
 
 /// POST /v1/auth/refresh - Refresh access token using refresh token from cookie
-/// Sets new auth cookies and returns user info
+/// Requires real refresh token backend; does not mint sessions from cookie presence.
 pub async fn refresh_token(
     State(_app_state): State<AppState>,
     jar: CookieJar,
 ) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
     info!("Token refresh requested");
 
-    // Get refresh token from cookie
     let refresh_token_cookie = jar
         .get(REFRESH_COOKIE_NAME)
         .ok_or_else(|| ApiError::Unauthorized("No refresh token provided".to_string()))?;
 
-    let refresh_token_value = refresh_token_cookie.value();
-
-    // In production, this would:
-    // 1. Validate the refresh token
-    // 2. Check if it's revoked
-    // 3. Get the associated user
-    // 4. Generate new tokens
-    // 5. Optionally rotate the refresh token
-
-    if refresh_token_value.is_empty() {
+    if refresh_token_cookie.value().is_empty() {
         return Err(ApiError::Unauthorized("Invalid refresh token".to_string()));
     }
 
-    let now = Utc::now();
-    let expires_at = now + Duration::hours(24);
-    let user_id = Uuid::new_v4().to_string();
-
-    let session = AuthSessionInternal {
-        access_token: generate_mock_jwt(&user_id),
-        refresh_token: Uuid::new_v4().to_string(),
-        expires_at: expires_at.timestamp(),
-        user: AuthUser {
-            id: user_id,
-            email: "user@example.com".to_string(),
-            kyc_status: "VERIFIED".to_string(),
-            kyc_tier: 1,
-            status: "ACTIVE".to_string(),
-            created_at: now.to_rfc3339(),
-        },
-    };
-
-    // Set cookies and return response
-    let jar = set_auth_cookies(jar, &session);
-    let response = AuthResponse {
-        user: session.user,
-        expires_at: session.expires_at,
-    };
-
-    Ok((jar, Json(response)))
+    Err(ApiError::Unauthorized(
+        "Token refresh is not available".to_string(),
+    ))
 }
 
 /// POST /v1/auth/logout - Logout and invalidate session
@@ -539,37 +405,24 @@ pub async fn logout(
 }
 
 /// GET /v1/auth/me - Get current user info
-/// Reads auth token from cookie
+/// Requires real token validation and user lookup backend.
 pub async fn get_me(
     State(_app_state): State<AppState>,
     jar: CookieJar,
 ) -> Result<Json<AuthUser>, ApiError> {
     info!("Get current user info requested");
 
-    // Get auth token from cookie
     let auth_cookie = jar
         .get(AUTH_COOKIE_NAME)
         .ok_or_else(|| ApiError::Unauthorized("Not authenticated".to_string()))?;
 
-    let _token = auth_cookie.value();
+    if auth_cookie.value().is_empty() {
+        return Err(ApiError::Unauthorized("Not authenticated".to_string()));
+    }
 
-    // In production, this would:
-    // 1. Validate and decode the JWT
-    // 2. Extract user ID from JWT
-    // 3. Fetch user from database
-    // 4. Return user info
-
-    // For now, return mock user (would be replaced by portal auth middleware)
-    let now = Utc::now();
-
-    Ok(Json(AuthUser {
-        id: Uuid::new_v4().to_string(),
-        email: "user@example.com".to_string(),
-        kyc_status: "VERIFIED".to_string(),
-        kyc_tier: 1,
-        status: "ACTIVE".to_string(),
-        created_at: now.to_rfc3339(),
-    }))
+    Err(ApiError::Unauthorized(
+        "Session validation is not available".to_string(),
+    ))
 }
 
 /// GET /v1/auth/session - Check if user has valid session
@@ -583,41 +436,12 @@ pub struct SessionStatus {
 
 pub async fn check_session(
     State(_app_state): State<AppState>,
-    jar: CookieJar,
+    _jar: CookieJar,
 ) -> Json<SessionStatus> {
-    // Check if auth cookie exists
-    let auth_cookie = jar.get(AUTH_COOKIE_NAME);
-
-    match auth_cookie {
-        Some(cookie) => {
-            let token = cookie.value();
-            // In production, would validate the JWT here
-            if !token.is_empty() {
-                // Return mock user for now
-                let now = Utc::now();
-                Json(SessionStatus {
-                    authenticated: true,
-                    user: Some(AuthUser {
-                        id: Uuid::new_v4().to_string(),
-                        email: "user@example.com".to_string(),
-                        kyc_status: "VERIFIED".to_string(),
-                        kyc_tier: 1,
-                        status: "ACTIVE".to_string(),
-                        created_at: now.to_rfc3339(),
-                    }),
-                })
-            } else {
-                Json(SessionStatus {
-                    authenticated: false,
-                    user: None,
-                })
-            }
-        }
-        None => Json(SessionStatus {
-            authenticated: false,
-            user: None,
-        }),
-    }
+    Json(SessionStatus {
+        authenticated: false,
+        user: None,
+    })
 }
 
 // ============================================================================
@@ -684,59 +508,6 @@ fn base64_url_encode(data: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(data)
 }
 
-fn generate_mock_jwt(user_id: &str) -> String {
-    // Use real JWT generation with proper signing - no fallback to fake tokens
-    generate_real_jwt(user_id, "user@example.com", "access")
-        .expect("JWT encoding must succeed; ensure JWT_SECRET is set")
-}
-
-/// Get the JWT secret from environment
-fn get_jwt_secret() -> String {
-    std::env::var("JWT_SECRET")
-        .expect("JWT_SECRET environment variable must be set")
-}
-
-/// Get the default tenant ID from environment
-fn get_default_tenant_id() -> String {
-    std::env::var("DEFAULT_TENANT_ID")
-        .unwrap_or_else(|_| "00000000-0000-0000-0000-000000000001".to_string())
-}
-
-/// Generate a real JWT token with proper signing using jsonwebtoken crate
-fn generate_real_jwt(user_id: &str, email: &str, token_type: &str) -> Result<String, ApiError> {
-    let jwt_secret = get_jwt_secret();
-    let encoding_key = EncodingKey::from_secret(jwt_secret.as_bytes());
-    let now = Utc::now();
-    let tenant_id = get_default_tenant_id();
-
-    let expiry = if token_type == "refresh" {
-        now + Duration::days(7)
-    } else {
-        now + Duration::hours(24)
-    };
-
-    let claims = PortalClaims {
-        sub: user_id.to_string(),
-        tenant_id: Some(tenant_id),
-        email: email.to_string(),
-        iat: now.timestamp(),
-        exp: expiry.timestamp(),
-        token_type: token_type.to_string(),
-    };
-
-    encode(&Header::default(), &claims, &encoding_key).map_err(|e| {
-        warn!(error = %e, "Failed to encode JWT token");
-        ApiError::Internal("Failed to generate token".to_string())
-    })
-}
-
-/// Generate both access and refresh tokens
-#[allow(dead_code)]
-fn generate_token_pair(user_id: &str, email: &str) -> Result<(String, String), ApiError> {
-    let access_token = generate_real_jwt(user_id, email, "access")?;
-    let refresh_token = generate_real_jwt(user_id, email, "refresh")?;
-    Ok((access_token, refresh_token))
-}
 
 #[cfg(test)]
 mod tests {

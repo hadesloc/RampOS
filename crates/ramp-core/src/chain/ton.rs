@@ -2,7 +2,7 @@
 //!
 //! Implementation for The Open Network (TON) blockchain
 //! using TON Center HTTP API (toncenter.com/api/v2).
-//! Falls back to mock data if API key is not set or request fails.
+//! Uses TON Center HTTP API and returns explicit errors when unavailable.
 
 use async_trait::async_trait;
 use reqwest::Client;
@@ -345,30 +345,6 @@ impl TonChain {
         }
     }
 
-    /// Return mock balance as fallback
-    fn mock_balance(address: &str) -> Balance {
-        warn!("Using mock TON balance for address {}", address);
-        Balance {
-            native: "1000000000".to_string(), // 1 TON in nanotons
-            native_symbol: "TON".to_string(),
-            tokens: HashMap::new(),
-        }
-    }
-
-    /// Return mock tx status as fallback
-    fn mock_tx_status(hash: &str) -> TxStatus {
-        warn!("Using mock TON transaction status for hash {}", hash);
-        TxStatus {
-            hash: TxHash(hash.to_string()),
-            status: TxState::Confirmed,
-            block_number: Some(1),
-            block_hash: None,
-            confirmations: 1,
-            gas_used: Some("5000000".to_string()),
-            effective_gas_price: None,
-            error_message: None,
-        }
-    }
 }
 
 #[async_trait]
@@ -406,8 +382,9 @@ impl Chain for TonChain {
         Self::validate_ton_address(address)?;
 
         if self.api_key.is_none() {
-            warn!("TON_API_KEY not set, returning mock balance");
-            return Ok(Self::mock_balance(address));
+            return Err(ChainError::NotSupported(
+                "TON get_balance requires TON_API_KEY".to_string(),
+            ));
         }
 
         match self
@@ -426,8 +403,11 @@ impl Chain for TonChain {
                 })
             }
             Err(e) => {
-                warn!("TON API get_balance failed, falling back to mock: {}", e);
-                Ok(Self::mock_balance(address))
+                warn!("TON API get_balance failed: {}", e);
+                Err(ChainError::RpcError(format!(
+                    "Failed to get TON balance: {}",
+                    e
+                )))
             }
         }
     }
@@ -500,9 +480,8 @@ impl Chain for TonChain {
         Self::validate_ton_address(&tx.to)?;
 
         if self.api_key.is_none() {
-            warn!("TON_API_KEY not set, cannot send real transaction - returning mock hash");
-            return Ok(TxHash(
-                "mock_ton_tx_00000000000000000000000000000000000000000000".to_string(),
+            return Err(ChainError::NotSupported(
+                "TON send_transaction requires TON_API_KEY".to_string(),
             ));
         }
 
@@ -553,8 +532,9 @@ impl Chain for TonChain {
         }
 
         if self.api_key.is_none() {
-            warn!("TON_API_KEY not set, returning mock transaction status");
-            return Ok(Self::mock_tx_status(hash));
+            return Err(ChainError::NotSupported(
+                "TON get_transaction requires TON_API_KEY".to_string(),
+            ));
         }
 
         // Use tryLocateResultTx or getTransactions to look up by message hash.
@@ -618,8 +598,10 @@ impl Chain for TonChain {
             }
             Err(e) => {
                 warn!("TON API getTransactions failed for hash lookup: {}", e);
-                // Fall back to mock if API call fails
-                Ok(Self::mock_tx_status(hash))
+                Err(ChainError::RpcError(format!(
+                    "Failed to get TON transaction: {}",
+                    e
+                )))
             }
         }
     }
@@ -756,8 +738,9 @@ impl Chain for TonChain {
 
     async fn get_block_number(&self) -> Result<u64> {
         if self.api_key.is_none() {
-            warn!("TON_API_KEY not set, returning mock block number");
-            return Ok(0);
+            return Err(ChainError::NotSupported(
+                "TON get_block_number requires TON_API_KEY".to_string(),
+            ));
         }
 
         #[derive(Deserialize)]
@@ -781,8 +764,11 @@ impl Chain for TonChain {
                 Ok(seqno)
             }
             Err(e) => {
-                warn!("TON API getMasterchainInfo failed, returning 0: {}", e);
-                Ok(0)
+                warn!("TON API getMasterchainInfo failed: {}", e);
+                Err(ChainError::RpcError(format!(
+                    "Failed to get TON masterchain info: {}",
+                    e
+                )))
             }
         }
     }
@@ -863,16 +849,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_balance_no_api_key() {
-        // Without API key, should fall back to mock
+        // Without API key, should return explicit NotSupported error
         env::remove_var("TON_API_KEY");
         let chain = TonChain::new(TonChainConfig::mainnet("https://toncenter.com/api/v2")).unwrap();
         let balance = chain
             .get_balance("0:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8")
             .await;
-        assert!(balance.is_ok());
-        let bal = balance.unwrap();
-        assert_eq!(bal.native, "1000000000");
-        assert_eq!(bal.native_symbol, "TON");
+        assert!(balance.is_err());
+        assert!(matches!(balance.unwrap_err(), ChainError::NotSupported(_)));
     }
 
     #[tokio::test]
@@ -882,9 +866,8 @@ mod tests {
         let tx = chain
             .get_transaction("abcdef1234567890abcdef1234567890abcdef1234567890")
             .await;
-        assert!(tx.is_ok());
-        let status = tx.unwrap();
-        assert_eq!(status.status, TxState::Confirmed);
+        assert!(tx.is_err());
+        assert!(matches!(tx.unwrap_err(), ChainError::NotSupported(_)));
     }
 
     #[tokio::test]
@@ -905,7 +888,8 @@ mod tests {
             nonce: None,
         };
         let result = chain.send_transaction(tx).await;
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), ChainError::NotSupported(_)));
     }
 
     #[tokio::test]
@@ -913,8 +897,8 @@ mod tests {
         env::remove_var("TON_API_KEY");
         let chain = TonChain::new(TonChainConfig::mainnet("https://toncenter.com/api/v2")).unwrap();
         let block = chain.get_block_number().await;
-        assert!(block.is_ok());
-        assert_eq!(block.unwrap(), 0);
+        assert!(block.is_err());
+        assert!(matches!(block.unwrap_err(), ChainError::NotSupported(_)));
     }
 
     /// Helper: build a user-friendly address from workchain + hash + flags for testing

@@ -1,22 +1,25 @@
 # Installed Claude Code Resources
 
-Generated: 2026-02-09T11:48:46.680921
+Generated: 2026-02-23T13:06:47.703569
 
 **This list shows ONLY resources that are currently ENABLED in Claude Code settings.**
 
 ---
 
-## Enabled Plugins (44)
+## Enabled Plugins (48)
 
 - **ai-generation-skills** (baoyu-skills): AI-powered generation backends
-- **ask-questions-if-underspecified** (trailofbits): Clarify requirements before implementing. When doubting, ask questions.
+- **ask-questions-if-underspecified** (trailofbits): Clarify ambiguous requirements by asking questions before implementing. Only when invoked explicitly.
 - **audit-context-building** (trailofbits): Build deep architectural context through ultra-granular code analysis before vulnerability hunting
 - **building-secure-contracts** (trailofbits): Comprehensive smart contract security toolkit based on Trail of Bits' Building Secure Contracts framework. Includes vulnerability scanners for 6 blockchains and 5 development guideline assistants.
-- **burpsuite-project-parser** (trailofbits): Search and extract data from Burp Suite project files (.burp) for use in Claude
+- **burpsuite-project-parser** (trailofbits): Search and extract data from Burp Suite project files (.burp) for security analysis
+- **claude-code-setup** (claude-plugins-official): Analyze codebases and recommend tailored Claude Code automations such as hooks, skills, MCP servers, and subagents.
+- **claude-in-chrome-troubleshooting** (trailofbits): Diagnose and fix Claude in Chrome MCP extension connectivity issues
 - **claude-md-management** (claude-plugins-official): Tools to maintain and improve CLAUDE.md files - audit quality, capture session learnings, and keep project memory current.
 - **code-review** (claude-plugins-official): Automated code review for pull requests using multiple specialized agents with confidence-based scoring to filter false positives
 - **code-simplifier** (claude-plugins-official): Agent that simplifies and refines code for clarity, consistency, and maintainability while preserving functionality. Focuses on recently modified code.
 - **coderabbit** (claude-plugins-official): Your code review partner. CodeRabbit provides external validation using a specialized AI architecture and 40+ integrated static analyzers—offering a different perspective that catches bugs, security vulnerabilities, logic errors, and edge cases. Context-aware analysis via AST parsing and codegraph relationships. Automatically incorporates CLAUDE.md and project coding guidelines into reviews. Useful after writing or modifying code, before commits, when implementing complex or security-sensitive logic, or when a second opinion would increase confidence in the changes. Returns specific findings with suggested fixes that can be applied immediately. Free to use.
+- **commit-commands** (claude-plugins-official): Commands for git commit workflows including commit, push, and PR creation
 - **constant-time-analysis** (trailofbits): Detect compiler-induced timing side-channels in cryptographic code
 - **content-skills** (baoyu-skills): Content generation and publishing skills
 - **context7** (claude-plugins-official): Upstash Context7 MCP server for up-to-date documentation lookup. Pull version-specific documentation and code examples directly from source repositories into your LLM context.
@@ -27,9 +30,10 @@ Generated: 2026-02-09T11:48:46.680921
 - **entry-point-analyzer** (trailofbits): Analyzes smart contract codebases to identify state-changing entry points for security auditing. Detects externally callable functions that modify state, categorizes them by access level, and generates structured audit reports.
 - **example-skills** (anthropic-agent-skills): Collection of example skills demonstrating various capabilities including skill creation, MCP building, visual design, algorithmic art, internal communications, web testing, artifact building, Slack GIFs, and theme styling
 - **feature-dev** (claude-plugins-official): Comprehensive feature development workflow with specialized agents for codebase exploration, architecture design, and quality review
-- **fix-review** (trailofbits): Verify fix commits address audit findings without introducing bugs
+- **firecrawl** (claude-plugins-official): Web scraping and crawling powered by Firecrawl. Turn any website into clean, LLM-ready markdown or structured data. Scrape single pages, crawl entire sites, search the web, and extract structured information. Includes an AI agent for autonomous multi-source data gathering - just describe what you need and it finds, navigates, and extracts automatically.
 - **frontend-design** (claude-plugins-official): Create distinctive, production-grade frontend interfaces with high design quality. Generates creative, polished code that avoids generic AI aesthetics.
 - **greptile** (claude-plugins-official): AI-powered codebase search and understanding. Query your repositories using natural language to find relevant code, understand dependencies, and get contextual answers about your codebase architecture.
+- **hookify** (claude-plugins-official): Easily create custom hooks to prevent unwanted behaviors by analyzing conversation patterns or from explicit instructions. Define rules via simple markdown files.
 - **playwright** (claude-plugins-official): Browser automation and end-to-end testing MCP server by Microsoft. Enables Claude to interact with web pages, take screenshots, fill forms, click elements, and perform automated browser testing workflows.
 - **plugin-dev** (claude-plugins-official): Comprehensive toolkit for developing Claude Code plugins. Includes 7 expert skills covering hooks, MCP integration, commands, agents, and best practices. AI-assisted plugin creation and validation.
 - **plugin-factory** (ultimate-workflow-local): Unified factory for creating, validating, registering, and installing Claude Code plugins and skills
@@ -53,7 +57,7 @@ Generated: 2026-02-09T11:48:46.680921
 - **utility-skills** (baoyu-skills): Utility tools for content processing
 - **variant-analysis** (trailofbits): Find similar vulnerabilities and bugs across codebases using pattern-based analysis
 
-## Skills (148)
+## Skills (153)
 
 ### Internal Skills (use Skill tool)
 - **Agent Development**: This skill should be used when the user asks to "create an agent", "add an agent", "write a subagent", "agent frontmatter", "when to use description", "agent examples", "agent tools", "agent colors", "autonomous agent", or needs guidance on agent structure, system prompts, triggering conditions, or agent development best practices for Claude Code plugins.
@@ -150,11 +154,11 @@ Generated: 2026-02-09T11:48:46.680921
   - Plugin: ai-generation-skills (baoyu-skills)
 - **baoyu-markdown-to-html**: Converts Markdown to styled HTML with WeChat-compatible themes. Supports code highlighting, math, PlantUML, footnotes, alerts, and infographics. Use when user asks for "markdown to html", "convert md to html", "md转html", or needs styled HTML output from markdown.
   - Plugin: utility-skills (baoyu-skills)
-- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "图文/文章".
+- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (贴图, formerly 图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "贴图/图文/文章".
   - Plugin: content-skills (baoyu-skills)
-- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "图文/文章".
+- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (贴图, formerly 图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "贴图/图文/文章".
   - Plugin: ai-generation-skills (baoyu-skills)
-- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "图文/文章".
+- **baoyu-post-to-wechat**: Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (贴图, formerly 图文) with multiple images. Use when user mentions "发布公众号", "post to wechat", "微信公众号", or "贴图/图文/文章".
   - Plugin: utility-skills (baoyu-skills)
 - **baoyu-post-to-x**: Posts content and articles to X (Twitter). Supports regular posts with images/videos and X Articles (long-form Markdown). Uses real Chrome with CDP to bypass anti-automation. Use when user asks to "post to X", "tweet", "publish to Twitter", or "share on X".
   - Plugin: content-skills (baoyu-skills)
@@ -184,25 +188,31 @@ Generated: 2026-02-09T11:48:46.680921
   - Plugin: document-skills (anthropic-agent-skills)
 - **brand-guidelines**: Applies Anthropic's official brand colors and typography to any sort of artifact that may benefit from having Anthropic's look-and-feel. Use it when brand colors or style guidelines, visual formatting, or company design standards apply.
   - Plugin: example-skills (anthropic-agent-skills)
-- **build**: 
+- **build**: Use when the user asks to build a complete app/product from an idea (end-to-end workflow).
   - Plugin: ultimate-workflow (ultimate-workflow-local)
-- **build-approve**: 
+- **build-approve**: Use when the user approves the plan and you are transitioning from Planning to Development.
   - Plugin: ultimate-workflow (ultimate-workflow-local)
-- **build-development**: 
+- **build-debug-compete**: Use when a complex bug needs investigation from multiple angles simultaneously.
   - Plugin: ultimate-workflow (ultimate-workflow-local)
-- **build-discovery**: 
+- **build-development**: Use during Development phase to coordinate native Team/Task execution in parallel waves.
   - Plugin: ultimate-workflow (ultimate-workflow-local)
-- **build-gap-detect**: 
+- **build-discovery**: Use when starting Discovery to gather requirements via a short interview.
   - Plugin: ultimate-workflow (ultimate-workflow-local)
-- **build-memory**: 
+- **build-gap-detect**: Use when a needed capability is missing and should be solved via existing resources or a new plugin/skill.
   - Plugin: ultimate-workflow (ultimate-workflow-local)
-- **build-planning**: 
+- **build-headless**: Generate a headless pipeline script for running workflow phases non-interactively.
   - Plugin: ultimate-workflow (ultimate-workflow-local)
-- **build-qa**: 
+- **build-memory**: Use for operations on the Ultimate Workflow memory structure (.claude/).
   - Plugin: ultimate-workflow (ultimate-workflow-local)
-- **build-resume**: 
+- **build-planning**: Use when Discovery is complete and you need product-spec.md, implementation-plan.md, and task-breakdown.json.
   - Plugin: ultimate-workflow (ultimate-workflow-local)
-- **build-status**: 
+- **build-qa**: Use during QA phase to verify tests, run product journeys, and produce qa-report.md.
+  - Plugin: ultimate-workflow (ultimate-workflow-local)
+- **build-resume**: Use when the user asks to resume a previously started Ultimate Workflow project.
+  - Plugin: ultimate-workflow (ultimate-workflow-local)
+- **build-status**: Use when the user asks for current project progress or status.
+  - Plugin: ultimate-workflow (ultimate-workflow-local)
+- **build-wrapup**: Use at the end of every workflow session to capture learnings and prepare for next session.
   - Plugin: ultimate-workflow (ultimate-workflow-local)
 - **cairo-vulnerability-scanner**: Scans Cairo/StarkNet smart contracts for 6 critical vulnerabilities including felt252 arithmetic overflow, L1-L2 messaging issues, address conversion problems, and signature replay. Use when auditing StarkNet projects.
   - Plugin: building-secure-contracts (trailofbits)
@@ -212,6 +222,10 @@ Generated: 2026-02-09T11:48:46.680921
   - Plugin: example-skills (anthropic-agent-skills)
 - **cargo-fuzz**: >
   - Plugin: testing-handbook-skills (trailofbits)
+- **claude-automation-recommender**: Analyze a codebase and recommend Claude Code automations (hooks, subagents, skills, plugins, MCP servers). Use when user asks for automation recommendations, wants to optimize their Claude Code setup, mentions improving Claude Code workflows, asks how to first set up Claude Code for a project, or wants to know what Claude Code features they should use.
+  - Plugin: claude-code-setup (claude-plugins-official)
+- **claude-in-chrome-troubleshooting**: Diagnose and fix Claude in Chrome MCP extension connectivity issues. Use when mcp__claude-in-chrome__* tools fail, return "Browser extension is not connected", or behave erratically.
+  - Plugin: claude-in-chrome-troubleshooting (trailofbits)
 - **claude-md-improver**: Audit and improve CLAUDE.md files in repositories. Use when user asks to check, audit, update, improve, or fix CLAUDE.md files. Scans for all CLAUDE.md files, evaluates quality against templates, outputs quality report, then makes targeted updates. Also use when the user mentions "CLAUDE.md maintenance" or "project memory optimization".
   - Plugin: claude-md-management (claude-plugins-official)
 - **code-maturity-assessor**: Systematic code maturity assessment using Trail of Bits' 9-category framework. Analyzes codebase for arithmetic safety, auditing practices, access controls, complexity, decentralization, documentation, MEV risks, low-level code, and testing. Produces professional scorecard with evidence-based ratings and actionable recommendations.
@@ -242,8 +256,6 @@ Generated: 2026-02-09T11:48:46.680921
   - Plugin: dwarf-expert (trailofbits)
 - **entry-point-analyzer**: Analyzes smart contract codebases to identify state-changing entry points for security auditing. Detects externally callable functions that modify state, categorizes them by access level (public, admin, role-restricted, contract-only), and generates structured audit reports. Excludes view/pure/read-only functions. Use when auditing smart contracts (Solidity, Vyper, Solana/Rust, Move, TON, CosmWasm) or when asked to find entry points, audit flows, external functions, access control patterns, or privileged operations.
   - Plugin: entry-point-analyzer (trailofbits)
-- **fix-review**: >
-  - Plugin: fix-review (trailofbits)
 - **frontend-design**: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.
   - Plugin: document-skills (anthropic-agent-skills)
 - **frontend-design**: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.
@@ -266,7 +278,7 @@ Generated: 2026-02-09T11:48:46.680921
   - Plugin: document-skills (anthropic-agent-skills)
 - **internal-comms**: A set of resources to help me write all kinds of internal communications, using the formats that my company likes to use. Claude should use this skill whenever asked to write some sort of internal communications (status reports, leadership updates, 3P updates, company newsletters, FAQs, incident reports, project updates, etc.).
   - Plugin: example-skills (anthropic-agent-skills)
-- **interpreting-culture-index**: Use when interpreting Culture Index surveys, CI profiles, behavioral assessments, or personality data. Supports individual interpretation, team composition (gas/brake/glue), burnout detection, profile comparison, hiring profiles, manager coaching, interview transcript analysis for trait prediction, candidate debrief, onboarding planning, and conflict mediation. Handles PDF vision or JSON input.
+- **interpreting-culture-index**: Interprets Culture Index (CI) surveys, behavioral profiles, and personality assessment data. Supports individual profile interpretation, team composition analysis (gas/brake/glue), burnout detection, profile comparison, hiring profiles, manager coaching, interview transcript analysis for trait prediction, candidate debrief, onboarding planning, and conflict mediation. Accepts extracted JSON or PDF input via OpenCV extraction script.
   - Plugin: culture-index (trailofbits)
 - **libafl**: >
   - Plugin: testing-handbook-skills (trailofbits)
@@ -346,6 +358,8 @@ Generated: 2026-02-09T11:48:46.680921
   - Plugin: document-skills (anthropic-agent-skills)
 - **webapp-testing**: Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browser logs.
   - Plugin: example-skills (anthropic-agent-skills)
+- **writing-hookify-rules**: This skill should be used when the user asks to "create a hookify rule", "write a hook rule", "configure hookify", "add a hookify rule", or needs guidance on hookify rule syntax and patterns.
+  - Plugin: hookify (claude-plugins-official)
 - **wycheproof**: >
   - Plugin: testing-handbook-skills (trailofbits)
 - **xlsx**: Use this skill any time a spreadsheet file is the primary input or output. This means any task where the user wants to: open, read, edit, or fix an existing .xlsx, .xlsm, .csv, or .tsv file (e.g., adding columns, computing formulas, formatting, charting, cleaning messy data); create a new spreadsheet from scratch or from other data sources; or convert between tabular file formats. Trigger especially when the user references a spreadsheet file by name or path — even casually (like \"the xlsx in my downloads\") — and wants something done to it or produced from it. Also trigger for cleaning or restructuring messy tabular data files (malformed rows, misplaced headers, junk data) into proper spreadsheets. The deliverable must be a spreadsheet file. Do NOT trigger when the primary deliverable is a Word document, HTML report, standalone Python script, database pipeline, or Google Sheets API integration, even if tabular data is involved.
@@ -353,7 +367,7 @@ Generated: 2026-02-09T11:48:46.680921
 - **xlsx**: Use this skill any time a spreadsheet file is the primary input or output. This means any task where the user wants to: open, read, edit, or fix an existing .xlsx, .xlsm, .csv, or .tsv file (e.g., adding columns, computing formulas, formatting, charting, cleaning messy data); create a new spreadsheet from scratch or from other data sources; or convert between tabular file formats. Trigger especially when the user references a spreadsheet file by name or path — even casually (like \"the xlsx in my downloads\") — and wants something done to it or produced from it. Also trigger for cleaning or restructuring messy tabular data files (malformed rows, misplaced headers, junk data) into proper spreadsheets. The deliverable must be a spreadsheet file. Do NOT trigger when the primary deliverable is a Word document, HTML report, standalone Python script, database pipeline, or Google Sheets API integration, even if tabular data is involved.
   - Plugin: example-skills (anthropic-agent-skills)
 
-## Agents (18)
+## Agents (23)
 
 - **agent-creator** (sonnet): |
   - Invoke: `Task tool with subagent_type: "plugin-dev:agent-creator"`
@@ -367,29 +381,39 @@ Generated: 2026-02-09T11:48:46.680921
   - Invoke: `Task tool with subagent_type: "feature-dev:code-reviewer"`
 - **code-simplifier** (opus): Simplifies and refines code for clarity, consistency, and maintainability while preserving all functionality. Focuses on recently modified code unless instructed otherwise.
   - Invoke: `Task tool with subagent_type: "code-simplifier:code-simplifier"`
-- **fast-helper-agent** (sonnet): 
+- **conversation-analyzer** (inherit): Use this agent when analyzing conversation transcripts to find behaviors worth preventing with hooks. Examples: <example>Context: User is running /hookify command without arguments\nuser: "/hookify"\nassistant: "I'll analyze the conversation to find behaviors you want to prevent"\n<commentary>The /hookify command without arguments triggers conversation analysis to find unwanted behaviors.</commentary></example><example>Context: User wants to create hooks from recent frustrations\nuser: "Can you look back at this conversation and help me create hooks for the mistakes you made?"\nassistant: "I'll use the conversation-analyzer agent to identify the issues and suggest hooks."\n<commentary>User explicitly asks to analyze conversation for mistakes that should be prevented.</commentary></example>
+  - Invoke: `Task tool with subagent_type: "hookify:conversation-analyzer"`
+- **fast-helper-agent** (haiku): Use this agent when a small, low-risk task needs to be done very quickly (summaries, small edits, file checks, formatting, simple scaffolds).
   - Invoke: `Task tool with subagent_type: "ultimate-workflow:fast-helper-agent"`
-- **orchestrator-rules** (sonnet): 
+- **function-analyzer** (sonnet): Performs ultra-granular per-function deep analysis for security audit context building. Use when analyzing dense functions, data-flow chains, cryptographic implementations, or state machines.
+  - Invoke: `Task tool with subagent_type: "audit-context-building:function-analyzer"`
+- **orchestrator-rules** (sonnet): Rules and guidelines for the main session acting as orchestrator in hybrid model. NOT a spawnable agent.
   - Invoke: `Task tool with subagent_type: "ultimate-workflow:orchestrator-rules"`
-- **plan-auditor-agent** (sonnet): 
+- **plan-auditor-agent** (opus): Use this agent when the workflow has produced product-spec.md, implementation-plan.md, and task-breakdown.json and needs a rigorous quality gate before development.
   - Invoke: `Task tool with subagent_type: "ultimate-workflow:plan-auditor-agent"`
-- **planner-agent** (sonnet): 
+- **planner-agent** (opus): Use this agent when the workflow needs a company-grade product specification and implementation plan created from requirements.
   - Invoke: `Task tool with subagent_type: "ultimate-workflow:planner-agent"`
 - **plugin-validator** (inherit): |
   - Invoke: `Task tool with subagent_type: "plugin-dev:plugin-validator"`
 - **plugin-validator** (inherit): Use this agent when the user asks to "validate my plugin", "check plugin structure", "verify plugin is correct", "validate plugin.json", "check plugin files", or mentions plugin validation. Also trigger proactively after user creates or modifies plugin components. Examples:
   - Invoke: `Task tool with subagent_type: "plugin-factory:plugin-validator"`
-- **product-tester-agent** (sonnet): 
+- **product-tester-agent** (haiku): Use this agent when end-to-end product testing is needed (browser-based validation).
   - Invoke: `Task tool with subagent_type: "ultimate-workflow:product-tester-agent"`
 - **recursive-agent** (inherit): |
   - Invoke: `Task tool with subagent_type: "rlm-agent:recursive-agent"`
 - **recursive-agent** (inherit): |
   - Invoke: `Task tool with subagent_type: "rlm-agent:recursive-agent"`
+- **semgrep-scanner** (sonnet): Executes semgrep CLI scans for a language category. Use when running automated static analysis scans with semgrep against a codebase.
+  - Invoke: `Task tool with subagent_type: "static-analysis:semgrep-scanner"`
+- **semgrep-triager** (sonnet): Classifies semgrep scan findings as true or false positives by reading source context. Use when triaging static analysis results to separate real vulnerabilities from noise.
+  - Invoke: `Task tool with subagent_type: "static-analysis:semgrep-triager"`
 - **skill-reviewer** (inherit): |
   - Invoke: `Task tool with subagent_type: "plugin-dev:skill-reviewer"`
 - **skill-reviewer** (inherit): Use this agent when the user has created or modified a skill and needs quality review, asks to "review my skill", "check skill quality", "improve skill description", or wants to ensure skill follows best practices. Trigger proactively after skill creation. Examples:
   - Invoke: `Task tool with subagent_type: "plugin-factory:skill-reviewer"`
-- **worker-agent** (sonnet): 
+- **spec-compliance-checker** (sonnet): Performs full specification-to-code compliance analysis for blockchain audits. Use when verifying that smart contract implementations correctly match their formal specifications or whitepapers.
+  - Invoke: `Task tool with subagent_type: "spec-to-code-compliance:spec-compliance-checker"`
+- **worker-agent** (sonnet): Use this agent when a medium-complexity implementation task needs to be executed quickly and reliably with the default model.
   - Invoke: `Task tool with subagent_type: "ultimate-workflow:worker-agent"`
 
 ## MCP Servers (4 connected)

@@ -1,0 +1,11 @@
+{
+  "task_id": "42",
+  "status": "completed",
+  "current_task": "Fix failing portal sidebar tests",
+  "progress": 100,
+  "artifacts": [
+    "C:/Users/hades/OneDrive/Desktop/New folder (6)/frontend/src/components/layout/portal-sidebar.tsx",
+    "C:/Users/hades/OneDrive/Desktop/New folder (6)/frontend/src/components/layout/__tests__/portal-sidebar.test.tsx"
+  ],
+  "notes": "Fixed undefined component import in PortalSidebar and aligned test mocking to @/navigation. Targeted and full frontend test suites are passing."
+}

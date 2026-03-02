@@ -1,9 +1,24 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@/test/test-utils'
-import { usePathname } from 'next/navigation'
+import { render, screen } from '@/test/test-utils'
+import { usePathname } from '@/navigation'
 import { PortalSidebar } from '../portal-sidebar'
 
-// Mock usePathname
+vi.mock('@/navigation', () => ({
+  Link: ({ children, href, ...props }: any) => {
+    const React = require('react')
+    return React.createElement('a', { href, ...props }, children)
+  },
+  usePathname: vi.fn(() => '/portal'),
+  useRouter: vi.fn(() => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+  })),
+}))
+
+// Mock usePathname default
 vi.mocked(usePathname).mockReturnValue('/portal')
 
 // Mock useAuth

@@ -17,6 +17,11 @@ use tracing::info;
 use uuid::Uuid;
 use validator::Validate;
 
+use base64::{engine::general_purpose::STANDARD, Engine};
+use ramp_compliance::types::KycTier;
+use ramp_compliance::zkkyc::{ZkCredential, ZkCredentialIssuer, ZkKycProof, ZkKycService};
+use std::sync::OnceLock;
+
 use crate::error::ApiError;
 use crate::middleware::PortalUser;
 use crate::router::AppState;
@@ -113,6 +118,91 @@ pub struct NextTierInfo {
     pub requirements: Vec<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateZkChallengeRequest {
+    #[validate(range(min = 0, max = 3, message = "requiredKycLevel must be between 0 and 3"))]
+    pub required_kyc_level: i16,
+    #[serde(default)]
+    pub allowed_nationalities: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateZkChallengeResponse {
+    pub challenge: String,
+    pub required_kyc_level: i16,
+    pub allowed_nationalities: Vec<String>,
+    pub expires_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct VerifyZkProofRequest {
+    #[validate(length(equal = 64, message = "commitmentHash must be 64 hex chars"))]
+    pub commitment_hash: String,
+    #[validate(length(min = 1, message = "proofData is required"))]
+    pub proof_data: String,
+    #[validate(length(min = 1, message = "publicInputs must contain challenge"))]
+    pub public_inputs: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VerifyZkProofResponse {
+    pub valid: bool,
+    pub commitment_hash: String,
+    pub proven_tier: i16,
+    pub verified_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rejection_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZkCredentialResponse {
+    pub id: String,
+    pub commitment_hash: String,
+    pub issued_at: String,
+    pub expires_at: String,
+    pub issuer_signature: String,
+}
+
+static ZK_KYC_SERVICE: OnceLock<ZkKycService> = OnceLock::new();
+static ZK_CREDENTIAL_ISSUER: OnceLock<ZkCredentialIssuer> = OnceLock::new();
+
+fn zk_kyc_service() -> &'static ZkKycService {
+    ZK_KYC_SERVICE.get_or_init(|| {
+        let key = std::env::var("ZK_KYC_VERIFICATION_KEY")
+            .unwrap_or_else(|_| "rampos-zk-kyc-verification-key-dev".to_string())
+            .into_bytes();
+        ZkKycService::new(key)
+    })
+}
+
+fn zk_credential_issuer() -> &'static ZkCredentialIssuer {
+    ZK_CREDENTIAL_ISSUER.get_or_init(|| {
+        let key = std::env::var("ZK_KYC_ISSUER_KEY")
+            .unwrap_or_else(|_| "rampos-zk-kyc-issuer-key-dev".to_string())
+            .into_bytes();
+        ZkCredentialIssuer::new(key)
+    })
+}
+
+fn map_tier(level: i16) -> KycTier {
+    KycTier::from_i16(level)
+}
+
+fn to_credential_response(credential: ZkCredential) -> ZkCredentialResponse {
+    ZkCredentialResponse {
+        id: credential.id,
+        commitment_hash: credential.commitment_hash,
+        issued_at: credential.issued_at.to_rfc3339(),
+        expires_at: credential.expires_at.to_rfc3339(),
+        issuer_signature: credential.issuer_signature,
+    }
+}
+
 // ============================================================================
 // Router
 // ============================================================================
@@ -123,6 +213,9 @@ pub fn router() -> Router<AppState> {
         .route("/submit", post(submit_kyc))
         .route("/documents", post(upload_document))
         .route("/tier", get(get_tier))
+        .route("/zk/challenge", post(create_zk_kyc_challenge))
+        .route("/zk/verify", post(verify_zk_kyc_proof))
+        .route("/zk/credential", get(get_zk_credential_status))
 }
 
 // ============================================================================
@@ -317,6 +410,113 @@ pub async fn get_tier(
     };
 
     Ok(Json(tier_info))
+}
+
+/// POST /v1/portal/kyc/zk/challenge - Create ZK-KYC challenge
+pub async fn create_zk_kyc_challenge(
+    State(_app_state): State<AppState>,
+    portal_user: PortalUser,
+    Json(req): Json<CreateZkChallengeRequest>,
+) -> Result<Json<CreateZkChallengeResponse>, ApiError> {
+    req.validate()
+        .map_err(|e| ApiError::Validation(e.to_string()))?;
+
+    let user_id = portal_user.user_id.to_string();
+    let service = zk_kyc_service();
+    let challenge = service.create_challenge(
+        &user_id,
+        map_tier(req.required_kyc_level),
+        req.allowed_nationalities.clone(),
+    );
+
+    info!(
+        user_id = %portal_user.user_id,
+        tenant_id = %portal_user.tenant_id,
+        required_kyc_level = req.required_kyc_level,
+        "ZK-KYC challenge created via portal API"
+    );
+
+    Ok(Json(CreateZkChallengeResponse {
+        challenge: challenge.challenge,
+        required_kyc_level: challenge.required_kyc_level as i16,
+        allowed_nationalities: challenge.allowed_nationalities,
+        expires_at: challenge.expires_at.to_rfc3339(),
+    }))
+}
+
+/// POST /v1/portal/kyc/zk/verify - Verify ZK-KYC proof and issue credential
+pub async fn verify_zk_kyc_proof(
+    State(_app_state): State<AppState>,
+    portal_user: PortalUser,
+    Json(req): Json<VerifyZkProofRequest>,
+) -> Result<Json<VerifyZkProofResponse>, ApiError> {
+    req.validate()
+        .map_err(|e| ApiError::Validation(e.to_string()))?;
+
+    let user_id = portal_user.user_id.to_string();
+
+    let proof_bytes = STANDARD
+        .decode(&req.proof_data)
+        .map_err(|_| ApiError::Validation("Invalid base64 proofData".to_string()))?;
+
+    let proof = ZkKycProof {
+        commitment_hash: req.commitment_hash,
+        proof_data: proof_bytes,
+        public_inputs: req.public_inputs,
+    };
+
+    let service = zk_kyc_service();
+    let result = service.verify_proof(&user_id, &proof);
+
+    if result.valid {
+        service.store_verification(
+            &user_id,
+            &result.commitment_hash,
+            result.proven_tier,
+        );
+
+        let issuer = zk_credential_issuer();
+        let _ = issuer.issue_credential(&user_id, &result.commitment_hash);
+
+        info!(
+            user_id = %portal_user.user_id,
+            tenant_id = %portal_user.tenant_id,
+            commitment_hash = %result.commitment_hash,
+            "ZK-KYC proof verified and credential issued"
+        );
+    }
+
+    Ok(Json(VerifyZkProofResponse {
+        valid: result.valid,
+        commitment_hash: result.commitment_hash,
+        proven_tier: result.proven_tier as i16,
+        verified_at: result.verified_at.to_rfc3339(),
+        rejection_reason: result.rejection_reason,
+    }))
+}
+
+/// GET /v1/portal/kyc/zk/credential - Get latest credential for current user
+pub async fn get_zk_credential_status(
+    State(_app_state): State<AppState>,
+    portal_user: PortalUser,
+) -> Result<Json<Option<ZkCredentialResponse>>, ApiError> {
+    let user_id = portal_user.user_id.to_string();
+    let service = zk_kyc_service();
+    if !service.is_verified(&user_id) {
+        return Ok(Json(None));
+    }
+
+    let tier = service
+        .get_verified_tier(&user_id)
+        .unwrap_or(KycTier::Tier0);
+
+    let issuer = zk_credential_issuer();
+    let issued = issuer.issue_credential(
+        &user_id,
+        &format!("{:064x}", tier as i16),
+    );
+
+    Ok(Json(Some(to_credential_response(issued))))
 }
 
 // ============================================================================

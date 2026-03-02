@@ -1,41 +1,57 @@
 {
-  "generated_at": "2026-02-09T11:48:46.681984",
+  "generated_at": "2026-02-23T13:06:47.705294",
   "enabled_plugins": [
     [
-      "superpowers",
-      "claude-plugins-official"
-    ],
-    [
-      "burpsuite-project-parser",
+      "ask-questions-if-underspecified",
       "trailofbits"
     ],
     [
-      "plugin-super-factory",
-      "hades-local"
+      "plugin-factory",
+      "ultimate-workflow-local"
+    ],
+    [
+      "spec-to-code-compliance",
+      "trailofbits"
+    ],
+    [
+      "static-analysis",
+      "trailofbits"
+    ],
+    [
+      "security-guidance",
+      "claude-plugins-official"
+    ],
+    [
+      "content-skills",
+      "baoyu-skills"
     ],
     [
       "example-skills",
       "anthropic-agent-skills"
     ],
     [
+      "pyright-lsp",
+      "claude-plugins-official"
+    ],
+    [
+      "hookify",
+      "claude-plugins-official"
+    ],
+    [
+      "playwright",
+      "claude-plugins-official"
+    ],
+    [
+      "property-based-testing",
+      "trailofbits"
+    ],
+    [
       "document-skills",
       "anthropic-agent-skills"
     ],
     [
-      "ask-questions-if-underspecified",
+      "semgrep-rule-creator",
       "trailofbits"
-    ],
-    [
-      "claude-md-management",
-      "claude-plugins-official"
-    ],
-    [
-      "rust-analyzer-lsp",
-      "claude-plugins-official"
-    ],
-    [
-      "pyright-lsp",
-      "claude-plugins-official"
     ],
     [
       "differential-review",
@@ -46,71 +62,15 @@
       "trailofbits"
     ],
     [
-      "context7",
-      "claude-plugins-official"
-    ],
-    [
-      "coderabbit",
-      "claude-plugins-official"
-    ],
-    [
-      "security-guidance",
-      "claude-plugins-official"
-    ],
-    [
-      "plugin-factory",
-      "ultimate-workflow-local"
-    ],
-    [
-      "plugin-factory",
-      "trailofbits"
-    ],
-    [
-      "plugin-dev",
-      "claude-plugins-official"
-    ],
-    [
-      "variant-analysis",
-      "trailofbits"
-    ],
-    [
-      "ai-generation-skills",
-      "baoyu-skills"
-    ],
-    [
-      "local-plugin-installer",
-      "trailofbits"
-    ],
-    [
-      "static-analysis",
-      "trailofbits"
-    ],
-    [
-      "ultimate-workflow",
-      "ultimate-workflow-local"
-    ],
-    [
-      "frontend-design",
-      "claude-plugins-official"
-    ],
-    [
-      "ui-ux-pro-max",
-      "ui-ux-pro-max-skill"
-    ],
-    [
-      "entry-point-analyzer",
-      "trailofbits"
-    ],
-    [
-      "feature-dev",
-      "claude-plugins-official"
-    ],
-    [
       "rlm-agent",
       "rlm-local"
     ],
     [
-      "code-simplifier",
+      "superpowers",
+      "claude-plugins-official"
+    ],
+    [
+      "firecrawl",
       "claude-plugins-official"
     ],
     [
@@ -118,23 +78,27 @@
       "trailofbits"
     ],
     [
-      "culture-index",
-      "trailofbits"
-    ],
-    [
-      "sharp-edges",
-      "trailofbits"
-    ],
-    [
-      "super-meta-factory",
-      "trailofbits"
-    ],
-    [
-      "code-review",
+      "code-simplifier",
       "claude-plugins-official"
     ],
     [
-      "semgrep-rule-variant-creator",
+      "feature-dev",
+      "claude-plugins-official"
+    ],
+    [
+      "ultimate-workflow",
+      "ultimate-workflow-local"
+    ],
+    [
+      "plugin-super-factory",
+      "hades-local"
+    ],
+    [
+      "context7",
+      "claude-plugins-official"
+    ],
+    [
+      "culture-index",
       "trailofbits"
     ],
     [
@@ -142,11 +106,91 @@
       "trailofbits"
     ],
     [
-      "property-based-testing",
+      "audit-context-building",
       "trailofbits"
     ],
     [
-      "spec-to-code-compliance",
+      "plugin-factory",
+      "trailofbits"
+    ],
+    [
+      "local-plugin-installer",
+      "trailofbits"
+    ],
+    [
+      "ai-generation-skills",
+      "baoyu-skills"
+    ],
+    [
+      "testing-handbook-skills",
+      "trailofbits"
+    ],
+    [
+      "commit-commands",
+      "claude-plugins-official"
+    ],
+    [
+      "entry-point-analyzer",
+      "trailofbits"
+    ],
+    [
+      "plugin-dev",
+      "claude-plugins-official"
+    ],
+    [
+      "semgrep-rule-variant-creator",
+      "trailofbits"
+    ],
+    [
+      "utility-skills",
+      "baoyu-skills"
+    ],
+    [
+      "sharp-edges",
+      "trailofbits"
+    ],
+    [
+      "frontend-design",
+      "claude-plugins-official"
+    ],
+    [
+      "super-meta-factory",
+      "trailofbits"
+    ],
+    [
+      "ui-ux-pro-max",
+      "ui-ux-pro-max-skill"
+    ],
+    [
+      "coderabbit",
+      "claude-plugins-official"
+    ],
+    [
+      "claude-md-management",
+      "claude-plugins-official"
+    ],
+    [
+      "code-review",
+      "claude-plugins-official"
+    ],
+    [
+      "claude-code-setup",
+      "claude-plugins-official"
+    ],
+    [
+      "claude-in-chrome-troubleshooting",
+      "trailofbits"
+    ],
+    [
+      "rust-analyzer-lsp",
+      "claude-plugins-official"
+    ],
+    [
+      "typescript-lsp",
+      "claude-plugins-official"
+    ],
+    [
+      "burpsuite-project-parser",
       "trailofbits"
     ],
     [
@@ -158,32 +202,8 @@
       "trailofbits"
     ],
     [
-      "semgrep-rule-creator",
+      "variant-analysis",
       "trailofbits"
-    ],
-    [
-      "typescript-lsp",
-      "claude-plugins-official"
-    ],
-    [
-      "audit-context-building",
-      "trailofbits"
-    ],
-    [
-      "utility-skills",
-      "baoyu-skills"
-    ],
-    [
-      "playwright",
-      "claude-plugins-official"
-    ],
-    [
-      "testing-handbook-skills",
-      "trailofbits"
-    ],
-    [
-      "content-skills",
-      "baoyu-skills"
     ]
   ],
   "plugins": [
@@ -236,6 +256,12 @@
       "category": "development"
     },
     {
+      "name": "commit-commands",
+      "description": "Commands for git commit workflows including commit, push, and PR creation",
+      "marketplace": "claude-plugins-official",
+      "category": "productivity"
+    },
+    {
       "name": "feature-dev",
       "description": "Comprehensive feature development workflow with specialized agents for codebase exploration, architecture design, and quality review",
       "marketplace": "claude-plugins-official",
@@ -266,10 +292,22 @@
       "category": "development"
     },
     {
+      "name": "hookify",
+      "description": "Easily create custom hooks to prevent unwanted behaviors by analyzing conversation patterns or from explicit instructions. Define rules via simple markdown files.",
+      "marketplace": "claude-plugins-official",
+      "category": "productivity"
+    },
+    {
       "name": "plugin-dev",
       "description": "Comprehensive toolkit for developing Claude Code plugins. Includes 7 expert skills covering hooks, MCP integration, commands, agents, and best practices. AI-assisted plugin creation and validation.",
       "marketplace": "claude-plugins-official",
       "category": "development"
+    },
+    {
+      "name": "claude-code-setup",
+      "description": "Analyze codebases and recommend tailored Claude Code automations such as hooks, skills, MCP servers, and subagents.",
+      "marketplace": "claude-plugins-official",
+      "category": "productivity"
     },
     {
       "name": "claude-md-management",
@@ -308,6 +346,12 @@
       "category": "productivity"
     },
     {
+      "name": "firecrawl",
+      "description": "Web scraping and crawling powered by Firecrawl. Turn any website into clean, LLM-ready markdown or structured data. Scrape single pages, crawl entire sites, search the web, and extract structured information. Includes an AI agent for autonomous multi-source data gathering - just describe what you need and it finds, navigates, and extracts automatically.",
+      "marketplace": "claude-plugins-official",
+      "category": "development"
+    },
+    {
       "name": "rlm-agent",
       "description": "Recursive Language Model integration for handling near-infinite context tasks",
       "marketplace": "rlm-local",
@@ -315,7 +359,7 @@
     },
     {
       "name": "ask-questions-if-underspecified",
-      "description": "Clarify requirements before implementing. When doubting, ask questions.",
+      "description": "Clarify ambiguous requirements by asking questions before implementing. Only when invoked explicitly.",
       "marketplace": "trailofbits",
       "category": ""
     },
@@ -333,7 +377,13 @@
     },
     {
       "name": "burpsuite-project-parser",
-      "description": "Search and extract data from Burp Suite project files (.burp) for use in Claude",
+      "description": "Search and extract data from Burp Suite project files (.burp) for security analysis",
+      "marketplace": "trailofbits",
+      "category": ""
+    },
+    {
+      "name": "claude-in-chrome-troubleshooting",
+      "description": "Diagnose and fix Claude in Chrome MCP extension connectivity issues",
       "marketplace": "trailofbits",
       "category": ""
     },
@@ -352,12 +402,6 @@
     {
       "name": "differential-review",
       "description": "Security-focused differential review of code changes with git history analysis and blast radius estimation",
-      "marketplace": "trailofbits",
-      "category": ""
-    },
-    {
-      "name": "fix-review",
-      "description": "Verify fix commits address audit findings without introducing bugs",
       "marketplace": "trailofbits",
       "category": ""
     },
@@ -791,7 +835,7 @@
     },
     {
       "name": "baoyu-post-to-wechat",
-      "description": "Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (图文) with multiple images. Use when user mentions \"发布公众号\", \"post to wechat\", \"微信公众号\", or \"图文/文章\".",
+      "description": "Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (贴图, formerly 图文) with multiple images. Use when user mentions \"发布公众号\", \"post to wechat\", \"微信公众号\", or \"贴图/图文/文章\".",
       "plugin": "content-skills",
       "marketplace": "baoyu-skills",
       "user_invocable": false,
@@ -911,7 +955,7 @@
     },
     {
       "name": "baoyu-post-to-wechat",
-      "description": "Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (图文) with multiple images. Use when user mentions \"发布公众号\", \"post to wechat\", \"微信公众号\", or \"图文/文章\".",
+      "description": "Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (贴图, formerly 图文) with multiple images. Use when user mentions \"发布公众号\", \"post to wechat\", \"微信公众号\", or \"贴图/图文/文章\".",
       "plugin": "ai-generation-skills",
       "marketplace": "baoyu-skills",
       "user_invocable": false,
@@ -1031,7 +1075,7 @@
     },
     {
       "name": "baoyu-post-to-wechat",
-      "description": "Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (图文) with multiple images. Use when user mentions \"发布公众号\", \"post to wechat\", \"微信公众号\", or \"图文/文章\".",
+      "description": "Posts content to WeChat Official Account (微信公众号) via API or Chrome CDP. Supports article posting (文章) with HTML, markdown, or plain text input, and image-text posting (贴图, formerly 图文) with multiple images. Use when user mentions \"发布公众号\", \"post to wechat\", \"微信公众号\", or \"贴图/图文/文章\".",
       "plugin": "utility-skills",
       "marketplace": "baoyu-skills",
       "user_invocable": false,
@@ -1076,6 +1120,14 @@
       "marketplace": "claude-plugins-official",
       "user_invocable": false,
       "invoke": "Skill tool: frontend-design"
+    },
+    {
+      "name": "writing-hookify-rules",
+      "description": "This skill should be used when the user asks to \"create a hookify rule\", \"write a hook rule\", \"configure hookify\", \"add a hookify rule\", or needs guidance on hookify rule syntax and patterns.",
+      "plugin": "hookify",
+      "marketplace": "claude-plugins-official",
+      "user_invocable": false,
+      "invoke": "Skill tool: writing-hookify-rules"
     },
     {
       "name": "agent-development",
@@ -1132,6 +1184,14 @@
       "marketplace": "claude-plugins-official",
       "user_invocable": false,
       "invoke": "Skill tool: skill-development"
+    },
+    {
+      "name": "claude-automation-recommender",
+      "description": "Analyze a codebase and recommend Claude Code automations (hooks, subagents, skills, plugins, MCP servers). Use when user asks for automation recommendations, wants to optimize their Claude Code setup, mentions improving Claude Code workflows, asks how to first set up Claude Code for a project, or wants to know what Claude Code features they should use.",
+      "plugin": "claude-code-setup",
+      "marketplace": "claude-plugins-official",
+      "user_invocable": false,
+      "invoke": "Skill tool: claude-automation-recommender"
     },
     {
       "name": "claude-md-improver",
@@ -1246,6 +1306,14 @@
       "invoke": "Skill tool: ton-vulnerability-scanner"
     },
     {
+      "name": "claude-in-chrome-troubleshooting",
+      "description": "Diagnose and fix Claude in Chrome MCP extension connectivity issues. Use when mcp__claude-in-chrome__* tools fail, return \"Browser extension is not connected\", or behave erratically.",
+      "plugin": "claude-in-chrome-troubleshooting",
+      "marketplace": "trailofbits",
+      "user_invocable": false,
+      "invoke": "Skill tool: claude-in-chrome-troubleshooting"
+    },
+    {
       "name": "constant-time-analysis",
       "description": "Detects timing side-channel vulnerabilities in cryptographic code. Use when implementing or reviewing crypto code, encountering division on secrets, secret-dependent branches, or constant-time programming questions in C, C++, Go, Rust, Swift, Java, Kotlin, C#, PHP, JavaScript, TypeScript, Python, or Ruby.",
       "plugin": "constant-time-analysis",
@@ -1255,7 +1323,7 @@
     },
     {
       "name": "interpreting-culture-index",
-      "description": "Use when interpreting Culture Index surveys, CI profiles, behavioral assessments, or personality data. Supports individual interpretation, team composition (gas/brake/glue), burnout detection, profile comparison, hiring profiles, manager coaching, interview transcript analysis for trait prediction, candidate debrief, onboarding planning, and conflict mediation. Handles PDF vision or JSON input.",
+      "description": "Interprets Culture Index (CI) surveys, behavioral profiles, and personality assessment data. Supports individual profile interpretation, team composition analysis (gas/brake/glue), burnout detection, profile comparison, hiring profiles, manager coaching, interview transcript analysis for trait prediction, candidate debrief, onboarding planning, and conflict mediation. Accepts extracted JSON or PDF input via OpenCV extraction script.",
       "plugin": "culture-index",
       "marketplace": "trailofbits",
       "user_invocable": false,
@@ -1268,14 +1336,6 @@
       "marketplace": "trailofbits",
       "user_invocable": false,
       "invoke": "Skill tool: differential-review"
-    },
-    {
-      "name": "fix-review",
-      "description": ">",
-      "plugin": "fix-review",
-      "marketplace": "trailofbits",
-      "user_invocable": false,
-      "invoke": "Skill tool: fix-review"
     },
     {
       "name": "dwarf-expert",
@@ -1487,7 +1547,7 @@
     },
     {
       "name": "build",
-      "description": "",
+      "description": "Use when the user asks to build a complete app/product from an idea (end-to-end workflow).",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
       "user_invocable": false,
@@ -1495,15 +1555,23 @@
     },
     {
       "name": "build-approve",
-      "description": "",
+      "description": "Use when the user approves the plan and you are transitioning from Planning to Development.",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
       "user_invocable": false,
       "invoke": "Skill tool: build-approve"
     },
     {
+      "name": "build-debug-compete",
+      "description": "Use when a complex bug needs investigation from multiple angles simultaneously.",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: build-debug-compete"
+    },
+    {
       "name": "build-development",
-      "description": "",
+      "description": "Use during Development phase to coordinate native Team/Task execution in parallel waves.",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
       "user_invocable": false,
@@ -1511,7 +1579,7 @@
     },
     {
       "name": "build-discovery",
-      "description": "",
+      "description": "Use when starting Discovery to gather requirements via a short interview.",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
       "user_invocable": false,
@@ -1519,15 +1587,23 @@
     },
     {
       "name": "build-gap-detect",
-      "description": "",
+      "description": "Use when a needed capability is missing and should be solved via existing resources or a new plugin/skill.",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
       "user_invocable": false,
       "invoke": "Skill tool: build-gap-detect"
     },
     {
+      "name": "build-headless",
+      "description": "Generate a headless pipeline script for running workflow phases non-interactively.",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: build-headless"
+    },
+    {
       "name": "build-memory",
-      "description": "",
+      "description": "Use for operations on the Ultimate Workflow memory structure (.claude/).",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
       "user_invocable": false,
@@ -1535,7 +1611,7 @@
     },
     {
       "name": "build-planning",
-      "description": "",
+      "description": "Use when Discovery is complete and you need product-spec.md, implementation-plan.md, and task-breakdown.json.",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
       "user_invocable": false,
@@ -1543,7 +1619,7 @@
     },
     {
       "name": "build-qa",
-      "description": "",
+      "description": "Use during QA phase to verify tests, run product journeys, and produce qa-report.md.",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
       "user_invocable": false,
@@ -1551,7 +1627,7 @@
     },
     {
       "name": "build-resume",
-      "description": "",
+      "description": "Use when the user asks to resume a previously started Ultimate Workflow project.",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
       "user_invocable": false,
@@ -1559,11 +1635,19 @@
     },
     {
       "name": "build-status",
-      "description": "",
+      "description": "Use when the user asks for current project progress or status.",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
       "user_invocable": false,
       "invoke": "Skill tool: build-status"
+    },
+    {
+      "name": "build-wrapup",
+      "description": "Use at the end of every workflow session to capture learnings and prepare for next session.",
+      "plugin": "ultimate-workflow",
+      "marketplace": "ultimate-workflow-local",
+      "user_invocable": false,
+      "invoke": "Skill tool: build-wrapup"
     },
     {
       "name": "Agent Development",
@@ -1672,6 +1756,14 @@
       "invoke": "Task tool with subagent_type: \"code-simplifier:code-simplifier\""
     },
     {
+      "name": "conversation-analyzer",
+      "description": "Use this agent when analyzing conversation transcripts to find behaviors worth preventing with hooks. Examples: <example>Context: User is running /hookify command without arguments\\nuser: \"/hookify\"\\nassistant: \"I'll analyze the conversation to find behaviors you want to prevent\"\\n<commentary>The /hookify command without arguments triggers conversation analysis to find unwanted behaviors.</commentary></example><example>Context: User wants to create hooks from recent frustrations\\nuser: \"Can you look back at this conversation and help me create hooks for the mistakes you made?\"\\nassistant: \"I'll use the conversation-analyzer agent to identify the issues and suggest hooks.\"\\n<commentary>User explicitly asks to analyze conversation for mistakes that should be prevented.</commentary></example>",
+      "model": "inherit",
+      "plugin": "hookify",
+      "marketplace": "claude-plugins-official",
+      "invoke": "Task tool with subagent_type: \"hookify:conversation-analyzer\""
+    },
+    {
       "name": "agent-creator",
       "description": "|",
       "model": "sonnet",
@@ -1704,16 +1796,48 @@
       "invoke": "Task tool with subagent_type: \"rlm-agent:recursive-agent\""
     },
     {
-      "name": "fast-helper-agent",
-      "description": "",
+      "name": "function-analyzer",
+      "description": "Performs ultra-granular per-function deep analysis for security audit context building. Use when analyzing dense functions, data-flow chains, cryptographic implementations, or state machines.",
       "model": "sonnet",
+      "plugin": "audit-context-building",
+      "marketplace": "trailofbits",
+      "invoke": "Task tool with subagent_type: \"audit-context-building:function-analyzer\""
+    },
+    {
+      "name": "semgrep-scanner",
+      "description": "Executes semgrep CLI scans for a language category. Use when running automated static analysis scans with semgrep against a codebase.",
+      "model": "sonnet",
+      "plugin": "static-analysis",
+      "marketplace": "trailofbits",
+      "invoke": "Task tool with subagent_type: \"static-analysis:semgrep-scanner\""
+    },
+    {
+      "name": "semgrep-triager",
+      "description": "Classifies semgrep scan findings as true or false positives by reading source context. Use when triaging static analysis results to separate real vulnerabilities from noise.",
+      "model": "sonnet",
+      "plugin": "static-analysis",
+      "marketplace": "trailofbits",
+      "invoke": "Task tool with subagent_type: \"static-analysis:semgrep-triager\""
+    },
+    {
+      "name": "spec-compliance-checker",
+      "description": "Performs full specification-to-code compliance analysis for blockchain audits. Use when verifying that smart contract implementations correctly match their formal specifications or whitepapers.",
+      "model": "sonnet",
+      "plugin": "spec-to-code-compliance",
+      "marketplace": "trailofbits",
+      "invoke": "Task tool with subagent_type: \"spec-to-code-compliance:spec-compliance-checker\""
+    },
+    {
+      "name": "fast-helper-agent",
+      "description": "Use this agent when a small, low-risk task needs to be done very quickly (summaries, small edits, file checks, formatting, simple scaffolds).",
+      "model": "haiku",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
       "invoke": "Task tool with subagent_type: \"ultimate-workflow:fast-helper-agent\""
     },
     {
       "name": "orchestrator-rules",
-      "description": "",
+      "description": "Rules and guidelines for the main session acting as orchestrator in hybrid model. NOT a spawnable agent.",
       "model": "sonnet",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
@@ -1721,31 +1845,31 @@
     },
     {
       "name": "plan-auditor-agent",
-      "description": "",
-      "model": "sonnet",
+      "description": "Use this agent when the workflow has produced product-spec.md, implementation-plan.md, and task-breakdown.json and needs a rigorous quality gate before development.",
+      "model": "opus",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
       "invoke": "Task tool with subagent_type: \"ultimate-workflow:plan-auditor-agent\""
     },
     {
       "name": "planner-agent",
-      "description": "",
-      "model": "sonnet",
+      "description": "Use this agent when the workflow needs a company-grade product specification and implementation plan created from requirements.",
+      "model": "opus",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
       "invoke": "Task tool with subagent_type: \"ultimate-workflow:planner-agent\""
     },
     {
       "name": "product-tester-agent",
-      "description": "",
-      "model": "sonnet",
+      "description": "Use this agent when end-to-end product testing is needed (browser-based validation).",
+      "model": "haiku",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",
       "invoke": "Task tool with subagent_type: \"ultimate-workflow:product-tester-agent\""
     },
     {
       "name": "worker-agent",
-      "description": "",
+      "description": "Use this agent when a medium-complexity implementation task needs to be executed quickly and reliably with the default model.",
       "model": "sonnet",
       "plugin": "ultimate-workflow",
       "marketplace": "ultimate-workflow-local",

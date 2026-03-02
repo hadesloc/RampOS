@@ -3,6 +3,7 @@
 //! Also includes EIP-7702 for EOA smart account delegation.
 
 pub mod bundler;
+pub mod custody_signer;
 pub mod eip7702;
 pub mod gas;
 pub mod passkey;
@@ -13,6 +14,7 @@ pub mod types;
 pub mod user_operation;
 
 pub use bundler::BundlerClient;
+pub use custody_signer::CustodySigner;
 pub use eip7702::{
     Authorization, AuthorizationList, Delegation, DelegationManager, Eip7702Config,
     Eip7702Transaction, Eip7702TxBuilder, SessionDelegation, SignedAuthorization,

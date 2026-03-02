@@ -164,7 +164,6 @@ export default function SettingsPage() {
   const handleLogout = async () => {
     try {
       await logout();
-      router.push("/portal/login");
     } catch {
       toast.error(tCommon('error'));
     }

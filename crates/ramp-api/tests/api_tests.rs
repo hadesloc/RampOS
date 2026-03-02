@@ -874,3 +874,31 @@ async fn test_admin_dashboard() {
     let response = app.router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn test_sso_callback_missing_state_rejected() {
+    let app = setup_app().await;
+
+    let request = Request::builder()
+        .uri("/v1/auth/sso/test-provider/callback?code=test-code")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_sso_callback_invalid_state_rejected() {
+    let app = setup_app().await;
+
+    let request = Request::builder()
+        .uri("/v1/auth/sso/test-provider/callback?code=test-code&state=invalid-state")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}

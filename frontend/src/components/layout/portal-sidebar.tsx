@@ -13,7 +13,6 @@ import {
   Menu,
   X,
   User,
-  LogOut,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -27,13 +26,13 @@ import {
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/auth-context";
 import { useTranslations } from "next-intl";
-import { LocaleSwitcher } from "@/components/locale-switcher";
+import LocaleSwitcher from "@/components/locale-switcher";
 
 export function PortalSidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const t = useTranslations('Navigation');
   const tPortal = useTranslations('Portal.dashboard');
 
@@ -215,22 +214,7 @@ export function PortalSidebar() {
         <div className="border-t p-4 bg-muted/20">
             {/* Desktop Collapsed Footer */}
             <div className={cn("hidden md:flex flex-col items-center gap-4", !isCollapsed && "hidden")}>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                         <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => logout()}
-                        >
-                            <LogOut className="h-4 w-4" />
-                            <span className="sr-only">{t('logout')}</span>
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                         <p>{t('logout')} {user?.email}</p>
-                    </TooltipContent>
-                </Tooltip>
+                <LocaleSwitcher />
             </div>
 
              {/* Standard Footer */}
@@ -247,14 +231,6 @@ export function PortalSidebar() {
                    </div>
                    <LocaleSwitcher />
                 </div>
-                 <Button
-                    variant="outline"
-                    className="w-full justify-start gap-2 text-muted-foreground hover:text-destructive hover:border-destructive/50"
-                    onClick={() => logout()}
-                >
-                    <LogOut className="h-4 w-4" />
-                    {t('logout')}
-                </Button>
             </div>
         </div>
       </aside>

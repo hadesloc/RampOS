@@ -3,10 +3,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
-  authApi,
   walletApi,
   AuthUser,
-  AuthResponse,
   SmartAccount,
   PortalApiError,
 } from "@/lib/portal-api";
@@ -32,278 +30,83 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// WebAuthn helpers
-function base64UrlEncode(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let str = "";
-  for (let i = 0; i < bytes.length; i++) {
-    str += String.fromCharCode(bytes[i]);
-  }
-  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
-
-function base64UrlDecode(str: string): ArrayBuffer {
-  const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
-  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  const raw = atob(base64 + padding);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) {
-    bytes[i] = raw.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
+const GUEST_USER: AuthUser = {
+  id: "guest-user",
+  email: "guest@rampos.local",
+  kycStatus: "NONE",
+  kycTier: 0,
+  status: "ACTIVE",
+  createdAt: new Date(0).toISOString(),
+};
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user] = useState<AuthUser | null>(GUEST_USER);
   const [wallet, setWallet] = useState<SmartAccount | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const isAuthenticated = !!user;
+  const isAuthenticated = true;
 
-  // Load user on mount by checking session status via API
-  // Auth tokens are now in httpOnly cookies, so we check session via API
+  // Login is disabled: bootstrap guest state and attempt wallet fetch.
   useEffect(() => {
-    const initAuth = async () => {
+    const initGuest = async () => {
       try {
-        // Check session status via API (cookies are sent automatically)
-        const session = await authApi.checkSession();
-
-        if (session.authenticated && session.user) {
-          setUser(session.user);
-
-          // Also fetch wallet
-          try {
-            const walletData = await walletApi.getAccount();
-            setWallet(walletData);
-          } catch {
-            // Wallet might not exist yet
-          }
-        }
+        const walletData = await walletApi.getAccount();
+        setWallet(walletData);
       } catch {
-        // Session check failed, user is not authenticated
-        // This is expected for non-authenticated users
+        // Guest mode may not have a wallet yet.
       } finally {
         setIsLoading(false);
       }
     };
 
-    initAuth();
+    initGuest();
   }, []);
 
-  const handleAuthSuccess = useCallback(async (response: AuthResponse) => {
-    // Tokens are now set as httpOnly cookies by the server
-    // We just need to update the local state with user info
-    setUser(response.user);
+  const loginWithPasskey = useCallback(async (_email?: string) => {
+    setIsLoading(true);
+    setError(null);
+    router.push("/portal");
+    setIsLoading(false);
+  }, [router]);
 
-    // Fetch wallet
-    try {
-      const walletData = await walletApi.getAccount();
-      setWallet(walletData);
-    } catch {
-      // Wallet might not exist yet
-    }
+  const registerWithPasskey = useCallback(async (_email: string) => {
+    setIsLoading(true);
+    setError(null);
+    router.push("/portal");
+    setIsLoading(false);
+  }, [router]);
 
-    // Redirect to portal
+  const loginWithMagicLink = useCallback(async (_email: string) => {
+    setIsLoading(true);
+    setError(null);
+    router.push("/portal");
+    setIsLoading(false);
+  }, [router]);
+
+  const verifyMagicLink = useCallback(async (_token: string) => {
+    setIsLoading(true);
+    setError(null);
+    router.push("/portal");
+    setIsLoading(false);
+  }, [router]);
+
+  const logout = useCallback(async () => {
+    setError(null);
     router.push("/portal");
   }, [router]);
 
-  const loginWithPasskey = useCallback(async (email?: string) => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // Get challenge from server
-      const challenge = await authApi.getAuthenticationChallenge(email);
-
-      // Create credential request options
-      const publicKeyCredentialRequestOptions: PublicKeyCredentialRequestOptions = {
-        challenge: base64UrlDecode(challenge.challenge),
-        rpId: challenge.rpId,
-        timeout: challenge.timeout,
-        userVerification: "preferred",
-      };
-
-      // Request credential from browser
-      const credential = (await navigator.credentials.get({
-        publicKey: publicKeyCredentialRequestOptions,
-      })) as PublicKeyCredential;
-
-      if (!credential) {
-        throw new Error("No credential returned");
-      }
-
-      const response = credential.response as AuthenticatorAssertionResponse;
-
-      // Send credential to server
-      // Server will set auth cookies and return user info
-      const authResponse = await authApi.completeAuthentication({
-        id: credential.id,
-        rawId: base64UrlEncode(credential.rawId),
-        type: "public-key",
-        response: {
-          clientDataJSON: base64UrlEncode(response.clientDataJSON),
-          authenticatorData: base64UrlEncode(response.authenticatorData),
-          signature: base64UrlEncode(response.signature),
-        },
-      });
-
-      await handleAuthSuccess(authResponse);
-    } catch (err) {
-      const message =
-        err instanceof PortalApiError
-          ? err.message
-          : err instanceof Error
-          ? err.message
-          : "Authentication failed";
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [handleAuthSuccess]);
-
-  const registerWithPasskey = useCallback(async (email: string) => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // Get challenge from server
-      const challenge = await authApi.getRegistrationChallenge(email);
-
-      // Create credential creation options
-      const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
-        challenge: base64UrlDecode(challenge.challenge),
-        rp: {
-          id: challenge.rpId,
-          name: challenge.rpName,
-        },
-        user: {
-          id: base64UrlDecode(challenge.userId),
-          name: challenge.userName,
-          displayName: challenge.userDisplayName,
-        },
-        pubKeyCredParams: challenge.pubKeyCredParams,
-        timeout: challenge.timeout,
-        attestation: challenge.attestation,
-        authenticatorSelection: challenge.authenticatorSelection,
-        excludeCredentials: challenge.excludeCredentials?.map((cred) => ({
-          id: base64UrlDecode(cred.id),
-          type: cred.type,
-          transports: cred.transports as AuthenticatorTransport[],
-        })),
-      };
-
-      // Create credential
-      const credential = (await navigator.credentials.create({
-        publicKey: publicKeyCredentialCreationOptions,
-      })) as PublicKeyCredential;
-
-      if (!credential) {
-        throw new Error("No credential returned");
-      }
-
-      const response = credential.response as AuthenticatorAttestationResponse;
-
-      // Send credential to server
-      // Server will set auth cookies and return user info
-      const authResponse = await authApi.completeRegistration(email, {
-        id: credential.id,
-        rawId: base64UrlEncode(credential.rawId),
-        type: "public-key",
-        response: {
-          clientDataJSON: base64UrlEncode(response.clientDataJSON),
-          attestationObject: base64UrlEncode(response.attestationObject),
-        },
-      });
-
-      await handleAuthSuccess(authResponse);
-    } catch (err) {
-      const message =
-        err instanceof PortalApiError
-          ? err.message
-          : err instanceof Error
-          ? err.message
-          : "Registration failed";
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [handleAuthSuccess]);
-
-  const loginWithMagicLink = useCallback(async (email: string) => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      await authApi.requestMagicLink(email);
-      // Don't set loading to false, show "check email" message
-    } catch (err) {
-      const message =
-        err instanceof PortalApiError
-          ? err.message
-          : "Failed to send magic link";
-      setError(message);
-      setIsLoading(false);
-      throw err;
-    }
-  }, []);
-
-  const verifyMagicLink = useCallback(async (token: string) => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // Server will set auth cookies and return user info
-      const authResponse = await authApi.verifyMagicLink(token);
-      await handleAuthSuccess(authResponse);
-    } catch (err) {
-      const message =
-        err instanceof PortalApiError
-          ? err.message
-          : "Invalid or expired magic link";
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [handleAuthSuccess]);
-
-  const logout = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      // Server will clear auth cookies
-      await authApi.logout();
-    } catch {
-      // Ignore logout errors
-    } finally {
-      // Clear local state
-      setUser(null);
-      setWallet(null);
-      setIsLoading(false);
-      router.push("/portal/login");
-    }
-  }, [router]);
-
   const refreshWallet = useCallback(async () => {
-    if (!user) return;
-
     try {
       const walletData = await walletApi.getAccount();
       setWallet(walletData);
     } catch {
       // Wallet refresh failed silently
     }
-  }, [user]);
+  }, []);
 
   const createWallet = useCallback(async () => {
-    if (!user) {
-      setError("Must be logged in to create wallet");
-      return;
-    }
-
     setIsLoading(true);
     setError(null);
 
@@ -320,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, []);
 
   const clearError = useCallback(() => {
     setError(null);
@@ -358,14 +161,7 @@ export function withAuth<P extends object>(
   Component: React.ComponentType<P>
 ): React.FC<P> {
   return function ProtectedRoute(props: P) {
-    const { isAuthenticated, isLoading } = useAuth();
-    const router = useRouter();
-
-    useEffect(() => {
-      if (!isLoading && !isAuthenticated) {
-        router.push("/portal/login");
-      }
-    }, [isAuthenticated, isLoading, router]);
+    const { isLoading } = useAuth();
 
     if (isLoading) {
       return (
@@ -373,10 +169,6 @@ export function withAuth<P extends object>(
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
       );
-    }
-
-    if (!isAuthenticated) {
-      return null;
     }
 
     return <Component {...props} />;

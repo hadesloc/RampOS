@@ -9,17 +9,18 @@
 //! - POST /v1/yield/rebalance - Trigger manual rebalance
 
 use axum::{
-    extract::{Extension, Path, Query},
+    extract::{Extension, Path, Query, State},
     http::HeaderMap,
     Json,
 };
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use alloy::primitives::Address;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
+use crate::router::AppState;
 
 // ============================================================================
 // DTOs
@@ -140,6 +141,7 @@ pub struct RebalanceResponse {
 pub async fn list_strategies(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
+    State(_app_state): State<AppState>,
 ) -> Result<Json<ListStrategiesResponse>, ApiError> {
     super::tier::check_admin_key(&headers)?;
     info!(
@@ -147,59 +149,9 @@ pub async fn list_strategies(
         "Listing yield strategies"
     );
 
-    // Return pre-defined strategies
-    let strategies = vec![
-        StrategyResponse {
-            id: "conservative".to_string(),
-            name: "Conservative Strategy".to_string(),
-            description: "Low risk strategy prioritizing safety and stable yields. Limits exposure to well-established protocols only.".to_string(),
-            risk_level: "low".to_string(),
-            max_protocol_exposure: 40,
-            max_token_exposure: 50,
-            min_apy_threshold: 2.0,
-            rebalance_apy_threshold: 1.0,
-            min_health_factor: 2.0,
-            rebalance_interval_secs: 86400,
-            gas_aware_rebalancing: true,
-            allowed_protocols: vec!["aave-v3".to_string()],
-            is_active: false,
-        },
-        StrategyResponse {
-            id: "balanced".to_string(),
-            name: "Balanced Strategy".to_string(),
-            description: "Moderate risk strategy balancing yield and safety. Diversifies across multiple protocols.".to_string(),
-            risk_level: "medium".to_string(),
-            max_protocol_exposure: 50,
-            max_token_exposure: 60,
-            min_apy_threshold: 1.0,
-            rebalance_apy_threshold: 0.5,
-            min_health_factor: 1.5,
-            rebalance_interval_secs: 3600,
-            gas_aware_rebalancing: true,
-            allowed_protocols: vec!["aave-v3".to_string(), "compound-v3".to_string()],
-            is_active: false,
-        },
-        StrategyResponse {
-            id: "aggressive".to_string(),
-            name: "Aggressive Strategy".to_string(),
-            description: "High yield strategy accepting more risk. Actively chases highest APY with frequent rebalancing.".to_string(),
-            risk_level: "high".to_string(),
-            max_protocol_exposure: 70,
-            max_token_exposure: 80,
-            min_apy_threshold: 0.5,
-            rebalance_apy_threshold: 0.3,
-            min_health_factor: 1.2,
-            rebalance_interval_secs: 1800,
-            gas_aware_rebalancing: false,
-            allowed_protocols: vec!["aave-v3".to_string(), "compound-v3".to_string()],
-            is_active: false,
-        },
-    ];
-
-    Ok(Json(ListStrategiesResponse {
-        data: strategies,
-        active_strategy: None,
-    }))
+    Err(ApiError::Internal(
+        "Yield strategy runtime is not configured for this environment".to_string(),
+    ))
 }
 
 /// GET /v1/yield/strategies/:id - Get strategy details
@@ -207,6 +159,7 @@ pub async fn get_strategy(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     Path(strategy_id): Path<String>,
+    State(_app_state): State<AppState>,
 ) -> Result<Json<StrategyResponse>, ApiError> {
     super::tier::check_admin_key(&headers)?;
     info!(
@@ -215,56 +168,9 @@ pub async fn get_strategy(
         "Getting yield strategy"
     );
 
-    let strategy = match strategy_id.as_str() {
-        "conservative" => StrategyResponse {
-            id: "conservative".to_string(),
-            name: "Conservative Strategy".to_string(),
-            description: "Low risk strategy prioritizing safety and stable yields.".to_string(),
-            risk_level: "low".to_string(),
-            max_protocol_exposure: 40,
-            max_token_exposure: 50,
-            min_apy_threshold: 2.0,
-            rebalance_apy_threshold: 1.0,
-            min_health_factor: 2.0,
-            rebalance_interval_secs: 86400,
-            gas_aware_rebalancing: true,
-            allowed_protocols: vec!["aave-v3".to_string()],
-            is_active: false,
-        },
-        "balanced" => StrategyResponse {
-            id: "balanced".to_string(),
-            name: "Balanced Strategy".to_string(),
-            description: "Moderate risk strategy balancing yield and safety.".to_string(),
-            risk_level: "medium".to_string(),
-            max_protocol_exposure: 50,
-            max_token_exposure: 60,
-            min_apy_threshold: 1.0,
-            rebalance_apy_threshold: 0.5,
-            min_health_factor: 1.5,
-            rebalance_interval_secs: 3600,
-            gas_aware_rebalancing: true,
-            allowed_protocols: vec!["aave-v3".to_string(), "compound-v3".to_string()],
-            is_active: false,
-        },
-        "aggressive" => StrategyResponse {
-            id: "aggressive".to_string(),
-            name: "Aggressive Strategy".to_string(),
-            description: "High yield strategy with frequent rebalancing.".to_string(),
-            risk_level: "high".to_string(),
-            max_protocol_exposure: 70,
-            max_token_exposure: 80,
-            min_apy_threshold: 0.5,
-            rebalance_apy_threshold: 0.3,
-            min_health_factor: 1.2,
-            rebalance_interval_secs: 1800,
-            gas_aware_rebalancing: false,
-            allowed_protocols: vec!["aave-v3".to_string(), "compound-v3".to_string()],
-            is_active: false,
-        },
-        _ => return Err(ApiError::NotFound(format!("Strategy {} not found", strategy_id))),
-    };
-
-    Ok(Json(strategy))
+    Err(ApiError::Internal(
+        "Yield strategy runtime is not configured for this environment".to_string(),
+    ))
 }
 
 /// POST /v1/yield/strategies/:id/activate - Activate a yield strategy
@@ -324,6 +230,7 @@ pub async fn get_performance(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
     Query(query): Query<PerformanceQuery>,
+    State(_app_state): State<AppState>,
 ) -> Result<Json<PerformanceResponse>, ApiError> {
     super::tier::check_admin_key(&headers)?;
     info!(
@@ -332,64 +239,16 @@ pub async fn get_performance(
         "Getting yield performance"
     );
 
-    let now = Utc::now();
-    let period_start = match query.period.as_str() {
-        "24h" => now - Duration::hours(24),
-        "7d" => now - Duration::days(7),
-        "30d" => now - Duration::days(30),
-        _ => now - Duration::days(7),
-    };
-
-    // Return simulated performance data
-    Ok(Json(PerformanceResponse {
-        period_start: period_start.to_rfc3339(),
-        period_end: now.to_rfc3339(),
-        total_deposited: "1000000000000".to_string(), // 1M USDC (6 decimals)
-        total_withdrawn: "100000000000".to_string(),  // 100K USDC
-        total_yield_earned: "5000000000".to_string(), // 5K USDC
-        average_apy: 4.8,
-        net_apy: 4.5, // After gas costs
-        num_rebalances: 3,
-        total_gas_cost: "50000000".to_string(), // 50 USDC
-        positions: vec![
-            PositionPerformance {
-                protocol: "aave-v3".to_string(),
-                token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
-                principal: "600000000000".to_string(),
-                current_value: "603000000000".to_string(),
-                yield_earned: "3000000000".to_string(),
-                apy: 4.5,
-            },
-            PositionPerformance {
-                protocol: "compound-v3".to_string(),
-                token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
-                principal: "300000000000".to_string(),
-                current_value: "302000000000".to_string(),
-                yield_earned: "2000000000".to_string(),
-                apy: 5.2,
-            },
-        ],
-        protocol_breakdown: vec![
-            ProtocolBreakdown {
-                protocol: "aave-v3".to_string(),
-                allocation_percent: 66.7,
-                current_apy: 4.5,
-                yield_earned: "3000000000".to_string(),
-            },
-            ProtocolBreakdown {
-                protocol: "compound-v3".to_string(),
-                allocation_percent: 33.3,
-                current_apy: 5.2,
-                yield_earned: "2000000000".to_string(),
-            },
-        ],
-    }))
+    Err(ApiError::Internal(
+        "Yield performance runtime is not configured for this environment".to_string(),
+    ))
 }
 
 /// POST /v1/yield/rebalance - Trigger manual rebalance
 pub async fn trigger_rebalance(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
+    State(_app_state): State<AppState>,
     Json(request): Json<RebalanceRequest>,
 ) -> Result<Json<RebalanceResponse>, ApiError> {
     let auth = super::tier::check_admin_key_operator(&headers)?;
@@ -401,28 +260,21 @@ pub async fn trigger_rebalance(
         "Triggering manual rebalance"
     );
 
-    // Validate token address
-    let _token: Address = request.token.parse()
+    let _token: Address = request
+        .token
+        .parse()
         .map_err(|_| ApiError::Validation("Invalid token address".to_string()))?;
 
-    // Simulated rebalance result
-    Ok(Json(RebalanceResponse {
-        executed: true,
-        transactions: vec![
-            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string(),
-            "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890".to_string(),
-        ],
-        from_protocol: Some("aave-v3".to_string()),
-        to_protocol: Some("compound-v3".to_string()),
-        amount: Some("100000000000".to_string()), // 100K USDC
-        apy_improvement: Some(0.7),
-    }))
+    Err(ApiError::Internal(
+        "Yield rebalance runtime is not configured for this environment".to_string(),
+    ))
 }
 
 /// GET /v1/yield/apys - Get current APYs across protocols
 pub async fn get_current_apys(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
+    State(_app_state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     super::tier::check_admin_key(&headers)?;
     info!(
@@ -430,44 +282,9 @@ pub async fn get_current_apys(
         "Getting current APYs"
     );
 
-    Ok(Json(serde_json::json!({
-        "timestamp": Utc::now().to_rfc3339(),
-        "protocols": [
-            {
-                "id": "aave-v3",
-                "name": "Aave V3",
-                "tokens": [
-                    {
-                        "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-                        "symbol": "USDC",
-                        "supplyApy": 4.5,
-                        "incentiveApy": 0.2,
-                        "totalApy": 4.7
-                    },
-                    {
-                        "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-                        "symbol": "USDT",
-                        "supplyApy": 4.2,
-                        "incentiveApy": 0.1,
-                        "totalApy": 4.3
-                    }
-                ]
-            },
-            {
-                "id": "compound-v3",
-                "name": "Compound V3",
-                "tokens": [
-                    {
-                        "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-                        "symbol": "USDC",
-                        "supplyApy": 5.2,
-                        "incentiveApy": 0.5,
-                        "totalApy": 5.7
-                    }
-                ]
-            }
-        ]
-    })))
+    Err(ApiError::Internal(
+        "Yield APY runtime is not configured for this environment".to_string(),
+    ))
 }
 
 #[cfg(test)]

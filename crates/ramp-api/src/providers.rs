@@ -134,18 +134,10 @@ pub fn build_billing_provider() -> anyhow::Result<Arc<dyn BillingDataProvider>> 
             ))
         }
         "postgres" => {
-            // For now, postgres billing falls back to mock with a warning.
-            // A real PgBillingDataProvider should be implemented separately.
-            warn!("BILLING_PROVIDER=postgres selected but PgBillingDataProvider not yet implemented; using mock fallback");
-            if is_production() {
-                anyhow::bail!(
-                    "PgBillingDataProvider is not yet implemented. \
-                     Cannot start in production without a real billing provider."
-                );
-            }
-            Ok(Arc::new(
-                ramp_core::billing::mock::MockBillingDataProvider::new(),
-            ))
+            anyhow::bail!(
+                "BILLING_PROVIDER=postgres selected but PgBillingDataProvider is not yet implemented. \
+                 Use BILLING_PROVIDER=mock for dev/test until postgres provider is available."
+            );
         }
         other => {
             anyhow::bail!(
@@ -188,16 +180,10 @@ pub fn build_vnst_provider() -> anyhow::Result<Arc<dyn VnstProtocolDataProvider>
             ))
         }
         "live" => {
-            warn!("VNST_PROVIDER=live selected but live provider not yet implemented; using mock fallback");
-            if is_production() {
-                anyhow::bail!(
-                    "Live VnstProtocolDataProvider is not yet implemented. \
-                     Cannot start in production without a real VNST provider."
-                );
-            }
-            Ok(Arc::new(
-                ramp_core::stablecoin::MockVnstProtocolDataProvider::new(),
-            ))
+            anyhow::bail!(
+                "VNST_PROVIDER=live selected but live VnstProtocolDataProvider is not yet implemented. \
+                 Use VNST_PROVIDER=mock for dev/test until live provider is available."
+            );
         }
         other => {
             anyhow::bail!(
@@ -243,9 +229,13 @@ pub fn validate_production_providers() -> anyhow::Result<()> {
     }
     if billing.is_empty() || billing.eq_ignore_ascii_case("mock") {
         errors.push("BILLING_PROVIDER must not be 'mock' in production (set to 'postgres')");
+    } else if billing.eq_ignore_ascii_case("postgres") {
+        errors.push("BILLING_PROVIDER=postgres is configured but PgBillingDataProvider is not implemented yet");
     }
     if vnst.is_empty() || vnst.eq_ignore_ascii_case("mock") {
         errors.push("VNST_PROVIDER must not be 'mock' in production (set to 'live')");
+    } else if vnst.eq_ignore_ascii_case("live") {
+        errors.push("VNST_PROVIDER=live is configured but live VnstProtocolDataProvider is not implemented yet");
     }
 
     if errors.is_empty() {
@@ -360,6 +350,30 @@ mod tests {
     }
 
     #[test]
+    fn test_dev_rejects_unimplemented_postgres_billing() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("BILLING_PROVIDER", "postgres");
+        let result = build_billing_provider();
+        assert!(result.is_err());
+        let err = result.err().unwrap().to_string();
+        assert!(err.contains("not yet implemented"));
+        clear_env();
+    }
+
+    #[test]
+    fn test_dev_rejects_unimplemented_live_vnst() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("VNST_PROVIDER", "live");
+        let result = build_vnst_provider();
+        assert!(result.is_err());
+        let err = result.err().unwrap().to_string();
+        assert!(err.contains("not yet implemented"));
+        clear_env();
+    }
+
+    #[test]
     fn test_unknown_provider_rejected() {
         let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         clear_env();
@@ -388,7 +402,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_production_providers_passes_with_real_providers() {
+    fn test_validate_production_providers_fails_when_real_providers_unimplemented() {
         let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         clear_env();
         std::env::set_var("RUST_ENV", "production");
@@ -397,7 +411,10 @@ mod tests {
         std::env::set_var("VNST_PROVIDER", "live");
 
         let result = validate_production_providers();
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("PgBillingDataProvider is not implemented"));
+        assert!(err.contains("VnstProtocolDataProvider is not implemented"));
 
         clear_env();
     }

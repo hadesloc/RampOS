@@ -120,7 +120,7 @@ export default function Home() {
                 transition={{ duration: 0.8, delay: 0.4 }}
                 className="flex flex-col sm:flex-row gap-4 justify-center items-center"
             >
-                <Link href="/dashboard" className="px-8 py-4 bg-white text-black rounded-full font-semibold hover:bg-gray-200 transition-colors flex items-center gap-2">
+                <Link href="/vi/portal" className="px-8 py-4 bg-white text-black rounded-full font-semibold hover:bg-gray-200 transition-colors flex items-center gap-2">
                     Get Started <ArrowRight className="w-4 h-4" />
                 </Link>
                 <Link href="/docs" className="px-8 py-4 bg-gray-900 text-white border border-gray-800 rounded-full font-semibold hover:bg-gray-800 transition-colors">

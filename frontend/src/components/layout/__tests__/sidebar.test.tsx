@@ -15,12 +15,18 @@ vi.mock('lucide-react', () => ({
   ChevronRight: () => <div data-testid="icon-chevron-right" />,
   Menu: () => <div data-testid="icon-menu" />,
   X: () => <div data-testid="icon-x" />,
+  RefreshCw: () => <div data-testid="icon-refresh" />,
+  Network: () => <div data-testid="icon-network" />,
+  TrendingUp: () => <div data-testid="icon-trending" />,
+  KeyRound: () => <div data-testid="icon-key-round" />,
+  Bell: () => <div data-testid="icon-bell" />,
 }));
 
 // Mock usePathname
 const mockUsePathname = vi.fn();
-vi.mock('next/navigation', () => ({
+vi.mock('@/navigation', () => ({
   usePathname: () => mockUsePathname(),
+  Link: ({ href, children }: any) => <a href={href}>{children}</a>,
 }));
 
 // Mock Button and Separator
@@ -43,6 +49,26 @@ vi.mock('@/components/ui/tooltip', () => ({
   TooltipTrigger: ({ children }: any) => <div>{children}</div>,
 }));
 
+vi.mock('next-intl', () => ({
+  useTranslations: () => (key: string) => {
+    const map: Record<string, string> = {
+      dashboard: 'Dashboard',
+      users: 'Users',
+      compliance: 'Compliance',
+      settings: 'Settings',
+    };
+    return map[key] ?? key;
+  },
+}));
+
+vi.mock('@/components/locale-switcher', () => ({
+  default: () => <div>LocaleSwitcher</div>,
+}));
+
+vi.mock('@/components/layout/notification-center', () => ({
+  NotificationCenter: () => <div>NotificationCenter</div>,
+}));
+
 describe('Admin Sidebar', () => {
   beforeEach(() => {
     mockUsePathname.mockReturnValue('/');
@@ -51,6 +77,7 @@ describe('Admin Sidebar', () => {
   it('renders sidebar with navigation items', () => {
     render(<Sidebar />);
     expect(screen.getAllByText('Dashboard')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Custody')[0]).toBeInTheDocument();
   });
 
   it('renders title', () => {

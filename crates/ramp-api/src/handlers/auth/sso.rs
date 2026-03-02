@@ -6,22 +6,49 @@ use axum::{
     Json,
 };
 use ramp_core::sso::{
-    SsoAuthRequest, SsoCallback,
+    SsoAuthRequest, SsoCallback, SsoProviderSummary,
 };
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use chrono::{Duration, Utc};
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 use crate::AppState;
 use crate::error::ApiError;
 
-/// Summary of an SSO provider for listing
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SsoProviderSummary {
-    pub provider_id: String,
-    pub provider_type: String,
-    pub protocol: String,
-    pub enabled: bool,
+fn sanitize_redirect_target(input: &str) -> String {
+    // Only allow relative in-app paths to prevent open redirects.
+    // Accept: /dashboard, /settings?tab=security
+    // Reject: https://evil.com, //evil.com, javascript:, path without leading slash
+    if input.starts_with('/') && !input.starts_with("//") && !input.contains(['\r', '\n']) {
+        input.to_string()
+    } else {
+        "/dashboard".to_string()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SsoAuthFlowState {
+    redirect_to: String,
+    callback_url: String,
+    expires_at: chrono::DateTime<Utc>,
+}
+
+const SSO_STATE_TTL_MINUTES: i64 = 10;
+
+static SSO_AUTH_STATES: Lazy<Mutex<HashMap<String, SsoAuthFlowState>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn store_sso_state(state: String, flow: SsoAuthFlowState) {
+    let mut map = SSO_AUTH_STATES.lock().unwrap();
+    map.retain(|_, entry| entry.expires_at > Utc::now());
+    map.insert(state, flow);
+}
+
+fn consume_sso_state(state: &str) -> Option<SsoAuthFlowState> {
+    let mut map = SSO_AUTH_STATES.lock().unwrap();
+    map.retain(|_, entry| entry.expires_at > Utc::now());
+    map.remove(state)
 }
 
 /// Initiate SSO login
@@ -44,7 +71,10 @@ pub async fn sso_login(
     Path(provider_id): Path<String>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let redirect_to = params.get("redirect_to").cloned().unwrap_or_else(|| "/dashboard".to_string());
+    let redirect_to = params
+        .get("redirect_to")
+        .map(|v| sanitize_redirect_target(v))
+        .unwrap_or_else(|| "/dashboard".to_string());
 
     // Construct return URL (callback URL)
     // Read base URL from environment to avoid hardcoded localhost in production
@@ -52,10 +82,20 @@ pub async fn sso_login(
         .unwrap_or_else(|_| "http://localhost:3000".to_string());
     let callback_url = format!("{}/v1/auth/sso/{}/callback", api_base_url, provider_id);
 
+    let state_token = uuid::Uuid::new_v4().to_string();
+    store_sso_state(
+        state_token.clone(),
+        SsoAuthFlowState {
+            redirect_to,
+            callback_url: callback_url.clone(),
+            expires_at: Utc::now() + Duration::minutes(SSO_STATE_TTL_MINUTES),
+        },
+    );
+
     let request = SsoAuthRequest {
         tenant_id: ramp_common::types::TenantId::new(&provider_id),
         redirect_uri: callback_url,
-        state: redirect_to, // Store final destination in state for simplicity (CSRF token should be here too)
+        state: state_token,
         nonce: Some(uuid::Uuid::new_v4().to_string()),
     };
 
@@ -83,17 +123,34 @@ pub async fn sso_callback(
     State(state): State<AppState>,
     Path(provider_id): Path<String>,
     Query(params): Query<HashMap<String, String>>,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<Redirect, ApiError> {
     // Extract parameters
     let code = params.get("code").or(params.get("SAMLResponse")).cloned();
     let state_param = params.get("state").cloned();
     let error = params.get("error").cloned();
     let error_description = params.get("error_description").cloned();
 
+    let state_token = state_param
+        .as_deref()
+        .ok_or_else(|| ApiError::BadRequest("Missing state parameter".to_string()))?;
+    let flow_state = consume_sso_state(state_token)
+        .ok_or_else(|| ApiError::Unauthorized("Invalid or expired state parameter".to_string()))?;
+
+    let callback_url = format!(
+        "{}/v1/auth/sso/{}/callback",
+        std::env::var("API_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string()),
+        provider_id
+    );
+    if flow_state.callback_url != callback_url {
+        return Err(ApiError::Unauthorized(
+            "SSO callback URL mismatch for state parameter".to_string(),
+        ));
+    }
+
     let callback = SsoCallback {
         code,
         saml_response: params.get("SAMLResponse").cloned(),
-        state: state_param.clone().unwrap_or_default(),
+        state: state_token.to_string(),
         error,
         error_description,
     };
@@ -102,24 +159,13 @@ pub async fn sso_callback(
     let tenant_id = ramp_common::types::TenantId::new(&provider_id);
     let _sso_user = state.sso_service.handle_callback(&tenant_id, &callback).await.map_err(ApiError::from)?;
 
-    // Create session for user
-    // 1. Check if user exists (by email) or JIT provision
-    // 2. Create JWT/Session
-    // 3. Redirect
-
-    // For MVP, we'll assume JIT provisioning logic is in sso_service or handled here
-    // Let's assume sso_service handles the user mapping and returns a resolved user
-
-    // Generate session token (mock)
-    let session_token = format!("sso_{}_{}", provider_id, uuid::Uuid::new_v4());
-
-    // Store session (omitted)
-
-    // Redirect to original destination
-    let destination = state_param.unwrap_or_else(|| "/dashboard".to_string());
-    let redirect_url = format!("{}?token={}", destination, session_token);
-
-    Ok(Redirect::to(&redirect_url))
+    // Session issuance is intentionally hard-failed until production session plumbing exists.
+    // Never mint or return synthetic SSO tokens from runtime handlers.
+    let destination = sanitize_redirect_target(&flow_state.redirect_to);
+    Err(ApiError::Internal(format!(
+        "SSO authentication succeeded for provider '{}' but session issuance is not configured. Refusing to issue synthetic token. Requested redirect: {}",
+        provider_id, destination
+    )))
 }
 
 /// List Identity Providers
@@ -138,9 +184,15 @@ pub async fn sso_callback(
     )
 )]
 pub async fn list_providers(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
 ) -> Result<Json<Vec<SsoProviderSummary>>, ApiError> {
-    // Implementation requires Admin API extensions
-    // This is a placeholder
-    Ok(Json(vec![]))
+    let providers = state.sso_service.list_provider_summaries();
+
+    if providers.is_empty() {
+        return Err(ApiError::NotFound(
+            "No SSO providers are configured for this runtime".to_string(),
+        ));
+    }
+
+    Ok(Json(providers))
 }

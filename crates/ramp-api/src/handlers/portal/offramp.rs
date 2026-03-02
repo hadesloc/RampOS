@@ -11,8 +11,14 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use chrono::Utc;
+use ramp_common::types::{CryptoSymbol, TenantId};
+use ramp_core::repository::{OfframpIntentRepository, OfframpIntentRow, PgOfframpIntentRepository};
+use ramp_core::service::exchange_rate::ExchangeRateService;
+use ramp_core::service::offramp_fees::OffRampFeeCalculator;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tracing::info;
 use validator::Validate;
 
@@ -96,17 +102,89 @@ pub fn router() -> Router<AppState> {
 }
 
 // ============================================================================
+// Internal helpers
+// ============================================================================
+
+fn parse_crypto_symbol(asset: &str) -> Result<CryptoSymbol, ApiError> {
+    let upper = asset.to_uppercase();
+    let symbol = match upper.as_str() {
+        "USDT" => CryptoSymbol::USDT,
+        "USDC" => CryptoSymbol::USDC,
+        "ETH" => CryptoSymbol::ETH,
+        "BTC" => CryptoSymbol::BTC,
+        _ => {
+            return Err(ApiError::Validation(
+                "Invalid crypto asset. Must be one of: USDT, USDC, ETH, BTC".to_string(),
+            ))
+        }
+    };
+    Ok(symbol)
+}
+
+fn map_intent_response(intent: &OfframpIntentRow) -> OfframpIntentResponse {
+    OfframpIntentResponse {
+        id: intent.id.clone(),
+        state: intent.state.clone(),
+        crypto_asset: intent.crypto_asset.clone(),
+        crypto_amount: intent.crypto_amount.to_string(),
+        exchange_rate: intent.exchange_rate.to_string(),
+        net_vnd_amount: intent.net_vnd_amount.to_string(),
+        gross_vnd_amount: intent.gross_vnd_amount.to_string(),
+        deposit_address: intent.deposit_address.clone(),
+        tx_hash: intent.tx_hash.clone(),
+        bank_reference: intent.bank_reference.clone(),
+        created_at: intent.created_at.to_rfc3339(),
+        updated_at: intent.updated_at.to_rfc3339(),
+    }
+}
+
+fn append_state_transition(
+    mut history: serde_json::Value,
+    from: &str,
+    to: &str,
+    reason: Option<&str>,
+) -> serde_json::Value {
+    let Some(arr) = history.as_array_mut() else {
+        return json!([
+            {
+                "from": from,
+                "to": to,
+                "timestamp": Utc::now().to_rfc3339(),
+                "reason": reason,
+            }
+        ]);
+    };
+
+    arr.push(json!({
+        "from": from,
+        "to": to,
+        "timestamp": Utc::now().to_rfc3339(),
+        "reason": reason,
+    }));
+
+    history
+}
+
+fn ensure_runtime_pool(state: &AppState) -> Result<&sqlx::PgPool, ApiError> {
+    state.db_pool.as_ref().ok_or_else(|| {
+        ApiError::Internal("Off-ramp runtime is unavailable: database not configured".to_string())
+    })
+}
+
+// ============================================================================
 // Handlers
 // ============================================================================
 
 /// POST /v1/portal/offramp/quote - Get quote for VND off-ramp
 pub async fn create_quote(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     portal_user: PortalUser,
     Json(req): Json<OfframpQuoteRequest>,
 ) -> Result<Json<OfframpQuoteResponse>, ApiError> {
     req.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
+
+    let pool = ensure_runtime_pool(&app_state)?;
 
     let amount: Decimal = req
         .amount
@@ -117,84 +195,147 @@ pub async fn create_quote(
         return Err(ApiError::Validation("Amount must be positive".to_string()));
     }
 
-    let valid_assets = ["USDT", "USDC", "ETH", "BTC"];
-    let asset_upper = req.crypto_asset.to_uppercase();
-    if !valid_assets.contains(&asset_upper.as_str()) {
-        return Err(ApiError::Validation(format!(
-            "Invalid crypto asset. Must be one of: {}",
-            valid_assets.join(", ")
-        )));
-    }
+    let symbol = parse_crypto_symbol(&req.crypto_asset)?;
+    let exchange_rate_service = ExchangeRateService::new();
+    let fee_calculator = OffRampFeeCalculator::new();
+
+    let rate = exchange_rate_service.get_rate(symbol, "VND")?.sell_price;
+    let gross_vnd = amount * rate;
+    let fees = fee_calculator.calculate_fees(gross_vnd, symbol, "domestic");
+    let quote_id = format!("ofr_{}", uuid::Uuid::now_v7());
+    let now = Utc::now();
+    let expires_at = now + chrono::Duration::minutes(5);
+
+    let repo = PgOfframpIntentRepository::new(pool.clone());
+    let intent = OfframpIntentRow {
+        id: quote_id.clone(),
+        tenant_id: portal_user.tenant_id.to_string(),
+        user_id: portal_user.user_id.to_string(),
+        crypto_asset: symbol.to_string(),
+        crypto_amount: amount,
+        exchange_rate: rate,
+        locked_rate_id: None,
+        fees: serde_json::to_value(&fees)
+            .map_err(|e| ApiError::Internal(format!("Failed to serialize fees: {}", e)))?,
+        net_vnd_amount: fees.net_amount_vnd,
+        gross_vnd_amount: fees.gross_amount_vnd,
+        bank_account: json!({
+            "bank_code": req.bank_code,
+            "account_number": req.account_number,
+            "account_name": req.account_name,
+        }),
+        deposit_address: None,
+        tx_hash: None,
+        bank_reference: None,
+        state: "QUOTE_CREATED".to_string(),
+        state_history: json!([
+            {
+                "from": "NONE",
+                "to": "QUOTE_CREATED",
+                "timestamp": now.to_rfc3339(),
+                "reason": "Quote created",
+            }
+        ]),
+        created_at: now,
+        updated_at: now,
+        quote_expires_at: expires_at,
+    };
+
+    repo.create_intent(&intent).await?;
 
     info!(
         user_id = %portal_user.user_id,
-        crypto_asset = %asset_upper,
+        quote_id = %quote_id,
+        crypto_asset = %symbol,
         amount = %amount,
-        "Off-ramp quote requested"
+        "Off-ramp quote created"
     );
-
-    // Stub quote calculation (real impl calls ExchangeRateService + OffRampFeeCalculator)
-    let rate = Decimal::new(25_000, 0); // 25,000 VND per unit (stub)
-    let gross_vnd = amount * rate;
-    let fee = gross_vnd * Decimal::new(1, 2); // 1% fee stub
-    let net_vnd = gross_vnd - fee;
-    let quote_id = format!("ofr_{}", uuid::Uuid::now_v7());
-    let expires_at = chrono::Utc::now() + chrono::Duration::minutes(5);
 
     Ok(Json(OfframpQuoteResponse {
         quote_id,
-        crypto_asset: asset_upper,
+        crypto_asset: symbol.to_string(),
         crypto_amount: amount.to_string(),
         exchange_rate: rate.to_string(),
-        gross_vnd_amount: gross_vnd.to_string(),
-        net_vnd_amount: net_vnd.to_string(),
-        fee_total: fee.to_string(),
+        gross_vnd_amount: fees.gross_amount_vnd.to_string(),
+        net_vnd_amount: fees.net_amount_vnd.to_string(),
+        fee_total: fees.total_fee.to_string(),
         expires_at: expires_at.to_rfc3339(),
     }))
 }
 
 /// POST /v1/portal/offramp/create - Create off-ramp intent from quote
 pub async fn create_offramp(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     portal_user: PortalUser,
     Json(req): Json<OfframpCreateRequest>,
 ) -> Result<Json<OfframpIntentResponse>, ApiError> {
     req.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
+    let pool = ensure_runtime_pool(&app_state)?;
+    let repo = PgOfframpIntentRepository::new(pool.clone());
+
+    let tenant_id = TenantId(portal_user.tenant_id.to_string());
+    let mut intent = repo
+        .get_intent(&tenant_id, &req.quote_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Off-ramp quote not found".to_string()))?;
+
+    if intent.user_id != portal_user.user_id.to_string() {
+        return Err(ApiError::NotFound("Off-ramp quote not found".to_string()));
+    }
+
+    if Utc::now() >= intent.quote_expires_at {
+        intent.state_history = append_state_transition(
+            intent.state_history.clone(),
+            &intent.state,
+            "EXPIRED",
+            Some("Quote expired before create"),
+        );
+        intent.state = "EXPIRED".to_string();
+        intent.updated_at = Utc::now();
+        repo.update_intent(&intent).await?;
+        return Err(ApiError::Gone("Off-ramp quote has expired".to_string()));
+    }
+
+    if intent.state != "QUOTE_CREATED" {
+        return Err(ApiError::Conflict(format!(
+            "Off-ramp quote is not creatable from state {}",
+            intent.state
+        )));
+    }
+
+    let symbol = parse_crypto_symbol(&intent.crypto_asset)?;
+    let locked_rate = ExchangeRateService::new().lock_rate(symbol, "VND", 60)?;
+
+    intent.locked_rate_id = Some(locked_rate.id);
+    intent.deposit_address = Some(format!(
+        "0x{:040x}",
+        uuid::Uuid::now_v7().as_u128() & u128::MAX
+    ));
+    intent.state_history = append_state_transition(
+        intent.state_history.clone(),
+        "QUOTE_CREATED",
+        "CRYPTO_PENDING",
+        Some("Quote confirmed and awaiting crypto deposit"),
+    );
+    intent.state = "CRYPTO_PENDING".to_string();
+    intent.updated_at = Utc::now();
+
+    repo.update_intent(&intent).await?;
+
     info!(
         user_id = %portal_user.user_id,
-        quote_id = %req.quote_id,
-        "Off-ramp intent creation requested"
+        intent_id = %intent.id,
+        "Off-ramp intent moved to CRYPTO_PENDING"
     );
 
-    // In production, this would look up the quote, verify it's not expired,
-    // lock the rate, and create a proper intent via OffRampService.
-    // For now, return a stub response confirming the intent was created.
-    let now = chrono::Utc::now();
-
-    Ok(Json(OfframpIntentResponse {
-        id: req.quote_id.clone(),
-        state: "CRYPTO_PENDING".to_string(),
-        crypto_asset: "USDT".to_string(),
-        crypto_amount: "100".to_string(),
-        exchange_rate: "25000".to_string(),
-        net_vnd_amount: "2475000".to_string(),
-        gross_vnd_amount: "2500000".to_string(),
-        deposit_address: Some(format!(
-            "0x{:040x}",
-            uuid::Uuid::now_v7().as_u128() & u128::MAX
-        )),
-        tx_hash: None,
-        bank_reference: None,
-        created_at: now.to_rfc3339(),
-        updated_at: now.to_rfc3339(),
-    }))
+    Ok(Json(map_intent_response(&intent)))
 }
 
 /// GET /v1/portal/offramp/:id/status - Check off-ramp intent status
 pub async fn get_offramp_status(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     portal_user: PortalUser,
     Path(id): Path<String>,
 ) -> Result<Json<OfframpIntentResponse>, ApiError> {
@@ -204,34 +345,32 @@ pub async fn get_offramp_status(
         ));
     }
 
+    let pool = ensure_runtime_pool(&app_state)?;
+    let repo = PgOfframpIntentRepository::new(pool.clone());
+    let tenant_id = TenantId(portal_user.tenant_id.to_string());
+
+    let intent = repo
+        .get_intent(&tenant_id, &id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Off-ramp intent not found".to_string()))?;
+
+    if intent.user_id != portal_user.user_id.to_string() {
+        return Err(ApiError::NotFound("Off-ramp intent not found".to_string()));
+    }
+
     info!(
         user_id = %portal_user.user_id,
         intent_id = %id,
+        state = %intent.state,
         "Off-ramp status requested"
     );
 
-    // In production, query from OfframpIntentRepository
-    let now = chrono::Utc::now();
-
-    Ok(Json(OfframpIntentResponse {
-        id,
-        state: "QUOTE_CREATED".to_string(),
-        crypto_asset: "USDT".to_string(),
-        crypto_amount: "100".to_string(),
-        exchange_rate: "25000".to_string(),
-        net_vnd_amount: "2475000".to_string(),
-        gross_vnd_amount: "2500000".to_string(),
-        deposit_address: None,
-        tx_hash: None,
-        bank_reference: None,
-        created_at: now.to_rfc3339(),
-        updated_at: now.to_rfc3339(),
-    }))
+    Ok(Json(map_intent_response(&intent)))
 }
 
 /// POST /v1/portal/offramp/:id/confirm - Confirm off-ramp (user confirms bank details)
 pub async fn confirm_offramp(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     portal_user: PortalUser,
     Path(id): Path<String>,
 ) -> Result<Json<OfframpIntentResponse>, ApiError> {
@@ -241,32 +380,54 @@ pub async fn confirm_offramp(
         ));
     }
 
+    let pool = ensure_runtime_pool(&app_state)?;
+    let repo = PgOfframpIntentRepository::new(pool.clone());
+    let tenant_id = TenantId(portal_user.tenant_id.to_string());
+
+    let mut intent = repo
+        .get_intent(&tenant_id, &id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Off-ramp intent not found".to_string()))?;
+
+    if intent.user_id != portal_user.user_id.to_string() {
+        return Err(ApiError::NotFound("Off-ramp intent not found".to_string()));
+    }
+
+    if intent.state == "QUOTE_CREATED" {
+        let symbol = parse_crypto_symbol(&intent.crypto_asset)?;
+        let locked_rate = ExchangeRateService::new().lock_rate(symbol, "VND", 60)?;
+
+        intent.locked_rate_id = Some(locked_rate.id);
+        if intent.deposit_address.is_none() {
+            intent.deposit_address = Some(format!(
+                "0x{:040x}",
+                uuid::Uuid::now_v7().as_u128() & u128::MAX
+            ));
+        }
+        intent.state_history = append_state_transition(
+            intent.state_history.clone(),
+            "QUOTE_CREATED",
+            "CRYPTO_PENDING",
+            Some("User confirmed off-ramp details"),
+        );
+        intent.state = "CRYPTO_PENDING".to_string();
+        intent.updated_at = Utc::now();
+        repo.update_intent(&intent).await?;
+    } else if intent.state != "CRYPTO_PENDING" {
+        return Err(ApiError::Conflict(format!(
+            "Off-ramp cannot be confirmed from state {}",
+            intent.state
+        )));
+    }
+
     info!(
         user_id = %portal_user.user_id,
         intent_id = %id,
+        state = %intent.state,
         "Off-ramp confirm requested"
     );
 
-    // In production, call OffRampService::confirm_quote
-    let now = chrono::Utc::now();
-
-    Ok(Json(OfframpIntentResponse {
-        id,
-        state: "CRYPTO_PENDING".to_string(),
-        crypto_asset: "USDT".to_string(),
-        crypto_amount: "100".to_string(),
-        exchange_rate: "25000".to_string(),
-        net_vnd_amount: "2475000".to_string(),
-        gross_vnd_amount: "2500000".to_string(),
-        deposit_address: Some(format!(
-            "0x{:040x}",
-            uuid::Uuid::now_v7().as_u128() & u128::MAX
-        )),
-        tx_hash: None,
-        bank_reference: None,
-        created_at: now.to_rfc3339(),
-        updated_at: now.to_rfc3339(),
-    }))
+    Ok(Json(map_intent_response(&intent)))
 }
 
 #[cfg(test)]

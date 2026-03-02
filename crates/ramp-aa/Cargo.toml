@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 ramp-common = { path = "../ramp-common" }
+ramp-core = { path = "../ramp-core" }
 
 tokio = { workspace = true }
 serde = { workspace = true }

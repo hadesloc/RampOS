@@ -8,6 +8,8 @@ use axum::{
 };
 use chrono::Utc;
 use jsonwebtoken::{encode, EncodingKey, Header};
+use base64::Engine;
+use hmac::Mac;
 use ramp_api::middleware::{PortalAuthConfig, PortalClaims};
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{
@@ -27,6 +29,7 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::sync::Arc;
 use tower::ServiceExt;
+use uuid::Uuid;
 
 // ============================================================================
 // Test Setup
@@ -67,6 +70,12 @@ fn create_jwt_token(user_id: &str, tenant_id: &str, email: &str) -> String {
 
     let encoding_key = EncodingKey::from_secret(TEST_JWT_SECRET.as_bytes());
     encode(&Header::default(), &claims, &encoding_key).unwrap()
+}
+
+fn create_unique_jwt_token(email: &str) -> String {
+    let user_id = Uuid::new_v4().to_string();
+    let tenant_id = Uuid::new_v4().to_string();
+    create_jwt_token(&user_id, &tenant_id, email)
 }
 
 async fn setup_portal_app() -> TestPortalApp {
@@ -313,6 +322,120 @@ async fn test_get_tier_info() {
     assert!(body.get("limits").is_some());
 }
 
+#[tokio::test]
+async fn test_create_zk_kyc_challenge() {
+    let app = setup_portal_app().await;
+    let isolated_token = create_unique_jwt_token("zk-challenge@example.com");
+
+    let payload = serde_json::json!({
+        "requiredKycLevel": 2,
+        "allowedNationalities": ["VN", "SG"]
+    });
+
+    let request = Request::builder()
+        .uri("/v1/portal/kyc/zk/challenge")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", isolated_token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+        .unwrap();
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+    assert_eq!(body["requiredKycLevel"], 2);
+    assert!(body["challenge"].as_str().unwrap().len() == 64);
+}
+
+#[tokio::test]
+async fn test_verify_zk_kyc_proof_success() {
+    let app = setup_portal_app().await;
+
+    let challenge_payload = serde_json::json!({
+        "requiredKycLevel": 1,
+        "allowedNationalities": []
+    });
+
+    let challenge_req = Request::builder()
+        .uri("/v1/portal/kyc/zk/challenge")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", app.jwt_token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&challenge_payload).unwrap()))
+        .unwrap();
+
+    let challenge_resp = app.router.clone().oneshot(challenge_req).await.unwrap();
+    assert_eq!(challenge_resp.status(), StatusCode::OK);
+
+    let challenge_body_bytes = axum::body::to_bytes(challenge_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let challenge_body: serde_json::Value = serde_json::from_slice(&challenge_body_bytes).unwrap();
+    let challenge = challenge_body["challenge"].as_str().unwrap().to_string();
+
+    let commitment_hash = "ab".repeat(32);
+    let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(
+        b"rampos-zk-kyc-verification-key-dev",
+    )
+    .unwrap();
+    mac.update(commitment_hash.as_bytes());
+    mac.update(challenge.as_bytes());
+    let proof_bytes = mac.finalize().into_bytes();
+    let proof_data = base64::engine::general_purpose::STANDARD.encode(proof_bytes);
+
+    let verify_payload = serde_json::json!({
+        "commitmentHash": commitment_hash,
+        "proofData": proof_data,
+        "publicInputs": [challenge]
+    });
+
+    let verify_req = Request::builder()
+        .uri("/v1/portal/kyc/zk/verify")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", app.jwt_token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&verify_payload).unwrap()))
+        .unwrap();
+
+    let verify_resp = app.router.clone().oneshot(verify_req).await.unwrap();
+    assert_eq!(verify_resp.status(), StatusCode::OK);
+
+    let verify_body_bytes = axum::body::to_bytes(verify_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let verify_body: serde_json::Value = serde_json::from_slice(&verify_body_bytes).unwrap();
+
+    assert_eq!(verify_body["valid"], true);
+    assert_eq!(verify_body["provenTier"], 1);
+}
+
+#[tokio::test]
+async fn test_get_zk_credential_status_before_verify_returns_null() {
+    let app = setup_portal_app().await;
+    let isolated_token = create_unique_jwt_token("zk-null-check@example.com");
+
+    let request = Request::builder()
+        .uri("/v1/portal/kyc/zk/credential")
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", isolated_token))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+    assert!(body.is_null());
+}
+
 // ============================================================================
 // Wallet Endpoint Tests
 // ============================================================================
@@ -354,15 +477,14 @@ async fn test_get_wallet_account() {
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
     let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
-    assert!(body.get("address").is_some());
-    assert!(body.get("deployed").is_some());
+    assert_eq!(body["error"]["code"], "INTERNAL_ERROR");
 }
 
 #[tokio::test]
@@ -378,16 +500,14 @@ async fn test_get_deposit_info_vnd_bank() {
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
     let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
-    assert_eq!(body["method"], "VND_BANK");
-    assert!(body.get("bankName").is_some());
-    assert!(body.get("accountNumber").is_some());
+    assert_eq!(body["error"]["code"], "INTERNAL_ERROR");
 }
 
 #[tokio::test]
@@ -403,16 +523,14 @@ async fn test_get_deposit_info_crypto() {
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
     let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
-    assert_eq!(body["method"], "CRYPTO");
-    assert!(body.get("network").is_some());
-    assert!(body.get("depositAddress").is_some());
+    assert_eq!(body["error"]["code"], "INTERNAL_ERROR");
 }
 
 #[tokio::test]

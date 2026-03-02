@@ -415,6 +415,16 @@ pub fn create_router(state: AppState) -> Router {
         .route("/bridge", post(handlers::chain::initiate_bridge))
         .with_state(state.clone());
 
+    // Custody routes (admin/operator auth required)
+    let custody_routes = Router::new()
+        .route("/keys/generate", post(handlers::custody::generate_custody_keys))
+        .route("/sign", post(handlers::custody::sign_with_custody))
+        .route(
+            "/policies",
+            get(handlers::custody::get_custody_policy).put(handlers::custody::update_custody_policy),
+        )
+        .route("/policies/check", post(handlers::custody::check_custody_policy));
+
     // API v1 routes with authentication
     let mut api_v1 = Router::new()
         .nest("/intents", intent_routes)
@@ -425,6 +435,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/yield", yield_routes)
         .nest("/aa", aa_routes)
         .nest("/chains", chain_routes)
+        .nest("/custody", custody_routes)
         .layer(middleware::from_fn(version_negotiation_middleware))
         .layer(middleware::from_fn_with_state(
             state.clone(),

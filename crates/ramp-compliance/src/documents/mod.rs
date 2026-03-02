@@ -689,10 +689,9 @@ impl ComplianceDocumentGenerator {
                 (json.into_bytes(), "json", "application/json")
             }
             DocumentFormat::Pdf => {
-                // Simple PDF mock - in production would use a proper PDF library
-                let html = self.export_to_html(report)?;
-                let pdf_content = format!("PDF-MOCK\n{}", html);
-                (pdf_content.into_bytes(), "pdf", "application/pdf")
+                return Err(ramp_common::Error::NotImplemented(
+                    "PDF export is not configured for compliance documents".to_string(),
+                ));
             }
             DocumentFormat::Csv => {
                 let csv = self.export_to_csv(report)?;
@@ -728,6 +727,19 @@ impl ComplianceDocumentGenerator {
         };
 
         Ok(doc)
+    }
+
+    /// Download a previously saved document by storage key.
+    pub async fn download_document(&self, document_key: &str) -> Result<Vec<u8>> {
+        self.storage
+            .download(document_key)
+            .await
+            .map_err(|e| match e {
+                crate::storage::StorageError::NotFound(key) => {
+                    ramp_common::Error::NotFound(format!("Document not found: {}", key))
+                }
+                other => ramp_common::Error::Internal(format!("Storage error: {}", other)),
+            })
     }
 
     /// Export report to CSV format

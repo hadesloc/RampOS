@@ -238,6 +238,19 @@ pub struct SsoUser {
     pub expires_at: DateTime<Utc>,
 }
 
+/// Summary of configured SSO provider
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SsoProviderSummary {
+    /// Provider ID (tenant key)
+    pub provider_id: String,
+    /// Provider type (e.g. okta, azure_ad)
+    pub provider_type: String,
+    /// Protocol (oidc or saml)
+    pub protocol: String,
+    /// Whether provider is enabled
+    pub enabled: bool,
+}
+
 /// SSO authentication request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SsoAuthRequest {
@@ -422,6 +435,26 @@ impl SsoService {
         }
 
         roles
+    }
+
+    /// List configured SSO providers as runtime-safe summaries
+    pub fn list_provider_summaries(&self) -> Vec<SsoProviderSummary> {
+        let mut providers: Vec<SsoProviderSummary> = self
+            .configs
+            .iter()
+            .map(|(provider_id, config)| SsoProviderSummary {
+                provider_id: provider_id.clone(),
+                provider_type: config.provider_type.as_str().to_string(),
+                protocol: match config.protocol {
+                    SsoProtocol::Oidc => "oidc".to_string(),
+                    SsoProtocol::Saml => "saml".to_string(),
+                },
+                enabled: config.enabled,
+            })
+            .collect();
+
+        providers.sort_by(|a, b| a.provider_id.cmp(&b.provider_id));
+        providers
     }
 
     /// Check if tenant has SSO enabled

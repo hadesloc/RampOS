@@ -1,7 +1,8 @@
 //! Stripe Integration
 //!
 //! Adapter for Stripe API with real HTTP calls.
-//! Falls back to mock responses when `secret_key` is empty (dev/test mode).
+//! Falls back to mock responses when `secret_key` is empty in dev/test mode.
+//! In production (`RUST_ENV=production` or `RAMPOS_ENV=production`), missing key is fail-fast.
 
 use chrono::{DateTime, Utc};
 use ramp_common::{types::TenantId, Result};
@@ -49,6 +50,20 @@ impl StripeClient {
     /// Returns true if a real Stripe API key is configured.
     fn has_api_key(&self) -> bool {
         !self.config.secret_key.is_empty()
+    }
+
+    fn is_production() -> bool {
+        std::env::var("RUST_ENV")
+            .or_else(|_| std::env::var("RAMPOS_ENV"))
+            .map(|v| v.eq_ignore_ascii_case("production"))
+            .unwrap_or(false)
+    }
+
+    fn missing_key_error() -> ramp_common::Error {
+        ramp_common::Error::ExternalService {
+            service: "stripe".into(),
+            message: "STRIPE_SECRET_KEY is required in production billing runtime".into(),
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -153,6 +168,9 @@ impl StripeClient {
     /// Create a customer in Stripe
     pub async fn create_customer(&self, tenant_id: &TenantId, email: &str) -> Result<String> {
         if !self.has_api_key() {
+            if Self::is_production() {
+                return Err(Self::missing_key_error());
+            }
             warn!("Stripe API key not configured -- returning mock customer ID");
             return Ok(format!("cus_mock_{}_{}", tenant_id.0, Utc::now().timestamp()));
         }
@@ -186,6 +204,9 @@ impl StripeClient {
         plan: &BillingPlan,
     ) -> Result<Subscription> {
         if !self.has_api_key() {
+            if Self::is_production() {
+                return Err(Self::missing_key_error());
+            }
             warn!("Stripe API key not configured -- returning mock subscription");
             return Ok(Subscription {
                 id: format!("sub_mock_{}", Utc::now().timestamp()),
@@ -218,6 +239,9 @@ impl StripeClient {
         plan: &BillingPlan,
     ) -> Result<Subscription> {
         if !self.has_api_key() {
+            if Self::is_production() {
+                return Err(Self::missing_key_error());
+            }
             warn!("Stripe API key not configured -- returning mock updated subscription");
             return Ok(Subscription {
                 id: subscription_id.to_string(),
@@ -260,6 +284,9 @@ impl StripeClient {
     /// Cancel subscription at period end
     pub async fn cancel_subscription(&self, subscription_id: &str) -> Result<()> {
         if !self.has_api_key() {
+            if Self::is_production() {
+                return Err(Self::missing_key_error());
+            }
             warn!("Stripe API key not configured -- mock cancellation");
             return Ok(());
         }
@@ -278,6 +305,9 @@ impl StripeClient {
         usage: &super::UsageSummary,
     ) -> Result<()> {
         if !self.has_api_key() {
+            if Self::is_production() {
+                return Err(Self::missing_key_error());
+            }
             warn!("Stripe API key not configured -- skipping usage report");
             return Ok(());
         }
@@ -321,6 +351,9 @@ impl StripeClient {
         let now = Utc::now();
 
         if !self.has_api_key() {
+            if Self::is_production() {
+                return Err(Self::missing_key_error());
+            }
             warn!("Stripe API key not configured -- returning mock invoice");
             return Ok(Invoice {
                 id: format!("in_mock_{}", now.timestamp()),
@@ -671,6 +704,14 @@ pub struct InvoiceItem {
 mod tests {
     use super::*;
     use rust_decimal::Decimal;
+    use std::sync::Mutex;
+
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    fn clear_env() {
+        std::env::remove_var("RUST_ENV");
+        std::env::remove_var("RAMPOS_ENV");
+    }
 
     // ---- BillingPlan constructors ----
 
@@ -868,6 +909,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_stripe_client_mock_create_customer() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         let config = StripeConfig {
             secret_key: String::new(), // empty = mock mode
             publishable_key: String::new(),
@@ -879,10 +922,32 @@ mod tests {
         assert!(result.is_ok());
         let customer_id = result.unwrap();
         assert!(customer_id.starts_with("cus_mock_tenant_1_"));
+        clear_env();
+    }
+
+    #[tokio::test]
+    async fn test_stripe_client_production_rejects_missing_key() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("RUST_ENV", "production");
+        let config = StripeConfig {
+            secret_key: String::new(),
+            publishable_key: String::new(),
+            webhook_secret: String::new(),
+        };
+        let client = StripeClient::new(config);
+        let tenant_id = ramp_common::types::TenantId::new("tenant_1");
+        let result = client.create_customer(&tenant_id, "test@example.com").await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("STRIPE_SECRET_KEY"));
+        clear_env();
     }
 
     #[tokio::test]
     async fn test_stripe_client_mock_create_subscription() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         let config = StripeConfig {
             secret_key: String::new(),
             publishable_key: String::new(),
@@ -896,10 +961,13 @@ mod tests {
         assert_eq!(sub.status, SubscriptionStatus::Active);
         assert_eq!(sub.plan_id, "plan_starter");
         assert!(!sub.cancel_at_period_end);
+        clear_env();
     }
 
     #[tokio::test]
     async fn test_stripe_client_mock_update_subscription() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         let config = StripeConfig {
             secret_key: String::new(),
             publishable_key: String::new(),
@@ -911,10 +979,13 @@ mod tests {
         assert_eq!(sub.id, "sub_existing");
         assert_eq!(sub.plan_id, "plan_growth");
         assert_eq!(sub.status, SubscriptionStatus::Active);
+        clear_env();
     }
 
     #[tokio::test]
     async fn test_stripe_client_mock_cancel_subscription() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         let config = StripeConfig {
             secret_key: String::new(),
             publishable_key: String::new(),
@@ -923,10 +994,13 @@ mod tests {
         let client = StripeClient::new(config);
         let result = client.cancel_subscription("sub_123").await;
         assert!(result.is_ok());
+        clear_env();
     }
 
     #[tokio::test]
     async fn test_stripe_client_mock_report_usage() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         let config = StripeConfig {
             secret_key: String::new(),
             publishable_key: String::new(),
@@ -941,10 +1015,13 @@ mod tests {
         };
         let result = client.report_usage("sub_123", &usage).await;
         assert!(result.is_ok());
+        clear_env();
     }
 
     #[tokio::test]
     async fn test_stripe_client_mock_create_invoice() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
         let config = StripeConfig {
             secret_key: String::new(),
             publishable_key: String::new(),
@@ -967,6 +1044,7 @@ mod tests {
         let expected = Decimal::new(2900, 2) + Decimal::new(5, 0);
         assert_eq!(invoice.amount_due, expected);
         assert_eq!(invoice.amount_paid, Decimal::ZERO);
+        clear_env();
     }
 
     #[test]

@@ -14,6 +14,7 @@ pub mod stablecoin;
 pub mod trade;
 pub mod auth;
 pub mod chain;
+pub mod custody;
 pub mod ws;
 
 pub use aa::*;

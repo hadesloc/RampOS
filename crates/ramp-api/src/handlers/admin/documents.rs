@@ -164,7 +164,7 @@ pub async fn generate_document(
 pub async fn download_document(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
-    State(_state): State<DocumentState>,
+    State(state): State<DocumentState>,
     Path(document_id): Path<String>,
     Query(params): Query<DownloadParams>,
 ) -> Result<Response, ApiError> {
@@ -176,10 +176,6 @@ pub async fn download_document(
         "Downloading document"
     );
 
-    // For MVP, we generate the document on-the-fly based on the ID pattern
-    // In production, we would look up the document in a database
-
-    // Parse format from query params or default to json
     let format: DocumentFormat = params.format
         .as_ref()
         .map(|f| f.parse())
@@ -187,12 +183,15 @@ pub async fn download_document(
         .map_err(|e: String| ApiError::BadRequest(e))?
         .unwrap_or(DocumentFormat::Json);
 
-    // For now, return a placeholder response
-    // In production, this would fetch from storage
-    let content = format!(
-        r#"{{"documentId": "{}", "status": "Document retrieval requires storage integration"}}"#,
-        document_id
-    );
+    let content = state
+        .generator
+        .download_document(&document_id)
+        .await
+        .map_err(|_| {
+            ApiError::NotFound(
+                "Document not found. Ensure you are using a valid stored document key from the generate response URL field.".to_string(),
+            )
+        })?;
 
     let headers = [
         (header::CONTENT_TYPE, format.content_type()),
@@ -228,14 +227,9 @@ pub async fn list_documents(
         "Listing documents"
     );
 
-    // For MVP, return an empty list
-    // In production, this would query a documents table
-    Ok(Json(ListDocumentsResponse {
-        documents: vec![],
-        total: 0,
-        limit,
-        offset: query.offset,
-    }))
+    Err(ApiError::Internal(
+        "Document listing is not configured for this deployment. Please enable document metadata persistence before calling this endpoint.".to_string(),
+    ))
 }
 
 /// POST /v1/admin/documents/compliance-report
@@ -286,11 +280,9 @@ pub async fn generate_compliance_report(
             (csv.into_bytes(), "text/csv", "compliance_report.csv")
         }
         DocumentFormat::Pdf => {
-            // Mock PDF for MVP
-            let html = state.generator.export_to_html(&report)
-                .map_err(|e| ApiError::Internal(format!("Failed to export: {}", e)))?;
-            let pdf_content = format!("PDF-MOCK\n{}", html);
-            (pdf_content.into_bytes(), "application/pdf", "compliance_report.pdf")
+            return Err(ApiError::Internal(
+                "PDF export is not configured for compliance documents".to_string(),
+            ));
         }
     };
 

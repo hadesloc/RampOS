@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-02-09T11:48:34.981844",
+  "generated_at": "2026-02-23T13:06:37.262880",
   "plugins_dir": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow",
   "plugins_dirs": [
     "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow",
@@ -8,58 +8,73 @@
   "plugins": [
     {
       "name": "ultimate-workflow",
-      "version": "0.2.0",
-      "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0",
+      "version": "0.5.0",
+      "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0",
       "skills": [
         {
           "name": "build",
           "description": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build\\SKILL.md"
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\skills\\build\\SKILL.md"
         },
         {
           "name": "build-approve",
           "description": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-approve\\SKILL.md"
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\skills\\build-approve\\SKILL.md"
+        },
+        {
+          "name": "build-debug-compete",
+          "description": "Use when a complex bug needs investigation from multiple angles simultaneously.",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\skills\\build-debug-compete\\SKILL.md"
         },
         {
           "name": "build-development",
           "description": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-development\\SKILL.md"
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\skills\\build-development\\SKILL.md"
         },
         {
           "name": "build-discovery",
-          "description": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-discovery\\SKILL.md"
+          "description": "Use when starting Discovery to gather requirements via a short interview.",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\skills\\build-discovery\\SKILL.md"
         },
         {
           "name": "build-gap-detect",
-          "description": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-gap-detect\\SKILL.md"
+          "description": "Use when a needed capability is missing and should be solved via existing resources or a new plugin/skill.",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\skills\\build-gap-detect\\SKILL.md"
+        },
+        {
+          "name": "build-headless",
+          "description": "Generate a headless pipeline script for running workflow phases non-interactively.",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\skills\\build-headless\\SKILL.md"
         },
         {
           "name": "build-memory",
-          "description": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-memory\\SKILL.md"
+          "description": "Use for operations on the Ultimate Workflow memory structure (.claude/).",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\skills\\build-memory\\SKILL.md"
         },
         {
           "name": "build-planning",
-          "description": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-planning\\SKILL.md"
+          "description": "Use when Discovery is complete and you need product-spec.md, implementation-plan.md, and task-breakdown.json.",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\skills\\build-planning\\SKILL.md"
         },
         {
           "name": "build-qa",
           "description": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-qa\\SKILL.md"
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\skills\\build-qa\\SKILL.md"
         },
         {
           "name": "build-resume",
           "description": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-resume\\SKILL.md"
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\skills\\build-resume\\SKILL.md"
         },
         {
           "name": "build-status",
           "description": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\skills\\build-status\\SKILL.md"
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\skills\\build-status\\SKILL.md"
+        },
+        {
+          "name": "build-wrapup",
+          "description": "Use at the end of every workflow session to capture learnings and prepare for next session.",
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\skills\\build-wrapup\\SKILL.md"
         }
       ],
       "agents": [
@@ -67,44 +82,44 @@
           "name": "fast-helper-agent",
           "description": "",
           "model": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\agents\\fast-helper-agent.md"
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\agents\\fast-helper-agent.md"
         },
         {
           "name": "orchestrator-rules",
           "description": "",
           "model": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\agents\\orchestrator-rules.md"
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\agents\\orchestrator-rules.md"
         },
         {
           "name": "plan-auditor-agent",
           "description": "",
           "model": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\agents\\plan-auditor-agent.md"
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\agents\\plan-auditor-agent.md"
         },
         {
           "name": "planner-agent",
           "description": "",
           "model": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\agents\\planner-agent.md"
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\agents\\planner-agent.md"
         },
         {
           "name": "product-tester-agent",
           "description": "",
           "model": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\agents\\product-tester-agent.md"
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\agents\\product-tester-agent.md"
         },
         {
           "name": "worker-agent",
           "description": "",
           "model": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\agents\\worker-agent.md"
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\agents\\worker-agent.md"
         }
       ],
       "commands": [
         {
           "name": "build",
           "description": "",
-          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.2.0\\commands\\build.md"
+          "path": "C:\\Users\\hades\\.claude\\plugins\\cache\\ultimate-workflow-local\\ultimate-workflow\\0.5.0\\commands\\build.md"
         }
       ],
       "mcp_servers": []

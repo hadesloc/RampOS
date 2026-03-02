@@ -136,6 +136,17 @@ impl ParaSwapAggregator {
             .map_err(|e| Error::Validation(format!("Invalid amount: {}", e)))
     }
 
+    /// Detect production runtime mode from common environment variables.
+    fn is_production_mode() -> bool {
+        ["RAMP_ENV", "APP_ENV", "ENV", "NODE_ENV"]
+            .iter()
+            .filter_map(|k| std::env::var(k).ok())
+            .any(|v| {
+                let normalized = v.trim().to_ascii_lowercase();
+                normalized == "prod" || normalized == "production"
+            })
+    }
+
     /// Return a mock quote for test/dev environments
     fn mock_quote(
         &self,
@@ -240,13 +251,26 @@ impl DexAggregator for ParaSwapAggregator {
         let api_key = self.config.api_key.clone()
             .or_else(|| std::env::var("PARASWAP_API_KEY").ok());
 
-        // Check if we should use mock mode (test environments or explicit override)
-        let use_mock = std::env::var("PARASWAP_MOCK").unwrap_or_default() == "true"
-            || (cfg!(test) && self.config.api_url.is_empty() && api_key.is_none());
+        // Check if we should use mock mode (test environments or explicit override).
+        // In production mode, mock fallback is always disabled.
+        let production_mode = Self::is_production_mode();
+        let use_mock = !production_mode && (std::env::var("PARASWAP_MOCK").unwrap_or_default() == "true"
+            || (cfg!(test) && self.config.api_url.is_empty() && api_key.is_none()));
 
         if use_mock {
-            tracing::warn!("ParaSwap mock mode active (no PARASWAP_API_KEY set), returning mock quote");
+            tracing::warn!("ParaSwap mock mode active, returning mock quote in non-production mode");
             return self.mock_quote(from, to, amount, slippage_bps, chain_id, now);
+        }
+
+        // In production mode require a key to avoid accidental runtime mocks or silent degraded behavior.
+        if production_mode {
+            let has_api_key = matches!(api_key.as_ref(), Some(key) if !key.trim().is_empty());
+            if !has_api_key {
+                return Err(Error::ExternalService {
+                    service: "ParaSwap".to_string(),
+                    message: "PARASWAP_API_KEY is required in production mode".to_string(),
+                });
+            }
         }
 
         // Make real API call to ParaSwap (with circuit breaker)
@@ -376,12 +400,14 @@ impl DexAggregator for ParaSwapAggregator {
         let api_key = self.config.api_key.clone()
             .or_else(|| std::env::var("PARASWAP_API_KEY").ok());
 
-        // Check if we should use mock mode
-        let use_mock = std::env::var("PARASWAP_MOCK").unwrap_or_default() == "true"
-            || (cfg!(test) && self.config.api_url.is_empty() && api_key.is_none());
+        // Check if we should use mock mode.
+        // In production mode, mock fallback is always disabled.
+        let production_mode = Self::is_production_mode();
+        let use_mock = !production_mode && (std::env::var("PARASWAP_MOCK").unwrap_or_default() == "true"
+            || (cfg!(test) && self.config.api_url.is_empty() && api_key.is_none()));
 
         if use_mock {
-            tracing::warn!("ParaSwap mock mode active (no PARASWAP_API_KEY set), returning mock swap tx");
+            tracing::warn!("ParaSwap mock mode active, returning mock swap tx in non-production mode");
             return Ok(SwapTxData {
                 to: quote.swap_contract,
                 data: quote.swap_data.clone(),
@@ -392,6 +418,17 @@ impl DexAggregator for ParaSwapAggregator {
                 },
                 gas_limit: quote.estimated_gas * U256::from(115) / U256::from(100),
             });
+        }
+
+        // In production mode require a key to avoid accidental runtime mocks or silent degraded behavior.
+        if production_mode {
+            let has_api_key = matches!(api_key.as_ref(), Some(key) if !key.trim().is_empty());
+            if !has_api_key {
+                return Err(Error::ExternalService {
+                    service: "ParaSwap".to_string(),
+                    message: "PARASWAP_API_KEY is required in production mode".to_string(),
+                });
+            }
         }
 
         // Build the transaction request body for ParaSwap /transactions endpoint

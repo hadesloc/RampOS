@@ -341,7 +341,6 @@ impl Chain for SolanaChain {
     async fn get_balance(&self, address: &str) -> Result<Balance> {
         Self::validate_solana_address(address)?;
 
-        // Try real RPC call, fall back to mock on failure
         match self
             .rpc_call::<BalanceResult>("getBalance", serde_json::json!([address]))
             .await
@@ -355,12 +354,11 @@ impl Chain for SolanaChain {
                 })
             }
             Err(e) => {
-                tracing::warn!("Solana RPC getBalance failed, returning mock: {}", e);
-                Ok(Balance {
-                    native: "0.000000000".to_string(),
-                    native_symbol: "SOL".to_string(),
-                    tokens: HashMap::new(),
-                })
+                tracing::warn!("Solana RPC getBalance failed: {}", e);
+                Err(ChainError::RpcError(format!(
+                    "Failed to get SOL balance: {}",
+                    e
+                )))
             }
         }
     }
