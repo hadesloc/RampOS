@@ -98,6 +98,7 @@ security-reports/
 bundle/
 docs/plans/
 docs/security/
+docs/AUDIT_NOTES.md
 BAO_CAO_AUDIT_TONG_HOP.md
 FINAL_STATUS_REPORT.md
 NEXT-GEN-MASTER-PLAN.md
@@ -111,4 +112,5 @@ SECURITY_REMEDIATION.md
 TASK-TRACKER.md
 content_script.md
 integration_report.md
+tests/staging_dry_run_test.md
 
