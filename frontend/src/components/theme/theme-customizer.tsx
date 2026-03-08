@@ -68,6 +68,11 @@ export function ThemeCustomizer() {
   const [history, setHistory] = useState([theme]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const isUndoing = useRef(false);
+  const historyIndexRef = useRef(historyIndex);
+
+  useEffect(() => {
+    historyIndexRef.current = historyIndex;
+  }, [historyIndex]);
 
   // Push current theme to history with 500ms debounce
   useEffect(() => {
@@ -77,7 +82,7 @@ export function ThemeCustomizer() {
     }
     const timer = setTimeout(() => {
       setHistory(prev => {
-        const truncated = prev.slice(0, historyIndex + 1);
+        const truncated = prev.slice(0, historyIndexRef.current + 1);
         return [...truncated, theme];
       });
       setHistoryIndex(prev => prev + 1);

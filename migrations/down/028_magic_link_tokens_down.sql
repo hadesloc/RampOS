@@ -1,4 +1,4 @@
--- Down migration for 023_magic_link_tokens.sql
+-- Down migration for 028_magic_link_tokens.sql
 -- Drops magic link tokens table
 
 DROP INDEX IF EXISTS idx_magic_link_tokens_expires;

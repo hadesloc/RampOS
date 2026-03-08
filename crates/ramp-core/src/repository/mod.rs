@@ -18,6 +18,7 @@ pub mod user;
 pub mod offramp;
 pub mod settlement;
 pub mod webhook;
+pub mod rfq;
 
 pub use audit::PgAuditRepository;
 pub use bank_confirmation::{
@@ -46,6 +47,8 @@ pub use user::UserRepository;
 pub use webhook::WebhookRepository;
 pub use offramp::{OfframpIntentRepository, OfframpIntentRow, PgOfframpIntentRepository};
 pub use settlement::{InMemorySettlementRepository, PgSettlementRepository, SettlementRepository, SettlementRow};
+pub use rfq::{RfqRepository, RfqRequestRow, RfqBidRow, RfqDirection, PgRfqRepository};
+
 
 /// Shared database pool
 #[derive(Clone)]

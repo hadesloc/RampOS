@@ -104,6 +104,8 @@ impl From<ramp_common::Error> for ApiError {
             }
             ramp_common::Error::IntentExpired(_) => ApiError::Gone(err.to_string()),
             ramp_common::Error::DuplicateIntent(_) => ApiError::Conflict(err.to_string()),
+            ramp_common::Error::Conflict(_) => ApiError::Conflict(err.to_string()),
+            ramp_common::Error::Gone(_) => ApiError::Gone(err.to_string()),
             ramp_common::Error::TenantNotFound(_) => ApiError::NotFound(err.to_string()),
             ramp_common::Error::TenantSuspended(_) => ApiError::Forbidden(err.to_string()),
             ramp_common::Error::UserNotFound(_) => ApiError::NotFound(err.to_string()),

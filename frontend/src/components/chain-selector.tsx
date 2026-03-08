@@ -822,7 +822,7 @@ export function ChainSelector({
 
             {filteredChains.length === 0 ? (
               <div className="p-4 text-center text-sm text-muted-foreground">
-                No chains found matching "{search}"
+                No chains found matching <span>&quot;{search}&quot;</span>
               </div>
             ) : (
               <div className="max-h-[300px] overflow-y-auto">

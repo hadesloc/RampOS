@@ -16,7 +16,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/auth-context";
 import { isWebAuthnSupported, isPlatformAuthenticatorAvailable } from "@/lib/webauthn";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "@/navigation";
+import { useRouter } from "@/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   Fingerprint,
   Mail,
@@ -49,7 +50,7 @@ function LoginContent() {
 
   const router = useRouter();
   const searchParams = useSearchParams();
-  const magicLinkToken = searchParams.get("token");
+  const magicLinkToken = searchParams?.get("token");
 
   // Check WebAuthn availability
   useEffect(() => {

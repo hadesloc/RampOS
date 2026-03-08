@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { casesApi, type AmlCase } from "@/lib/api";
 import { Loader2, RefreshCw, FileText, AlertCircle, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -56,7 +56,7 @@ export default function CompliancePage() {
     status: "",
   });
 
-  const fetchCases = async () => {
+  const fetchCases = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -76,11 +76,11 @@ export default function CompliancePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter.severity, filter.status, toast]);
 
   useEffect(() => {
     fetchCases();
-  }, [filter.status, filter.severity]);
+  }, [fetchCases]);
 
   const handleStatusUpdate = async (id: string, newStatus: string) => {
     try {

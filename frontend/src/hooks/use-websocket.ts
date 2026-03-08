@@ -40,7 +40,7 @@ export function useWebSocket({
   const [lastMessage, setLastMessage] = useState<unknown | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const reconnectAttempts = useRef(0);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualDisconnect = useRef(false);
 
   const onMessageRef = useRef(onMessage);
@@ -117,6 +117,7 @@ export function useWebSocket({
     manualDisconnect.current = true;
     if (reconnectTimer.current) {
       clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = null;
     }
     if (ws.current) {
       ws.current.close();
@@ -150,6 +151,7 @@ export function useWebSocket({
       }
       if (reconnectTimer.current) {
         clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
       }
     };
   }, [connect]);

@@ -138,6 +138,7 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 | **Pay-in** | Full lifecycle: initiate → bank confirmation → ledger credit → webhook |
 | **Pay-out** | Compliance checks → ledger debit → rails transfer → confirmation |
 | **Trade** | Crypto trade recording with VND↔crypto double-entry |
+| **RFQ Auction** | Bidirectional LP auction market for competitive pricing (USDT↔VND) |
 | **Escrow** | Funds locked in escrow during processing; auto-release or rollback |
 | **Settlement** | End-of-day settlement between rails providers |
 | **Reconciliation** | Automatic daily reconciliation between ledger and bank statements |
@@ -515,7 +516,7 @@ rampos/
 ├── packages/widget/        # Embeddable widget
 ├── frontend/               # Admin Dashboard (Next.js 15)
 ├── frontend-landing/       # Marketing site
-├── migrations/             # 65 PostgreSQL migrations
+├── migrations/             # 67 PostgreSQL migrations
 ├── k8s/                    # Kubernetes (Kustomize)
 │   ├── base/               # Core manifests, HA Postgres, PgBouncer
 │   ├── jobs/               # Backup jobs (Postgres, Redis, NATS → S3)
@@ -591,7 +592,72 @@ npm run dev
 
 ## API Overview
 
-### Intent Lifecycle
+### RFQ Auction — Bidirectional Price Discovery
+
+The **RFQ (Request For Quote)** layer enables a competitive LP auction market where Liquidity Providers compete to offer the best exchange rates:
+
+```
+OFF-RAMP (USDT → VND):  User creates RFQ → LPs bid to buy USDT → highest VND offer wins
+ON-RAMP  (VND → USDT):  User creates RFQ → LPs bid to sell USDT → lowest VND price wins
+```
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/v1/portal/rfq` | Portal JWT | Create RFQ (OFFRAMP or ONRAMP) |
+| `GET`  | `/v1/portal/rfq/:id` | Portal JWT | Get RFQ + bids + best rate |
+| `POST` | `/v1/portal/rfq/:id/accept` | Portal JWT | Accept best bid → MATCHED |
+| `POST` | `/v1/portal/rfq/:id/cancel` | Portal JWT | Cancel open RFQ |
+| `POST` | `/v1/lp/rfq/:rfq_id/bid` | X-LP-Key | LP submits price quote |
+| `GET`  | `/v1/admin/rfq/open` | Admin Key | List open auctions |
+| `POST` | `/v1/admin/rfq/:id/finalize` | Admin Key | Manual trigger matching |
+
+### RFQ Auction Flow
+
+```
+  ┌─────────────────────────────────────────────────────────────────────────────────┐
+  │                        RFQ Auction Architecture                                  │
+  │                                                                                  │
+  │   ┌──────────────┐  1. Create RFQ  ┌──────────────────────────────────────────┐ │
+  │   │  User Portal │ ─────────────►  │         RFQ Request (state: OPEN)         │ │
+  │   │              │                 │  ┌─────────────────────────────────────┐  │ │
+  │   │              │                 │  │  direction: OFFRAMP | ONRAMP        │  │ │
+  │   │              │                 │  │  crypto_amount: 100 USDT            │  │ │
+  │   │              │                 │  │  expires_at: +5 min                 │  │ │
+  │   │              │                 │  └─────────────────────────────────────┘  │ │
+  │   └──────────────┘                 └──────────────────────────────────────────┘ │
+  │          │                                             │                         │
+  │          │                              2. NATS event "rfq.created"              │
+  │          │                                             │                         │
+  │          │                         ┌───────────────────┼───────────────────┐    │
+  │          │                         ▼                   ▼                   ▼    │
+  │          │                  ┌────────────┐     ┌────────────┐     ┌────────────┐│
+  │          │  3. Submit bids  │   LP Acme  │     │  LP FastEx │     │  LP VietFX ││
+  │          │  ◄──────────────  └─────┬──────┘     └─────┬──────┘     └────────────┘│
+  │          │                        │                   │                          │
+  │          │          26,000 VND/U   │   25,800 VND/U   │                          │
+  │          │                        ▼                   ▼                          │
+  │          │                 ┌──────────────────────────────────────────────────┐  │
+  │          │                 │              rfq_bids table                       │  │
+  │          │                 │  ┌─────────────────────────────────────────────┐ │  │
+  │          │  4. GET /rfq    │  │ bid#1 lp_acme   rate=26000 VND  ← BEST ✅  │ │  │
+  │          │  best_rate shown│  │ bid#2 lp_fastex rate=25800 VND              │ │  │
+  │          │ ◄───────────────│  └─────────────────────────────────────────────┘ │  │
+  │          │                 └──────────────────────────────────────────────────┘  │
+  │          │                                                                        │
+  │          │  5. POST /accept                                                       │
+  │          │ ─────────────────────────────────────────────────────────────────►    │
+  │          │                            state → MATCHED, winning_lp_id = lp_acme  │
+  │          │                            event "rfq.matched" → NATS                 │
+  │          │                                                                        │
+  │          │  6. Response: final_rate=26,000 VND/USDT                              │
+  │          │ ◄─────────────────────────────────────────────────────────────────    │
+  └──────────────────────────────────────────────────────────────────────────────────┘
+
+  OFFRAMP matching: highest exchange_rate wins  (best for user selling USDT)
+  ON-RAMP  matching: lowest  exchange_rate wins  (best for user buying  USDT)
+
+  Auto-expiry: background job runs every 60s → OPEN + expires_at < NOW() → EXPIRED
+```
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -687,7 +753,7 @@ payin = client.payins.create(user_id="usr_123", amount_vnd=1000000)
 | Layer | Technology |
 |-------|------------|
 | **Backend** | Rust, Tokio, Axum, SQLx |
-| **Database** | PostgreSQL 16 (65 migrations) |
+| **Database** | PostgreSQL 16 (35 migrations) |
 | **Cache** | Redis 7 |
 | **Messaging** | NATS JetStream |
 | **Analytics** | ClickHouse |

@@ -1,4 +1,4 @@
--- Down migration for 024_refresh_tokens.sql
+-- Down migration for 029_refresh_tokens.sql
 -- Drops refresh tokens table
 
 DROP INDEX IF EXISTS idx_refresh_tokens_expires;

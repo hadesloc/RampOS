@@ -1,48 +1,52 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 
-// Mock webauthn module
-const mockIsWebAuthnSupported = vi.fn(() => true);
-const mockToAuthenticationOptions = vi.fn((c) => ({ challenge: c.challenge }));
-const mockToRegistrationOptions = vi.fn((c) => ({ challenge: c.challenge }));
-const mockStartAuthenticationWithAbort = vi.fn();
-const mockStartRegistrationWithAbort = vi.fn();
-
-vi.mock('@/lib/webauthn', () => ({
-  isWebAuthnSupported: (...args: unknown[]) => mockIsWebAuthnSupported(...args),
-  toAuthenticationOptions: (...args: unknown[]) =>
-    mockToAuthenticationOptions(...args),
-  toRegistrationOptions: (...args: unknown[]) =>
-    mockToRegistrationOptions(...args),
-  startAuthenticationWithAbort: (...args: unknown[]) =>
-    mockStartAuthenticationWithAbort(...args),
-  startRegistrationWithAbort: (...args: unknown[]) =>
-    mockStartRegistrationWithAbort(...args),
+const {
+  mockIsWebAuthnSupported,
+  mockToAuthenticationOptions,
+  mockToRegistrationOptions,
+  mockStartAuthenticationWithAbort,
+  mockStartRegistrationWithAbort,
+  mockGetAuthenticationChallenge,
+  mockVerifyAuthentication,
+  mockGetRegistrationChallenge,
+  mockVerifyRegistration,
+  mockListPasskeys,
+  mockDeletePasskey,
+  mockRenamePasskey,
+} = vi.hoisted(() => ({
+  mockIsWebAuthnSupported: vi.fn(() => true),
+  mockToAuthenticationOptions: vi.fn((c: { challenge: string }) => ({ challenge: c.challenge })),
+  mockToRegistrationOptions: vi.fn((c: { challenge: string }) => ({ challenge: c.challenge })),
+  mockStartAuthenticationWithAbort: vi.fn(),
+  mockStartRegistrationWithAbort: vi.fn(),
+  mockGetAuthenticationChallenge: vi.fn(),
+  mockVerifyAuthentication: vi.fn(),
+  mockGetRegistrationChallenge: vi.fn(),
+  mockVerifyRegistration: vi.fn(),
+  mockListPasskeys: vi.fn(),
+  mockDeletePasskey: vi.fn(),
+  mockRenamePasskey: vi.fn(),
 }));
 
-// Mock passkey-api module
-const mockGetAuthenticationChallenge = vi.fn();
-const mockVerifyAuthentication = vi.fn();
-const mockGetRegistrationChallenge = vi.fn();
-const mockVerifyRegistration = vi.fn();
-const mockListPasskeys = vi.fn();
-const mockDeletePasskey = vi.fn();
-const mockRenamePasskey = vi.fn();
+vi.mock('@/lib/webauthn', () => ({
+  isWebAuthnSupported: mockIsWebAuthnSupported,
+  toAuthenticationOptions: mockToAuthenticationOptions,
+  toRegistrationOptions: mockToRegistrationOptions,
+  startAuthenticationWithAbort: mockStartAuthenticationWithAbort,
+  startRegistrationWithAbort: mockStartRegistrationWithAbort,
+}));
 
 vi.mock('@/lib/passkey-api', () => ({
   passkeyApi: {
-    getAuthenticationChallenge: (...args: unknown[]) =>
-      mockGetAuthenticationChallenge(...args),
-    verifyAuthentication: (...args: unknown[]) =>
-      mockVerifyAuthentication(...args),
-    getRegistrationChallenge: (...args: unknown[]) =>
-      mockGetRegistrationChallenge(...args),
-    verifyRegistration: (...args: unknown[]) =>
-      mockVerifyRegistration(...args),
-    listPasskeys: (...args: unknown[]) => mockListPasskeys(...args),
-    deletePasskey: (...args: unknown[]) => mockDeletePasskey(...args),
-    renamePasskey: (...args: unknown[]) => mockRenamePasskey(...args),
+    getAuthenticationChallenge: mockGetAuthenticationChallenge,
+    verifyAuthentication: mockVerifyAuthentication,
+    getRegistrationChallenge: mockGetRegistrationChallenge,
+    verifyRegistration: mockVerifyRegistration,
+    listPasskeys: mockListPasskeys,
+    deletePasskey: mockDeletePasskey,
+    renamePasskey: mockRenamePasskey,
   },
   PasskeyApiError: class PasskeyApiError extends Error {
     status: number;

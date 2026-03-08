@@ -11,6 +11,7 @@ pub mod auth;
 pub mod intents;
 pub mod kyc;
 pub mod offramp;
+pub mod rfq;
 pub mod settings;
 pub mod transactions;
 pub mod wallet;

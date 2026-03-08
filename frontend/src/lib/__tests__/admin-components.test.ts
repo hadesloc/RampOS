@@ -352,11 +352,11 @@ describe('API proxy routing', () => {
 
   it('proxy skips body for GET and HEAD requests', () => {
     const method = 'GET';
-    const shouldSkipBody = method === 'GET' || method === 'HEAD';
+    const shouldSkipBody = ['GET', 'HEAD'].includes(method);
     expect(shouldSkipBody).toBe(true);
 
     const method2 = 'POST';
-    const shouldSkipBody2 = method2 === 'GET' || method2 === 'HEAD';
+    const shouldSkipBody2 = ['GET', 'HEAD'].includes(method2);
     expect(shouldSkipBody2).toBe(false);
   });
 });

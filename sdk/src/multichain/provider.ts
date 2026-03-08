@@ -1,5 +1,5 @@
-import { JsonRpcProvider, BrowserProvider, ethers, Contract, Wallet } from 'ethers';
-import { ChainId, getChainConfig, CrossChainIntent, CrossChainIntentResponse } from '../types/multichain';
+import { JsonRpcProvider, ethers } from 'ethers';
+import { ChainId, getChainConfig } from '../types/multichain';
 
 export class MultichainProvider {
   private providers: Map<number, JsonRpcProvider> = new Map();

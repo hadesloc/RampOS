@@ -236,7 +236,9 @@ async fn main() -> anyhow::Result<()> {
         ctr_service: None,
         ws_state: Some(ws_state),
         metrics_registry: Arc::new(ramp_core::service::MetricsRegistry::new()),
+        event_publisher: event_publisher.clone(),
     };
+
 
     // Graceful shutdown flag
     let shutdown_flag = Arc::new(AtomicBool::new(false));
@@ -292,6 +294,38 @@ async fn main() -> anyhow::Result<()> {
             tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
         }
     });
+
+    // Start RFQ expiry job — marks OPEN RFQs past expires_at as EXPIRED
+    let pool_rfq = pool.clone();
+    let shutdown_flag_rfq = shutdown_flag.clone();
+    tokio::spawn(async move {
+        loop {
+            if shutdown_flag_rfq.load(Ordering::Relaxed) {
+                info!("RFQ expiry job shutting down");
+                break;
+            }
+            match sqlx::query(
+                r#"
+                UPDATE rfq_requests
+                SET state = 'EXPIRED', updated_at = NOW()
+                WHERE state = 'OPEN' AND expires_at <= NOW()
+                "#,
+            )
+            .execute(&pool_rfq)
+            .await
+            {
+                Ok(result) if result.rows_affected() > 0 => {
+                    info!(expired = result.rows_affected(), "RFQ expiry job: expired RFQs");
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "RFQ expiry job failed");
+                }
+                _ => {}
+            }
+            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+        }
+    });
+
 
     // Graceful shutdown signal handler
     let shutdown_flag_signal = shutdown_flag.clone();

@@ -41,7 +41,7 @@ function getTypeColor(type: string): string {
 
 function mapApiIntentToLocal(apiIntent: ApiIntent): Intent {
   // Map API intent_type (e.g. "PAYIN_VND") to display type (e.g. "PAYIN")
-  let intentType = apiIntent.intent_type;
+  let intentType: string = apiIntent.intent_type;
   if (intentType.startsWith("PAYIN")) intentType = "PAYIN";
   else if (intentType.startsWith("PAYOUT")) intentType = "PAYOUT";
   else if (intentType.startsWith("TRADE")) intentType = "TRADE";
@@ -62,8 +62,8 @@ function mapApiIntentToLocal(apiIntent: ApiIntent): Intent {
 export default function IntentsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const pageParam = searchParams.get('page');
-  const perPageParam = searchParams.get('per_page');
+  const pageParam = searchParams?.get('page');
+  const perPageParam = searchParams?.get('per_page');
 
   const [intents, setIntents] = useState<Intent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -291,7 +291,7 @@ export default function IntentsPage() {
 
   // Update URL on pagination change
   useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(searchParams?.toString() ?? '');
     params.set('page', (pageIndex + 1).toString());
     params.set('per_page', pageSize.toString());
     // Only push if changed to avoid loops/redundant entries

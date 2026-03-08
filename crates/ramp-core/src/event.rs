@@ -107,6 +107,21 @@ pub trait EventPublisher: Send + Sync {
         tenant_id: &TenantId,
         event: RegulatoryEvent,
     ) -> Result<()>;
+
+    /// Publish RFQ created event (notifies LPs that a new auction is open)
+    async fn publish_rfq_created(
+        &self,
+        rfq_id: &str,
+        tenant_id: &TenantId,
+    ) -> Result<()>;
+
+    /// Publish RFQ matched event (auction completed, winner selected)
+    async fn publish_rfq_matched(
+        &self,
+        rfq_id: &str,
+        tenant_id: &TenantId,
+        final_rate: &str,
+    ) -> Result<()>;
 }
 
 /// NATS JetStream event publisher
@@ -254,6 +269,36 @@ impl EventPublisher for NatsEventPublisher {
 
         self.publish(&subject, payload.to_string().as_bytes()).await
     }
+
+    async fn publish_rfq_created(
+        &self,
+        rfq_id: &str,
+        tenant_id: &TenantId,
+    ) -> Result<()> {
+        let subject = format!("{}.rfq.created", self.stream_prefix);
+        let payload = serde_json::json!({
+            "rfq_id": rfq_id,
+            "tenant_id": tenant_id.0,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        });
+        self.publish(&subject, payload.to_string().as_bytes()).await
+    }
+
+    async fn publish_rfq_matched(
+        &self,
+        rfq_id: &str,
+        tenant_id: &TenantId,
+        final_rate: &str,
+    ) -> Result<()> {
+        let subject = format!("{}.rfq.matched", self.stream_prefix);
+        let payload = serde_json::json!({
+            "rfq_id": rfq_id,
+            "tenant_id": tenant_id.0,
+            "final_rate": final_rate,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        });
+        self.publish(&subject, payload.to_string().as_bytes()).await
+    }
 }
 
 /// In-memory event publisher for testing
@@ -371,6 +416,36 @@ impl EventPublisher for InMemoryEventPublisher {
             "event": event,
         });
         self.events.write().await.push(stored);
+        Ok(())
+    }
+
+    async fn publish_rfq_created(
+        &self,
+        rfq_id: &str,
+        tenant_id: &TenantId,
+    ) -> Result<()> {
+        let event = serde_json::json!({
+            "type": "rfq.created",
+            "rfq_id": rfq_id,
+            "tenant_id": tenant_id.0,
+        });
+        self.events.write().await.push(event);
+        Ok(())
+    }
+
+    async fn publish_rfq_matched(
+        &self,
+        rfq_id: &str,
+        tenant_id: &TenantId,
+        final_rate: &str,
+    ) -> Result<()> {
+        let event = serde_json::json!({
+            "type": "rfq.matched",
+            "rfq_id": rfq_id,
+            "tenant_id": tenant_id.0,
+            "final_rate": final_rate,
+        });
+        self.events.write().await.push(event);
         Ok(())
     }
 }

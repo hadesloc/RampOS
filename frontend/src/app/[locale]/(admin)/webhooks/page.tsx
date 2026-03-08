@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { webhooksApi, type WebhookEvent } from "@/lib/api";
 import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -49,7 +49,7 @@ export default function WebhooksPage() {
     eventType: "",
   });
 
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -70,11 +70,11 @@ export default function WebhooksPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter.status, toast]);
 
   useEffect(() => {
     fetchEvents();
-  }, [filter.status]);
+  }, [fetchEvents]);
 
   const handleRetry = async (id: string) => {
     try {

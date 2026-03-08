@@ -26,6 +26,7 @@ pub mod withdraw;
 pub mod exchange_rate;
 pub mod offramp;
 pub mod offramp_fees;
+pub mod rfq;
 pub mod escrow;
 pub mod metrics;
 pub mod settlement;

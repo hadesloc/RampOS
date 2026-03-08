@@ -383,7 +383,7 @@ export default function KYCPage() {
                     <SelectContent>
                       <SelectItem value="PASSPORT">Passport</SelectItem>
                       <SelectItem value="DRIVERS_LICENSE">
-                        Driver's License
+                        Driver&apos;s License
                       </SelectItem>
                       <SelectItem value="NATIONAL_ID">National ID Card</SelectItem>
                     </SelectContent>

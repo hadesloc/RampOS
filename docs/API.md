@@ -288,6 +288,119 @@ List intents with filters.
 
 ---
 
+### RFQ Auction — Bidirectional Price Discovery
+
+The RFQ layer provides a competitive LP auction marketplace where Liquidity Providers compete to offer the best rates for USDT↔VND conversions.
+
+**Flow:**
+```
+OFF-RAMP: User creates RFQ → LPs bid (highest VND wins) → User accepts → MATCHED
+ON-RAMP:  User creates RFQ → LPs bid (lowest VND wins) → User accepts → MATCHED
+```
+
+#### POST /v1/portal/rfq
+
+Create a new RFQ auction. Auth: Portal JWT.
+
+**Request Body**
+```json
+{
+  "direction": "OFFRAMP",
+  "cryptoAsset": "USDT",
+  "cryptoAmount": "100",
+  "vndAmount": null,
+  "ttlMinutes": 5
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `direction` | string | Yes | `OFFRAMP` or `ONRAMP` |
+| `cryptoAsset` | string | Yes | Crypto symbol (e.g. `USDT`) |
+| `cryptoAmount` | string | Yes | Amount to swap |
+| `vndAmount` | string | ONRAMP only | VND budget (required for ONRAMP) |
+| `ttlMinutes` | integer | No | Auction TTL 1-60 min (default: 5) |
+
+**Response** (201 Created)
+```json
+{
+  "id": "rfq_01jn...",
+  "direction": "OFFRAMP",
+  "cryptoAsset": "USDT",
+  "cryptoAmount": "100",
+  "vndAmount": null,
+  "state": "OPEN",
+  "expiresAt": "2026-03-08T18:05:00Z",
+  "winningLpId": null,
+  "finalRate": null,
+  "createdAt": "2026-03-08T18:00:00Z"
+}
+```
+
+#### GET /v1/portal/rfq/:id
+
+Get RFQ with all bids and best rate. Auth: Portal JWT.
+
+**Response** (200 OK)
+```json
+{
+  "rfq": { "id": "rfq_01jn...", "state": "OPEN", ... },
+  "bids": [
+    { "id": "bid_01jn...", "lpId": "lp_acme", "exchangeRate": "26000", "vndAmount": "2600000", "state": "PENDING" }
+  ],
+  "bestRate": "26000",
+  "bidCount": 1
+}
+```
+
+#### POST /v1/portal/rfq/:id/accept
+
+Accept best bid and finalize the auction. Auth: Portal JWT.
+
+#### POST /v1/portal/rfq/:id/cancel
+
+Cancel an open RFQ. Auth: Portal JWT.
+
+#### POST /v1/lp/rfq/:rfq_id/bid
+
+LP submits a bid. Auth: `X-LP-Key: lp_id:tenant_id:secret`.
+
+**Request Body**
+```json
+{
+  "exchangeRate": "26000",
+  "vndAmount": "2600000",
+  "lpName": "ACME Exchange",
+  "validMinutes": 5
+}
+```
+
+#### GET /v1/admin/rfq/open
+
+List all open RFQs. Auth: Admin key. Query: `?direction=OFFRAMP&limit=20&offset=0`.
+
+#### POST /v1/admin/rfq/:id/finalize
+
+Manually trigger matching for an RFQ. Auth: Admin key.
+
+### RFQ State Machine
+
+```
+OPEN → MATCHED   (best bid accepted)
+OPEN → CANCELLED  (user cancelled)
+OPEN → EXPIRED    (TTL elapsed, auto-expired every 60s by background job)
+```
+
+### Bid States
+
+```
+PENDING → ACCEPTED  (this bid won)
+PENDING → REJECTED  (another bid won)
+PENDING → EXPIRED   (bid validity elapsed)
+```
+
+---
+
 ## State Machines
 
 ### Pay-In States
@@ -452,6 +565,23 @@ The complete OpenAPI 3.0 specification is available at:
 
 ## Changelog
 
+### v0.3.0 (2026-03-08)
+- **RFQ Auction Layer** — Bidirectional LP marketplace for competitive USDT↔VND pricing
+  - `POST /v1/portal/rfq` — Create OFFRAMP/ONRAMP auction
+  - `GET /v1/portal/rfq/:id` — View bids + best rate
+  - `POST /v1/portal/rfq/:id/accept` — Accept best bid
+  - `POST /v1/portal/rfq/:id/cancel` — Cancel auction
+  - `POST /v1/lp/rfq/:rfq_id/bid` — LP submit bid (X-LP-Key auth)
+  - `GET/POST /v1/admin/rfq/*` — Admin auction management
+- New DB tables: `rfq_requests`, `rfq_bids`, `registered_lp_keys` (migrations 033-034)
+- Background job: auto-expire RFQs past TTL every 60s
+- Event publishing: `rfq.created` and `rfq.matched` events via NATS
+
+### v0.2.0 (2026-02-15)
+- Vietnam AML compliance (SBV reporting)
+- Account Abstraction (ERC-4337)
+- WebSocket real-time updates
+
 ### v0.1.0 (2026-01-23)
 - Initial release
 - Pay-in and pay-out flows
@@ -461,4 +591,4 @@ The complete OpenAPI 3.0 specification is available at:
 
 ---
 
-Last updated: 2026-01-23
+Last updated: 2026-03-08

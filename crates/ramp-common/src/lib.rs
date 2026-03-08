@@ -56,6 +56,14 @@ mod inline_tests {
         assert_eq!(err.error_code(), "INTENT_NOT_FOUND");
         assert!(!err.is_retryable());
 
+        let conflict = Error::Conflict("rfq already finalized".to_string());
+        assert_eq!(conflict.error_code(), "CONFLICT");
+        assert!(!conflict.is_retryable());
+
+        let gone = Error::Gone("rfq expired".to_string());
+        assert_eq!(gone.error_code(), "GONE");
+        assert!(!gone.is_retryable());
+
         let db_err = Error::Database("connection failed".to_string());
         assert_eq!(db_err.error_code(), "DATABASE_ERROR");
         assert!(db_err.is_retryable());

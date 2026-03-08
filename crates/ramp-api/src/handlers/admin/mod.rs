@@ -39,6 +39,7 @@ pub mod rules;
 pub mod tier;
 pub mod webhooks;
 pub mod yield_strategy;
+pub mod rfq;
 
 pub use audit::*;
 pub use bridge::*;
@@ -55,6 +56,8 @@ pub use rules::*;
 pub use tier::*;
 pub use webhooks::*;
 pub use yield_strategy::*;
+pub use rfq::*;
+
 
 // ============================================================================
 // Case Management DTOs

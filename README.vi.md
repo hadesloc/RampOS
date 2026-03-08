@@ -138,6 +138,7 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 | **Pay-in** | Vòng đời đầy đủ: khởi tạo → xác nhận ngân hàng → ghi sổ cái → webhook |
 | **Pay-out** | Kiểm tra compliance → trừ sổ cái → chuyển qua rails → xác nhận |
 | **Trade** | Ghi nhận giao dịch crypto với kế toán kép VND↔crypto |
+| **RFQ Auction** | Thị trường đấu giá LP hai chiều cho tỷ giá tốt nhất (USDT↔VND) |
 | **Escrow** | Khóa tiền trong escrow khi xử lý; tự giải phóng hoặc rollback |
 | **Settlement** | Quyết toán cuối ngày giữa các nhà cung cấp rails |
 | **Reconciliation** | Đối soát hàng ngày tự động giữa sổ cái và sao kê ngân hàng |
@@ -512,7 +513,7 @@ rampos/
 ├── packages/widget/        # Widget nhúng
 ├── frontend/               # Dashboard Admin (Next.js 15)
 ├── frontend-landing/       # Trang marketing
-├── migrations/             # 65 migration PostgreSQL
+├── migrations/             # 67 migration PostgreSQL
 ├── k8s/                    # Kubernetes (Kustomize)
 │   ├── base/               # Manifests lõi, Postgres HA, PgBouncer
 │   ├── jobs/               # Backup jobs (Postgres, Redis, NATS → S3)
@@ -588,7 +589,68 @@ npm run dev
 
 ## Tổng quan API
 
-### Vòng đời Intent
+### Thị trường Đấu giá RFQ — Khám phá giá hai chiều
+
+Lớp **RFQ (Request For Quote)** tạo ra thị trường đấu giá LP cạnh tranh, nơi các Nhà cung cấp Thanh khoản thi đua để đưa ra tỷ giá tốt nhất:
+
+```
+OFF-RAMP (USDT → VND):  User tạo RFQ → LP cạnh tranh mua USDT → ai trả nhiều VND nhất thắng
+ON-RAMP  (VND → USDT):  User tạo RFQ → LP cạnh tranh bán USDT → ai bán rẻ VND nhất thắng
+```
+
+| Phương thức | Endpoint | Auth | Mô tả |
+|-------------|----------|------|-------|
+| `POST` | `/v1/portal/rfq` | Portal JWT | Tạo RFQ (OFFRAMP hoặc ONRAMP) |
+| `GET`  | `/v1/portal/rfq/:id` | Portal JWT | Xem RFQ + danh sách bid + tỷ giá tốt nhất |
+| `POST` | `/v1/portal/rfq/:id/accept` | Portal JWT | Chấp nhận bid tốt nhất → MATCHED |
+| `POST` | `/v1/portal/rfq/:id/cancel` | Portal JWT | Huỷ RFQ đang mở |
+| `POST` | `/v1/lp/rfq/:rfq_id/bid` | X-LP-Key | LP đặt giá |
+| `GET`  | `/v1/admin/rfq/open` | Admin Key | Liệt kê tất cả phiên đấu giá đang mở |
+| `POST` | `/v1/admin/rfq/:id/finalize` | Admin Key | Kích hoạt ghép lệnh thủ công |
+
+### Sơ đồ Luồng Đấu giá RFQ
+
+```
+  ┌───────────────────────────────────────────────────────────────────────────────────┐
+  │                    Kiến trúc RFQ Auction Market                                     │
+  │                                                                                  │
+  │   ┌──────────────┐  1. Tạo RFQ  ┌──────────────────────────────────────────┐ │
+  │   │  Cổng người   │ ──────────────►  │          RFQ Request (state: OPEN)          │ │
+  │   │  dùng (Portal) │                │  ┌───────────────────────────────────┐  │ │
+  │   │               │                │  │  direction: OFFRAMP | ONRAMP        │  │ │
+  │   │               │                │  │  crypto_amount: 100 USDT            │  │ │
+  │   │               │                │  │  expires_at: +5 phút               │  │ │
+  │   └──────────────┘                │  └───────────────────────────────────┘  │ │
+  │          │                         └──────────────────────────────────────────┘ │
+  │          │                                             │                         │
+  │          │                         2. Event NATS "rfq.created" gửi cho LP       │
+  │          │                                             │                         │
+  │          │                         ┌───────────────────┼───────────────────┐    │
+  │          │                         ▼                   ▼                   ▼    │
+  │          │                  ┌──────────┐     ┌──────────┐     ┌──────────┐│
+  │          │   3. Đặt giá  │  LP Acme   │     │ LP FastEx  │     │ LP VietFX  ││
+  │          │   ◄───────────  └─────┬─────┘     └─────┬─────┘     └──────────┘│
+  │          │            26.000 VND/U   │  25.800 VND/U   │                        │
+  │          │                           ▼                 ▼                        │
+  │          │                 ┌──────────────────────────────────────────┐  │
+  │          │                 │              Bảng rfq_bids                      │  │
+  │   4. Xem │                 │  ┌───────────────────────────────────────┐ │  │
+  │  tỷ giá  │                 │  │ bid#1 lp_acme  rate=26000 ← Tốt ✅  │ │  │
+  │  tốt nhất│ ◄────────────── │  │ bid#2 lp_fastex rate=25800            │ │  │
+  │          │                 │  └───────────────────────────────────────┘ │  │
+  │          │                 └──────────────────────────────────────────┘  │
+  │          │                                                                        │
+  │          │  5. POST /accept ──────────────────────────────────────────►            │
+  │          │                         state → MATCHED | event "rfq.matched" → NATS │
+  │          │                                                                        │
+  │          │  6. final_rate = 26.000 VND/USDT ◄──────────────────────────────   │
+  └───────────────────────────────────────────────────────────────────────────────────┘
+
+  OFFRAMP: chọn rate cao nhất (user bán USDT → được nhiều VND nhất)
+  ONRAMP:  chọn rate thấp nhất (user mua USDT → trả ít VND nhất)
+
+  Job tự expire: chạy mỗi 60s → OPEN + expires_at < NOW() → EXPIRED
+```
 
 | Phương thức | Endpoint | Mô tả |
 |--------|----------|-------------|
@@ -684,7 +746,7 @@ payin = client.payins.create(user_id="usr_123", amount_vnd=1000000)
 | Tầng | Công nghệ |
 |-------|------------|
 | **Backend** | Rust, Tokio, Axum, SQLx |
-| **Cơ sở dữ liệu** | PostgreSQL 16 (65 migrations) |
+| **Cơ sở dữ liệu** | PostgreSQL 16 (35 migrations) |
 | **Cache** | Redis 7 |
 | **Messaging** | NATS JetStream |
 | **Phân tích** | ClickHouse |

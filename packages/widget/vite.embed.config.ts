@@ -14,6 +14,9 @@ export default defineConfig({
     rollupOptions: {
       // No external dependencies - self-contained bundle
       external: [],
+      output: {
+        exports: 'named',
+      },
     },
   },
   define: {

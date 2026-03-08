@@ -15,6 +15,12 @@ pub enum Error {
     #[error("Duplicate intent: {0}")]
     DuplicateIntent(String),
 
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
+    #[error("Resource gone: {0}")]
+    Gone(String),
+
     // Ledger errors
     #[error("Ledger entry not found: {0}")]
     LedgerEntryNotFound(String),
@@ -171,6 +177,8 @@ impl Error {
             Error::InvalidStateTransition { .. } => "INVALID_STATE_TRANSITION",
             Error::IntentExpired(_) => "INTENT_EXPIRED",
             Error::DuplicateIntent(_) => "DUPLICATE_INTENT",
+            Error::Conflict(_) => "CONFLICT",
+            Error::Gone(_) => "GONE",
             Error::LedgerEntryNotFound(_) => "LEDGER_ENTRY_NOT_FOUND",
             Error::InsufficientBalance { .. } => "INSUFFICIENT_BALANCE",
             Error::LedgerImbalance { .. } => "LEDGER_IMBALANCE",

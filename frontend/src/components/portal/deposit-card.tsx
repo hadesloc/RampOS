@@ -1,3 +1,4 @@
+import Image from "next/image"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -134,7 +135,14 @@ export function DepositCard({
                         {qrCode && (
                             <div className="flex flex-col items-center justify-start pt-2">
                                 <div className="p-3 border rounded-xl bg-white">
-                                    <img src={qrCode} alt="QR Code" className="w-32 h-32 md:w-40 md:h-40 object-contain mix-blend-multiply" />
+                                    <Image
+                                        src={qrCode}
+                                        alt="QR Code"
+                                        width={160}
+                                        height={160}
+                                        unoptimized
+                                        className="w-32 h-32 md:w-40 md:h-40 object-contain mix-blend-multiply"
+                                    />
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-3 font-medium text-center">Scan to Pay</p>
                             </div>

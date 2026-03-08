@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Table,
   TableBody,
@@ -100,7 +100,7 @@ export default function UsersPage() {
       kycTier: "0",
   });
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -120,11 +120,11 @@ export default function UsersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter.status, tCommon, toast]);
 
   useEffect(() => {
     fetchUsers();
-  }, [filter.status]); // Refetch when filter changes
+  }, [fetchUsers]); // Refetch when filter changes
 
   // Client-side filtering for other fields
   const filteredUsers = users.filter((user) => {

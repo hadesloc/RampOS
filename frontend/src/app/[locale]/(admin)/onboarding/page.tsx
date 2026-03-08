@@ -373,7 +373,7 @@ export default function OnboardingPage() {
                         />
                       </FormControl>
                       <FormDescription>
-                        We'll send event notifications to this URL.
+                        We&apos;ll send event notifications to this URL.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>

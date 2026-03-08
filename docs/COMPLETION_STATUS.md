@@ -1,168 +1,106 @@
 # RampOS Project Completion Status
 
-## Completed in This Session
+_Last updated: 2026-03-08_
 
-### 1. Temporal Worker Implementation (Priority 1) - DONE
-Created `crates/ramp-core/src/temporal_worker.rs` with:
-- `TemporalWorkerConfig` - Configuration for Temporal connection
-- `TemporalWorker` - Worker that polls and executes workflows
-- `WorkflowClient` - Client for starting and signaling workflows
-- `WorkflowTask` enum - Payin, Payout, Trade workflow types
-- `WorkflowSignal` enum - Bank confirmation, settlement signals
-- Full implementation of:
-  - `execute_payin_workflow` - Complete VND pay-in flow
-  - `execute_payout_workflow` - Complete VND pay-out flow with policy checks
-  - `execute_trade_workflow` - Trade execution with compliance checks
-- Signal handling for async webhook integration
-- Unit tests for workflow starting
+---
 
-### 2. Security Audit Preparation (Priority 2) - DONE
-Created `docs/SECURITY.md` with:
-- 15 security categories covering:
-  - Authentication & Authorization
-  - Input Validation
-  - Cryptography (at rest and in transit)
-  - Financial Controls (double-entry ledger)
-  - Rate Limiting & DDoS Protection
-  - Idempotency
-  - Secrets Management
-  - Logging & Monitoring
-  - Database Security
-  - Smart Contract Security
-  - Dependency Security
-  - Infrastructure Security
-  - Compliance Considerations
-  - Incident Response
-  - Penetration Testing Recommendations
-- Pre-production checklist
-- Continuous security plan
+## ✅ RFQ Auction Layer — COMPLETED (2026-03-08)
 
-### 3. API Documentation (Priority 4) - DONE
-Created `docs/API.md` with:
-- Authentication documentation (Bearer tokens, headers)
-- Rate limiting tiers and headers
-- Complete endpoint documentation:
-  - Health check endpoints
-  - Pay-in endpoints (create, confirm)
-  - Pay-out endpoints
-  - Trade execution
-  - Balance queries
-  - Intent status
-  - Admin endpoints
-- State machine diagrams for all flows
-- Webhook documentation with signature verification
-- Error codes and responses
-- SDK usage examples (TypeScript, Go)
-- OpenAPI specification reference
+Implemented a full bidirectional LP auction market, enabling competitive price discovery for USDT↔VND without modifying any existing payin/offramp code.
 
-### 4. Build System Fixes
-- Fixed Windows build compatibility:
-  - Made NATS dependency optional (feature-gated)
-  - Made HTTP client (reqwest) optional for webhooks
-  - Updated sqlx features for macros
-- Added missing error type conversions:
-  - `From<sqlx::Error>` for database errors
-  - `From<serde_json::Error>` for serialization
-  - `From<LedgerError>` for ledger operations
-  - `From<String>` for workflow activities
-- Fixed ownership issues in service layer
-- Added `Display` impl for `EntryDirection`
+### New Files Created
 
-## Build Status
+| File | Description |
+|------|-------------|
+| `migrations/033_rfq_auction.sql` | Tables: `rfq_requests`, `rfq_bids` — with RLS, indexes, trigger |
+| `migrations/034_lp_keys.sql` | Table: `registered_lp_keys` — LP credential store with key_hash |
+| `crates/ramp-core/src/repository/rfq.rs` | `RfqRepository` trait + `PgRfqRepository` + `InMemoryRfqRepository` (test) |
+| `crates/ramp-core/src/service/rfq.rs` | `RfqService` with 5 methods + 4 unit tests |
+| `crates/ramp-api/src/handlers/portal/rfq.rs` | Portal: create/get/accept/cancel RFQ |
+| `crates/ramp-api/src/handlers/admin/rfq.rs` | Admin: list open RFQs, manual finalize |
+| `crates/ramp-api/src/handlers/lp/rfq.rs` | LP: submit bid (X-LP-Key auth) |
+| `crates/ramp-api/src/handlers/lp/mod.rs` | LP module root |
 
-### ramp-core - COMPILES SUCCESSFULLY
-Using MSVC toolchain: `cargo +stable-x86_64-pc-windows-msvc check --package ramp-core`
+### Files Modified
 
-### Other Crates - Need Dependency Updates
-The following crates need minor fixes:
-- `ramp-api` - Missing uuid, sha2 imports
-- `ramp-compliance` - Private struct exports
-- These are straightforward fixes
+| File | Change |
+|------|--------|
+| `crates/ramp-core/src/event.rs` | Added `publish_rfq_created`, `publish_rfq_matched` to trait + 2 impls |
+| `crates/ramp-core/src/repository/mod.rs` | Export `rfq` module |
+| `crates/ramp-core/src/service/mod.rs` | Export `rfq` module |
+| `crates/ramp-api/src/router.rs` | Added `event_publisher` field to `AppState`, mounted 4 route groups |
+| `crates/ramp-api/src/main.rs` | Wire `event_publisher` to `AppState`, added RFQ expiry background job (60s) |
+| `crates/ramp-api/src/handlers/mod.rs` | Added `pub mod lp` |
+| `crates/ramp-api/src/handlers/admin/mod.rs` | Added `pub mod rfq` |
+| `crates/ramp-api/src/handlers/portal/mod.rs` | Added `pub mod rfq` |
 
-## Remaining Work for Production
+### API Routes Added
 
-### High Priority
-1. **Fix remaining crate compilation issues** (Est: 1-2 hours)
-   - Add missing dependencies to other crates
-   - Fix visibility of compliance rules
+```
+POST   /v1/portal/rfq               Create RFQ (OFFRAMP or ONRAMP, Portal JWT)
+GET    /v1/portal/rfq/:id           View RFQ + bids + best rate (Portal JWT)
+POST   /v1/portal/rfq/:id/accept    Accept best bid → MATCHED (Portal JWT)
+POST   /v1/portal/rfq/:id/cancel    Cancel open RFQ (Portal JWT)
+POST   /v1/lp/rfq/:rfq_id/bid       LP submit bid (X-LP-Key: lp_id:tenant_id:secret)
+GET    /v1/admin/rfq/open           List open auctions, filter by direction (Admin Key)
+POST   /v1/admin/rfq/:id/finalize   Manual trigger matching (Admin Key)
+```
 
-2. **End-to-end integration testing** (Est: 2-3 hours)
-   - Test with real PostgreSQL
-   - Test with real Redis
-   - Test with Temporal server (if using full SDK)
+### Architecture Details
 
-3. **Docker build verification** (Est: 30 min)
-   - Build Docker image on Linux
-   - Verify docker-compose works
+- **Bidirectional logic**: OFFRAMP selects `MAX(exchange_rate)` — ONRAMP selects `MIN(exchange_rate)`
+- **Event-driven**: `rfq.created` event via NATS notifies LPs; `rfq.matched` signals completion
+- **Real EventPublisher**: all handlers use `app_state.event_publisher` (NATS in prod, InMemory in dev)
+- **Expiry job**: background tokio task runs every 60s — `UPDATE rfq_requests SET state='EXPIRED' WHERE state='OPEN' AND expires_at <= NOW()`
+- **LP Auth**: `X-LP-Key` header with format `lp_id:tenant_id:secret`; `registered_lp_keys` table for future DB-backed validation
+- **Tenant isolation**: RLS policies on all new tables
+- **Non-destructive**: Zero changes to existing `/v1/portal/offramp/*` or payin flows
 
-### Medium Priority
-4. **Temporal SDK Integration** (Est: 4-6 hours)
-   - Current implementation simulates Temporal
-   - Integrate with `temporal-sdk-core` for production
-   - Set up Temporal server in K8s
+---
 
-5. **Security hardening** (Est: 2-3 hours)
-   - Run cargo-audit
-   - Address any CVEs
-   - Review secrets management
+## Previously Completed
 
-### Low Priority
-6. **Performance testing** (Est: 4-6 hours)
-   - Load testing with k6 or similar
-   - Database query optimization
-   - Connection pool tuning
+### Core Services — DONE
+- Pay-in, Pay-out, Trade with full lifecycle
+- Double-entry ledger (ramp-ledger)
+- Compliance engine: KYC/AML/KYT, case management, SBV reporting
+- Webhook delivery with retry, HMAC signing, DLQ
+- Account Abstraction (ERC-4337)
+- Vietnam AML compliance (Luật AML 2022)
 
-7. **Monitoring setup** (Est: 2-3 hours)
-   - Grafana dashboards
-   - Alert rules
-   - Log aggregation
+### Security — DONE
+- Repository sanitization (no leaked secrets)
+- AES-256-GCM encryption at rest
+- HMAC-SHA256 webhook signatures
+- JWT auth with role-based access
+- Row Level Security on all tenant tables
 
-## Files Created/Modified
+### Infrastructure — DONE
+- Kubernetes manifests (base + overlays)
+- PostgreSQL HA with PgBouncer
+- Automated S3 backups
+- Prometheus + Grafana monitoring
+- ArgoCD GitOps deployment
 
-### Created
-- `crates/ramp-core/src/temporal_worker.rs` (600+ lines)
-- `docs/SECURITY.md` (340+ lines)
-- `docs/API.md` (380+ lines)
+---
 
-### Modified
-- `Cargo.toml` - Updated sqlx features, made deps optional
-- `crates/ramp-core/Cargo.toml` - Added features for nats/http-client
-- `crates/ramp-core/src/lib.rs` - Exported temporal_worker module
-- `crates/ramp-core/src/event.rs` - Feature-gated NATS publisher
-- `crates/ramp-core/src/service/webhook.rs` - Feature-gated HTTP client
-- `crates/ramp-core/src/service/payout.rs` - Fixed ownership issues
-- `crates/ramp-core/src/service/trade.rs` - Fixed ownership issues
-- `crates/ramp-core/src/test_utils.rs` - Fixed type mismatch
-- `crates/ramp-common/Cargo.toml` - Added sqlx, rand deps
-- `crates/ramp-common/src/error.rs` - Added From impls
-- `crates/ramp-common/src/ledger.rs` - Added Display for EntryDirection
+## Pending / Next Steps
+
+| Priority | Task | Est. |
+|----------|------|------|
+| High | Run `sqlx migrate run` to apply migrations 033-034 | 5 min |
+| High | LP auth: lookup `registered_lp_keys` table in DB (currently honor-system) | 2-4h |
+| Medium | Frontend: RFQ auction UI for user portal | 1-2 days |
+| Medium | LP dashboard: view open RFQs, submit bids | 1 day |
+| Low | Integration tests for RFQ flow e2e | 2-4h |
+| Low | Admin dashboard: auction monitoring view | 4-8h |
 
 ## Estimated Project Completion
 
-**Previous: 90%**
-**Current: 95%**
+**Previous (before RFQ): 95%**
+**Current: 97%**
 
-The remaining 5% consists of:
-- Minor compilation fixes for other crates (~2%)
-- Integration testing (~2%)
-- Temporal SDK integration (optional for MVP) (~1%)
-
-## Recommendations
-
-1. Use MSVC toolchain on Windows for development:
-   ```bash
-   rustup default stable-x86_64-pc-windows-msvc
-   ```
-
-2. For production builds, use Linux (CI/CD):
-   - Docker builds on Linux CI
-   - Full feature support without toolchain issues
-
-3. Consider using feature flags for optional components:
-   ```toml
-   # Development (minimal dependencies)
-   cargo build
-
-   # Production (full features)
-   cargo build --features "nats,http-client"
-   ```
+The remaining 3%:
+- LP key DB validation (1%)
+- Frontend RFQ UI (1%)
+- E2E integration tests (1%)

@@ -1,4 +1,4 @@
--- Down migration for 023_webauthn_credentials.sql
+-- Down migration for 024_webauthn_credentials.sql
 -- Drops WebAuthn and portal users tables
 
 DROP INDEX IF EXISTS idx_portal_users_tenant;

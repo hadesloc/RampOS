@@ -16,6 +16,7 @@ pub mod auth;
 pub mod chain;
 pub mod custody;
 pub mod ws;
+pub mod lp;
 
 pub use aa::*;
 pub use admin::*;

@@ -21,6 +21,7 @@ use ramp_core::repository::licensing::LicensingRepository;
 use ramp_core::repository::tenant::TenantRepository;
 use ramp_core::repository::BankConfirmationRepository;
 use ramp_core::billing::BillingService;
+use ramp_core::event::EventPublisher;
 use ramp_core::stablecoin::VnstProtocolService;
 use ramp_core::service::{
     ledger::LedgerService, metrics::MetricsRegistry, onboarding::OnboardingService,
@@ -78,7 +79,10 @@ pub struct AppState {
     pub ctr_service: Option<Arc<CtrService>>,
     pub ws_state: Option<Arc<WsState>>,
     pub metrics_registry: Arc<MetricsRegistry>,
+    /// Shared event publisher (NATS or InMemory depending on config)
+    pub event_publisher: Arc<dyn EventPublisher>,
 }
+
 
 /// Create the API router with full middleware stack
 pub fn create_router(state: AppState) -> Router {
@@ -221,6 +225,9 @@ pub fn create_router(state: AppState) -> Router {
         .route("/offramp/pending", get(handlers::admin::offramp::list_pending_offramps))
         .route("/offramp/:id/approve", post(handlers::admin::offramp::approve_offramp))
         .route("/offramp/:id/reject", post(handlers::admin::offramp::reject_offramp))
+        // RFQ auction management
+        .route("/rfq/open", get(handlers::admin::rfq::list_open_rfqs))
+        .route("/rfq/:id/finalize", post(handlers::admin::rfq::finalize_rfq))
         // Fraud score management
         .route("/fraud/scores", get(handlers::admin::fraud::list_fraud_scores))
         .route("/fraud/scores/:id", get(handlers::admin::fraud::get_fraud_score))
@@ -394,6 +401,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/transactions", handlers::portal::transactions::router())
         .nest("/intents", handlers::portal::intents::router())
         .nest("/offramp", handlers::portal::offramp::router())
+        .merge(handlers::portal::rfq::router())
         .layer(middleware::from_fn_with_state(
             state.portal_auth_config.clone(),
             portal_auth_middleware,
@@ -535,6 +543,8 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/v1/auth/sso", sso_routes)
         // WebSocket endpoint for real-time updates (JWT auth via query param)
         .nest("/v1/portal", ws_routes)
+        // LP (Liquidity Provider) routes — authenticated via X-LP-Key header
+        .nest("/v1/lp", handlers::lp::rfq::router().with_state(state.clone()))
         .layer(middleware::from_fn(request_id_middleware))
         .layer(middleware::from_fn(error_sanitizer_middleware))
         .layer({
