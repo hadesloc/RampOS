@@ -9,117 +9,150 @@
   <img src="https://img.shields.io/badge/rust-1.75%2B-orange.svg?style=flat-square" alt="Rust Version">
   <img src="https://img.shields.io/badge/solidity-0.8.24-purple.svg?style=flat-square" alt="Solidity Version">
   <img src="https://img.shields.io/badge/node-18%2B-green.svg?style=flat-square" alt="Node Version">
-  <img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/license-AGPL--3.0-red.svg?style=flat-square" alt="License">
 </p>
 
 <p align="center">
   <a href="#features">Features</a> |
-  <a href="#quick-start">Quick Start</a> |
+  <a href="#screenshots">Screenshots</a> |
   <a href="#architecture">Architecture</a> |
+  <a href="#quick-start">Quick Start</a> |
   <a href="#api-overview">API</a> |
-  <a href="#sdk">SDK</a> |
-  <a href="#contributing">Contributing</a>
+  <a href="#smart-contracts">Contracts</a> |
+  <a href="#sdk">SDK</a>
 </p>
 
 ---
 
 ## Overview
 
-RampOS is a complete orchestration layer for crypto/fiat exchanges, providing standardized transaction processing, regulatory compliance, and modern wallet UX via Account Abstraction (ERC-4337). Built with Rust for performance and reliability.
+RampOS is a **production-grade orchestration layer** for crypto/fiat exchanges. It handles the entire transaction lifecycle — from fiat deposit to crypto trading to fiat withdrawal — with built-in compliance, account abstraction, and multi-tenant isolation.
+
+Built with **Rust** for performance and memory safety, **Solidity** for on-chain logic, and **Next.js** for the admin dashboard.
 
 ### Key Principles
 
-- **BYOR (Bring Your Own Rails)** — Keep your banking relationships, integrate any bank/PSP
+- **BYOR (Bring Your Own Rails)** — Keep your banking relationships, plug any bank/PSP
 - **Zero Liability** — RampOS never holds customer funds
-- **Compliance-First** — Built for FATF and Vietnam AML Law 2022
-- **Intent-Based** — All operations start as signed, auditable intents
-- **Double-Entry Ledger** — Complete audit trail with financial accuracy
+- **Compliance-First** — FATF Travel Rule & Vietnam AML Law 2022
+- **Intent-Based** — All operations are signed, auditable intents
+- **Double-Entry Ledger** — Financial-grade accounting with complete audit trail
+
+---
+
+## Screenshots
+
+### User Portal
+> Self-service portal for end users with deposit, withdraw, asset management, and transaction history.
+
+<p align="center">
+  <img src="docs/screenshots/portal.png" alt="User Portal" width="800">
+</p>
+
+### Operations — Intent Management
+> Search, filter, and manage all payment intents (pay-in, pay-out, trade) by type and state.
+
+<p align="center">
+  <img src="docs/screenshots/intents.png" alt="Intent Management" width="800">
+</p>
+
+### Compliance Dashboard
+> KYC/AML case management — review flagged transactions, manage compliance cases.
+
+<p align="center">
+  <img src="docs/screenshots/compliance.png" alt="Compliance Dashboard" width="800">
+</p>
+
+### Double-Entry Ledger
+> Real-time accounting view with complete audit trail for every transaction.
+
+<p align="center">
+  <img src="docs/screenshots/ledger.png" alt="Ledger" width="800">
+</p>
+
+### Admin Login
+> Secure admin key authentication for dashboard access.
+
+<p align="center">
+  <img src="docs/screenshots/admin-login.png" alt="Admin Login" width="600">
+</p>
 
 ---
 
 ## Features
 
-### Core Orchestrator
-- State machine for standardized transaction flows (Pay-in, Pay-out, Trade)
-- Double-entry ledger with atomic transactions
-- Webhook delivery with retry and HMAC signing
-- Idempotency handling for safe retries
+### 🔧 Core Orchestrator (`ramp-core`)
+- **State Machine** — Standardized transaction flows for Pay-in, Pay-out, and Trade intents
+- **Intent Solver** — Unified intent processing with pluggable execution backends
+- **Double-Entry Ledger** — Atomic, balanced transactions with `rust_decimal` precision
+- **Webhook Engine** — Delivery with exponential backoff retry and HMAC-SHA256 signing
+- **Idempotency** — Safe retries via idempotency key tracking
+- **Multi-Tenant** — Complete data isolation, per-tenant config, API key management
+- **Job Scheduler** — Background jobs for timeout handling, webhook retry, compliance alerts
 
-### Compliance Pack
-- **KYC Tiering** — Configurable verification levels with limits
-- **AML Rules Engine** — Velocity checks, structuring detection, sanctions screening
-- **Case Management** — Manual review workflows for flagged transactions
-- **Reporting** — SAR/CTR report generation
+### 🏦 Compliance Engine (`ramp-compliance`)
+- **KYC Tiering** — Tier 1/2/3 with configurable limits; integrations with Onfido and eKYC providers
+- **AML Rules Engine** — Velocity checks, structuring detection, device anomaly analysis
+- **Fraud Scoring** — ML-ready feature extraction, risk scoring, and decision engine
+- **Sanctions Screening** — OpenSanctions integration with configurable providers
+- **Case Management** — Full workflow with notes, status tracking, and resolution
+- **Regulatory Reporting** — Automated SAR/CTR generation in SBV (State Bank of Vietnam) format
+- **SBV Scheduler** — Automated report scheduling for Vietnam's central bank
+- **Fuzz Testing** — Dedicated fuzz targets for compliance rule edge cases
 
-### Account Abstraction Kit (ERC-4337)
-- Smart Account Factory for deterministic account creation
-- Paymaster for gas sponsorship
-- Session Keys for time-limited permissions
-- Batch transaction execution
+### ⛓️ Smart Contracts (Solidity 0.8.24 / Foundry)
 
-### Multi-Tenant Architecture
-- Complete data isolation per tenant
-- Per-tenant configuration and limits
-- API key management with role-based access
-- Custom webhook endpoints
+| Contract | Description |
+|----------|-------------|
+| `RampOSAccount.sol` | ERC-4337 Smart Account — ECDSA owner, batch execution, UUPS upgradeable |
+| `RampOSAccountFactory.sol` | Deterministic CREATE2 account deployment |
+| `RampOSPaymaster.sol` | Gas sponsorship for gasless transactions |
+| `VNDToken.sol` | Stable token for VND representation on-chain |
+| `PasskeySigner.sol` | WebAuthn/Passkey on-chain signature verification |
+| `PasskeyAccountFactory.sol` | Account factory with passkey authentication |
+| `EIP7702Auth.sol` | EIP-7702 authorization for EOA delegation |
+| `EIP7702Delegation.sol` | Smart contract delegation for EOAs |
+| `ZkKycRegistry.sol` | Zero-Knowledge KYC status registry |
+| `ZkKycVerifier.sol` | ZK-proof verifier for privacy-preserving compliance |
 
----
+### 🌐 Multi-Chain Support (`ramp-core/chain`)
+- **EVM Chains** — Ethereum, Polygon, Arbitrum, Base, BSC
+- **Solana** — Native SOL and SPL token support
+- **TON** — The Open Network integration
+- **Cross-Chain** — Bridge support via Across and Stargate protocols
+- **DEX Aggregation** — Swap routing across multiple DEXes
+- **Oracle Integration** — Chainlink price feeds with fallback providers
 
-## Quick Start
+### 🔐 Custody & Key Management (`ramp-core/custody`)
+- **MPC Signing** — Multi-Party Computation key generation and transaction signing
+- **Policy Engine** — Configurable approval policies per operation type
+- **Key Rotation** — Automated key lifecycle management
 
-### Prerequisites
+### 💰 Billing & Metering (`ramp-core/billing`)
+- **Usage Metering** — Track API calls, transaction volume per tenant
+- **Stripe Integration** — Automated billing based on metered usage
 
-| Component | Version |
-|-----------|---------|
-| Rust | 1.75+ |
-| PostgreSQL | 16+ |
-| Redis | 7+ |
-| NATS | 2.10+ |
-| Node.js | 18+ |
-| Foundry | Latest |
+### 🖥️ Frontend Applications
 
-### Installation
+#### Admin Dashboard (Next.js 15 + React)
+- Real-time dashboard with WebSocket updates and Recharts visualization
+- Intent management with search, filter, and status tracking
+- User management with KYC status overview
+- Compliance case review and resolution workflow
+- Double-entry ledger explorer
+- System settings: branding, domains, API keys, roles
+- **Internationalization** — English and Vietnamese (next-intl)
+- **E2E Tests** — Playwright test suite
 
-```bash
-# Clone the repository
-git clone https://github.com/hadesloc/RampOS.git
-cd rampos
+#### User Portal
+- Self-service deposit and withdrawal
+- Asset portfolio overview
+- Transaction history
+- Account settings
 
-# Copy environment configuration
-cp .env.example .env
-# Edit .env and fill in your passwords/secrets (see comments in .env.example)
-
-# Start infrastructure services
-docker-compose up -d postgres redis nats
-
-# Run database migrations
-cargo install sqlx-cli
-sqlx migrate run
-
-# Build and run the API server
-cargo build --release
-cargo run --release --package ramp-api
-```
-
-The API server will be available at `http://localhost:8080`.
-
-### Using Docker
-
-```bash
-# Build and run the complete stack
-docker-compose up --build
-
-# Or run specific services
-docker-compose up -d postgres redis nats
-docker-compose up ramp-api
-```
-
-### Verify Installation
-
-```bash
-curl http://localhost:8080/health
-# {"status":"healthy","version":"0.1.0"}
-```
+#### Embeddable Widget
+- Drop-in on-ramp/off-ramp widget for any dApp
+- CDN-ready distribution
 
 ---
 
@@ -131,76 +164,149 @@ curl http://localhost:8080/health
 │   (Tenant)        │◄───►│   Orchestrator    │◄───►│   (Rails)        │
 └──────────────────┘     └────────┬─────────┘     └──────────────────┘
                                   │
-                                  ▼
-                         ┌──────────────────┐
-                         │   Blockchain      │
-                         │   Networks        │
-                         └──────────────────┘
+                    ┌─────────────┼─────────────┐
+                    ▼             ▼             ▼
+             ┌────────────┐ ┌─────────┐ ┌────────────┐
+             │ Blockchain  │ │ Oracles │ │ Compliance │
+             │  Networks   │ │         │ │  Providers │
+             └────────────┘ └─────────┘ └────────────┘
 ```
 
-### Service Components
+### Rust Workspace (7 crates)
 
-| Crate | Description | Technology |
-|-------|-------------|------------|
-| `ramp-api` | REST API Gateway | Rust (Axum) |
-| `ramp-core` | Business Logic & State Machine | Rust |
-| `ramp-ledger` | Double-Entry Accounting | Rust |
-| `ramp-compliance` | KYC/AML/KYT Engine | Rust |
-| `ramp-aa` | Account Abstraction (ERC-4337) | Rust |
-| `ramp-adapter` | Bank/PSP Integration SDK | Rust |
-| `ramp-common` | Shared types & errors | Rust |
+| Crate | Description | Key Dependencies |
+|-------|-------------|-----------------|
+| `ramp-api` | REST API Gateway | Axum 0.7, Tower, OpenTelemetry |
+| `ramp-core` | Business logic, state machine, 119 modules | Tokio, SQLx, async-nats |
+| `ramp-ledger` | Double-entry accounting | rust_decimal |
+| `ramp-compliance` | KYC/AML/KYT, 64 modules | Fuzz testing, report generation |
+| `ramp-aa` | Account Abstraction (ERC-4337) | Alloy |
+| `ramp-adapter` | Bank/PSP integration SDK | Pluggable provider trait |
+| `ramp-common` | Shared types & errors | serde, thiserror |
 
 ### Project Structure
 
 ```
 rampos/
-├── crates/               # Rust workspace crates
-│   ├── ramp-api/          # HTTP API server (Axum)
-│   ├── ramp-core/         # Business logic, services
-│   ├── ramp-ledger/       # Double-entry ledger
-│   ├── ramp-compliance/   # KYC/AML/KYT engine
-│   ├── ramp-aa/           # Account Abstraction
-│   ├── ramp-adapter/      # Rails adapter SDK
-│   └── ramp-common/       # Shared types, errors
-├── contracts/             # Solidity smart contracts (Foundry)
-├── sdk/                   # TypeScript SDK
-├── sdk-go/                # Go SDK
-├── sdk-python/            # Python SDK
-├── packages/widget/       # Embeddable on-ramp widget
-├── frontend/              # Admin Dashboard (Next.js)
-├── frontend-landing/      # Marketing Landing Page
-├── migrations/            # PostgreSQL migrations
-├── k8s/                   # Kubernetes manifests
-├── monitoring/            # Grafana & Prometheus configs
-├── scripts/               # Utility & deployment scripts
-└── docs/                  # Documentation
+├── crates/                # 7 Rust workspace crates
+│   ├── ramp-api/           # HTTP API (Axum) — 101 files
+│   ├── ramp-core/          # Business logic — 126 files
+│   │   ├── billing/         # Metering, Stripe
+│   │   ├── bridge/          # Across, Stargate
+│   │   ├── chain/           # EVM, Solana, TON, swaps
+│   │   ├── crosschain/      # Executor, relayer
+│   │   ├── custody/         # MPC keys, signing, policies
+│   │   ├── intents/         # Solver, execution, unified balance
+│   │   ├── oracle/          # Chainlink, fallback
+│   │   └── ...
+│   ├── ramp-compliance/    # KYC/AML engine — 75 files
+│   │   ├── aml/             # Device anomaly detection
+│   │   ├── fraud/           # Scoring, analytics, features
+│   │   ├── kyc/             # Onfido, eKYC, tiering
+│   │   ├── kyt/             # Chainalysis integration
+│   │   ├── sanctions/       # OpenSanctions
+│   │   └── reports/         # SAR/CTR, SBV format
+│   ├── ramp-ledger/        # Double-entry ledger
+│   ├── ramp-aa/            # Account Abstraction
+│   ├── ramp-adapter/       # Rails adapter SDK
+│   └── ramp-common/        # Shared types
+├── contracts/              # 10 Solidity contracts (Foundry)
+│   ├── src/
+│   │   ├── passkey/         # WebAuthn on-chain
+│   │   ├── eip7702/         # EOA delegation
+│   │   └── zk/             # Zero-Knowledge KYC
+│   ├── test/               # 18 test files
+│   └── script/             # 8 deployment scripts
+├── sdk/                    # TypeScript SDK
+├── sdk-go/                 # Go SDK
+├── sdk-python/             # Python SDK
+├── packages/widget/        # Embeddable widget
+├── frontend/               # Admin Dashboard (Next.js 15)
+├── frontend-landing/       # Marketing site
+├── migrations/             # 65 PostgreSQL migrations
+├── k8s/                    # Kubernetes (Kustomize)
+│   ├── base/               # Core manifests, HA Postgres, PgBouncer
+│   ├── jobs/               # Backup jobs (Postgres, Redis, NATS → S3)
+│   ├── monitoring/         # Prometheus, Grafana
+│   └── overlays/           # Staging/Production configs
+├── monitoring/             # Grafana dashboards, Prometheus rules
+├── argocd/                 # GitOps deployment
+└── docs/                   # Documentation
 ```
 
 ---
 
-## Documentation
+## Quick Start
 
-| Document | Description |
-|----------|-------------|
-| [API Reference](docs/API.md) | Complete REST API documentation |
-| [Architecture](docs/architecture.md) | System design and components |
-| [SDK Guide](docs/SDK.md) | TypeScript/Go/Python SDK usage |
-| [Deployment](docs/DEPLOY.md) | Production deployment guide |
-| [Security](docs/SECURITY.md) | Security model and best practices |
-| [Monitoring](docs/MONITORING.md) | Observability and alerting |
+### Prerequisites
+
+| Component | Version | Purpose |
+|-----------|---------|---------|
+| Rust | 1.75+ | Backend API |
+| PostgreSQL | 16+ | Primary database |
+| Redis | 7+ | Cache, rate limiting, idempotency |
+| NATS | 2.10+ | Event streaming |
+| Node.js | 18+ | Frontend, SDKs |
+| Foundry | Latest | Smart contracts |
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/hadesloc/RampOS.git
+cd RampOS
+
+# Copy environment configuration
+cp .env.example .env
+# Edit .env — fill in passwords (see comments for generation commands)
+
+# Start infrastructure
+docker-compose up -d postgres redis nats
+
+# Run database migrations
+cargo install sqlx-cli
+sqlx migrate run
+
+# Build and run
+cargo build --release
+cargo run --release --package ramp-api
+```
+
+The API server will be available at `http://localhost:8080`.
+
+### Using Docker
+
+```bash
+# Full stack
+docker-compose up --build
+
+# Or infrastructure only
+docker-compose up -d postgres redis nats clickhouse
+docker-compose up ramp-api
+```
+
+### Frontend (Admin Dashboard)
+
+```bash
+cd frontend
+cp .env.local.example .env.local
+npm install
+npm run dev
+# → http://localhost:3000
+```
 
 ---
 
 ## API Overview
 
-### Intent Management
+### Intent Lifecycle
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/v1/intents/payin` | Create VND pay-in intent |
-| `POST` | `/v1/intents/payin/confirm` | Confirm pay-in from bank |
-| `POST` | `/v1/intents/payout` | Create VND pay-out intent |
-| `POST` | `/v1/events/trade-executed` | Record trade execution |
+| `POST` | `/v1/intents/payin` | Create fiat deposit intent |
+| `POST` | `/v1/intents/payin/confirm` | Confirm deposit from bank |
+| `POST` | `/v1/intents/payout` | Create fiat withdrawal intent |
+| `POST` | `/v1/events/trade-executed` | Record crypto trade |
 | `GET` | `/v1/intents/{id}` | Get intent status |
 
 ### Example: Create Pay-in
@@ -216,6 +322,30 @@ curl -X POST http://localhost:8080/v1/intents/payin \
     "rails_provider": "VIETCOMBANK"
   }'
 ```
+
+---
+
+## Smart Contracts
+
+### Deploy
+
+```bash
+cd contracts
+forge install
+forge script script/Deploy.s.sol --rpc-url sepolia --broadcast
+forge verify-contract <ADDRESS> RampOSAccountFactory --chain sepolia
+```
+
+### Highlights
+
+| Feature | Contract | Standard |
+|---------|----------|----------|
+| Smart Accounts | `RampOSAccount.sol` | ERC-4337 |
+| Gas Sponsorship | `RampOSPaymaster.sol` | ERC-4337 |
+| Passkey Login | `PasskeySigner.sol` | WebAuthn |
+| EOA Delegation | `EIP7702Delegation.sol` | EIP-7702 |
+| Privacy KYC | `ZkKycRegistry.sol` | ZK Proofs |
+| VND Stablecoin | `VNDToken.sol` | ERC-20 |
 
 ---
 
@@ -235,17 +365,14 @@ const payin = await client.payins.create({
   userId: 'usr_123',
   amountVnd: 1000000
 });
-
-console.log(payin.intentId);
 ```
 
 ### Go
 
 ```go
-import "github.com/your-org/rampos-go"
+import "github.com/hadesloc/rampos-go"
 
 client := rampos.NewClient("your_api_key")
-
 payin, err := client.Payins.Create(ctx, &rampos.CreatePayinRequest{
     UserID:    "usr_123",
     AmountVND: 1000000,
@@ -258,37 +385,8 @@ payin, err := client.Payins.Create(ctx, &rampos.CreatePayinRequest{
 from rampos import RampOSClient
 
 client = RampOSClient(api_key="your_api_key")
-
-payin = client.payins.create(
-    user_id="usr_123",
-    amount_vnd=1000000
-)
+payin = client.payins.create(user_id="usr_123", amount_vnd=1000000)
 ```
-
----
-
-## Smart Contracts
-
-### Deploy to Testnet
-
-```bash
-cd contracts
-
-# Install dependencies
-forge install
-
-# Deploy to Sepolia
-forge script script/Deploy.s.sol --rpc-url sepolia --broadcast
-
-# Verify contract
-forge verify-contract <ADDRESS> RampOSAccountFactory --chain sepolia
-```
-
-### Contract Features
-
-- **Smart Account** — Single owner ECDSA, batch execution, upgradeable (UUPS)
-- **Session Keys** — Time-limited permissions for specific actions
-- **Paymaster** — Gas sponsorship for gasless transactions
 
 ---
 
@@ -296,15 +394,37 @@ forge verify-contract <ADDRESS> RampOSAccountFactory --chain sepolia
 
 | Layer | Technology |
 |-------|------------|
-| **Backend** | Rust, Tokio, Axum |
-| **Database** | PostgreSQL 16 |
+| **Backend** | Rust, Tokio, Axum, SQLx |
+| **Database** | PostgreSQL 16 (65 migrations) |
 | **Cache** | Redis 7 |
 | **Messaging** | NATS JetStream |
 | **Analytics** | ClickHouse |
 | **Smart Contracts** | Solidity 0.8.24, Foundry |
-| **Frontend** | Next.js 14, React, Tailwind CSS |
-| **Infrastructure** | Kubernetes, ArgoCD |
+| **Frontend** | Next.js 15, React, Tailwind CSS, Recharts |
+| **Crypto** | AES-256-GCM, Argon2, HMAC-SHA256, JWT |
+| **Infrastructure** | Kubernetes, ArgoCD, PgBouncer |
 | **Observability** | OpenTelemetry, Prometheus, Grafana |
+| **Testing** | Playwright (E2E), Vitest, Foundry fuzz |
+
+---
+
+## Infrastructure
+
+### Kubernetes (Production-Ready)
+- **PostgreSQL HA** — Primary + streaming replicas with automated failover
+- **PgBouncer** — Connection pooling for high concurrency
+- **Automated Backups** — Postgres, Redis, NATS → S3 with retention policies
+- **Network Policies** — Pod-level isolation
+- **HPA/PDB** — Auto-scaling and disruption budgets
+- **Kustomize Overlays** — Staging and production configurations
+
+### Security
+- AES-256-GCM encryption for sensitive data at rest
+- Argon2 password hashing
+- HMAC-SHA256 webhook signature verification
+- JWT authentication with role-based access
+- Rate limiting and request timeout protection
+- Kubernetes NetworkPolicies and mTLS-ready architecture
 
 ---
 
@@ -313,41 +433,25 @@ forge verify-contract <ADDRESS> RampOSAccountFactory --chain sepolia
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ```bash
-# Create your feature branch
 git checkout -b feature/amazing-feature
-
-# Make your changes and commit
 git commit -m 'feat: add amazing feature'
-
-# Push to your fork and open a Pull Request
 git push origin feature/amazing-feature
+# Open a Pull Request
 ```
-
----
-
-## Roadmap
-
-- [x] Core Orchestrator — State machine, Ledger, API
-- [x] Compliance Pack — KYC, AML, Case Management
-- [x] AA Kit — ERC-4337, Paymaster, Session Keys
-- [x] Security Hardening — Audit, mTLS, Secrets Management
-- [x] Frontend — Admin Dashboard, User Portal, Landing Page
-- [x] Multi-chain Support — Polygon, Arbitrum, Base
-- [ ] Production Deployment — HA, monitoring, runbooks
-
----
-
-## Security
-
-If you discover a security vulnerability, please report it responsibly via a **private** GitHub security advisory (Settings → Security → Advisories → New draft). **Do not** open public issues for vulnerabilities.
-
-See [SECURITY.md](docs/SECURITY.md) for the full security policy.
 
 ---
 
 ## License
 
-This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+This means:
+- ✅ You can view, modify, and use this code for **personal and educational** purposes
+- ✅ You can contribute back to this project
+- ⚠️ If you use this software to provide a **network service** (SaaS), you **must** release your complete source code under AGPL-3.0
+- ❌ You **cannot** use this in a proprietary/closed-source commercial product without making your entire codebase open source
+
+See [LICENSE](LICENSE) for the full license text.
 
 ---
 

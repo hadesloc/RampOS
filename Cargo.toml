@@ -16,8 +16,8 @@ exclude = ["crates/ramp-compliance/fuzz"]
 version = "0.1.0"
 edition = "2021"
 authors = ["RampOS Team"]
-license = "MIT"
-repository = "https://github.com/rampos/rampos"
+license = "AGPL-3.0"
+repository = "https://github.com/hadesloc/RampOS"
 
 [workspace.dependencies]
 # Async runtime
