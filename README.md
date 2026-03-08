@@ -93,14 +93,63 @@ Built with **Rust** for performance and memory safety, **Solidity** for on-chain
 
 ## Features
 
-### 🔧 Core Orchestrator (`ramp-core`)
-- **State Machine** — Standardized transaction flows for Pay-in, Pay-out, and Trade intents
-- **Intent Solver** — Unified intent processing with pluggable execution backends
-- **Double-Entry Ledger** — Atomic, balanced transactions with `rust_decimal` precision
-- **Webhook Engine** — Delivery with exponential backoff retry and HMAC-SHA256 signing
-- **Idempotency** — Safe retries via idempotency key tracking
-- **Multi-Tenant** — Complete data isolation, per-tenant config, API key management
-- **Job Scheduler** — Background jobs for timeout handling, webhook retry, compliance alerts
+### 🎯 Intent Engine (`ramp-core/intents`) — The Core of RampOS
+
+RampOS is built around a **declarative Intent System** — users express *what* they want to do, and the engine figures out *how* to execute it optimally:
+
+```
+User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
+     ↓ IntentSolver evaluates all routes
+     ↓ Route A: Bridge USDC → Arbitrum, then Swap (score: 0.82)
+     ↓ Route B: Swap USDC→USDT on Ethereum, then Bridge (score: 0.71)
+     ↓ Selects Route A → generates ExecutionPlan
+     ↓ WorkflowEngine persists & executes each step durably
+```
+
+**4 Intent Action Types:**
+| Action | Same-chain | Cross-chain | Steps |
+|--------|-----------|-------------|-------|
+| `Swap` | Direct DEX swap | Bridge+Swap or Swap+Bridge (auto-selected) | 2–5 |
+| `Bridge` | — | Across / Stargate (auto provider) | 3 |
+| `Send` | Direct transfer | Bridge+Transfer | 1–4 |
+| `Stake` | Direct stake | Bridge+Stake | 2–5 |
+
+**Smart Route Optimization:**
+- Gas cost estimation per chain (Ethereum, Arbitrum, Base, Optimism, Polygon)
+- Time estimation with bridge wait periods (5min L2→L2, 10min L1→L2, 1hr L2→L1)
+- Composite scoring: 40% gas efficiency + 40% speed + 20% fewest steps
+- Slippage-aware: configurable `max_slippage_bps` (default 0.5%), MEV protection
+- Constraint enforcement: max gas USD, max steps, execution deadline
+
+**Dual-Mode Workflow Engine:**
+- **InProcess mode** (dev/test) — Tokio async tasks + optional PostgreSQL state persistence for crash recovery
+- **Temporal mode** (production) — Full durable execution via Temporal server gRPC, automatic retries, workflow history, signal handling (e.g. manual bank confirmation)
+- **Automatic fallback** — If Temporal server is unreachable, seamlessly falls back to in-process
+
+**Compensation & Rollback:**
+- Every multi-step workflow has compensation steps for automatic rollback on failure
+- Escrow-based intermediate state ensures no fund loss during partial failures
+- `compensation.rs` handles saga-pattern rollback across all transaction types
+
+### 🔧 Core Services (`ramp-core/service`)
+
+| Service | Description |
+|---------|-------------|
+| **Pay-in** | Full lifecycle: initiate → bank confirmation → ledger credit → webhook |
+| **Pay-out** | Compliance checks → ledger debit → rails transfer → confirmation |
+| **Trade** | Crypto trade recording with VND↔crypto double-entry |
+| **Escrow** | Funds locked in escrow during processing; auto-release or rollback |
+| **Settlement** | End-of-day settlement between rails providers |
+| **Reconciliation** | Automatic daily reconciliation between ledger and bank statements |
+| **Exchange Rate** | Real-time rate engine with configurable spread and rate sources |
+| **Withdraw** | Full withdrawal flow with policy engine and per-tenant limits |
+| **Withdraw Policy** | Per-tenant, per-user configurable withdrawal policies |
+| **Webhook Delivery** | Guaranteed delivery with retry, HMAC signing, and DLQ |
+| **Webhook DLQ** | Dead Letter Queue for permanently failed webhooks |
+| **Passkey Auth** | Server-side WebAuthn verification for passkey-secured accounts |
+| **License** | Per-tenant license management: tier, expiry, feature flags |
+| **Onboarding** | Streamlined user onboarding with KYC tier progression |
+| **Metrics** | Internal metrics collection for Prometheus export |
 
 ### 🏦 Compliance Engine (`ramp-compliance`)
 - **KYC Tiering** — Tier 1/2/3 with configurable limits; integrations with Onfido and eKYC providers
