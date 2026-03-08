@@ -1,3 +1,0 @@
-Trivy filesystem scan not run: tool not installed in this environment.
-Install: `choco install trivy` or `brew install trivy` (or your package manager).
-Run: `trivy fs --scanners vuln,secret,config --format table --output security-reports/trivy-fs-report.txt .`

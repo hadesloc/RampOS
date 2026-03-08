@@ -1,3 +1,0 @@
-Semgrep scan not run: tool not installed in this environment.
-Install: `pipx install semgrep` (or your package manager).
-Run: `semgrep --config auto --output security-reports/semgrep-report.txt .`

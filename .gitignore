@@ -80,3 +80,24 @@ uploads/
 # Build output
 frontend/.next/
 frontend-landing/.next/
+
+# Internal plans, reports, audit artifacts
+audit_results/
+security-reports/
+bundle/
+docs/plans/
+docs/security/
+BAO_CAO_AUDIT_TONG_HOP.md
+FINAL_STATUS_REPORT.md
+NEXT-GEN-MASTER-PLAN.md
+NEXT-GEN-ROADMAP.md
+PHASES.md
+PRODUCTION_READINESS_REPORT.md
+PROGRESS.md
+RAMPOS_COMPREHENSIVE_REVIEW.md
+SECURITY_AUDIT_FINAL_*.md
+SECURITY_REMEDIATION.md
+TASK-TRACKER.md
+content_script.md
+integration_report.md
+
