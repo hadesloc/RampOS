@@ -12,6 +12,8 @@
   <img src="https://img.shields.io/badge/license-AGPL--3.0-red.svg?style=flat-square" alt="License">
 </p>
 
+> 🇻🇳 [Đọc bản Tiếng Việt](README.vi.md)
+
 <p align="center">
   <a href="#features">Features</a> |
   <a href="#screenshots">Screenshots</a> |
