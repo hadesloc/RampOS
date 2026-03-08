@@ -217,21 +217,252 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 
 ---
 
+---
+
 ## Architecture
 
+### 1. Overall System Architecture
+
 ```
-┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│    Exchange       │     │     RampOS        │     │   Bank / PSP     │
-│   (Tenant)        │◄───►│   Orchestrator    │◄───►│   (Rails)        │
-└──────────────────┘     └────────┬─────────┘     └──────────────────┘
-                                  │
-                    ┌─────────────┼─────────────┐
-                    ▼             ▼             ▼
-             ┌────────────┐ ┌─────────┐ ┌────────────┐
-             │ Blockchain  │ │ Oracles │ │ Compliance │
-             │  Networks   │ │         │ │  Providers │
-             └────────────┘ └─────────┘ └────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                              RampOS Ecosystem                                     │
+│                                                                                   │
+│  ┌────────────────┐   REST/WS    ┌────────────────────────────────────────────┐  │
+│  │  Admin         │◄────────────►│              ramp-api (Axum)               │  │
+│  │  Dashboard     │             │   Auth · Rate Limit · Idempotency · OTel   │  │
+│  │  (Next.js 15)  │             └─────────────────────┬──────────────────────┘  │
+│  └────────────────┘                                   │                          │
+│                                                        │ calls                   │
+│  ┌────────────────┐   REST/WS    ┌─────────────────────▼──────────────────────┐  │
+│  │  User Portal   │◄────────────►│             ramp-core (Rust)               │  │
+│  │  (Next.js 15)  │             │                                              │  │
+│  └────────────────┘             │  ┌──────────┐  ┌──────────┐  ┌──────────┐  │  │
+│                                 │  │  Intent  │  │ Workflow │  │ Service  │  │  │
+│  ┌────────────────┐   iframe    │  │  Engine  │  │  Engine  │  │  Layer   │  │  │
+│  │  Embeddable    │◄──────────  │  │ (Solver) │  │(Temporal)│  │(15 svcs) │  │  │
+│  │  Widget        │             │  └────┬─────┘  └────┬─────┘  └────┬─────┘  │  │
+│  └────────────────┘             │       └─────────────┴─────────────┘        │  │
+│                                 │                      │                       │  │
+│  ┌────────────────┐   SDK/API   │       ┌──────────────▼──────────────┐       │  │
+│  │  Tenant        │◄────────────┤       │        ramp-ledger          │       │  │
+│  │  Exchange      │             │       │   Double-Entry · Atomic Tx  │       │  │
+│  └────────────────┘             │       └──────────────┬──────────────┘       │  │
+│                                 │                      │                       │  │
+│                                 └──────────────────────┼───────────────────────┘  │
+│                                                        │                          │
+│              ┌─────────────────┬──────────────────────┼────────────────────────┐  │
+│              ▼                 ▼                      ▼                        ▼  │
+│  ┌────────────────┐  ┌──────────────┐  ┌──────────────────┐  ┌──────────────┐  │
+│  │  PostgreSQL 16 │  │  Redis 7     │  │  NATS JetStream   │  │  ClickHouse  │  │
+│  │  (Primary+HA)  │  │  (Cache/RL)  │  │  (Event Stream)   │  │  (Analytics) │  │
+│  └────────────────┘  └──────────────┘  └──────────────────┘  └──────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────────┘
+         │                          │                           │
+         ▼                          ▼                           ▼
+┌─────────────────┐    ┌──────────────────────┐    ┌────────────────────────────┐
+│  Bank / PSP     │    │  Blockchain Networks  │    │  Compliance Providers      │
+│  (Rails)        │    │  EVM · Solana · TON   │    │  Onfido · Chainalysis      │
+│  VCB · MB · ... │    │  Bridge: Across/Gate  │    │  OpenSanctions · SBV       │
+└─────────────────┘    └──────────────────────┘    └────────────────────────────┘
 ```
+
+---
+
+### 2. Intent Lifecycle — From Request to Execution
+
+```
+  Tenant / User
+      │
+      │  POST /v1/intents/...
+      ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         ramp-api: Request Pipeline                               │
+│                                                                                  │
+│  ┌──────────────┐   ┌────────────────┐   ┌──────────────┐   ┌──────────────┐   │
+│  │ JWT Auth     │──►│ Idempotency    │──►│ Rate Limiter │──►│ Validator    │   │
+│  │ (tenant_id)  │   │ (Redis check)  │   │ (per tenant) │   │ (amount/KYC) │   │
+│  └──────────────┘   └────────────────┘   └──────────────┘   └──────────────┘   │
+└──────────────────────────────────────────────────────────┬──────────────────────┘
+                                                           │
+                                                           ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              IntentSolver                                        │
+│                                                                                  │
+│  IntentSpec { action: Swap/Bridge/Send/Stake, from, to, amount, constraints }   │
+│                                                                                  │
+│  ┌───────────────────────────────────────────────────────────────────────────┐  │
+│  │  Route Builder → evaluates ALL possible routes                            │  │
+│  │                                                                           │  │
+│  │  Route A: [Approve] → [Swap] → [Bridge] → [Wait] → [Transfer]            │  │
+│  │           gas: $2.1    time: 8min    steps: 5    score: 0.82 ✅           │  │
+│  │                                                                           │  │
+│  │  Route B: [Bridge] → [Wait] → [Approve] → [Swap]                         │  │
+│  │           gas: $4.7    time: 25min   steps: 4    score: 0.71             │  │
+│  │                                                                           │  │
+│  │  Score Formula: 40% × (1/gas) + 40% × (1/time) + 20% × (1/steps)        │  │
+│  └───────────────────────────────────────────────────────────────────────────┘  │
+│                                      │                                           │
+│                             Best route selected                                  │
+│                                      │                                           │
+│                                      ▼                                           │
+│  ExecutionPlan { steps[], gas_cost, est_time, min_output (slippage adjusted) }  │
+└──────────────────────────────────────┬──────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            WorkflowEngine                                        │
+│                                                                                  │
+│  ┌──────────────────────────┐        ┌──────────────────────────────────────┐   │
+│  │  InProcess (dev/test)    │   OR   │  Temporal (production)               │   │
+│  │                          │        │                                      │   │
+│  │  Tokio async tasks       │        │  Durable execution (gRPC)            │   │
+│  │  PostgreSQL state store  │        │  Auto retry on failure               │   │
+│  │  Crash recovery on boot  │        │  Signal handling (bank confirm)      │   │
+│  │                          │        │  Full workflow history               │   │
+│  └──────────────────────────┘        └──────────────────────────────────────┘   │
+│                                                                                  │
+│                    Automatic fallback if Temporal unreachable                   │
+└──────────────────────────────────────┬──────────────────────────────────────────┘
+                                       │
+                         executes steps sequentially
+                                       │
+                    ┌──────────────────┴────────────────────┐
+                    ▼                                        ▼
+          ┌──────────────────┐                   ┌──────────────────────────┐
+          │  On-chain Steps  │                   │  Compensation Workflow   │
+          │  Approve · Swap  │                   │  (runs on any failure)   │
+          │  Bridge · Stake  │                   │                          │
+          │  Transfer · Wait │                   │  Step N failed?          │
+          └──────────────────┘                   │  → Run N-1 compensate   │
+                                                 │  → Run N-2 compensate   │
+                                                 │  → Release escrow       │
+                                                 └──────────────────────────┘
+```
+
+---
+
+### 3. Pay-in Flow (Fiat → Crypto)
+
+```
+  User (on exchange)            RampOS                        Bank / Blockchain
+       │                           │                                  │
+       │  1. Create Payin Intent   │                                  │
+       │──────────────────────────►│                                  │
+       │                           │  2. AML pre-check                │
+       │                           │  3. Lock funds in Escrow         │
+       │                           │  4. Generate bank reference code │
+       │◄──────────────────────────│                                  │
+       │  5. Show VA / QR code     │                                  │
+       │                           │                                  │
+       │  6. User sends VND        │                                  │
+       │───────────────────────────────────────────────────────────► │
+       │                           │                                  │
+       │                           │  7. Bank webhook / polling      │
+       │                           │◄────────────────────────────────│
+       │                           │                                  │
+       │                           │  8. Signal: BankConfirmation     │
+       │                           │  (WorkflowEngine receives)       │
+       │                           │                                  │
+       │                           │  9.  AML post-check              │
+       │                           │  10. Double-entry ledger entry   │
+       │                           │      DR: bank_clearing           │
+       │                           │      CR: user_balance            │
+       │                           │  11. Release escrow              │
+       │                           │  12. Credit crypto to user       │
+       │                           │──────────────────────────────── ►│
+       │                           │  13. Fire webhook to tenant      │
+       │◄──────────────────────────│                                  │
+       │  14. UI updated (WebSocket)                                  │
+```
+
+---
+
+### 4. Pay-out Flow (Crypto → Fiat) with Compliance Gate
+
+```
+  User (withdrawal request)
+       │
+       │  POST /v1/intents/payout
+       ▼
+  ┌────────────────────────────────────────────────────────────────────────────────┐
+  │                         Compliance Gate (MANDATORY)                             │
+  │                                                                                 │
+  │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌─────────────┐  │
+  │  │ KYC Tier Check │  │ AML Velocity   │  │ Sanctions      │  │ Fraud Score │  │
+  │  │ Tier ≥ required│  │ 24h/7d/30d     │  │ OFAC·UN·OpenS  │  │ ML scoring  │  │
+  │  │ for amount     │  │ limits         │  │ real-time      │  │ threshold   │  │
+  │  └───────┬────────┘  └───────┬────────┘  └───────┬────────┘  └──────┬──────┘  │
+  │          │                   │                    │                   │         │
+  │          └───────────────────┴────────────────────┴───────────────────┘         │
+  │                                         │                                       │
+  │                              All checks PASS?                                   │
+  │                          NO ──────────────────── YES                            │
+  │                           │                        │                            │
+  │                    ┌──────▼──────┐         ┌──────▼──────────────────────────┐ │
+  │                    │ Create Case │         │  Proceed to execution           │ │
+  │                    │ Flag for    │         └─────────────────────────────────┘ │
+  │                    │ manual rev. │                                              │
+  │                    └─────────────┘                                             │
+  └────────────────────────────────────────────────────────────────────────────────┘
+                                              │
+                                              ▼
+  ┌────────────────────────────────────────────────────────────────────────────────┐
+  │                         Payout Execution                                       │
+  │                                                                                │
+  │  1. Withdraw Policy check (per-tenant limits, cooldown, blacklist)             │
+  │  2. Debit user balance (Double-entry: DR user_balance, CR bank_settling)       │
+  │  3. Lock in Escrow until bank confirms                                         │
+  │  4. Submit transfer order to bank/rails                                        │
+  │  5. Wait for rails confirmation (polling / webhook)                            │
+  │  6. On success → Release escrow, record final ledger entry                    │
+  │  7. On failure → Compensation: reverse ledger, credit user back               │
+  │  8. Deliver webhook to tenant                                                  │
+  └────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 5. Infrastructure Stack
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                          Production Kubernetes Cluster                           │
+│                                                                                  │
+│  ┌───────────┐    ┌───────────────────────────────────────────────────────────┐ │
+│  │  ArgoCD   │───►│                     ramp-api Pods                         │ │
+│  │  GitOps   │    │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ │ │
+│  │  Deploy   │    │  │ Pod 1    │  │ Pod 2    │  │ Pod 3    │  │  ...     │ │ │
+│  └───────────┘    │  │ (Axum)   │  │ (Axum)   │  │ (Axum)   │  │ HPA:3-20 │ │ │
+│                   │  └──────────┘  └──────────┘  └──────────┘  └──────────┘ │ │
+│  ┌───────────┐    └───────────────────────────────────────────────────────────┘ │
+│  │Prometheus │                                                                   │
+│  │  Rules    │    ┌───────────────────────────────────────────────────────────┐ │
+│  │  Grafana  │    │                  Data Layer                                │ │
+│  │Dashboards │    │                                                            │ │
+│  └───────────┘    │  ┌──────────────────────────┐  ┌──────────────────────┐  │ │
+│                   │  │   PostgreSQL 16 HA        │  │  Redis 7 Cluster     │  │ │
+│  ┌───────────┐    │  │   Primary ──► Replica     │  │  Cache · Sessions    │  │ │
+│  │  S3 Backup│◄───│  │   PgBouncer (pool:100)    │  │  Rate Limit · Idem.  │  │ │
+│  │  Cron Job │    │  │   Auto failover           │  └──────────────────────┘  │ │
+│  │ (daily)   │    │  └──────────────────────────┘                             │ │
+│  └───────────┘    │  ┌──────────────────────────┐  ┌──────────────────────┐  │ │
+│                   │  │  NATS JetStream           │  │  ClickHouse          │  │ │
+│                   │  │  Event streaming          │  │  Analytics · Reports │  │ │
+│                   │  │  Durable messages         │  │  SBV report data     │  │ │
+│                   │  └──────────────────────────┘  └──────────────────────┘  │ │
+│                   └───────────────────────────────────────────────────────────┘ │
+│                                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐│
+│  │  Network Policies: Pod-level isolation · mTLS-ready · HPA + PDB configured  ││
+│  └─────────────────────────────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────────────────────┘
+         │                │                │                    │
+         ▼                ▼                ▼                    ▼
+    OpenTelemetry    Prometheus         Grafana           AlertManager
+    (traces/logs)    (metrics)          (dashboards)      (PagerDuty/Slack)
+```
+
+
 
 ### Rust Workspace (7 crates)
 
