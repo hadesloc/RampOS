@@ -163,3 +163,19 @@ export function useWebSocket({
     lastMessage,
   };
 }
+
+export function useRealtimeDashboard() {
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const { isConnected, lastMessage } = useWebSocket({
+    url: typeof window !== 'undefined' ? `ws://${window.location.hostname}:8080/v1/ws` : '',
+    reconnect: true,
+  });
+
+  useEffect(() => {
+    if (lastMessage) {
+      setLastUpdate(new Date());
+    }
+  }, [lastMessage]);
+
+  return { isConnected, lastUpdate };
+}

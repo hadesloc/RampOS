@@ -111,34 +111,34 @@ export function PortalSidebar() {
         )}
       >
         <div className={cn("flex items-center h-16 px-4", isCollapsed ? "md:justify-center justify-between" : "justify-between")}>
-           <h1 className={cn("text-xl font-bold tracking-tight text-foreground truncate transition-opacity", isCollapsed ? "md:hidden" : "block")}>
-             RampOS
-           </h1>
-           <div className="flex items-center gap-2">
+          <h1 className={cn("text-xl font-bold tracking-tight text-foreground truncate transition-opacity", isCollapsed ? "md:hidden" : "block")}>
+            RampOS
+          </h1>
+          <div className="flex items-center gap-2">
             <Button
-                variant="ghost"
-                size="icon"
-                className="md:hidden"
-                onClick={() => setIsOpen(false)}
-                aria-label="Close navigation menu"
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={() => setIsOpen(false)}
+              aria-label="Close navigation menu"
             >
-                <X className="h-4 w-4" />
+              <X className="h-4 w-4" />
             </Button>
             <Button
-                variant="ghost"
-                size="icon"
-                className={cn("hidden md:flex h-8 w-8 text-muted-foreground hover:text-foreground", isCollapsed && "h-8 w-8")}
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              variant="ghost"
+              size="icon"
+              className={cn("hidden md:flex h-8 w-8 text-muted-foreground hover:text-foreground", isCollapsed && "h-8 w-8")}
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-                {isCollapsed ? (
+              {isCollapsed ? (
                 <ChevronRight className="h-4 w-4" />
-                ) : (
+              ) : (
                 <ChevronLeft className="h-4 w-4" />
-                )}
-                <span className="sr-only">Toggle Sidebar</span>
+              )}
+              <span className="sr-only">Toggle Sidebar</span>
             </Button>
-           </div>
+          </div>
         </div>
 
         <Separator />
@@ -155,49 +155,49 @@ export function PortalSidebar() {
                     const isActive = pathname === item.href;
 
                     return (
-                        <div key={item.href}>
-                             {/* Desktop Collapsed Item */}
-                             <div className={cn("hidden md:block", !isCollapsed && "hidden")}>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className={cn(
-                                            "h-10 w-10 rounded-md transition-colors hover:bg-primary/5 hover:text-foreground",
-                                            isActive ? "bg-primary/10 text-primary" : "text-muted-foreground"
-                                        )}
-                                        asChild
-                                    >
-                                        <Link href={item.href}>
-                                            <item.icon className="h-5 w-5" />
-                                            <span className="sr-only">{item.title}</span>
-                                        </Link>
-                                    </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right" className="font-medium">
-                                        {item.title}
-                                    </TooltipContent>
-                                </Tooltip>
-                             </div>
-
-                             {/* Standard Item (Mobile or Desktop Expanded) */}
-                             <div className={cn("block", isCollapsed && "md:hidden")}>
-                                <Link
-                                    href={item.href}
-                                    className={cn(
-                                    "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all hover:bg-primary/5 hover:text-foreground",
-                                    isActive
-                                        ? "bg-primary/10 text-primary border-l-2 border-primary rounded-l-none shadow-sm"
-                                        : "text-muted-foreground hover:translate-x-1"
-                                    )}
-                                    onClick={() => setIsOpen(false)}
-                                >
-                                    <item.icon className={cn("h-4 w-4 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
-                                    {item.title}
+                      <div key={item.href}>
+                        {/* Desktop Collapsed Item */}
+                        <div className={isCollapsed ? "hidden md:block" : "hidden"}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={cn(
+                                  "h-10 w-10 rounded-md transition-colors hover:bg-primary/5 hover:text-foreground",
+                                  isActive ? "bg-primary/10 text-primary" : "text-muted-foreground"
+                                )}
+                                asChild
+                              >
+                                <Link href={item.href}>
+                                  <item.icon className="h-5 w-5" />
+                                  <span className="sr-only">{item.title}</span>
                                 </Link>
-                             </div>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="font-medium">
+                              {item.title}
+                            </TooltipContent>
+                          </Tooltip>
                         </div>
+
+                        {/* Standard Item (Mobile or Desktop Expanded) */}
+                        <div className={cn("block", isCollapsed && "md:hidden")}>
+                          <Link
+                            href={item.href}
+                            className={cn(
+                              "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all hover:bg-primary/5 hover:text-foreground",
+                              isActive
+                                ? "bg-primary/10 text-primary border-l-2 border-primary rounded-l-none shadow-sm"
+                                : "text-muted-foreground hover:translate-x-1"
+                            )}
+                            onClick={() => setIsOpen(false)}
+                          >
+                            <item.icon className={cn("h-4 w-4 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+                            {item.title}
+                          </Link>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
@@ -212,26 +212,26 @@ export function PortalSidebar() {
         </div>
 
         <div className="border-t p-4 bg-muted/20">
-            {/* Desktop Collapsed Footer */}
-            <div className={cn("hidden md:flex flex-col items-center gap-4", !isCollapsed && "hidden")}>
-                <LocaleSwitcher />
-            </div>
+          {/* Desktop Collapsed Footer */}
+          <div className={isCollapsed ? "hidden md:flex flex-col items-center gap-4" : "hidden"}>
+            <LocaleSwitcher />
+          </div>
 
-             {/* Standard Footer */}
-             <div className={cn("flex flex-col gap-4", isCollapsed && "md:hidden")}>
-                <div className="flex items-center justify-between">
-                   <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary ring-2 ring-background">
-                          {user?.email?.[0].toUpperCase() || "U"}
-                      </div>
-                      <div className="flex flex-col overflow-hidden">
-                          <p className="text-sm font-medium truncate text-foreground">My Account</p>
-                          <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-                      </div>
-                   </div>
-                   <LocaleSwitcher />
+          {/* Standard Footer */}
+          <div className={cn("flex flex-col gap-4", isCollapsed && "md:hidden")}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary ring-2 ring-background">
+                  {user?.email?.[0].toUpperCase() || "U"}
                 </div>
+                <div className="flex flex-col overflow-hidden">
+                  <p className="text-sm font-medium truncate text-foreground">My Account</p>
+                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                </div>
+              </div>
+              <LocaleSwitcher />
             </div>
+          </div>
         </div>
       </aside>
     </TooltipProvider>

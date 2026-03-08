@@ -120,8 +120,8 @@ export default function Sidebar() {
 
   return (
     <TooltipProvider delayDuration={0}>
-       {/* Mobile Toggle */}
-       <div className="md:hidden fixed top-4 left-4 z-50 flex items-center gap-2">
+      {/* Mobile Toggle */}
+      <div className="md:hidden fixed top-4 left-4 z-50 flex items-center gap-2">
         <Button variant="outline" size="icon" onClick={() => setIsOpen(!isOpen)} aria-label="Toggle navigation menu">
           <Menu className="h-4 w-4" />
         </Button>
@@ -148,33 +148,33 @@ export default function Sidebar() {
       >
         <div className={cn("flex items-center h-16 px-4", isCollapsed ? "md:justify-center justify-between" : "justify-between")}>
           <h1 className={cn("text-xl font-bold tracking-tight text-foreground truncate transition-opacity", isCollapsed ? "md:hidden" : "block")}>
-             RampOS
-           </h1>
-           <div className="flex items-center gap-2">
+            RampOS
+          </h1>
+          <div className="flex items-center gap-2">
             <Button
-                variant="ghost"
-                size="icon"
-                className="md:hidden"
-                onClick={() => setIsOpen(false)}
-                aria-label="Close navigation menu"
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={() => setIsOpen(false)}
+              aria-label="Close navigation menu"
             >
-                <X className="h-4 w-4" />
+              <X className="h-4 w-4" />
             </Button>
-             <Button
-                variant="ghost"
-                size="icon"
-                className={cn("hidden md:flex h-8 w-8 text-muted-foreground hover:text-foreground", isCollapsed && "h-8 w-8")}
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn("hidden md:flex h-8 w-8 text-muted-foreground hover:text-foreground", isCollapsed && "h-8 w-8")}
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-                {isCollapsed ? (
+              {isCollapsed ? (
                 <ChevronRight className="h-4 w-4" />
-                ) : (
+              ) : (
                 <ChevronLeft className="h-4 w-4" />
-                )}
-                <span className="sr-only">Toggle Sidebar</span>
+              )}
+              <span className="sr-only">Toggle Sidebar</span>
             </Button>
-           </div>
+          </div>
         </div>
 
         <Separator />
@@ -183,60 +183,60 @@ export default function Sidebar() {
           <nav className="space-y-6 px-2">
             {sidebarSections.map((section, index) => (
               <div key={section.title}>
-                 <h2 className={cn("mb-2 px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 transition-opacity", isCollapsed ? "md:hidden" : "block")}>
-                    {section.title}
-                  </h2>
+                <h2 className={cn("mb-2 px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 transition-opacity", isCollapsed ? "md:hidden" : "block")}>
+                  {section.title}
+                </h2>
                 <div className="space-y-1">
                   {section.items.map((item) => {
                     const isActive = pathname === item.href;
 
                     return (
-                        <div key={item.href}>
-                            {/* Desktop Collapsed */}
-                             <div className={cn("hidden md:block", !isCollapsed && "hidden")}>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Link
-                                        href={item.href}
-                                        className={cn(
-                                            "flex h-10 w-full items-center justify-center rounded-md transition-colors hover:bg-primary/5 hover:text-foreground",
-                                            isActive
-                                            ? "bg-primary/10 text-primary"
-                                            : "text-muted-foreground"
-                                        )}
-                                        >
-                                        <item.icon className="h-5 w-5" />
-                                        <span className="sr-only">{item.title}</span>
-                                        </Link>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right" className="font-medium">
-                                        {item.title}
-                                    </TooltipContent>
-                                </Tooltip>
-                             </div>
-
-                             {/* Standard */}
-                              <div className={cn("block", isCollapsed && "md:hidden")}>
-                                <Link
-                                    href={item.href}
-                                    className={cn(
-                                    "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all hover:bg-primary/5 hover:text-foreground",
-                                    isActive
-                                        ? "bg-primary/10 text-primary border-l-2 border-primary rounded-l-none shadow-sm"
-                                        : "text-muted-foreground hover:translate-x-1"
-                                    )}
-                                    onClick={() => setIsOpen(false)}
-                                >
-                                    <item.icon className={cn("h-4 w-4 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
-                                    {item.title}
-                                </Link>
-                             </div>
+                      <div key={item.href}>
+                        {/* Desktop Collapsed */}
+                        <div className={isCollapsed ? "hidden md:block" : "hidden"}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Link
+                                href={item.href}
+                                className={cn(
+                                  "flex h-10 w-full items-center justify-center rounded-md transition-colors hover:bg-primary/5 hover:text-foreground",
+                                  isActive
+                                    ? "bg-primary/10 text-primary"
+                                    : "text-muted-foreground"
+                                )}
+                              >
+                                <item.icon className="h-5 w-5" />
+                                <span className="sr-only">{item.title}</span>
+                              </Link>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="font-medium">
+                              {item.title}
+                            </TooltipContent>
+                          </Tooltip>
                         </div>
+
+                        {/* Standard */}
+                        <div className={cn("block", isCollapsed && "md:hidden")}>
+                          <Link
+                            href={item.href}
+                            className={cn(
+                              "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all hover:bg-primary/5 hover:text-foreground",
+                              isActive
+                                ? "bg-primary/10 text-primary border-l-2 border-primary rounded-l-none shadow-sm"
+                                : "text-muted-foreground hover:translate-x-1"
+                            )}
+                            onClick={() => setIsOpen(false)}
+                          >
+                            <item.icon className={cn("h-4 w-4 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+                            {item.title}
+                          </Link>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
                 {index < sidebarSections.length - 1 && (
-                   <div className={cn("mt-4 px-2", isCollapsed ? "md:hidden" : "block")}>
+                  <div className={cn("mt-4 px-2", isCollapsed ? "md:hidden" : "block")}>
                     <Separator className="bg-border/50" />
                   </div>
                 )}
@@ -246,40 +246,40 @@ export default function Sidebar() {
         </div>
 
         <div className="border-t p-4 bg-muted/20">
-             {/* Desktop Collapsed Footer */}
-             <div className={cn("hidden md:flex flex-col items-center gap-4", !isCollapsed && "hidden")}>
-                 <NotificationCenter />
-                 <Tooltip>
-                    <TooltipTrigger asChild>
-                        <div className="flex justify-center cursor-pointer">
-                            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary ring-2 ring-background">
-                                A
-                            </div>
-                        </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                        <p className="font-medium">Administrator</p>
-                        <p className="text-xs text-muted-foreground">admin@rampos.io</p>
-                    </TooltipContent>
-                </Tooltip>
-             </div>
-
-             {/* Standard Footer */}
-              <div className={cn("flex flex-col gap-3", isCollapsed && "md:hidden")}>
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary ring-2 ring-background">
-                        A
-                    </div>
-                    <div className="flex flex-col overflow-hidden">
-                        <p className="text-sm font-medium truncate text-foreground">Administrator</p>
-                        <p className="text-xs text-muted-foreground truncate">admin@rampos.io</p>
-                    </div>
-                    </div>
-                    <NotificationCenter />
+          {/* Desktop Collapsed Footer */}
+          <div className={isCollapsed ? "hidden md:flex flex-col items-center gap-4" : "hidden"}>
+            <NotificationCenter />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex justify-center cursor-pointer">
+                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary ring-2 ring-background">
+                    A
+                  </div>
                 </div>
-                <LocaleSwitcher />
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p className="font-medium">Administrator</p>
+                <p className="text-xs text-muted-foreground">admin@rampos.io</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+
+          {/* Standard Footer */}
+          <div className={cn("flex flex-col gap-3", isCollapsed && "md:hidden")}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary ring-2 ring-background">
+                  A
+                </div>
+                <div className="flex flex-col overflow-hidden">
+                  <p className="text-sm font-medium truncate text-foreground">Administrator</p>
+                  <p className="text-xs text-muted-foreground truncate">admin@rampos.io</p>
+                </div>
+              </div>
+              <NotificationCenter />
             </div>
+            <LocaleSwitcher />
+          </div>
         </div>
       </aside>
     </TooltipProvider>
