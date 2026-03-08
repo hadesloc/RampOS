@@ -1,12 +1,15 @@
+# Default configuration — override via environment variables or .env
+# See .env.example for all available settings
+
 [database]
-url = "postgres://rampos:change_me@localhost:5432/rampos"
+url = "postgres://rampos:changeme@localhost:5432/rampos"
 max_connections = 100
 min_connections = 10
 connect_timeout_secs = 30
 idle_timeout_secs = 600
 
 [redis]
-url = "redis://:dev_redis_pass@localhost:6379"
+url = "redis://:changeme@localhost:6379"
 pool_size = 20
 
 [nats]

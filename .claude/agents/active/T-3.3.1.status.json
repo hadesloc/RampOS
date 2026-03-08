@@ -1,7 +1,0 @@
-{
-  "status": "completed",
-  "task_id": "T-3.3.1",
-  "progress": 100,
-  "last_update": "Implemented Temporal worker with simulated workflow execution, signal handling, and activity integration. Registered Payin, Payout, and Trade workflows.",
-  "blockers": []
-}

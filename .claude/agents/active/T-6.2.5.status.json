@@ -1,7 +1,0 @@
-{
-  "status": "completed",
-  "progress": 100,
-  "current_step": "completed",
-  "last_updated": "2026-01-24T12:05:00Z",
-  "notes": "Implemented OpenSanctionsProvider with reqwest and wiremock tests. Added configuration struct and exports."
-}

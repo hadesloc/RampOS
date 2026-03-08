@@ -1,7 +1,7 @@
 /target
 /out
 /cache
-/node_modules
+**/node_modules/
 /.next/
 .worktrees/
 *.log
@@ -42,3 +42,41 @@ test_*.txt
 # Audit artifacts
 audit_results/
 .sisyphus/
+
+# Build/debug logs
+clippy_log.txt
+error_log.txt
+*.log
+
+# Test results
+test-results/
+playwright-report/
+.pytest_cache/
+
+# IDE / Editor
+.run/
+.playwright-mcp/
+.worktrees/
+
+# Agent metadata
+.claude/
+.gemini/
+
+# SDK dependencies
+sdk/node_modules/
+sdk-python/.venv/
+
+# Tarballs
+*.tgz
+
+# Scratch / dev-only scripts
+verify_*.sh
+verify_*.py
+.openapi-spec-hash
+
+# Uploads
+uploads/
+
+# Build output
+frontend/.next/
+frontend-landing/.next/

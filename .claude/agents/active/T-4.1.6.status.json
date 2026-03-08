@@ -1,7 +1,0 @@
-{
-  "task_id": "T-4.1.6",
-  "status": "in_progress",
-  "step": "fixing_dependencies",
-  "message": "Adding missing ramp-compliance dependency to ramp-core",
-  "timestamp": "2026-01-23T12:22:00Z"
-}

@@ -1,7 +1,0 @@
-{
-  "status": "completed",
-  "progress": 100,
-  "current_step": "verification",
-  "last_updated": "2026-01-23T12:00:00Z",
-  "notes": "Implemented tier checks and daily limits for payins and payouts."
-}
