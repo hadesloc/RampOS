@@ -5,10 +5,15 @@
 /.next/
 .worktrees/
 *.log
+*.tsbuildinfo
 *.pem
 *.key
 .DS_Store
 Thumbs.db
+
+# Private / personal docs — not for public repo
+docs/shill*.md
+docs/private/
 
 # Environment files - CRITICAL: Never commit secrets
 .env
@@ -52,6 +57,8 @@ error_log.txt
 test-results/
 playwright-report/
 .pytest_cache/
+__pycache__/
+*.pyc
 
 # IDE / Editor
 .run/
@@ -80,6 +87,10 @@ uploads/
 # Build output
 frontend/.next/
 frontend-landing/.next/
+contracts/out/
+contracts/cache/
+sdk/dist/
+packages/widget/dist/
 
 # Internal plans, reports, audit artifacts
 audit_results/
