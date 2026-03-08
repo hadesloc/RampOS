@@ -82,7 +82,7 @@ RampOS is a complete orchestration layer for crypto/fiat exchanges, providing st
 
 ```bash
 # Clone the repository
-git clone https://github.com/<YOUR_USERNAME>/rampos.git
+git clone https://github.com/hadesloc/RampOS.git
 cd rampos
 
 # Copy environment configuration
