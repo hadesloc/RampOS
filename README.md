@@ -42,6 +42,16 @@ Built with **Rust** for performance and memory safety, **Solidity** for on-chain
 
 ## Screenshots
 
+### Landing Page
+> Marketing site with hero, feature cards, how-it-works flow, and developer API showcase.
+
+<p align="center">
+  <img src="docs/screenshots/landing-hero.png" alt="Landing Page Hero" width="800">
+</p>
+<p align="center">
+  <img src="docs/screenshots/landing-features.png" alt="Landing Page Features" width="800">
+</p>
+
 ### User Portal
 > Self-service portal for end users with deposit, withdraw, asset management, and transaction history.
 
