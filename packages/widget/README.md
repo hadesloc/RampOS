@@ -240,6 +240,40 @@ Customize the widget appearance using theme props or CSS custom properties:
 ></rampos-checkout>
 ```
 
+## Headless Config Layer
+
+W11 adds a thin headless/config layer on top of the existing widget runtime. It does not create a second widget shell.
+
+```ts
+import {
+  buildHeadlessCheckoutConfig,
+  resolveHeadlessCheckoutConfig,
+} from '@rampos/widget';
+
+const localConfig = buildHeadlessCheckoutConfig({
+  apiKey: 'your-api-key',
+  asset: 'USDC',
+  amount: 120,
+  themeTokens: {
+    accentColor: '#0f766e',
+    surfaceColor: '#f8fafc',
+  },
+  headless: {
+    emitState: true,
+    flowId: 'checkout_headless_demo',
+  },
+});
+
+const resolved = await resolveHeadlessCheckoutConfig({
+  ...localConfig,
+  remoteConfig: {
+    url: 'https://example.com/widget-config.json',
+  },
+});
+```
+
+Use this layer to normalize checkout config, merge remote config, and map theme tokens while still rendering through `RampOSCheckout`, embed, or web-components.
+
 ## Event System
 
 ### React Callbacks

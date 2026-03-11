@@ -8,9 +8,9 @@
 //! When no RPC URL is provided, falls back to simulated in-memory state for
 //! local development and testing.
 
-use async_trait::async_trait;
 use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::providers::Provider;
+use async_trait::async_trait;
 use ramp_common::{Error, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -80,33 +80,42 @@ pub struct AaveV3Addresses {
 impl AaveV3Addresses {
     pub fn ethereum_mainnet() -> Result<Self> {
         Ok(Self {
-            pool: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2".parse()
+            pool: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid pool address: {}", e)))?,
-            pool_data_provider: "0x7B4EB56E7CD4b454BA8ff71E4518426369a138a3".parse()
+            pool_data_provider: "0x7B4EB56E7CD4b454BA8ff71E4518426369a138a3"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid data provider address: {}", e)))?,
-            incentives_controller: "0x8164Cc65827dcFe994AB23944CBC90e0aa80bFcb".parse()
+            incentives_controller: "0x8164Cc65827dcFe994AB23944CBC90e0aa80bFcb"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid incentives address: {}", e)))?,
         })
     }
 
     pub fn polygon_mainnet() -> Result<Self> {
         Ok(Self {
-            pool: "0x794a61358D6845594F94dc1DB02A252b5b4814aD".parse()
+            pool: "0x794a61358D6845594F94dc1DB02A252b5b4814aD"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid pool address: {}", e)))?,
-            pool_data_provider: "0x69FA688f1Dc47d4B5d8029D5a35FB7a548310654".parse()
+            pool_data_provider: "0x69FA688f1Dc47d4B5d8029D5a35FB7a548310654"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid data provider address: {}", e)))?,
-            incentives_controller: "0x929EC64c34a17401F460460D4B9390518E5B473e".parse()
+            incentives_controller: "0x929EC64c34a17401F460460D4B9390518E5B473e"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid incentives address: {}", e)))?,
         })
     }
 
     pub fn arbitrum() -> Result<Self> {
         Ok(Self {
-            pool: "0x794a61358D6845594F94dc1DB02A252b5b4814aD".parse()
+            pool: "0x794a61358D6845594F94dc1DB02A252b5b4814aD"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid pool address: {}", e)))?,
-            pool_data_provider: "0x69FA688f1Dc47d4B5d8029D5a35FB7a548310654".parse()
+            pool_data_provider: "0x69FA688f1Dc47d4B5d8029D5a35FB7a548310654"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid data provider address: {}", e)))?,
-            incentives_controller: "0x929EC64c34a17401F460460D4B9390518E5B473e".parse()
+            incentives_controller: "0x929EC64c34a17401F460460D4B9390518E5B473e"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid incentives address: {}", e)))?,
         })
     }
@@ -141,7 +150,8 @@ pub struct AaveV3Protocol {
     account: Address,
     supported_tokens: HashMap<Address, AaveTokenConfig>,
     /// Optional JSON-RPC provider for real on-chain reads.
-    provider: Option<alloy::providers::RootProvider<alloy::transports::http::Http<reqwest::Client>>>,
+    provider:
+        Option<alloy::providers::RootProvider<alloy::transports::http::Http<reqwest::Client>>>,
     /// HTTP client for Aave REST API calls.
     http: reqwest::Client,
     // Simulated state -- used only when `provider` is `None`.
@@ -190,10 +200,10 @@ impl AaveV3Protocol {
         account: Address,
         rpc_url: &str,
     ) -> Result<Self> {
-        let url: reqwest::Url = rpc_url.parse()
+        let url: reqwest::Url = rpc_url
+            .parse()
             .map_err(|e| Error::Internal(format!("Invalid RPC URL: {}", e)))?;
-        let provider = alloy::providers::ProviderBuilder::new()
-            .on_http(url);
+        let provider = alloy::providers::ProviderBuilder::new().on_http(url);
 
         Ok(Self {
             chain_id,
@@ -217,33 +227,42 @@ impl AaveV3Protocol {
                     "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse::<Address>(),
                     "0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c".parse::<Address>(),
                 ) {
-                    tokens.insert(underlying, AaveTokenConfig {
+                    tokens.insert(
                         underlying,
-                        a_token,
-                        decimals: 6,
-                    });
+                        AaveTokenConfig {
+                            underlying,
+                            a_token,
+                            decimals: 6,
+                        },
+                    );
                 }
                 // USDT
                 if let (Ok(underlying), Ok(a_token)) = (
                     "0xdAC17F958D2ee523a2206206994597C13D831ec7".parse::<Address>(),
                     "0x23878914EFE38d27C4D67Ab83ed1b93A74D4086a".parse::<Address>(),
                 ) {
-                    tokens.insert(underlying, AaveTokenConfig {
+                    tokens.insert(
                         underlying,
-                        a_token,
-                        decimals: 6,
-                    });
+                        AaveTokenConfig {
+                            underlying,
+                            a_token,
+                            decimals: 6,
+                        },
+                    );
                 }
                 // DAI
                 if let (Ok(underlying), Ok(a_token)) = (
                     "0x6B175474E89094C44Da98b954EedeAC495271d0F".parse::<Address>(),
                     "0x018008bfb33d285247A21d44E50697654f754e63".parse::<Address>(),
                 ) {
-                    tokens.insert(underlying, AaveTokenConfig {
+                    tokens.insert(
                         underlying,
-                        a_token,
-                        decimals: 18,
-                    });
+                        AaveTokenConfig {
+                            underlying,
+                            a_token,
+                            decimals: 18,
+                        },
+                    );
                 }
             }
             137 => {
@@ -252,11 +271,14 @@ impl AaveV3Protocol {
                     "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174".parse::<Address>(),
                     "0x625E7708f30cA75bfd92586e17077590C60eb4cD".parse::<Address>(),
                 ) {
-                    tokens.insert(underlying, AaveTokenConfig {
+                    tokens.insert(
                         underlying,
-                        a_token,
-                        decimals: 6,
-                    });
+                        AaveTokenConfig {
+                            underlying,
+                            a_token,
+                            decimals: 6,
+                        },
+                    );
                 }
             }
             _ => {}
@@ -350,10 +372,8 @@ impl AaveV3Protocol {
             });
         }
 
-        let markets: Vec<AaveMarketData> = resp
-            .json()
-            .await
-            .map_err(|e| Error::ExternalService {
+        let markets: Vec<AaveMarketData> =
+            resp.json().await.map_err(|e| Error::ExternalService {
                 service: "Aave API".to_string(),
                 message: format!("JSON parse error: {}", e),
             })?;
@@ -428,9 +448,10 @@ impl AaveV3Protocol {
     /// Pool contract. The `currentLiquidityRate` field (index 2 in the returned
     /// tuple for V3) is a ray-scaled value representing the current supply rate.
     async fn fetch_apy_onchain(&self, token: Address) -> Result<f64> {
-        let provider = self.provider.as_ref().ok_or_else(|| {
-            Error::Internal("No RPC provider configured".to_string())
-        })?;
+        let provider = self
+            .provider
+            .as_ref()
+            .ok_or_else(|| Error::Internal("No RPC provider configured".to_string()))?;
 
         // Build calldata: getReserveData(address)
         let mut calldata = Vec::with_capacity(36);
@@ -439,7 +460,9 @@ impl AaveV3Protocol {
 
         let tx = alloy::rpc::types::TransactionRequest::default()
             .to(self.addresses.pool)
-            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(calldata)));
+            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(
+                calldata,
+            )));
 
         let result = provider
             .call(&tx)
@@ -462,10 +485,7 @@ impl AaveV3Protocol {
         if data.len() < 96 {
             return Err(Error::ExternalService {
                 service: "Aave V3 on-chain".to_string(),
-                message: format!(
-                    "getReserveData response too short ({} bytes)",
-                    data.len()
-                ),
+                message: format!("getReserveData response too short ({} bytes)", data.len()),
             });
         }
 
@@ -503,11 +523,14 @@ impl AaveV3Protocol {
 
     /// Read the aToken balance for `self.account` on-chain.
     async fn fetch_balance_onchain(&self, token: Address) -> Result<U256> {
-        let provider = self.provider.as_ref().ok_or_else(|| {
-            Error::Internal("No RPC provider configured".to_string())
-        })?;
+        let provider = self
+            .provider
+            .as_ref()
+            .ok_or_else(|| Error::Internal("No RPC provider configured".to_string()))?;
 
-        let a_token = self.supported_tokens.get(&token)
+        let a_token = self
+            .supported_tokens
+            .get(&token)
             .ok_or_else(|| Error::Business(format!("Token not supported: {:?}", token)))?
             .a_token;
 
@@ -518,7 +541,9 @@ impl AaveV3Protocol {
 
         let tx = alloy::rpc::types::TransactionRequest::default()
             .to(a_token)
-            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(calldata)));
+            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(
+                calldata,
+            )));
 
         let result = provider
             .call(&tx)
@@ -539,9 +564,10 @@ impl AaveV3Protocol {
     /// Read `getUserAccountData(address)` from the Aave V3 Pool to get the
     /// health factor. Returns the health factor as a float (1e18 scaled on-chain).
     async fn fetch_health_factor_onchain(&self) -> Result<f64> {
-        let provider = self.provider.as_ref().ok_or_else(|| {
-            Error::Internal("No RPC provider configured".to_string())
-        })?;
+        let provider = self
+            .provider
+            .as_ref()
+            .ok_or_else(|| Error::Internal("No RPC provider configured".to_string()))?;
 
         let mut calldata = Vec::with_capacity(36);
         calldata.extend_from_slice(&GET_USER_ACCOUNT_DATA_SELECTOR);
@@ -549,7 +575,9 @@ impl AaveV3Protocol {
 
         let tx = alloy::rpc::types::TransactionRequest::default()
             .to(self.addresses.pool)
-            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(calldata)));
+            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(
+                calldata,
+            )));
 
         let result = provider
             .call(&tx)
@@ -734,8 +762,7 @@ impl YieldProtocol for AaveV3Protocol {
         if current_balance < amount {
             return Err(Error::Business(format!(
                 "Insufficient balance: {} < {}",
-                current_balance,
-                amount
+                current_balance, amount
             )));
         }
 
@@ -849,7 +876,9 @@ mod tests {
     use super::*;
 
     fn test_account() -> Address {
-        "0x742d35Cc6634C0532925a3b844Bc9e7595f00000".parse().unwrap()
+        "0x742d35Cc6634C0532925a3b844Bc9e7595f00000"
+            .parse()
+            .unwrap()
     }
 
     #[test]
@@ -882,7 +911,9 @@ mod tests {
         let addresses = AaveV3Addresses::ethereum_mainnet().unwrap();
         let protocol = AaveV3Protocol::new(1, addresses, test_account());
 
-        let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse().unwrap();
+        let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+            .parse()
+            .unwrap();
         // Without RPC/API, should return the hardcoded fallback
         let apy = protocol.current_apy(usdc).await.unwrap();
         assert!(apy > 0.0);
@@ -893,7 +924,9 @@ mod tests {
         let addresses = AaveV3Addresses::ethereum_mainnet().unwrap();
         let protocol = AaveV3Protocol::new(1, addresses, test_account());
 
-        let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse().unwrap();
+        let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+            .parse()
+            .unwrap();
         let amount = U256::from(1000) * U256::from(1_000_000u64); // 1000 USDC
 
         // Deposit
@@ -918,7 +951,8 @@ mod tests {
         let addresses = AaveV3Addresses::ethereum_mainnet().unwrap();
         // An invalid URL should still parse with alloy Http provider
         // (it only fails on actual calls), so this should succeed.
-        let result = AaveV3Protocol::with_rpc(1, addresses, test_account(), "http://localhost:8545");
+        let result =
+            AaveV3Protocol::with_rpc(1, addresses, test_account(), "http://localhost:8545");
         assert!(result.is_ok());
         assert!(result.unwrap().is_live());
     }

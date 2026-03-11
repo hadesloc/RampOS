@@ -7,6 +7,4 @@ pub mod credential;
 pub mod service;
 
 pub use credential::{ZkCredential, ZkCredentialIssuer};
-pub use service::{
-    VerificationResult, ZkKycProof, ZkKycProofRequest, ZkKycService,
-};
+pub use service::{VerificationResult, ZkKycProof, ZkKycProofRequest, ZkKycService};

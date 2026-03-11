@@ -107,3 +107,24 @@ async fn test_tenant_activation_failure_if_not_found() {
 
     assert!(result.is_err());
 }
+
+#[tokio::test]
+async fn test_configure_webhooks_rejects_loopback_target() {
+    let tenant_repo = Arc::new(MockTenantRepository::new());
+    let ledger_repo = Arc::new(MockLedgerRepository::new());
+    let ledger_service = Arc::new(LedgerService::new(ledger_repo));
+    let onboarding_service = OnboardingService::new(tenant_repo.clone(), ledger_service);
+
+    let tenant = onboarding_service
+        .create_tenant("Webhook Validation Tenant", serde_json::json!({}))
+        .await
+        .expect("Failed to create tenant");
+    let tenant_id = TenantId::new(tenant.id);
+
+    let err = onboarding_service
+        .configure_webhooks(&tenant_id, "http://127.0.0.1:8080/internal")
+        .await
+        .unwrap_err();
+
+    assert!(format!("{err}").contains("Webhook URL"));
+}

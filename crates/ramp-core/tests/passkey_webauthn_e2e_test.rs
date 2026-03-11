@@ -142,10 +142,7 @@ impl WebAuthnCeremonyService {
     }
 
     /// Step 1 of registration: Generate a challenge.
-    async fn begin_registration(
-        &self,
-        user_email: &str,
-    ) -> Result<String, WebAuthnCeremonyError> {
+    async fn begin_registration(&self, user_email: &str) -> Result<String, WebAuthnCeremonyError> {
         if user_email.is_empty() {
             return Err(WebAuthnCeremonyError::InvalidInput(
                 "Email is required".to_string(),
@@ -398,10 +395,8 @@ fn generate_challenge() -> String {
 }
 
 /// Well-known P256 test coordinates (the generator point of the P-256 curve).
-const TEST_PUB_KEY_X: &str =
-    "6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296";
-const TEST_PUB_KEY_Y: &str =
-    "4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5";
+const TEST_PUB_KEY_X: &str = "6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296";
+const TEST_PUB_KEY_Y: &str = "4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5";
 
 const TEST_RP_ID: &str = "localhost";
 const TEST_ORIGIN: &str = "https://localhost";
@@ -492,15 +487,10 @@ async fn test_authentication_ceremony_full_lifecycle() {
     let service = test_ceremony_service();
 
     // Pre-register a credential
-    let reg_challenge = service
-        .begin_registration(TEST_EMAIL)
-        .await
-        .unwrap();
-    let cred_response = make_credential_response(&reg_challenge, "cred-auth-001", "MacBook Touch ID");
-    service
-        .complete_registration(&cred_response)
-        .await
-        .unwrap();
+    let reg_challenge = service.begin_registration(TEST_EMAIL).await.unwrap();
+    let cred_response =
+        make_credential_response(&reg_challenge, "cred-auth-001", "MacBook Touch ID");
+    service.complete_registration(&cred_response).await.unwrap();
 
     // Step 1: Begin authentication
     let auth_challenge = service
@@ -555,10 +545,7 @@ async fn test_multiple_credentials_per_user() {
     ];
 
     for (cred_id, display_name) in &credential_names {
-        let challenge = service
-            .begin_registration(user_email)
-            .await
-            .unwrap();
+        let challenge = service.begin_registration(user_email).await.unwrap();
         let response = make_credential_response(&challenge, cred_id, display_name);
         service
             .complete_registration(&response)
@@ -582,10 +569,7 @@ async fn test_multiple_credentials_per_user() {
 
     // Authenticate with each credential
     for (cred_id, _) in &credential_names {
-        let challenge = service
-            .begin_authentication(user_email)
-            .await
-            .unwrap();
+        let challenge = service.begin_authentication(user_email).await.unwrap();
         let assertion = make_assertion(&challenge, cred_id);
         let session = service
             .complete_authentication(&assertion)
@@ -650,10 +634,7 @@ async fn test_credential_revocation() {
     );
 
     // Attempt to authenticate with the revoked credential
-    let auth_challenge = service
-        .begin_authentication(user_email)
-        .await
-        .unwrap();
+    let auth_challenge = service.begin_authentication(user_email).await.unwrap();
     let assertion = make_assertion(&auth_challenge, "cred-revoke-001");
     let result = service.complete_authentication(&assertion).await;
     assert!(
@@ -677,10 +658,7 @@ async fn test_credential_revocation() {
     }
 
     // The second credential should still work
-    let auth_challenge2 = service
-        .begin_authentication(user_email)
-        .await
-        .unwrap();
+    let auth_challenge2 = service.begin_authentication(user_email).await.unwrap();
     let assertion2 = make_assertion(&auth_challenge2, "cred-revoke-002");
     let session = service
         .complete_authentication(&assertion2)
@@ -710,10 +688,7 @@ async fn test_challenge_expiry() {
     let user_email = "expiry@example.com";
 
     // Begin registration
-    let challenge = service
-        .begin_registration(user_email)
-        .await
-        .unwrap();
+    let challenge = service.begin_registration(user_email).await.unwrap();
 
     // Wait for the challenge to expire
     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
@@ -739,10 +714,7 @@ async fn test_challenge_expiry() {
 
     // Register with fresh service that has long enough timeout
     let reg_service = test_ceremony_service();
-    let reg_challenge = reg_service
-        .begin_registration(user_email)
-        .await
-        .unwrap();
+    let reg_challenge = reg_service.begin_registration(user_email).await.unwrap();
     let reg_resp = make_credential_response(&reg_challenge, "cred-for-auth-expiry", "Test Device");
     reg_service.complete_registration(&reg_resp).await.unwrap();
 
@@ -750,13 +722,11 @@ async fn test_challenge_expiry() {
     // We need to register the credential in service2 as well, since each service
     // has its own PasskeyService instance.
     let reg_challenge2 = service2.begin_registration(user_email).await.unwrap();
-    let reg_resp2 = make_credential_response(&reg_challenge2, "cred-for-auth-expiry-2", "Test Device 2");
+    let reg_resp2 =
+        make_credential_response(&reg_challenge2, "cred-for-auth-expiry-2", "Test Device 2");
     service2.complete_registration(&reg_resp2).await.unwrap();
 
-    let auth_challenge = service2
-        .begin_authentication(user_email)
-        .await
-        .unwrap();
+    let auth_challenge = service2.begin_authentication(user_email).await.unwrap();
 
     // Wait for expiry
     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
@@ -787,10 +757,7 @@ async fn test_challenge_within_timeout_succeeds() {
     let service = WebAuthnCeremonyService::new(TEST_RP_ID, TEST_ORIGIN).with_timeout(300);
     let user_email = "fresh@example.com";
 
-    let challenge = service
-        .begin_registration(user_email)
-        .await
-        .unwrap();
+    let challenge = service.begin_registration(user_email).await.unwrap();
 
     // Immediately complete -- well within 300s timeout
     let response = make_credential_response(&challenge, "cred-fresh-001", "Fresh Device");
@@ -812,16 +779,16 @@ async fn test_cross_origin_protection() {
     let user_email = "origin@example.com";
 
     // Registration: wrong origin
-    let challenge = service
-        .begin_registration(user_email)
-        .await
-        .unwrap();
+    let challenge = service.begin_registration(user_email).await.unwrap();
 
     let mut response = make_credential_response(&challenge, "cred-origin-001", "Origin Test");
     response.origin = "https://evil.com".to_string(); // Wrong origin
 
     let result = service.complete_registration(&response).await;
-    assert!(result.is_err(), "Registration from wrong origin should fail");
+    assert!(
+        result.is_err(),
+        "Registration from wrong origin should fail"
+    );
     match result {
         Err(WebAuthnCeremonyError::OriginMismatch { expected, actual }) => {
             assert_eq!(expected, TEST_ORIGIN);
@@ -832,20 +799,11 @@ async fn test_cross_origin_protection() {
     }
 
     // Authentication: wrong origin (register first with correct origin)
-    let reg_challenge = service
-        .begin_registration(user_email)
-        .await
-        .unwrap();
+    let reg_challenge = service.begin_registration(user_email).await.unwrap();
     let reg_response = make_credential_response(&reg_challenge, "cred-origin-002", "Good Origin");
-    service
-        .complete_registration(&reg_response)
-        .await
-        .unwrap();
+    service.complete_registration(&reg_response).await.unwrap();
 
-    let auth_challenge = service
-        .begin_authentication(user_email)
-        .await
-        .unwrap();
+    let auth_challenge = service.begin_authentication(user_email).await.unwrap();
 
     let mut assertion = make_assertion(&auth_challenge, "cred-origin-002");
     assertion.origin = "https://phishing.example.com".to_string();
@@ -865,10 +823,7 @@ async fn test_cross_origin_protection() {
     }
 
     // Correct origin works
-    let auth_challenge2 = service
-        .begin_authentication(user_email)
-        .await
-        .unwrap();
+    let auth_challenge2 = service.begin_authentication(user_email).await.unwrap();
     let assertion2 = make_assertion(&auth_challenge2, "cred-origin-002");
     let session = service
         .complete_authentication(&assertion2)
@@ -887,21 +842,12 @@ async fn test_replay_attack_prevention() {
     let user_email = "replay@example.com";
 
     // Register a credential
-    let reg_challenge = service
-        .begin_registration(user_email)
-        .await
-        .unwrap();
+    let reg_challenge = service.begin_registration(user_email).await.unwrap();
     let reg_response = make_credential_response(&reg_challenge, "cred-replay-001", "Replay Test");
-    service
-        .complete_registration(&reg_response)
-        .await
-        .unwrap();
+    service.complete_registration(&reg_response).await.unwrap();
 
     // Authenticate successfully once
-    let auth_challenge = service
-        .begin_authentication(user_email)
-        .await
-        .unwrap();
+    let auth_challenge = service.begin_authentication(user_email).await.unwrap();
     let assertion = make_assertion(&auth_challenge, "cred-replay-001");
 
     let session = service
@@ -932,16 +878,10 @@ async fn test_replay_attack_prevention() {
     }
 
     // Registration challenge replay should also fail
-    let reg_challenge2 = service
-        .begin_registration(user_email)
-        .await
-        .unwrap();
+    let reg_challenge2 = service.begin_registration(user_email).await.unwrap();
     let reg_response2 =
         make_credential_response(&reg_challenge2, "cred-replay-002", "Replay Test 2");
-    service
-        .complete_registration(&reg_response2)
-        .await
-        .unwrap();
+    service.complete_registration(&reg_response2).await.unwrap();
 
     // Try to use the same registration challenge again with a different credential
     let replay_reg = make_credential_response(&reg_challenge2, "cred-replay-003", "Replay Reg");
@@ -1008,7 +948,10 @@ async fn test_concurrent_registration() {
         }
     }
 
-    assert_eq!(successful, 20, "All 20 concurrent registrations should succeed");
+    assert_eq!(
+        successful, 20,
+        "All 20 concurrent registrations should succeed"
+    );
 }
 
 #[tokio::test]
@@ -1062,11 +1005,7 @@ async fn test_concurrent_authentication() {
 
     // All session tokens should be unique
     let unique: std::collections::HashSet<&String> = session_tokens.iter().collect();
-    assert_eq!(
-        unique.len(),
-        10,
-        "All session tokens must be unique"
-    );
+    assert_eq!(unique.len(), 10, "All session tokens must be unique");
 
     // All sessions should be active
     assert_eq!(service.active_session_count().await, 10);
@@ -1175,10 +1114,7 @@ async fn test_nonexistent_challenge() {
     let fake_response = make_credential_response("fake-challenge-xyz", "cred-fake-001", "Fake");
     let result = service.complete_registration(&fake_response).await;
 
-    assert!(
-        result.is_err(),
-        "Fabricated challenge should be rejected"
-    );
+    assert!(result.is_err(), "Fabricated challenge should be rejected");
     match result {
         Err(WebAuthnCeremonyError::ChallengeNotFound) => {
             // Expected
@@ -1249,10 +1185,7 @@ async fn test_smart_account_linking_after_registration() {
     );
 
     // Authentication should still work after linking
-    let auth_challenge = service
-        .begin_authentication(user_email)
-        .await
-        .unwrap();
+    let auth_challenge = service.begin_authentication(user_email).await.unwrap();
     let assertion = make_assertion(&auth_challenge, "cred-link-001");
     let session = service
         .complete_authentication(&assertion)
@@ -1310,10 +1243,7 @@ async fn test_authentication_nonexistent_credential() {
     let user_email = "ghost@example.com";
 
     // Begin authentication for a user that has no registered credentials
-    let challenge = service
-        .begin_authentication(user_email)
-        .await
-        .unwrap();
+    let challenge = service.begin_authentication(user_email).await.unwrap();
 
     let assertion = make_assertion(&challenge, "nonexistent-cred-001");
     let result = service.complete_authentication(&assertion).await;
@@ -1329,7 +1259,10 @@ async fn test_authentication_nonexistent_credential() {
         Err(WebAuthnCeremonyError::PasskeyError(PasskeyError::CredentialNotFound(_))) => {
             // Also acceptable
         }
-        Err(other) => panic!("Expected UserNotFound or CredentialNotFound, got: {}", other),
+        Err(other) => panic!(
+            "Expected UserNotFound or CredentialNotFound, got: {}",
+            other
+        ),
         Ok(_) => panic!("Should have failed"),
     }
 }
@@ -1368,8 +1301,7 @@ async fn test_full_lifecycle_registration_auth_revoke() {
 
     // Phase 4: Register a second credential
     let reg_challenge2 = service.begin_registration(user_email).await.unwrap();
-    let reg_resp2 =
-        make_credential_response(&reg_challenge2, "cred-lifecycle-002", "Backup Key");
+    let reg_resp2 = make_credential_response(&reg_challenge2, "cred-lifecycle-002", "Backup Key");
     service.complete_registration(&reg_resp2).await.unwrap();
 
     assert_eq!(
@@ -1393,10 +1325,7 @@ async fn test_full_lifecycle_registration_auth_revoke() {
     let auth_challenge2 = service.begin_authentication(user_email).await.unwrap();
     let assertion2 = make_assertion(&auth_challenge2, "cred-lifecycle-001");
     assert!(
-        service
-            .complete_authentication(&assertion2)
-            .await
-            .is_err(),
+        service.complete_authentication(&assertion2).await.is_err(),
         "Revoked credential should fail"
     );
 
@@ -1425,10 +1354,7 @@ async fn test_empty_input_validation() {
         .unwrap();
     let response = make_credential_response(&challenge, "", "Empty Cred ID");
     let result2 = service.complete_registration(&response).await;
-    assert!(
-        result2.is_err(),
-        "Empty credential ID should be rejected"
-    );
+    assert!(result2.is_err(), "Empty credential ID should be rejected");
 
     // Empty user ID via direct passkey service
     let req = RegisterPasskeyRequest {
@@ -1438,15 +1364,9 @@ async fn test_empty_input_validation() {
         public_key_y: TEST_PUB_KEY_Y.to_string(),
         display_name: "Test".to_string(),
     };
-    let result3 = service
-        .passkey_service()
-        .register_passkey(req)
-        .await;
+    let result3 = service.passkey_service().register_passkey(req).await;
     assert!(result3.is_err());
-    assert!(matches!(
-        result3.unwrap_err(),
-        PasskeyError::InvalidUserId
-    ));
+    assert!(matches!(result3.unwrap_err(), PasskeyError::InvalidUserId));
 }
 
 // ============================================================================
@@ -1477,11 +1397,7 @@ async fn test_multiple_cross_origin_variants() {
         response.origin = origin.to_string();
 
         let result = service.complete_registration(&response).await;
-        assert!(
-            result.is_err(),
-            "Origin '{}' should be rejected",
-            origin
-        );
+        assert!(result.is_err(), "Origin '{}' should be rejected", origin);
     }
 }
 
@@ -1514,8 +1430,7 @@ async fn test_concurrent_mixed_operations() {
             let email = format!("mixed-{}@example.com", i);
             let cred_id = format!("cred-mixed-{}", i);
             let challenge = svc.begin_registration(&email).await.unwrap();
-            let response =
-                make_credential_response(&challenge, &cred_id, &format!("Device {}", i));
+            let response = make_credential_response(&challenge, &cred_id, &format!("Device {}", i));
             svc.complete_registration(&response).await.unwrap();
             format!("registered:{}", cred_id)
         }));

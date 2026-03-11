@@ -15,18 +15,40 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
 
+use crate::service::event_catalog::{EventCatalog, EventCatalogEntry};
+
 /// Maximum delivery attempts before moving to DLQ
 pub const MAX_DELIVERY_ATTEMPTS: i32 = 6;
 
 /// Retry delays in seconds for each attempt (after the first immediate attempt)
 /// Attempt 2: 5 min, Attempt 3: 30 min, Attempt 4: 2h, Attempt 5: 8h, Attempt 6: 24h
 const RETRY_DELAYS_SECS: [i64; 5] = [
-    300,     // 5 minutes
-    1_800,   // 30 minutes
-    7_200,   // 2 hours
-    28_800,  // 8 hours
-    86_400,  // 24 hours
+    300,    // 5 minutes
+    1_800,  // 30 minutes
+    7_200,  // 2 hours
+    28_800, // 8 hours
+    86_400, // 24 hours
 ];
+
+pub fn catalog_entry_for_delivery_event(event_name: &str) -> Result<EventCatalogEntry> {
+    EventCatalog::current()
+        .find(event_name)
+        .cloned()
+        .ok_or_else(|| {
+            ramp_common::Error::Validation(format!(
+                "Webhook delivery event '{}' is not registered in the event catalog",
+                event_name
+            ))
+        })
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct DeliveryHistoryFilter {
+    pub tenant_id: Option<String>,
+    pub event_id: Option<String>,
+    pub event_type: Option<String>,
+    pub endpoint_url: Option<String>,
+}
 
 /// Delivery status for webhook events
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,6 +87,7 @@ impl DeliveryStatus {
 pub struct WebhookDelivery {
     pub id: String,
     pub event_id: String,
+    pub event_type: Option<String>,
     pub tenant_id: String,
     pub endpoint_url: String,
     pub status: DeliveryStatus,
@@ -157,10 +180,37 @@ impl WebhookDeliveryService {
         tenant_id: &str,
         endpoint_url: &str,
     ) -> Result<WebhookDelivery> {
+        self.create_delivery_internal(event_id, None, tenant_id, endpoint_url)
+    }
+
+    pub fn create_delivery_for_event(
+        &self,
+        event_id: &str,
+        event_type: &str,
+        tenant_id: &str,
+        endpoint_url: &str,
+    ) -> Result<WebhookDelivery> {
+        let catalog_entry = catalog_entry_for_delivery_event(event_type)?;
+        self.create_delivery_internal(
+            event_id,
+            Some(catalog_entry.event_name),
+            tenant_id,
+            endpoint_url,
+        )
+    }
+
+    fn create_delivery_internal(
+        &self,
+        event_id: &str,
+        event_type: Option<String>,
+        tenant_id: &str,
+        endpoint_url: &str,
+    ) -> Result<WebhookDelivery> {
         let now = Utc::now();
         let delivery = WebhookDelivery {
             id: format!("whdel_{}", uuid::Uuid::now_v7()),
             event_id: event_id.to_string(),
+            event_type,
             tenant_id: tenant_id.to_string(),
             endpoint_url: endpoint_url.to_string(),
             status: DeliveryStatus::Pending,
@@ -172,7 +222,9 @@ impl WebhookDeliveryService {
             updated_at: now,
         };
 
-        let mut deliveries = self.deliveries.lock()
+        let mut deliveries = self
+            .deliveries
+            .lock()
             .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
         deliveries.push(delivery.clone());
 
@@ -186,17 +238,18 @@ impl WebhookDeliveryService {
     }
 
     /// Mark a delivery as successfully delivered
-    pub fn mark_delivered(
-        &self,
-        delivery_id: &str,
-        response_status_code: i32,
-    ) -> Result<()> {
-        let mut deliveries = self.deliveries.lock()
+    pub fn mark_delivered(&self, delivery_id: &str, response_status_code: i32) -> Result<()> {
+        let mut deliveries = self
+            .deliveries
+            .lock()
             .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
 
-        let delivery = deliveries.iter_mut()
+        let delivery = deliveries
+            .iter_mut()
             .find(|d| d.id == delivery_id)
-            .ok_or_else(|| ramp_common::Error::NotFound(format!("Delivery {} not found", delivery_id)))?;
+            .ok_or_else(|| {
+                ramp_common::Error::NotFound(format!("Delivery {} not found", delivery_id))
+            })?;
 
         delivery.status = DeliveryStatus::Delivered;
         delivery.response_status_code = Some(response_status_code);
@@ -222,12 +275,17 @@ impl WebhookDeliveryService {
         response_status_code: Option<i32>,
         event_payload: Option<serde_json::Value>,
     ) -> Result<bool> {
-        let mut deliveries = self.deliveries.lock()
+        let mut deliveries = self
+            .deliveries
+            .lock()
             .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
 
-        let delivery = deliveries.iter_mut()
+        let delivery = deliveries
+            .iter_mut()
             .find(|d| d.id == delivery_id)
-            .ok_or_else(|| ramp_common::Error::NotFound(format!("Delivery {} not found", delivery_id)))?;
+            .ok_or_else(|| {
+                ramp_common::Error::NotFound(format!("Delivery {} not found", delivery_id))
+            })?;
 
         delivery.attempts += 1;
         delivery.last_error = Some(error_message.to_string());
@@ -251,7 +309,9 @@ impl WebhookDeliveryService {
                 created_at: Utc::now(),
             };
 
-            let mut dlq = self.dlq_entries.lock()
+            let mut dlq = self
+                .dlq_entries
+                .lock()
                 .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
             dlq.push(dlq_entry);
 
@@ -281,12 +341,17 @@ impl WebhookDeliveryService {
 
     /// Mark a delivery as permanently failed (without DLQ)
     pub fn mark_failed(&self, delivery_id: &str, error_message: &str) -> Result<()> {
-        let mut deliveries = self.deliveries.lock()
+        let mut deliveries = self
+            .deliveries
+            .lock()
             .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
 
-        let delivery = deliveries.iter_mut()
+        let delivery = deliveries
+            .iter_mut()
             .find(|d| d.id == delivery_id)
-            .ok_or_else(|| ramp_common::Error::NotFound(format!("Delivery {} not found", delivery_id)))?;
+            .ok_or_else(|| {
+                ramp_common::Error::NotFound(format!("Delivery {} not found", delivery_id))
+            })?;
 
         delivery.status = DeliveryStatus::Failed;
         delivery.last_error = Some(error_message.to_string());
@@ -298,14 +363,16 @@ impl WebhookDeliveryService {
 
     /// Get pending deliveries that are ready for retry
     pub fn get_pending_deliveries(&self) -> Result<Vec<WebhookDelivery>> {
-        let deliveries = self.deliveries.lock()
+        let deliveries = self
+            .deliveries
+            .lock()
             .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
 
         let now = Utc::now();
-        let pending: Vec<WebhookDelivery> = deliveries.iter()
+        let pending: Vec<WebhookDelivery> = deliveries
+            .iter()
             .filter(|d| {
-                d.status == DeliveryStatus::Pending
-                    && d.next_retry_at.map_or(false, |t| t <= now)
+                d.status == DeliveryStatus::Pending && d.next_retry_at.map_or(false, |t| t <= now)
             })
             .cloned()
             .collect();
@@ -315,10 +382,13 @@ impl WebhookDeliveryService {
 
     /// Get delivery history for a specific event
     pub fn get_deliveries_for_event(&self, event_id: &str) -> Result<Vec<WebhookDelivery>> {
-        let deliveries = self.deliveries.lock()
+        let deliveries = self
+            .deliveries
+            .lock()
             .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
 
-        let results: Vec<WebhookDelivery> = deliveries.iter()
+        let results: Vec<WebhookDelivery> = deliveries
+            .iter()
             .filter(|d| d.event_id == event_id)
             .cloned()
             .collect();
@@ -333,10 +403,13 @@ impl WebhookDeliveryService {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<WebhookDelivery>> {
-        let deliveries = self.deliveries.lock()
+        let deliveries = self
+            .deliveries
+            .lock()
             .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
 
-        let results: Vec<WebhookDelivery> = deliveries.iter()
+        let results: Vec<WebhookDelivery> = deliveries
+            .iter()
             .filter(|d| d.tenant_id == tenant_id)
             .skip(offset)
             .take(limit)
@@ -346,9 +419,43 @@ impl WebhookDeliveryService {
         Ok(results)
     }
 
+    pub fn query_deliveries(&self, filter: &DeliveryHistoryFilter) -> Result<Vec<WebhookDelivery>> {
+        let deliveries = self
+            .deliveries
+            .lock()
+            .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
+
+        let results = deliveries
+            .iter()
+            .filter(|delivery| {
+                filter
+                    .tenant_id
+                    .as_ref()
+                    .is_none_or(|tenant_id| &delivery.tenant_id == tenant_id)
+                    && filter
+                        .event_id
+                        .as_ref()
+                        .is_none_or(|event_id| &delivery.event_id == event_id)
+                    && filter
+                        .event_type
+                        .as_ref()
+                        .is_none_or(|event_type| delivery.event_type.as_ref() == Some(event_type))
+                    && filter
+                        .endpoint_url
+                        .as_ref()
+                        .is_none_or(|endpoint_url| &delivery.endpoint_url == endpoint_url)
+            })
+            .cloned()
+            .collect();
+
+        Ok(results)
+    }
+
     /// Get a specific delivery by ID
     pub fn get_delivery(&self, delivery_id: &str) -> Result<Option<WebhookDelivery>> {
-        let deliveries = self.deliveries.lock()
+        let deliveries = self
+            .deliveries
+            .lock()
             .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
 
         Ok(deliveries.iter().find(|d| d.id == delivery_id).cloned())
@@ -356,10 +463,13 @@ impl WebhookDeliveryService {
 
     /// Get DLQ entries
     pub fn get_dlq_entries(&self, tenant_id: &str, limit: usize) -> Result<Vec<WebhookDeadLetter>> {
-        let dlq = self.dlq_entries.lock()
+        let dlq = self
+            .dlq_entries
+            .lock()
             .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
 
-        let results: Vec<WebhookDeadLetter> = dlq.iter()
+        let results: Vec<WebhookDeadLetter> = dlq
+            .iter()
             .filter(|e| e.tenant_id == tenant_id)
             .take(limit)
             .cloned()
@@ -371,23 +481,32 @@ impl WebhookDeliveryService {
     /// Replay a delivery from DLQ - creates a new delivery attempt
     pub fn replay_from_dlq(&self, dlq_entry_id: &str) -> Result<WebhookDelivery> {
         let dlq_entry = {
-            let dlq = self.dlq_entries.lock()
+            let dlq = self
+                .dlq_entries
+                .lock()
                 .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
 
             dlq.iter()
                 .find(|e| e.id == dlq_entry_id)
                 .cloned()
-                .ok_or_else(|| ramp_common::Error::NotFound(
-                    format!("DLQ entry {} not found", dlq_entry_id)
-                ))?
+                .ok_or_else(|| {
+                    ramp_common::Error::NotFound(format!("DLQ entry {} not found", dlq_entry_id))
+                })?
         };
 
         // Create a new delivery from the DLQ entry
-        let delivery = self.create_delivery(
+        let event_type = dlq_entry
+            .event_payload
+            .get("type")
+            .and_then(|value| value.as_str())
+            .map(str::to_string);
+        let delivery = self.create_delivery_internal(
             &dlq_entry.event_id,
+            event_type,
             &dlq_entry.tenant_id,
             &dlq_entry.endpoint_url,
         )?;
+        self.remove_dlq_entry(dlq_entry_id)?;
 
         info!(
             dlq_entry_id = %dlq_entry_id,
@@ -398,9 +517,40 @@ impl WebhookDeliveryService {
         Ok(delivery)
     }
 
+    pub fn replay_deliveries_for_event(&self, event_id: &str) -> Result<Vec<WebhookDelivery>> {
+        let deliveries = self.get_deliveries_for_event(event_id)?;
+        let mut original_by_endpoint = std::collections::BTreeMap::new();
+
+        for delivery in deliveries {
+            let should_replace = original_by_endpoint
+                .get(&delivery.endpoint_url)
+                .is_none_or(|current: &WebhookDelivery| {
+                    delivery.created_at < current.created_at
+                        || (delivery.created_at == current.created_at && delivery.id < current.id)
+                });
+            if should_replace {
+                original_by_endpoint.insert(delivery.endpoint_url.clone(), delivery);
+            }
+        }
+
+        original_by_endpoint
+            .into_values()
+            .map(|delivery| {
+                self.create_delivery_internal(
+                    &delivery.event_id,
+                    delivery.event_type,
+                    &delivery.tenant_id,
+                    &delivery.endpoint_url,
+                )
+            })
+            .collect()
+    }
+
     /// Remove a DLQ entry after successful replay
     pub fn remove_dlq_entry(&self, dlq_entry_id: &str) -> Result<()> {
-        let mut dlq = self.dlq_entries.lock()
+        let mut dlq = self
+            .dlq_entries
+            .lock()
             .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
 
         dlq.retain(|e| e.id != dlq_entry_id);
@@ -409,15 +559,22 @@ impl WebhookDeliveryService {
 
     /// Count total deliveries for a tenant
     pub fn count_deliveries(&self, tenant_id: &str) -> Result<usize> {
-        let deliveries = self.deliveries.lock()
+        let deliveries = self
+            .deliveries
+            .lock()
             .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
 
-        Ok(deliveries.iter().filter(|d| d.tenant_id == tenant_id).count())
+        Ok(deliveries
+            .iter()
+            .filter(|d| d.tenant_id == tenant_id)
+            .count())
     }
 
     /// Count DLQ entries for a tenant
     pub fn count_dlq_entries(&self, tenant_id: &str) -> Result<usize> {
-        let dlq = self.dlq_entries.lock()
+        let dlq = self
+            .dlq_entries
+            .lock()
             .map_err(|e| ramp_common::Error::Internal(format!("Lock poisoned: {}", e)))?;
 
         Ok(dlq.iter().filter(|e| e.tenant_id == tenant_id).count())

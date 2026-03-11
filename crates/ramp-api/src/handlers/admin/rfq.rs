@@ -10,9 +10,9 @@ use axum::{
     Json,
 };
 use ramp_common::types::TenantId;
+use ramp_core::repository::RfqRequestRow;
 use ramp_core::repository::{PgRfqRepository, RfqRepository};
 use ramp_core::service::rfq::RfqService;
-use ramp_core::repository::RfqRequestRow;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
@@ -79,9 +79,10 @@ pub struct FinalizeRfqResponse {
 // ============================================================================
 
 fn ensure_pool(state: &AppState) -> Result<&sqlx::PgPool, ApiError> {
-    state.db_pool.as_ref().ok_or_else(|| {
-        ApiError::Internal("RFQ admin service unavailable".to_string())
-    })
+    state
+        .db_pool
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("RFQ admin service unavailable".to_string()))
 }
 
 fn make_rfq_service(pool: sqlx::PgPool, state: &AppState) -> RfqService {
@@ -128,7 +129,6 @@ pub async fn list_open_rfqs(
     let tenant_id = TenantId(tenant_ctx.tenant_id.0.clone());
     let repo = PgRfqRepository::new(pool);
 
-
     let direction_filter = query.direction.as_deref();
     let rows = repo
         .list_open_requests(&tenant_id, direction_filter, query.limit, query.offset)
@@ -169,7 +169,6 @@ pub async fn finalize_rfq(
     let pool = ensure_pool(&app_state)?.clone();
     let tenant_id = TenantId(tenant_ctx.tenant_id.0.clone());
     let svc = make_rfq_service(pool, &app_state);
-
 
     let result = svc
         .finalize_rfq(&tenant_id, &id)

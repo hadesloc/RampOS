@@ -84,6 +84,37 @@ else
     log_fail "GET /docs -> $status (expected 200)"
 fi
 
+# Test: CLI help surface
+log_info "Testing rampos CLI help..."
+if python scripts/rampos-cli.py --help > /tmp/rampos_cli_help.txt 2>/tmp/rampos_cli_help.err; then
+    log_pass "rampos-cli.py --help"
+else
+    log_fail "rampos-cli.py --help"
+    cat /tmp/rampos_cli_help.err
+fi
+
+# Optional: bounded replay smoke via CLI when admin auth is configured
+if [ -n "${RAMPOS_ADMIN_KEY:-}" ]; then
+    log_info "Testing rampos CLI replay contract..."
+    if python scripts/rampos-cli.py sandbox replay \
+        --base-url "${BASE_URL}" \
+        --admin-key "${RAMPOS_ADMIN_KEY}" \
+        --role "${RAMPOS_ADMIN_ROLE:-viewer}" \
+        --journey-id smoke_test > /tmp/rampos_cli_replay.json 2>/tmp/rampos_cli_replay.err; then
+        if python3 -c "import json; json.load(open('/tmp/rampos_cli_replay.json'))" 2>/dev/null || \
+           node -e "JSON.parse(require('fs').readFileSync('/tmp/rampos_cli_replay.json','utf8'))" 2>/dev/null; then
+            log_pass "rampos-cli.py sandbox replay"
+        else
+            log_fail "rampos-cli.py sandbox replay -> invalid JSON"
+        fi
+    else
+        log_fail "rampos-cli.py sandbox replay"
+        cat /tmp/rampos_cli_replay.err
+    fi
+else
+    log_warn "Skipping CLI replay smoke (set RAMPOS_ADMIN_KEY to enable)"
+fi
+
 # --------------------------------------------------------------------------
 # Summary
 # --------------------------------------------------------------------------

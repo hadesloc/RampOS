@@ -11,9 +11,9 @@ mod fallback;
 pub use chainlink::ChainlinkOracle;
 pub use fallback::CoinGeckoFallback;
 
+use alloy::primitives::Address;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use alloy::primitives::Address;
 use ramp_common::Result;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -137,7 +137,7 @@ pub struct DepegConfig {
 impl Default for DepegConfig {
     fn default() -> Self {
         Self {
-            warning_threshold: Decimal::new(5, 1), // 0.5%
+            warning_threshold: Decimal::new(5, 1),  // 0.5%
             alert_threshold: Decimal::ONE,          // 1%
             critical_threshold: Decimal::new(5, 0), // 5%
             peg_price: Decimal::ONE,                // $1.00
@@ -170,7 +170,7 @@ impl OracleRegistry {
             primary,
             fallback: None,
             cache: RwLock::new(HashMap::new()),
-            cache_ttl: Duration::from_secs(60),       // 1 minute cache
+            cache_ttl: Duration::from_secs(60), // 1 minute cache
             max_staleness: Duration::from_secs(3600), // 1 hour max
             depeg_config: DepegConfig::default(),
             token_symbols: HashMap::new(),
@@ -237,7 +237,8 @@ impl OracleRegistry {
                 cache_key,
                 CacheEntry {
                     price: price.clone(),
-                    expires_at: Utc::now() + chrono::Duration::from_std(self.cache_ttl).unwrap_or_default(),
+                    expires_at: Utc::now()
+                        + chrono::Duration::from_std(self.cache_ttl).unwrap_or_default(),
                 },
             );
         }
@@ -258,7 +259,8 @@ impl OracleRegistry {
     /// Check for depeg and return alert if threshold breached
     pub async fn check_depeg(&self, token: Address, chain_id: u64) -> Result<Option<DepegAlert>> {
         let price = self.get_price(token, chain_id).await?;
-        let deviation = ((price.price_usd - self.depeg_config.peg_price) / self.depeg_config.peg_price)
+        let deviation = ((price.price_usd - self.depeg_config.peg_price)
+            / self.depeg_config.peg_price)
             * Decimal::from(100);
 
         let level = DepegLevel::from_deviation(deviation);
@@ -327,12 +329,7 @@ mod tests {
 
     #[test]
     fn test_price_age() {
-        let mut price = Price::new(
-            Address::ZERO,
-            1,
-            dec!(1.0),
-            PriceSource::Chainlink,
-        );
+        let mut price = Price::new(Address::ZERO, 1, dec!(1.0), PriceSource::Chainlink);
         price.timestamp = Utc::now() - chrono::Duration::seconds(30);
 
         let age = price.age();

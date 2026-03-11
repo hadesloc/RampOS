@@ -484,10 +484,7 @@ mod tests {
 
         // Verify all valid states are recognized
         for state in &valid_states {
-            assert!(
-                !state.is_empty(),
-                "State should not be empty"
-            );
+            assert!(!state.is_empty(), "State should not be empty");
         }
 
         // Simulate forward transition: QUOTE_CREATED -> CRYPTO_PENDING -> CRYPTO_RECEIVED -> VND_TRANSFERRING -> COMPLETED
@@ -547,10 +544,7 @@ mod tests {
         let invalid = valid_transitions
             .iter()
             .any(|(from, to)| *from == "COMPLETED" && *to == "CRYPTO_PENDING");
-        assert!(
-            !invalid,
-            "COMPLETED -> CRYPTO_PENDING should NOT be valid"
-        );
+        assert!(!invalid, "COMPLETED -> CRYPTO_PENDING should NOT be valid");
 
         // Verify serialization of OfframpIntentRow
         let serialized = serde_json::to_string(&intent).expect("Serialization should succeed");
@@ -567,7 +561,7 @@ mod tests {
             tenant_id: "tenant_persist".to_string(),
             user_id: "user_persist".to_string(),
             crypto_asset: "ETH".to_string(),
-            crypto_amount: Decimal::new(25, 1), // 2.5 ETH
+            crypto_amount: Decimal::new(25, 1),         // 2.5 ETH
             exchange_rate: Decimal::new(50_000_000, 0), // 50M VND/ETH
             locked_rate_id: Some("lock_abc".to_string()),
             fees: json!({"network_fee": "0.001", "platform_fee": "0.5", "total_pct": "1.5"}),
@@ -596,8 +590,7 @@ mod tests {
         };
 
         // Simulate persistence: serialize -> store -> deserialize (restart boundary)
-        let serialized = serde_json::to_string(&original)
-            .expect("Serialization should succeed");
+        let serialized = serde_json::to_string(&original).expect("Serialization should succeed");
 
         // Verify serialized data is not empty and contains key fields
         assert!(!serialized.is_empty());
@@ -608,8 +601,8 @@ mod tests {
         assert!(serialized.contains("RAMP-20260210-001"));
 
         // Deserialize (simulates loading from DB/disk after restart)
-        let restored: OfframpIntentRow = serde_json::from_str(&serialized)
-            .expect("Deserialization should succeed");
+        let restored: OfframpIntentRow =
+            serde_json::from_str(&serialized).expect("Deserialization should succeed");
 
         // Verify all fields survive the roundtrip
         assert_eq!(restored.id, original.id);

@@ -38,8 +38,14 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-pub use dns::{DnsProvider, DnsRecord, DnsRecordType, DnsVerification, DnsVerificationStatus, CloudflareDnsProvider, create_dns_provider};
-pub use ssl::{SslCertificate, SslProvider, SslProvisioningStatus, LetsEncryptProvider, CertificateStore, InMemoryCertificateStore, CertificateRenewalManager, create_ssl_provider};
+pub use dns::{
+    create_dns_provider, CloudflareDnsProvider, DnsProvider, DnsRecord, DnsRecordType,
+    DnsVerification, DnsVerificationStatus,
+};
+pub use ssl::{
+    create_ssl_provider, CertificateRenewalManager, CertificateStore, InMemoryCertificateStore,
+    LetsEncryptProvider, SslCertificate, SslProvider, SslProvisioningStatus,
+};
 
 /// Domain status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -239,7 +245,10 @@ pub trait DomainStore: Send + Sync {
     async fn list_expiring_ssl(&self, days_threshold: i64) -> Result<Vec<CustomDomain>>;
 
     /// List domains needing health check
-    async fn list_for_health_check(&self, last_check_before: DateTime<Utc>) -> Result<Vec<CustomDomain>>;
+    async fn list_for_health_check(
+        &self,
+        last_check_before: DateTime<Utc>,
+    ) -> Result<Vec<CustomDomain>>;
 }
 
 /// In-memory domain store for testing
@@ -309,7 +318,10 @@ impl DomainStore for InMemoryDomainStore {
             .collect())
     }
 
-    async fn list_for_health_check(&self, last_check_before: DateTime<Utc>) -> Result<Vec<CustomDomain>> {
+    async fn list_for_health_check(
+        &self,
+        last_check_before: DateTime<Utc>,
+    ) -> Result<Vec<CustomDomain>> {
         let domains = self.domains.read().await;
         Ok(domains
             .values()
@@ -388,7 +400,9 @@ impl<S: DomainStore, D: DnsProvider, L: SslProvider> DomainService<S, D, L> {
             dns_verification_token: Some(verification_token.clone()),
             dns_verification_record: Some(verification_record.clone()),
             ssl_certificate: None,
-            health_check_path: request.health_check_path.unwrap_or_else(|| "/health".to_string()),
+            health_check_path: request
+                .health_check_path
+                .unwrap_or_else(|| "/health".to_string()),
             last_health_check: None,
             is_primary: request.is_primary,
             custom_headers: HashMap::new(),
@@ -411,17 +425,21 @@ impl<S: DomainStore, D: DnsProvider, L: SslProvider> DomainService<S, D, L> {
 
     /// Verify DNS configuration for a domain
     pub async fn verify_dns(&self, domain_id: &str) -> Result<DnsVerification> {
-        let mut domain = self.store.get(domain_id).await?.ok_or_else(|| {
-            Error::NotFound(format!("Domain {} not found", domain_id))
-        })?;
+        let mut domain = self
+            .store
+            .get(domain_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Domain {} not found", domain_id)))?;
 
-        let token = domain.dns_verification_token.as_ref().ok_or_else(|| {
-            Error::Validation("Domain has no verification token".to_string())
-        })?;
+        let token = domain
+            .dns_verification_token
+            .as_ref()
+            .ok_or_else(|| Error::Validation("Domain has no verification token".to_string()))?;
 
-        let record = domain.dns_verification_record.as_ref().ok_or_else(|| {
-            Error::Validation("Domain has no verification record".to_string())
-        })?;
+        let record = domain
+            .dns_verification_record
+            .as_ref()
+            .ok_or_else(|| Error::Validation("Domain has no verification record".to_string()))?;
 
         debug!(
             domain = %domain.domain,
@@ -429,10 +447,7 @@ impl<S: DomainStore, D: DnsProvider, L: SslProvider> DomainService<S, D, L> {
             "Verifying DNS configuration"
         );
 
-        let verification = self
-            .dns_provider
-            .verify_txt_record(record, token)
-            .await?;
+        let verification = self.dns_provider.verify_txt_record(record, token).await?;
 
         match verification.status {
             DnsVerificationStatus::Verified => {
@@ -472,9 +487,11 @@ impl<S: DomainStore, D: DnsProvider, L: SslProvider> DomainService<S, D, L> {
 
     /// Provision SSL certificate for a domain
     pub async fn provision_ssl(&self, domain_id: &str) -> Result<SslCertificate> {
-        let mut domain = self.store.get(domain_id).await?.ok_or_else(|| {
-            Error::NotFound(format!("Domain {} not found", domain_id))
-        })?;
+        let mut domain = self
+            .store
+            .get(domain_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Domain {} not found", domain_id)))?;
 
         // Check domain is ready for SSL
         if domain.status != DomainStatus::PendingSSL
@@ -548,9 +565,11 @@ impl<S: DomainStore, D: DnsProvider, L: SslProvider> DomainService<S, D, L> {
 
     /// Renew SSL certificate for a domain
     pub async fn renew_ssl(&self, domain_id: &str) -> Result<SslCertificate> {
-        let mut domain = self.store.get(domain_id).await?.ok_or_else(|| {
-            Error::NotFound(format!("Domain {} not found", domain_id))
-        })?;
+        let mut domain = self
+            .store
+            .get(domain_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Domain {} not found", domain_id)))?;
 
         if !domain.status.is_active() && domain.status != DomainStatus::Expired {
             return Err(Error::Validation(format!(
@@ -603,9 +622,11 @@ impl<S: DomainStore, D: DnsProvider, L: SslProvider> DomainService<S, D, L> {
 
     /// Run health check on a domain
     pub async fn health_check(&self, domain_id: &str) -> Result<HealthCheckResult> {
-        let mut domain = self.store.get(domain_id).await?.ok_or_else(|| {
-            Error::NotFound(format!("Domain {} not found", domain_id))
-        })?;
+        let mut domain = self
+            .store
+            .get(domain_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Domain {} not found", domain_id)))?;
 
         let _url = format!("https://{}{}", domain.domain, domain.health_check_path);
         let start = std::time::Instant::now();
@@ -635,10 +656,16 @@ impl<S: DomainStore, D: DnsProvider, L: SslProvider> DomainService<S, D, L> {
     }
 
     /// Update domain configuration
-    pub async fn update(&self, domain_id: &str, request: UpdateDomainRequest) -> Result<CustomDomain> {
-        let mut domain = self.store.get(domain_id).await?.ok_or_else(|| {
-            Error::NotFound(format!("Domain {} not found", domain_id))
-        })?;
+    pub async fn update(
+        &self,
+        domain_id: &str,
+        request: UpdateDomainRequest,
+    ) -> Result<CustomDomain> {
+        let mut domain = self
+            .store
+            .get(domain_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Domain {} not found", domain_id)))?;
 
         if let Some(is_primary) = request.is_primary {
             domain.is_primary = is_primary;
@@ -670,9 +697,11 @@ impl<S: DomainStore, D: DnsProvider, L: SslProvider> DomainService<S, D, L> {
 
     /// Delete a domain
     pub async fn delete(&self, domain_id: &str) -> Result<()> {
-        let domain = self.store.get(domain_id).await?.ok_or_else(|| {
-            Error::NotFound(format!("Domain {} not found", domain_id))
-        })?;
+        let domain = self
+            .store
+            .get(domain_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Domain {} not found", domain_id)))?;
 
         // Revoke SSL if exists
         if let Some(ref ssl) = domain.ssl_certificate {
@@ -766,10 +795,7 @@ impl<S: DomainStore, D: DnsProvider, L: SslProvider> DomainService<S, D, L> {
                 return Err(Error::Validation("Invalid domain label".to_string()));
             }
 
-            if !label
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-')
-            {
+            if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
                 return Err(Error::Validation(
                     "Domain contains invalid characters".to_string(),
                 ));

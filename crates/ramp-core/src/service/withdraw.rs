@@ -283,7 +283,11 @@ impl WithdrawService {
 
         if policy_approved {
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, &WithdrawState::PolicyApproved.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &intent_id,
+                    &WithdrawState::PolicyApproved.to_string(),
+                )
                 .await?;
 
             // SECURITY FIX: Use atomic balance check and transaction recording
@@ -333,7 +337,11 @@ impl WithdrawService {
         } else if manual_review {
             // Requires manual review - hold for compliance
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, &WithdrawState::ManualReview.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &intent_id,
+                    &WithdrawState::ManualReview.to_string(),
+                )
                 .await?;
 
             self.event_publisher
@@ -341,7 +349,11 @@ impl WithdrawService {
                 .await?;
         } else {
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, &WithdrawState::RejectedByPolicy.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &intent_id,
+                    &WithdrawState::RejectedByPolicy.to_string(),
+                )
                 .await?;
         }
 
@@ -402,7 +414,11 @@ impl WithdrawService {
             );
 
             self.intent_repo
-                .update_state(&req.tenant_id, &req.intent_id, &WithdrawState::KytFlagged.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &req.intent_id,
+                    &WithdrawState::KytFlagged.to_string(),
+                )
                 .await?;
 
             self.event_publisher
@@ -414,11 +430,19 @@ impl WithdrawService {
 
         // KYT passed
         self.intent_repo
-            .update_state(&req.tenant_id, &req.intent_id, &WithdrawState::KytChecked.to_string())
+            .update_state(
+                &req.tenant_id,
+                &req.intent_id,
+                &WithdrawState::KytChecked.to_string(),
+            )
             .await?;
 
         self.event_publisher
-            .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &WithdrawState::KytChecked.to_string())
+            .publish_intent_status_changed(
+                &req.intent_id,
+                &req.tenant_id,
+                &WithdrawState::KytChecked.to_string(),
+            )
             .await?;
 
         info!(
@@ -491,11 +515,19 @@ impl WithdrawService {
 
         // Update state to broadcasted
         self.intent_repo
-            .update_state(&req.tenant_id, &req.intent_id, &WithdrawState::Broadcasted.to_string())
+            .update_state(
+                &req.tenant_id,
+                &req.intent_id,
+                &WithdrawState::Broadcasted.to_string(),
+            )
             .await?;
 
         self.event_publisher
-            .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &WithdrawState::Broadcasted.to_string())
+            .publish_intent_status_changed(
+                &req.intent_id,
+                &req.tenant_id,
+                &WithdrawState::Broadcasted.to_string(),
+            )
             .await?;
 
         info!(
@@ -506,7 +538,11 @@ impl WithdrawService {
 
         // Move to confirming state
         self.intent_repo
-            .update_state(&req.tenant_id, &req.intent_id, &WithdrawState::Confirming.to_string())
+            .update_state(
+                &req.tenant_id,
+                &req.intent_id,
+                &WithdrawState::Confirming.to_string(),
+            )
             .await?;
 
         Ok(WithdrawState::Confirming)
@@ -523,7 +559,8 @@ impl WithdrawService {
 
         // Validate state
         let current_state = WithdrawState::from(intent.state.as_str());
-        if current_state != WithdrawState::Confirming && current_state != WithdrawState::Broadcasted {
+        if current_state != WithdrawState::Confirming && current_state != WithdrawState::Broadcasted
+        {
             return Err(Error::InvalidStateTransition {
                 from: intent.state,
                 to: WithdrawState::Confirmed.to_string(),
@@ -535,7 +572,11 @@ impl WithdrawService {
         if req.success {
             // Update state to confirmed
             self.intent_repo
-                .update_state(&req.tenant_id, &req.intent_id, &WithdrawState::Confirmed.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &req.intent_id,
+                    &WithdrawState::Confirmed.to_string(),
+                )
                 .await?;
 
             // Complete clearing entries - finalize the withdraw
@@ -550,11 +591,19 @@ impl WithdrawService {
 
             // Mark as completed
             self.intent_repo
-                .update_state(&req.tenant_id, &req.intent_id, &WithdrawState::Completed.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &req.intent_id,
+                    &WithdrawState::Completed.to_string(),
+                )
                 .await?;
 
             self.event_publisher
-                .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &WithdrawState::Completed.to_string())
+                .publish_intent_status_changed(
+                    &req.intent_id,
+                    &req.tenant_id,
+                    &WithdrawState::Completed.to_string(),
+                )
                 .await?;
 
             info!(
@@ -578,11 +627,19 @@ impl WithdrawService {
             self.ledger_repo.record_transaction(tx).await?;
 
             self.intent_repo
-                .update_state(&req.tenant_id, &req.intent_id, &WithdrawState::BroadcastFailed.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &req.intent_id,
+                    &WithdrawState::BroadcastFailed.to_string(),
+                )
                 .await?;
 
             self.event_publisher
-                .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &WithdrawState::BroadcastFailed.to_string())
+                .publish_intent_status_changed(
+                    &req.intent_id,
+                    &req.tenant_id,
+                    &WithdrawState::BroadcastFailed.to_string(),
+                )
                 .await?;
 
             warn!(
@@ -622,7 +679,9 @@ impl WithdrawService {
         }
 
         // If funds were held, return them
-        if current_state != WithdrawState::Created && current_state != WithdrawState::RejectedByPolicy {
+        if current_state != WithdrawState::Created
+            && current_state != WithdrawState::RejectedByPolicy
+        {
             let user_id = UserId::new(&intent.user_id);
             let crypto_currency = LedgerCurrency::from_symbol(&intent.currency);
 
@@ -643,7 +702,11 @@ impl WithdrawService {
             .await?;
 
         self.event_publisher
-            .publish_intent_status_changed(intent_id, tenant_id, &WithdrawState::Cancelled.to_string())
+            .publish_intent_status_changed(
+                intent_id,
+                tenant_id,
+                &WithdrawState::Cancelled.to_string(),
+            )
             .await?;
 
         info!(intent_id = %intent_id, "Withdraw cancelled");

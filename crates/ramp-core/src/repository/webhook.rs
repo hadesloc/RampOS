@@ -71,11 +71,7 @@ pub trait WebhookRepository: Send + Sync {
     ) -> Result<Option<WebhookEventRow>>;
 
     /// Reset an event to pending status
-    async fn retry_event(
-        &self,
-        tenant_id: &TenantId,
-        event_id: &str,
-    ) -> Result<()>;
+    async fn retry_event(&self, tenant_id: &TenantId, event_id: &str) -> Result<()>;
 }
 
 pub struct PgWebhookRepository {
@@ -305,11 +301,7 @@ impl WebhookRepository for PgWebhookRepository {
         Ok(row)
     }
 
-    async fn retry_event(
-        &self,
-        tenant_id: &TenantId,
-        event_id: &str,
-    ) -> Result<()> {
+    async fn retry_event(&self, tenant_id: &TenantId, event_id: &str) -> Result<()> {
         let mut tx = self
             .pool
             .begin()
@@ -335,7 +327,10 @@ impl WebhookRepository for PgWebhookRepository {
         .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         if result.rows_affected() == 0 {
-             return Err(ramp_common::Error::NotFound(format!("Webhook event {} not found", event_id)));
+            return Err(ramp_common::Error::NotFound(format!(
+                "Webhook event {} not found",
+                event_id
+            )));
         }
 
         tx.commit()

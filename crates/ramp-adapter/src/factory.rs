@@ -86,7 +86,9 @@ impl AdapterFactory {
     where
         F: Fn(AdapterConfig) -> Result<Box<dyn RailsAdapter>> + Send + Sync + 'static,
     {
-        let mut constructors = self.constructors.write().map_err(|_| Error::Internal("Failed to acquire write lock on constructors".to_string()))?;
+        let mut constructors = self.constructors.write().map_err(|_| {
+            Error::Internal("Failed to acquire write lock on constructors".to_string())
+        })?;
         constructors.insert(adapter_type.to_lowercase(), Box::new(constructor));
         debug!(adapter_type = %adapter_type, "Registered adapter type");
         Ok(())
@@ -97,7 +99,9 @@ impl AdapterFactory {
     where
         F: Fn(serde_json::Value) -> Result<Box<dyn RailsAdapter>> + Send + Sync + 'static,
     {
-        let mut constructors = self.extended_constructors.write().map_err(|_| Error::Internal("Failed to acquire write lock on extended_constructors".to_string()))?;
+        let mut constructors = self.extended_constructors.write().map_err(|_| {
+            Error::Internal("Failed to acquire write lock on extended_constructors".to_string())
+        })?;
         constructors.insert(adapter_type.to_lowercase(), Box::new(constructor));
         Ok(())
     }
@@ -108,7 +112,9 @@ impl AdapterFactory {
         adapter_type: &str,
         config: AdapterConfig,
     ) -> Result<Box<dyn RailsAdapter>> {
-        let constructors = self.constructors.read().map_err(|_| Error::Internal("Failed to acquire read lock on constructors".to_string()))?;
+        let constructors = self.constructors.read().map_err(|_| {
+            Error::Internal("Failed to acquire read lock on constructors".to_string())
+        })?;
         let adapter_type_lower = adapter_type.to_lowercase();
 
         if let Some(constructor) = constructors.get(&adapter_type_lower) {
@@ -128,7 +134,9 @@ impl AdapterFactory {
         adapter_type: &str,
         config: serde_json::Value,
     ) -> Result<Box<dyn RailsAdapter>> {
-        let constructors = self.extended_constructors.read().map_err(|_| Error::Internal("Failed to acquire read lock on extended_constructors".to_string()))?;
+        let constructors = self.extended_constructors.read().map_err(|_| {
+            Error::Internal("Failed to acquire read lock on extended_constructors".to_string())
+        })?;
         let adapter_type_lower = adapter_type.to_lowercase();
 
         if let Some(constructor) = constructors.get(&adapter_type_lower) {
@@ -210,12 +218,18 @@ pub fn create_test_adapters() -> HashMap<String, Arc<dyn RailsAdapter>> {
 
     adapters.insert(
         "vietqr".to_string(),
-        Arc::new(VietQRAdapter::new("vietqr", "test_webhook_secret").expect("Failed to create test VietQR adapter")),
+        Arc::new(
+            VietQRAdapter::new("vietqr", "test_webhook_secret")
+                .expect("Failed to create test VietQR adapter"),
+        ),
     );
 
     adapters.insert(
         "napas".to_string(),
-        Arc::new(NapasAdapter::new("napas", "test_webhook_secret").expect("Failed to create test Napas adapter")),
+        Arc::new(
+            NapasAdapter::new("napas", "test_webhook_secret")
+                .expect("Failed to create test Napas adapter"),
+        ),
     );
 
     adapters
@@ -239,8 +253,7 @@ pub fn create_adapters_from_env() -> Result<HashMap<String, Arc<dyn RailsAdapter
                 extra: serde_json::json!({}),
             },
             client_id: std::env::var("VIETQR_CLIENT_ID").ok(),
-            merchant_account_number: std::env::var("VIETQR_MERCHANT_ACCOUNT")
-                .unwrap_or_default(),
+            merchant_account_number: std::env::var("VIETQR_MERCHANT_ACCOUNT").unwrap_or_default(),
             merchant_bank_bin: std::env::var("VIETQR_MERCHANT_BANK_BIN").unwrap_or_default(),
             merchant_name: std::env::var("VIETQR_MERCHANT_NAME")
                 .unwrap_or_else(|_| "RampOS".to_string()),

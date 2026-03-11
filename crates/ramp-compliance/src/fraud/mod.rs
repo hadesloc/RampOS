@@ -1,9 +1,16 @@
 pub mod analytics;
+pub mod decision;
 pub mod features;
 pub mod scorer;
-pub mod decision;
 
+pub use analytics::{
+    DailyFraudRate, FraudAnalytics, ScoreBucket, ScoredTransaction, TopRiskFactor,
+};
+pub use decision::{
+    DecisionThresholds, FraudDecision, FraudDecisionEngine, FraudDecisionExplanation,
+};
 pub use features::{FraudFeatureExtractor, FraudFeatureVector, TransactionContext};
-pub use scorer::{RiskScorer, RuleBasedScorer, OnnxModelScorer, RiskScore, RiskFactor, ScorerConfig};
-pub use decision::{FraudDecisionEngine, FraudDecision, DecisionThresholds};
-pub use analytics::{FraudAnalytics, ScoredTransaction, DailyFraudRate, TopRiskFactor, ScoreBucket};
+pub use scorer::{
+    ExplainedRiskScore, OnnxModelScorer, RiskFactor, RiskScore, RiskScoreMetadata, RiskScorer,
+    RuleBasedScorer, ScorerConfig,
+};

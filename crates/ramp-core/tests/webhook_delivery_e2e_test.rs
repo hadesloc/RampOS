@@ -16,10 +16,14 @@ use ramp_common::{
     types::{EventId, IntentId, TenantId},
     Result,
 };
-use ramp_core::repository::webhook::{WebhookEventRow, WebhookRepository};
 use ramp_core::repository::tenant::{TenantRepository, TenantRow};
-use ramp_core::service::webhook::{WebhookEventType, WebhookService};
+use ramp_core::repository::webhook::{WebhookEventRow, WebhookRepository};
 use ramp_core::service::crypto::CryptoService;
+use ramp_core::service::webhook::{WebhookEventType, WebhookService};
+use ramp_core::service::webhook_delivery::{
+    DeliveryHistoryFilter, WebhookDeliveryService, MAX_DELIVERY_ATTEMPTS,
+};
+use ramp_core::service::webhook_dlq::{DlqFilter, WebhookDlqService};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -96,10 +100,7 @@ impl WebhookRepository for InMemoryWebhookRepo {
         let mut pending: Vec<WebhookEventRow> = events
             .values()
             .filter(|e| {
-                e.status == "PENDING"
-                    && e.next_attempt_at
-                        .map(|t| t <= now)
-                        .unwrap_or(true)
+                e.status == "PENDING" && e.next_attempt_at.map(|t| t <= now).unwrap_or(true)
             })
             .cloned()
             .collect();
@@ -155,10 +156,7 @@ impl WebhookRepository for InMemoryWebhookRepo {
         let events = self.events.lock().unwrap();
         let filtered: Vec<WebhookEventRow> = events
             .values()
-            .filter(|e| {
-                e.tenant_id == tenant_id.0
-                    && e.intent_id.as_deref() == Some(&intent_id.0)
-            })
+            .filter(|e| e.tenant_id == tenant_id.0 && e.intent_id.as_deref() == Some(&intent_id.0))
             .cloned()
             .collect();
         Ok(filtered)
@@ -479,6 +477,133 @@ async fn test_webhook_dead_letter_after_max_retries() {
 }
 
 // ============================================================================
+// E2E Test: Delivery history filters and replay-by-event on delivery/DLQ layer
+// ============================================================================
+
+#[test]
+fn test_webhook_delivery_history_and_replay_by_event_e2e() {
+    let delivery_service = Arc::new(WebhookDeliveryService::new());
+    let dlq_service = WebhookDlqService::new(delivery_service.clone());
+
+    let matching = delivery_service
+        .create_delivery_for_event(
+            "evt_history_match",
+            "intent.status.changed",
+            "tenant_1",
+            "https://primary.example.com/wh",
+        )
+        .expect("create should succeed");
+    let other = delivery_service
+        .create_delivery_for_event(
+            "evt_history_other",
+            "risk.review.required",
+            "tenant_1",
+            "https://backup.example.com/wh",
+        )
+        .expect("create should succeed");
+
+    let filtered = delivery_service
+        .query_deliveries(&DeliveryHistoryFilter {
+            tenant_id: Some("tenant_1".to_string()),
+            event_id: Some("evt_history_match".to_string()),
+            event_type: Some("intent.status.changed".to_string()),
+            endpoint_url: Some("https://primary.example.com/wh".to_string()),
+        })
+        .expect("query should succeed");
+
+    assert_eq!(filtered.len(), 1);
+    assert_eq!(filtered[0].id, matching.id);
+
+    for delivery in [&matching, &other] {
+        for _ in 0..MAX_DELIVERY_ATTEMPTS {
+            delivery_service
+                .schedule_retry(
+                    &delivery.id,
+                    "Server error",
+                    Some(500),
+                    Some(json!({
+                        "type": delivery.event_type.clone().unwrap(),
+                        "data": { "deliveryId": delivery.id }
+                    })),
+                )
+                .ok();
+        }
+    }
+
+    let replayed = dlq_service
+        .replay_event_from_dlq("tenant_1", "evt_history_match")
+        .expect("replay by event should succeed");
+
+    assert_eq!(replayed.len(), 1);
+    assert_eq!(replayed[0].event_id, "evt_history_match");
+    assert_eq!(
+        replayed[0].event_type.as_deref(),
+        Some("intent.status.changed")
+    );
+}
+
+// ============================================================================
+// E2E Test: DLQ inspection supports event-type and endpoint filtering
+// ============================================================================
+
+#[test]
+fn test_webhook_dlq_inspection_filters_e2e() {
+    let delivery_service = Arc::new(WebhookDeliveryService::new());
+    let dlq_service = WebhookDlqService::new(delivery_service.clone());
+
+    let matching = delivery_service
+        .create_delivery_for_event(
+            "evt_dlq_match",
+            "intent.status.changed",
+            "tenant_1",
+            "https://primary.example.com/wh",
+        )
+        .expect("create should succeed");
+    let other = delivery_service
+        .create_delivery_for_event(
+            "evt_dlq_other",
+            "risk.review.required",
+            "tenant_1",
+            "https://backup.example.com/wh",
+        )
+        .expect("create should succeed");
+
+    for delivery in [&matching, &other] {
+        for _ in 0..MAX_DELIVERY_ATTEMPTS {
+            delivery_service
+                .schedule_retry(
+                    &delivery.id,
+                    "Exhausted retries",
+                    Some(500),
+                    Some(json!({
+                        "type": delivery.event_type.clone().unwrap(),
+                        "data": { "deliveryId": delivery.id }
+                    })),
+                )
+                .ok();
+        }
+    }
+
+    let filtered = dlq_service
+        .list_dlq_entries_filtered(
+            &DlqFilter {
+                tenant_id: Some("tenant_1".to_string()),
+                event_id: Some("evt_dlq_match".to_string()),
+                event_type: Some("intent.status.changed".to_string()),
+                endpoint_url: Some("https://primary.example.com/wh".to_string()),
+                ..Default::default()
+            },
+            10,
+        )
+        .expect("filtered dlq query should succeed");
+
+    assert_eq!(filtered.len(), 1);
+    assert_eq!(filtered[0].event_id, "evt_dlq_match");
+    assert_eq!(filtered[0].endpoint_url, "https://primary.example.com/wh");
+    assert_eq!(filtered[0].event_payload["type"], "intent.status.changed");
+}
+
+// ============================================================================
 // E2E Test: Deduplication (Unique Event IDs)
 // ============================================================================
 
@@ -508,8 +633,7 @@ async fn test_webhook_deduplication() {
     }
 
     // All event IDs must be unique
-    let unique: std::collections::HashSet<String> =
-        event_ids.iter().map(|e| e.0.clone()).collect();
+    let unique: std::collections::HashSet<String> = event_ids.iter().map(|e| e.0.clone()).collect();
     assert_eq!(unique.len(), 10, "All 10 event IDs must be unique");
 
     // All 10 events exist in the repository
@@ -571,9 +695,8 @@ fn test_webhook_stale_event_rejection() {
 
     // Verify the boundary: exactly at tolerance edge
     let edge_ts = Utc::now().timestamp() - 299; // 1 second within tolerance
-    let edge_sig =
-        ramp_common::crypto::generate_webhook_signature(secret, edge_ts, &payload_bytes)
-            .expect("edge signature should succeed");
+    let edge_sig = ramp_common::crypto::generate_webhook_signature(secret, edge_ts, &payload_bytes)
+        .expect("edge signature should succeed");
     let edge_result =
         ramp_common::crypto::verify_webhook_signature(secret, &edge_sig, &payload_bytes, 300);
     assert!(
@@ -631,9 +754,12 @@ async fn test_webhook_concurrent_delivery() {
     }
 
     // All event IDs unique
-    let unique: std::collections::HashSet<String> =
-        event_ids.iter().map(|e| e.0.clone()).collect();
-    assert_eq!(unique.len(), 20, "All 20 concurrent event IDs must be unique");
+    let unique: std::collections::HashSet<String> = event_ids.iter().map(|e| e.0.clone()).collect();
+    assert_eq!(
+        unique.len(),
+        20,
+        "All 20 concurrent event IDs must be unique"
+    );
 
     // Repository should have exactly 20 events
     let all = repo.get_all_events();
@@ -648,7 +774,9 @@ async fn test_webhook_concurrent_delivery() {
     #[cfg(not(feature = "http-client"))]
     assert_eq!(process_result.unwrap(), 20);
     #[cfg(feature = "http-client")]
-    { let _ = process_result.unwrap(); }
+    {
+        let _ = process_result.unwrap();
+    }
 
     // Concurrent simulated retries for different events
     let repo_clone = repo.clone();
@@ -671,18 +799,18 @@ async fn test_webhook_concurrent_delivery() {
     let retry_results: Vec<std::result::Result<(), _>> =
         futures::future::join_all(retry_handles).await;
     for (i, result) in retry_results.iter().enumerate() {
-        assert!(
-            result.is_ok(),
-            "Concurrent retry {} should not panic",
-            i
-        );
+        assert!(result.is_ok(), "Concurrent retry {} should not panic", i);
     }
 
     // All events should still exist with updated state
     let after_retries = repo.get_all_events();
     assert_eq!(after_retries.len(), 20);
     for event in &after_retries {
-        assert!(event.attempts > 0, "Event {} should have been retried", event.id);
+        assert!(
+            event.attempts > 0,
+            "Event {} should have been retried",
+            event.id
+        );
     }
 }
 
@@ -796,10 +924,8 @@ async fn test_webhook_payload_integrity() {
     // Sign and verify the serialized payload
     let secret = b"whsec_integrity_verification_key";
     let ts = Utc::now().timestamp();
-    let sig =
-        ramp_common::crypto::generate_webhook_signature(secret, ts, &serialized).unwrap();
-    let verified =
-        ramp_common::crypto::verify_webhook_signature(secret, &sig, &serialized, 300);
+    let sig = ramp_common::crypto::generate_webhook_signature(secret, ts, &serialized).unwrap();
+    let verified = ramp_common::crypto::verify_webhook_signature(secret, &sig, &serialized, 300);
     assert!(verified.is_ok(), "Signed payload must verify successfully");
 }
 
@@ -862,10 +988,7 @@ async fn test_webhook_full_lifecycle_e2e() {
     assert_eq!(repo.count_by_status("FAILED"), 1);
 
     // Phase 5: Manual retry reset via service public API
-    service
-        .retry_event(&tenant_id, &event_id.0)
-        .await
-        .unwrap();
+    service.retry_event(&tenant_id, &event_id.0).await.unwrap();
 
     let reset = repo.get_event_by_id(&event_id.0).unwrap();
     assert_eq!(
@@ -932,16 +1055,12 @@ async fn test_webhook_multi_tenant_isolation() {
     // Tenant A should only see its own events
     let a_events = service.list_events(&tenant_a, 10, 0).await.unwrap();
     assert_eq!(a_events.len(), 2);
-    assert!(a_events
-        .iter()
-        .all(|e| e.tenant_id == "tenant_a_isolation"));
+    assert!(a_events.iter().all(|e| e.tenant_id == "tenant_a_isolation"));
 
     // Tenant B should only see its own events
     let b_events = service.list_events(&tenant_b, 10, 0).await.unwrap();
     assert_eq!(b_events.len(), 1);
-    assert!(b_events
-        .iter()
-        .all(|e| e.tenant_id == "tenant_b_isolation"));
+    assert!(b_events.iter().all(|e| e.tenant_id == "tenant_b_isolation"));
 
     // Tenant A cannot access Tenant B's event by ID
     let cross_access = service.get_event(&tenant_a, &b1.0).await.unwrap();
@@ -958,6 +1077,85 @@ async fn test_webhook_multi_tenant_isolation() {
     assert!(
         cross_intent.is_empty(),
         "Tenant B should not see Tenant A's intent events"
+    );
+}
+
+// ============================================================================
+// E2E Test: W2 delivery history filters and replay-by-event remain wired
+// ============================================================================
+
+#[test]
+fn test_w2_delivery_history_filters_and_dlq_replay_e2e() {
+    let delivery_service = Arc::new(WebhookDeliveryService::new());
+    let dlq_service = WebhookDlqService::new(delivery_service.clone());
+
+    let matching = delivery_service
+        .create_delivery_for_event(
+            "evt_w2_match",
+            "intent.status.changed",
+            "tenant_1",
+            "https://primary.example.com/wh",
+        )
+        .expect("create should succeed");
+    let other = delivery_service
+        .create_delivery_for_event(
+            "evt_w2_other",
+            "risk.review.required",
+            "tenant_1",
+            "https://backup.example.com/wh",
+        )
+        .expect("create should succeed");
+
+    let filtered = delivery_service
+        .query_deliveries(&DeliveryHistoryFilter {
+            tenant_id: Some("tenant_1".to_string()),
+            event_id: Some("evt_w2_match".to_string()),
+            event_type: Some("intent.status.changed".to_string()),
+            endpoint_url: Some("https://primary.example.com/wh".to_string()),
+        })
+        .expect("query should succeed");
+    assert_eq!(filtered.len(), 1);
+    assert_eq!(filtered[0].id, matching.id);
+
+    for delivery in [&matching, &other] {
+        for _ in 0..MAX_DELIVERY_ATTEMPTS {
+            delivery_service
+                .schedule_retry(
+                    &delivery.id,
+                    "Server error",
+                    Some(500),
+                    Some(serde_json::json!({
+                        "type": delivery.event_type.clone().unwrap(),
+                        "data": {"deliveryId": delivery.id}
+                    })),
+                )
+                .ok();
+        }
+    }
+
+    let dlq_entries = dlq_service
+        .list_dlq_entries_filtered(
+            &DlqFilter {
+                tenant_id: Some("tenant_1".to_string()),
+                event_id: Some("evt_w2_match".to_string()),
+                event_type: Some("intent.status.changed".to_string()),
+                endpoint_url: Some("https://primary.example.com/wh".to_string()),
+                ..Default::default()
+            },
+            10,
+        )
+        .expect("dlq filter should succeed");
+    assert_eq!(dlq_entries.len(), 1);
+    assert_eq!(dlq_entries[0].event_id, "evt_w2_match");
+
+    let replayed = dlq_service
+        .replay_event_from_dlq("tenant_1", "evt_w2_match")
+        .expect("replay by event should succeed");
+    assert_eq!(replayed.len(), 1);
+    assert_eq!(replayed[0].event_id, "evt_w2_match");
+    assert_eq!(
+        replayed[0].event_type.as_deref(),
+        Some("intent.status.changed")
     );
 }
 
@@ -991,16 +1189,16 @@ fn test_webhook_exponential_backoff_delays() {
 
     // Test each retry level and verify backoff
     let expected_delays: Vec<(i32, i64)> = vec![
-        (0, 1),    // 2^0 = 1s
-        (1, 2),    // 2^1 = 2s
-        (2, 4),    // 2^2 = 4s
-        (3, 8),    // 2^3 = 8s
-        (4, 16),   // 2^4 = 16s
-        (5, 32),   // 2^5 = 32s
-        (6, 64),   // 2^6 = 64s
-        (7, 128),  // 2^7 = 128s
-        (8, 256),  // 2^8 = 256s
-        (9, 512),  // 2^9 = 512s
+        (0, 1),   // 2^0 = 1s
+        (1, 2),   // 2^1 = 2s
+        (2, 4),   // 2^2 = 4s
+        (3, 8),   // 2^3 = 8s
+        (4, 16),  // 2^4 = 16s
+        (5, 32),  // 2^5 = 32s
+        (6, 64),  // 2^6 = 64s
+        (7, 128), // 2^7 = 128s
+        (8, 256), // 2^8 = 256s
+        (9, 512), // 2^9 = 512s
     ];
 
     for (attempt, expected_delay) in &expected_delays {
@@ -1101,9 +1299,9 @@ async fn test_webhook_crypto_service_integration() {
 #[cfg(feature = "http-client")]
 mod http_delivery_tests {
     use super::*;
-    use wiremock::matchers::{method, header, header_exists};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
     use ramp_core::service::crypto::CryptoService;
+    use wiremock::matchers::{header, header_exists, method};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     /// Create a TenantRow with webhook configured, pointing to the given URL.
     /// The webhook secret is stored encrypted using the provided CryptoService.
@@ -1252,7 +1450,10 @@ mod http_delivery_tests {
 
         // Verify event was marked as DELIVERED in repository
         let event = webhook_repo.get_event_by_id(&event_id.0).unwrap();
-        assert_eq!(event.status, "DELIVERED", "Event should be marked DELIVERED");
+        assert_eq!(
+            event.status, "DELIVERED",
+            "Event should be marked DELIVERED"
+        );
         assert_eq!(event.response_status, Some(200));
         assert!(event.delivered_at.is_some());
     }
@@ -1309,7 +1510,10 @@ mod http_delivery_tests {
         let event = webhook_repo.get_event_by_id(&event_id.0).unwrap();
         assert_eq!(event.last_error.as_deref(), Some("HTTP 500"));
         assert!(event.attempts > 0, "Attempts should be incremented");
-        assert!(event.next_attempt_at.is_some(), "Next retry should be scheduled");
+        assert!(
+            event.next_attempt_at.is_some(),
+            "Next retry should be scheduled"
+        );
     }
 
     // ========================================================================
@@ -1381,12 +1585,7 @@ mod http_delivery_tests {
         let key = test_crypto_key();
         let crypto = Arc::new(CryptoService::from_key(&key));
 
-        let tenant = create_wired_tenant(
-            "tenant_429",
-            &mock_server.uri(),
-            webhook_secret,
-            &crypto,
-        );
+        let tenant = create_wired_tenant("tenant_429", &mock_server.uri(), webhook_secret, &crypto);
 
         let webhook_repo = Arc::new(InMemoryWebhookRepo::new());
         let tenant_repo: Arc<dyn TenantRepository> = Arc::new(HttpTestTenantRepo::new(tenant));
@@ -1471,24 +1670,38 @@ mod http_delivery_tests {
         assert!(!webhook_id.is_empty(), "X-Webhook-Id should not be empty");
 
         // Verify X-Webhook-Timestamp is present and valid
-        let timestamp_str = req.headers.get("X-Webhook-Timestamp").unwrap().to_str().unwrap();
-        let timestamp: i64 = timestamp_str.parse().expect("Timestamp should be valid i64");
+        let timestamp_str = req
+            .headers
+            .get("X-Webhook-Timestamp")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        let timestamp: i64 = timestamp_str
+            .parse()
+            .expect("Timestamp should be valid i64");
         let now = Utc::now().timestamp();
-        assert!((now - timestamp).abs() < 60, "Timestamp should be within 60s of now");
+        assert!(
+            (now - timestamp).abs() < 60,
+            "Timestamp should be within 60s of now"
+        );
 
         // Verify X-Webhook-Signature is present and verifiable
-        let signature = req.headers.get("X-Webhook-Signature").unwrap().to_str().unwrap();
-        assert!(signature.starts_with("t="), "Signature should start with t=");
+        let signature = req
+            .headers
+            .get("X-Webhook-Signature")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(
+            signature.starts_with("t="),
+            "Signature should start with t="
+        );
         assert!(signature.contains(",v1="), "Signature should contain ,v1=");
 
         // Verify the signature against the request body
         let body = &req.body;
-        let verified = ramp_common::crypto::verify_webhook_signature(
-            webhook_secret,
-            signature,
-            body,
-            300,
-        );
+        let verified =
+            ramp_common::crypto::verify_webhook_signature(webhook_secret, signature, body, 300);
         assert!(
             verified.is_ok(),
             "Signature should be verifiable by receiver: {:?}",
@@ -1496,10 +1709,14 @@ mod http_delivery_tests {
         );
 
         // Verify body is valid JSON with expected structure
-        let payload: serde_json::Value = serde_json::from_slice(body).expect("Body should be valid JSON");
+        let payload: serde_json::Value =
+            serde_json::from_slice(body).expect("Body should be valid JSON");
         assert!(payload.get("id").is_some(), "Payload must have 'id'");
         assert!(payload.get("type").is_some(), "Payload must have 'type'");
-        assert!(payload.get("created_at").is_some(), "Payload must have 'created_at'");
+        assert!(
+            payload.get("created_at").is_some(),
+            "Payload must have 'created_at'"
+        );
         assert!(payload.get("data").is_some(), "Payload must have 'data'");
         assert_eq!(payload["type"], "intent.status.changed");
         assert_eq!(payload["data"]["status"], "completed");
@@ -1554,7 +1771,10 @@ mod http_delivery_tests {
         // The event was attempted but delivery failed due to missing URL,
         // so the delivered count should reflect the attempt
         let delivered = result.unwrap();
-        assert_eq!(delivered, 0, "Should not count as delivered when URL is missing");
+        assert_eq!(
+            delivered, 0,
+            "Should not count as delivered when URL is missing"
+        );
     }
 
     // ========================================================================
@@ -1603,5 +1823,130 @@ mod http_delivery_tests {
             event.next_attempt_at.is_some(),
             "Next retry should be scheduled"
         );
+    }
+
+    // ========================================================================
+    // E2E Test: Delivery history filter and replay-by-event on DLQ
+    // ========================================================================
+
+    #[test]
+    fn test_delivery_history_and_dlq_replay_by_event() {
+        let delivery_service = Arc::new(WebhookDeliveryService::new());
+        let dlq_service = WebhookDlqService::new(delivery_service.clone());
+
+        let matching = delivery_service
+            .create_delivery_for_event(
+                "evt_history_match",
+                "intent.status.changed",
+                "tenant_1",
+                "https://primary.example.com/wh",
+            )
+            .expect("create should succeed");
+        let other = delivery_service
+            .create_delivery_for_event(
+                "evt_history_other",
+                "risk.review.required",
+                "tenant_1",
+                "https://backup.example.com/wh",
+            )
+            .expect("create should succeed");
+
+        let filtered = delivery_service
+            .query_deliveries(&DeliveryHistoryFilter {
+                tenant_id: Some("tenant_1".to_string()),
+                event_id: Some("evt_history_match".to_string()),
+                event_type: Some("intent.status.changed".to_string()),
+                endpoint_url: Some("https://primary.example.com/wh".to_string()),
+            })
+            .expect("query should succeed");
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].id, matching.id);
+
+        for delivery in [&matching, &other] {
+            for _ in 0..MAX_DELIVERY_ATTEMPTS {
+                delivery_service
+                    .schedule_retry(
+                        &delivery.id,
+                        "Server error",
+                        Some(500),
+                        Some(json!({
+                            "type": delivery.event_type.clone().unwrap(),
+                            "data": { "deliveryId": delivery.id }
+                        })),
+                    )
+                    .ok();
+            }
+        }
+
+        let replayed = dlq_service
+            .replay_event_from_dlq("tenant_1", "evt_history_match")
+            .expect("replay by event should succeed");
+        assert_eq!(replayed.len(), 1);
+        assert_eq!(replayed[0].event_id, "evt_history_match");
+        assert_eq!(
+            replayed[0].event_type.as_deref(),
+            Some("intent.status.changed")
+        );
+    }
+
+    // ========================================================================
+    // E2E Test: DLQ inspection supports event-type and endpoint filters
+    // ========================================================================
+
+    #[test]
+    fn test_dlq_inspection_filters_by_event_type_and_endpoint() {
+        let delivery_service = Arc::new(WebhookDeliveryService::new());
+        let dlq_service = WebhookDlqService::new(delivery_service.clone());
+
+        let matching = delivery_service
+            .create_delivery_for_event(
+                "evt_dlq_match",
+                "intent.status.changed",
+                "tenant_1",
+                "https://primary.example.com/wh",
+            )
+            .expect("create should succeed");
+        let other = delivery_service
+            .create_delivery_for_event(
+                "evt_dlq_other",
+                "risk.review.required",
+                "tenant_1",
+                "https://backup.example.com/wh",
+            )
+            .expect("create should succeed");
+
+        for delivery in [&matching, &other] {
+            for _ in 0..MAX_DELIVERY_ATTEMPTS {
+                delivery_service
+                    .schedule_retry(
+                        &delivery.id,
+                        "Exhausted retries",
+                        Some(500),
+                        Some(json!({
+                            "type": delivery.event_type.clone().unwrap(),
+                            "data": { "deliveryId": delivery.id }
+                        })),
+                    )
+                    .ok();
+            }
+        }
+
+        let filtered = dlq_service
+            .list_dlq_entries_filtered(
+                &DlqFilter {
+                    tenant_id: Some("tenant_1".to_string()),
+                    event_id: Some("evt_dlq_match".to_string()),
+                    event_type: Some("intent.status.changed".to_string()),
+                    endpoint_url: Some("https://primary.example.com/wh".to_string()),
+                    ..Default::default()
+                },
+                10,
+            )
+            .expect("filtered dlq query should succeed");
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].event_id, "evt_dlq_match");
+        assert_eq!(filtered[0].endpoint_url, "https://primary.example.com/wh");
+        assert_eq!(filtered[0].event_payload["type"], "intent.status.changed");
     }
 }

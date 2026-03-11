@@ -101,7 +101,10 @@ impl ActivityContext {
     }
 
     /// Set the bank confirmation repository for database-backed polling
-    pub fn with_bank_confirmation_repo(mut self, repo: Arc<dyn BankConfirmationRepository>) -> Self {
+    pub fn with_bank_confirmation_repo(
+        mut self,
+        repo: Arc<dyn BankConfirmationRepository>,
+    ) -> Self {
         self.bank_confirmation_repo = Some(repo);
         self
     }
@@ -173,7 +176,13 @@ pub async fn init_activity_context_with_adapters(
         }
     };
 
-    let ctx = ActivityContext::with_adapters(ledger_repo, webhook_repo, tenant_repo, case_manager, adapters);
+    let ctx = ActivityContext::with_adapters(
+        ledger_repo,
+        webhook_repo,
+        tenant_repo,
+        case_manager,
+        adapters,
+    );
     init_activity_context(ctx);
 
     info!("Activity context initialized with adapters from environment");
@@ -189,7 +198,13 @@ pub async fn init_activity_context_for_testing(
     case_manager: Arc<CaseManager>,
 ) {
     let adapters = ramp_adapter::create_test_adapters();
-    let ctx = ActivityContext::with_adapters(ledger_repo, webhook_repo, tenant_repo, case_manager, adapters);
+    let ctx = ActivityContext::with_adapters(
+        ledger_repo,
+        webhook_repo,
+        tenant_repo,
+        case_manager,
+        adapters,
+    );
     init_activity_context(ctx);
 
     info!("Activity context initialized with test adapters");
@@ -214,7 +229,13 @@ pub async fn init_activity_context_full(
         }
     };
 
-    let mut ctx = ActivityContext::with_adapters(ledger_repo, webhook_repo, tenant_repo, case_manager, adapters);
+    let mut ctx = ActivityContext::with_adapters(
+        ledger_repo,
+        webhook_repo,
+        tenant_repo,
+        case_manager,
+        adapters,
+    );
 
     if let Some(repo) = bank_confirmation_repo {
         ctx = ctx.with_bank_confirmation_repo(repo);
@@ -263,14 +284,19 @@ pub mod payin_activities {
             instructions: String,
         ) -> Self {
             // Try to parse QR data from instructions if it's JSON
-            let (qr_image, qr_content) = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&instructions) {
-                (
-                    json.get("qr_image_base64").and_then(|v| v.as_str()).map(String::from),
-                    json.get("qr_content").and_then(|v| v.as_str()).map(String::from),
-                )
-            } else {
-                (None, None)
-            };
+            let (qr_image, qr_content) =
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&instructions) {
+                    (
+                        json.get("qr_image_base64")
+                            .and_then(|v| v.as_str())
+                            .map(String::from),
+                        json.get("qr_content")
+                            .and_then(|v| v.as_str())
+                            .map(String::from),
+                    )
+                } else {
+                    (None, None)
+                };
 
             Self {
                 reference_code,
@@ -505,7 +531,10 @@ pub mod payin_activities {
                 ) {
                     let tenant_id_obj = ramp_common::types::TenantId::new(tenant);
 
-                    match repo.get_pending_by_reference(&tenant_id_obj, ref_code).await {
+                    match repo
+                        .get_pending_by_reference(&tenant_id_obj, ref_code)
+                        .await
+                    {
                         Ok(confirmations) => {
                             if let Some(db_confirmation) = confirmations.first() {
                                 info!(
@@ -516,21 +545,28 @@ pub mod payin_activities {
                                 );
 
                                 // Mark as matched in database
-                                if let Err(e) = repo.update_matched(&tenant_id_obj, &db_confirmation.id, intent_id).await {
+                                if let Err(e) = repo
+                                    .update_matched(&tenant_id_obj, &db_confirmation.id, intent_id)
+                                    .await
+                                {
                                     warn!(error = %e, "Failed to update confirmation status in database");
                                 }
 
                                 // Convert to BankConfirmation
-                                let bank_tx_id = db_confirmation.bank_tx_id.clone()
+                                let bank_tx_id = db_confirmation
+                                    .bank_tx_id
+                                    .clone()
                                     .or(db_confirmation.bank_reference.clone())
                                     .unwrap_or_else(|| db_confirmation.id.clone());
 
-                                let amount = db_confirmation.amount
+                                let amount = db_confirmation
+                                    .amount
                                     .to_string()
                                     .parse::<i64>()
                                     .unwrap_or(0);
 
-                                let settled_at = db_confirmation.transaction_time
+                                let settled_at = db_confirmation
+                                    .transaction_time
                                     .unwrap_or(db_confirmation.webhook_received_at)
                                     .to_rfc3339();
 
@@ -610,7 +646,10 @@ pub mod payin_activities {
                     }
                 }
             } else {
-                Err(format!("No adapter registered for provider: {}", provider_code))
+                Err(format!(
+                    "No adapter registered for provider: {}",
+                    provider_code
+                ))
             }
         } else {
             Err("No activity context available".to_string())
@@ -1055,7 +1094,9 @@ pub mod payout_activities {
                             reference_code: result.reference_code,
                             provider_tx_id: result.provider_tx_id,
                             status: status_str.to_string(),
-                            estimated_completion: result.estimated_completion.map(|dt| dt.to_rfc3339()),
+                            estimated_completion: result
+                                .estimated_completion
+                                .map(|dt| dt.to_rfc3339()),
                         })
                     }
                     Err(e) => {
@@ -1126,7 +1167,10 @@ pub mod payout_activities {
                     }
                 }
             } else {
-                Err(format!("No adapter registered for provider: {}", provider_code))
+                Err(format!(
+                    "No adapter registered for provider: {}",
+                    provider_code
+                ))
             }
         } else {
             // Simulation mode - return completed
@@ -1178,7 +1222,10 @@ pub mod payout_activities {
                     }
                 }
             } else {
-                Err(format!("No adapter registered for provider: {}", provider_code))
+                Err(format!(
+                    "No adapter registered for provider: {}",
+                    provider_code
+                ))
             }
         } else {
             Err("No activity context available".to_string())

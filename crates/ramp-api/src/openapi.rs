@@ -3,6 +3,7 @@
 use axum::http::{header, StatusCode};
 use axum::response::{Html, IntoResponse};
 use axum::Json;
+use serde_json::json;
 use utoipa::OpenApi;
 
 use crate::dto::*;
@@ -19,18 +20,16 @@ use crate::handlers::trade::*;
 // Import admin and bank_webhook handlers + utoipa __path_xxx generated types via re-export
 #[allow(unused_imports)]
 use crate::handlers::{
-    list_cases, get_case, update_case, get_case_stats,
-    list_users, get_user, get_dashboard,
-    handle_bank_webhook,
-    __path_list_cases, __path_get_case, __path_update_case, __path_get_case_stats,
-    __path_list_users, __path_get_user, __path_get_dashboard,
-    __path_handle_bank_webhook,
+    __path_get_case, __path_get_case_stats, __path_get_dashboard, __path_get_user,
+    __path_handle_bank_webhook, __path_list_cases, __path_list_users, __path_update_case, get_case,
+    get_case_stats, get_dashboard, get_user, handle_bank_webhook, list_cases, list_users,
+    update_case,
 };
 // Admin types with aliases to avoid name conflicts
 use crate::handlers::admin::{
-    CaseResponse, ListCasesResponse, UpdateCaseRequest, CaseStats, SeverityStats,
-    UserResponse as AdminUserResponse, ListUsersResponse,
-    DashboardStats, IntentStats as AdminIntentStats, UserStats, VolumeStats,
+    CaseResponse, CaseStats, DashboardStats, IntentStats as AdminIntentStats, ListCasesResponse,
+    ListUsersResponse, SeverityStats, UpdateCaseRequest, UserResponse as AdminUserResponse,
+    UserStats, VolumeStats,
 };
 
 /// RampOS API Documentation
@@ -39,7 +38,7 @@ use crate::handlers::admin::{
     info(
         title = "RampOS API",
         version = "1.0.0",
-        description = "BYOR (Bring Your Own Rails) - Crypto/VND Exchange Infrastructure API\n\n## Request Validation\n\nAll request bodies are validated before processing. Validation errors return HTTP 400 with detailed field-level error information in the following format:\n\n```json\n{\n  \"error\": {\n    \"code\": \"VALIDATION_ERROR\",\n    \"message\": \"Validation failed for N fields\",\n    \"details\": {\n      \"fieldName\": [{\"code\": \"length\", \"message\": \"...\"}]\n    }\n  }\n}\n```\n\n## Authentication\n\nAll endpoints require authentication via Bearer token (API key) in the Authorization header.",
+        description = "BYOR (Bring Your Own Rails) - Crypto/VND Exchange Infrastructure API\n\n## Request Validation\n\nAll request bodies are validated before processing. Validation errors return HTTP 400 with detailed field-level error information in the following format:\n\n```json\n{\n  \"error\": {\n    \"code\": \"VALIDATION_ERROR\",\n    \"message\": \"Validation failed for N fields\",\n    \"details\": {\n      \"fieldName\": [{\"code\": \"length\", \"message\": \"...\"}]\n    }\n  }\n}\n```\n\n## Authentication\n\nAll endpoints require authentication via Bearer token (API key) in the Authorization header.\n\n## Event Catalog\n\nWebhook and event payloads follow the current `v1` catalog contract. Event names are stable public identifiers such as `intent.status.changed` and `risk.review.required`. Current webhook wrappers use the `webhook_event` envelope with top-level `id`, `type`, `created_at`, and event-specific fields nested under `data`.\n\n## Contract-Driven SDKs and CLI\n\nPublic SDKs stay pinned to the OpenAPI contract. Bounded operator surfaces that are not yet promoted into first-class SDK namespaces are exposed through the thin `rampos-cli` preview and the existing admin endpoints, rather than a second client stack.",
         contact(
             name = "RampOS Team",
             email = "support@rampos.io",
@@ -57,7 +56,7 @@ use crate::handlers::admin::{
     ),
     tags(
         (name = "intents", description = "Intent management (payin, payout, trade)"),
-        (name = "events", description = "Event ingestion from rails providers"),
+        (name = "events", description = "Event ingestion from rails providers with stable cataloged event names and `v1` payload semantics"),
         (name = "users", description = "User management and balances"),
         (name = "admin", description = "Administrative endpoints for tenant and user management"),
         (name = "health", description = "Health check endpoints"),
@@ -65,7 +64,7 @@ use crate::handlers::admin::{
         (name = "chains", description = "Multi-chain operations and cross-chain bridging"),
         (name = "stablecoin", description = "VNST stablecoin mint, burn, reserves, and peg status"),
         (name = "domains", description = "Custom domain management for tenants"),
-        (name = "webhooks", description = "Incoming bank webhook processing")
+        (name = "webhooks", description = "Incoming bank webhook processing and outgoing tenant webhook contracts aligned to the `v1` event catalog")
     ),
     paths(
         // Intents
@@ -215,7 +214,8 @@ pub async fn openapi_json() -> impl IntoResponse {
 
 /// Serve Scalar API reference UI at /docs
 pub async fn docs_handler() -> Html<String> {
-    Html(r#"<!DOCTYPE html>
+    Html(
+        r#"<!DOCTYPE html>
 <html>
 <head>
     <title>RampOS API Documentation</title>
@@ -226,7 +226,9 @@ pub async fn docs_handler() -> Html<String> {
     <script id="api-reference" data-url="/openapi.json"></script>
     <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
 </body>
-</html>"#.to_string())
+</html>"#
+            .to_string(),
+    )
 }
 
 /// Security addon for API authentication
@@ -269,7 +271,493 @@ impl utoipa::Modify for SecurityAddon {
                 ),
             ),
         );
+
+        attach_manual_reconciliation_paths(openapi);
+        attach_manual_treasury_paths(openapi);
+        attach_manual_settlement_paths(openapi);
+        attach_manual_passport_paths(openapi);
+        attach_manual_kyb_paths(openapi);
+        attach_manual_config_bundle_paths(openapi);
     }
+}
+
+fn attach_manual_reconciliation_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    insert_manual_path(
+        openapi,
+        "/v1/admin/reconciliation/workbench",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "summary": "Load reconciliation workbench",
+                "description": "Returns the bounded reconciliation workbench snapshot used by the thin CLI and admin UI.",
+                "parameters": [
+                    {
+                        "name": "scenario",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional bounded fixture scenario such as `clean`.",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Reconciliation workbench snapshot",
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/reconciliation/export",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "summary": "Export reconciliation workbench",
+                "description": "Exports the bounded reconciliation queue snapshot as JSON or CSV.",
+                "parameters": [
+                    {
+                        "name": "scenario",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional bounded fixture scenario such as `clean`.",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "format",
+                        "in": "query",
+                        "required": false,
+                        "description": "Export format.",
+                        "schema": { "type": "string", "enum": ["json", "csv"] }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Reconciliation export artifact",
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            },
+                            "text/csv": {
+                                "schema": { "type": "string" }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/reconciliation/evidence/{id}",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "summary": "Load reconciliation evidence pack",
+                "description": "Returns the linked evidence pack for one reconciliation discrepancy.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "description": "Stable discrepancy identifier.",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "scenario",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional bounded fixture scenario such as `clean`.",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Reconciliation evidence pack",
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/reconciliation/evidence/{id}/export",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "summary": "Export reconciliation evidence pack",
+                "description": "Exports one reconciliation evidence pack as JSON.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "description": "Stable discrepancy identifier.",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "scenario",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional bounded fixture scenario such as `clean`.",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Reconciliation evidence export artifact",
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+}
+
+fn attach_manual_treasury_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    insert_manual_path(
+        openapi,
+        "/v1/admin/treasury/workbench",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "summary": "Load treasury workbench",
+                "description": "Returns the bounded recommendation-only treasury snapshot used by the admin UI.",
+                "parameters": [
+                    {
+                        "name": "scenario",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional bounded fixture scenario such as `stable`.",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Treasury workbench snapshot",
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/treasury/export",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "summary": "Export treasury workbench",
+                "description": "Exports the bounded treasury recommendation set as JSON or CSV.",
+                "parameters": [
+                    {
+                        "name": "scenario",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional bounded fixture scenario such as `stable`.",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "format",
+                        "in": "query",
+                        "required": false,
+                        "description": "Export format.",
+                        "schema": { "type": "string", "enum": ["json", "csv"] }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Treasury export artifact",
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            },
+                            "text/csv": {
+                                "schema": { "type": "string" }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+}
+
+fn attach_manual_settlement_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    insert_manual_path(
+        openapi,
+        "/v1/admin/settlement/workbench",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "summary": "Load bilateral settlement workbench",
+                "description": "Returns the bounded bilateral, approval-gated settlement proposal snapshot used by the admin UI.",
+                "parameters": [
+                    {
+                        "name": "scenario",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional bounded fixture scenario such as `clean` or `approval_pending`.",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Settlement workbench snapshot",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/settlement/export",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "summary": "Export bilateral settlement workbench",
+                "description": "Exports the bounded bilateral settlement proposal queue as JSON or CSV.",
+                "parameters": [
+                    {
+                        "name": "scenario",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional bounded fixture scenario such as `clean` or `approval_pending`.",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "format",
+                        "in": "query",
+                        "required": false,
+                        "description": "Export format.",
+                        "schema": { "type": "string", "enum": ["json", "csv"] }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Settlement export artifact",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } },
+                            "text/csv": { "schema": { "type": "string" } }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+}
+
+fn attach_manual_passport_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    insert_manual_path(
+        openapi,
+        "/v1/admin/passport/queue",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "summary": "List passport vault queue",
+                "description": "Returns the bounded shared-vault passport queue used for consent and review workflows.",
+                "parameters": [
+                    {
+                        "name": "scenario",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional bounded fixture scenario such as `revoked`.",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Passport queue snapshot",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/passport/packages/{id}",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "summary": "Load passport package detail",
+                "description": "Returns one bounded passport package detail including consent, freshness, and acceptance status.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "description": "Passport package identifier.",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "scenario",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional bounded fixture scenario such as `revoked`.",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Passport package detail",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+}
+
+fn attach_manual_kyb_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    insert_manual_path(
+        openapi,
+        "/v1/admin/kyb/reviews",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "summary": "List KYB ownership reviews",
+                "description": "Returns the bounded KYB review queue built from relational ownership edges.",
+                "parameters": [
+                    {
+                        "name": "scenario",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional bounded fixture scenario such as `clean`.",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "KYB review queue",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/kyb/graph/{id}",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "summary": "Load KYB graph review detail",
+                "description": "Returns one relational ownership graph review item for a business entity.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "description": "Business entity identifier.",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "scenario",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional bounded fixture scenario such as `clean`.",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "KYB graph review detail",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+}
+
+fn attach_manual_config_bundle_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    insert_manual_path(
+        openapi,
+        "/v1/admin/config-bundles/export",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "summary": "Export whitelisted config bundle",
+                "description": "Returns the bounded config bundle export used by admin settings tooling. Only whitelisted sections and actions are included.",
+                "responses": {
+                    "200": {
+                        "description": "Config bundle export artifact",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/extensions",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "summary": "List whitelisted extension actions",
+                "description": "Returns the bounded registry of allowed extension actions. No arbitrary extension execution is exposed.",
+                "responses": {
+                    "200": {
+                        "description": "Whitelisted extension action registry",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+}
+
+fn insert_manual_path(
+    openapi: &mut utoipa::openapi::OpenApi,
+    path: &str,
+    value: serde_json::Value,
+) {
+    let paths = &mut openapi.paths;
+    let path_item: utoipa::openapi::path::PathItem =
+        serde_json::from_value(value).expect("manual OpenAPI path item should deserialize");
+    paths.paths.insert(path.to_string(), path_item);
 }
 
 // Re-export error types for OpenAPI

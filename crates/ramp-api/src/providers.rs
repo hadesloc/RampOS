@@ -52,9 +52,7 @@ pub async fn build_event_publisher(
 
     // Resolve the effective NATS URL: env var first, then config value.
     // When the `nats` feature is disabled this variable is unused, which is expected.
-    let effective_nats_url = nats_url_from_env
-        .as_deref()
-        .unwrap_or(nats_url);
+    let effective_nats_url = nats_url_from_env.as_deref().unwrap_or(nats_url);
 
     // Determine publisher kind with auto-detection
     let kind = match std::env::var("EVENT_PUBLISHER") {
@@ -81,7 +79,10 @@ pub async fn build_event_publisher(
                      Set NATS_URL or RAMPOS__NATS__URL."
                 );
             }
-            info!("Connecting to NATS event publisher at {}", effective_nats_url);
+            info!(
+                "Connecting to NATS event publisher at {}",
+                effective_nats_url
+            );
             let publisher =
                 ramp_core::event::NatsEventPublisher::new(effective_nats_url, nats_stream).await?;
             Ok(Arc::new(publisher))
@@ -103,7 +104,10 @@ pub async fn build_event_publisher(
             Ok(Arc::new(InMemoryEventPublisher::new()))
         }
         other => {
-            anyhow::bail!("Unknown EVENT_PUBLISHER value: '{}'. Accepted: nats, memory", other);
+            anyhow::bail!(
+                "Unknown EVENT_PUBLISHER value: '{}'. Accepted: nats, memory",
+                other
+            );
         }
     }
 }
@@ -243,10 +247,7 @@ pub fn validate_production_providers() -> anyhow::Result<()> {
         Ok(())
     } else {
         let msg = errors.join("\n  - ");
-        anyhow::bail!(
-            "Production provider validation failed:\n  - {}",
-            msg
-        );
+        anyhow::bail!("Production provider validation failed:\n  - {}", msg);
     }
 }
 

@@ -10,18 +10,16 @@
 //! - Idempotency
 //! - Edge cases
 
-use std::sync::Arc;
 use chrono::Utc;
+use std::sync::Arc;
 
+use crate::jobs::webhook_retry::WebhookRetryWorker;
 use crate::service::webhook_delivery::{
-    calculate_next_retry, get_retry_delay_secs, DeliveryStatus,
-    WebhookDeliveryService, MAX_DELIVERY_ATTEMPTS,
+    calculate_next_retry, catalog_entry_for_delivery_event, get_retry_delay_secs,
+    DeliveryHistoryFilter, DeliveryStatus, WebhookDeliveryService, MAX_DELIVERY_ATTEMPTS,
 };
 use crate::service::webhook_dlq::WebhookDlqService;
-use crate::service::webhook_signing::{
-    WebhookSigningService, WebhookSignatureV2Error,
-};
-use crate::jobs::webhook_retry::WebhookRetryWorker;
+use crate::service::webhook_signing::{WebhookSignatureV2Error, WebhookSigningService};
 
 // ============================================================================
 // Test 1: Retry scheduling with correct delays
@@ -54,8 +52,16 @@ fn test_calculate_next_retry_with_jitter() {
     // Attempt 1 -> should be ~5 min in future (with up to 10% jitter)
     let next = calculate_next_retry(1).expect("should have next retry");
     let diff = (next - now).num_seconds();
-    assert!(diff >= 300, "Retry should be at least 300s in future, got {}s", diff);
-    assert!(diff <= 330, "Retry should be at most 330s (300 + 10% jitter), got {}s", diff);
+    assert!(
+        diff >= 300,
+        "Retry should be at least 300s in future, got {}s",
+        diff
+    );
+    assert!(
+        diff <= 330,
+        "Retry should be at most 330s (300 + 10% jitter), got {}s",
+        diff
+    );
 
     // Max attempts -> None
     assert!(calculate_next_retry(MAX_DELIVERY_ATTEMPTS).is_none());
@@ -80,17 +86,13 @@ fn test_delivery_lifecycle() {
 
     // First delivery fails
     let retried = service
-        .schedule_retry(
-            &delivery.id,
-            "Connection timeout",
-            Some(503),
-            None,
-        )
+        .schedule_retry(&delivery.id, "Connection timeout", Some(503), None)
         .expect("schedule_retry should succeed");
     assert!(retried, "Should schedule retry (not DLQ)");
 
     // Check delivery state
-    let updated = service.get_delivery(&delivery.id)
+    let updated = service
+        .get_delivery(&delivery.id)
         .expect("get should succeed")
         .expect("delivery should exist");
     assert_eq!(updated.attempts, 1);
@@ -99,10 +101,12 @@ fn test_delivery_lifecycle() {
     assert_eq!(updated.response_status_code, Some(503));
 
     // Now mark as delivered
-    service.mark_delivered(&delivery.id, 200)
+    service
+        .mark_delivered(&delivery.id, 200)
         .expect("mark_delivered should succeed");
 
-    let delivered = service.get_delivery(&delivery.id)
+    let delivered = service
+        .get_delivery(&delivery.id)
         .expect("get should succeed")
         .expect("delivery should exist");
     assert_eq!(delivered.status, DeliveryStatus::Delivered);
@@ -140,14 +144,16 @@ fn test_dlq_after_max_attempts() {
     }
 
     // Verify delivery is in DLQ status
-    let final_delivery = service.get_delivery(&delivery.id)
+    let final_delivery = service
+        .get_delivery(&delivery.id)
         .expect("get should succeed")
         .expect("delivery should exist");
     assert_eq!(final_delivery.status, DeliveryStatus::Dlq);
     assert!(final_delivery.next_retry_at.is_none());
 
     // Verify DLQ entry was created
-    let dlq_entries = service.get_dlq_entries("tenant_1", 100)
+    let dlq_entries = service
+        .get_dlq_entries("tenant_1", 100)
         .expect("get_dlq_entries should succeed");
     assert_eq!(dlq_entries.len(), 1);
     assert_eq!(dlq_entries[0].event_id, "evt_456");
@@ -171,7 +177,11 @@ fn test_signature_v2_sign_and_verify() {
 
     // Verify
     let verified = service.verify_v2(&result.header_value, payload, 300);
-    assert!(verified.is_ok(), "Verification should succeed: {:?}", verified);
+    assert!(
+        verified.is_ok(),
+        "Verification should succeed: {:?}",
+        verified
+    );
     assert_eq!(verified.unwrap(), result.timestamp);
 }
 
@@ -242,12 +252,8 @@ fn test_dual_signing() {
     assert_eq!(dual.timestamp, dual.timestamp);
 
     // v1 should be verifiable with HMAC
-    let v1_result = ramp_common::crypto::verify_webhook_signature(
-        hmac_secret,
-        &dual.v1_header,
-        payload,
-        300,
-    );
+    let v1_result =
+        ramp_common::crypto::verify_webhook_signature(hmac_secret, &dual.v1_header, payload, 300);
     assert!(v1_result.is_ok(), "v1 signature should verify");
 
     // v2 should be verifiable with Ed25519
@@ -280,21 +286,30 @@ fn test_replay_from_dlq() {
     }
 
     // Verify DLQ has the entry
-    let dlq_entries = dlq_service.list_dlq_entries("tenant_1", 100)
+    let dlq_entries = dlq_service
+        .list_dlq_entries("tenant_1", 100)
         .expect("list should succeed");
     assert_eq!(dlq_entries.len(), 1);
 
     // Replay
-    let replayed = dlq_service.replay_from_dlq(&dlq_entries[0].id)
+    let replayed = dlq_service
+        .replay_from_dlq(&dlq_entries[0].id)
         .expect("replay should succeed");
     assert_eq!(replayed.status, DeliveryStatus::Pending);
     assert_eq!(replayed.attempts, 0);
     assert_eq!(replayed.event_id, "evt_replay");
 
-    // Original DLQ entry should still exist (until explicitly purged)
-    let dlq_after = dlq_service.list_dlq_entries("tenant_1", 100)
+    // Replay should consume the original DLQ entry so duplicate manual replays are impossible.
+    let dlq_after = dlq_service
+        .list_dlq_entries("tenant_1", 100)
         .expect("list should succeed");
-    assert_eq!(dlq_after.len(), 1);
+    assert!(dlq_after.is_empty());
+
+    let replay_again = dlq_service.replay_from_dlq(&dlq_entries[0].id);
+    assert!(
+        replay_again.is_err(),
+        "a consumed DLQ entry must not be replayable again"
+    );
 }
 
 // ============================================================================
@@ -316,29 +331,105 @@ fn test_concurrent_delivery_tracking() {
         .expect("create should succeed");
 
     // Deliver d1, fail d2, leave d3 pending
-    service.mark_delivered(&d1.id, 200).expect("mark should succeed");
-    service.schedule_retry(&d2.id, "Timeout", Some(504), None).expect("retry should succeed");
+    service
+        .mark_delivered(&d1.id, 200)
+        .expect("mark should succeed");
+    service
+        .schedule_retry(&d2.id, "Timeout", Some(504), None)
+        .expect("retry should succeed");
 
     // Check per-event queries
-    let d1_history = service.get_deliveries_for_event("evt_a").expect("query should succeed");
+    let d1_history = service
+        .get_deliveries_for_event("evt_a")
+        .expect("query should succeed");
     assert_eq!(d1_history.len(), 1);
     assert_eq!(d1_history[0].status, DeliveryStatus::Delivered);
 
-    let d2_history = service.get_deliveries_for_event("evt_b").expect("query should succeed");
+    let d2_history = service
+        .get_deliveries_for_event("evt_b")
+        .expect("query should succeed");
     assert_eq!(d2_history.len(), 1);
     assert_eq!(d2_history[0].status, DeliveryStatus::Pending);
     assert_eq!(d2_history[0].attempts, 1);
 
     // Check per-tenant queries
-    let tenant1 = service.get_deliveries_for_tenant("tenant_1", 100, 0).expect("query should succeed");
+    let tenant1 = service
+        .get_deliveries_for_tenant("tenant_1", 100, 0)
+        .expect("query should succeed");
     assert_eq!(tenant1.len(), 2);
 
-    let tenant2 = service.get_deliveries_for_tenant("tenant_2", 100, 0).expect("query should succeed");
+    let tenant2 = service
+        .get_deliveries_for_tenant("tenant_2", 100, 0)
+        .expect("query should succeed");
     assert_eq!(tenant2.len(), 1);
 }
 
 // ============================================================================
-// Test 11: Idempotency - same event can have multiple deliveries
+// Test 11: Delivery layer uses the stable event catalog contract
+// ============================================================================
+#[test]
+fn test_delivery_catalog_lookup_uses_current_event_contract() {
+    let entry = catalog_entry_for_delivery_event("intent.status.changed")
+        .expect("intent.status.changed should exist in the event catalog");
+
+    assert_eq!(entry.event_name, "intent.status.changed");
+    assert_eq!(entry.version, "v1");
+    assert_eq!(entry.payload_wrapper, "webhook_event");
+}
+
+// ============================================================================
+// Test 12: Delivery history filters support endpoint, event type, and event id
+// ============================================================================
+#[test]
+fn test_delivery_history_filters_by_endpoint_event_type_and_event_id() {
+    let service = WebhookDeliveryService::new();
+
+    service
+        .create_delivery_for_event(
+            "evt_filter_a",
+            "intent.status.changed",
+            "tenant_1",
+            "https://primary.example.com/wh",
+        )
+        .expect("create should succeed");
+    service
+        .create_delivery_for_event(
+            "evt_filter_b",
+            "risk.review.required",
+            "tenant_1",
+            "https://primary.example.com/wh",
+        )
+        .expect("create should succeed");
+    service
+        .create_delivery_for_event(
+            "evt_filter_a",
+            "intent.status.changed",
+            "tenant_1",
+            "https://backup.example.com/wh",
+        )
+        .expect("create should succeed");
+
+    let filtered = service
+        .query_deliveries(&DeliveryHistoryFilter {
+            tenant_id: Some("tenant_1".to_string()),
+            event_id: Some("evt_filter_a".to_string()),
+            event_type: Some("intent.status.changed".to_string()),
+            endpoint_url: Some("https://primary.example.com/wh".to_string()),
+            ..Default::default()
+        })
+        .expect("query should succeed");
+
+    assert_eq!(filtered.len(), 1);
+    assert_eq!(filtered[0].event_id, "evt_filter_a");
+    assert_eq!(
+        filtered[0].event_type.as_deref(),
+        Some("intent.status.changed")
+    );
+    assert_eq!(filtered[0].endpoint_url, "https://primary.example.com/wh");
+}
+
+// ============================================================================
+// Test 13: Idempotency - same event can have multiple deliveries
 // ============================================================================
 #[test]
 fn test_idempotency_multiple_deliveries() {
@@ -359,12 +450,137 @@ fn test_idempotency_multiple_deliveries() {
     assert_eq!(d1.event_id, d2.event_id);
 
     // Query by event should return both
-    let deliveries = service.get_deliveries_for_event("evt_same").expect("query should succeed");
+    let deliveries = service
+        .get_deliveries_for_event("evt_same")
+        .expect("query should succeed");
     assert_eq!(deliveries.len(), 2);
 }
 
 // ============================================================================
-// Test 12: Ed25519 key pair from seed is deterministic
+// Test 14: Replay-by-event requeues matching DLQ deliveries
+// ============================================================================
+#[test]
+fn test_replay_by_event_from_dlq_requeues_matching_entries() {
+    let delivery_service = Arc::new(WebhookDeliveryService::new());
+    let dlq_service = WebhookDlqService::new(delivery_service.clone());
+
+    let matching = delivery_service
+        .create_delivery_for_event(
+            "evt_replay_batch",
+            "intent.status.changed",
+            "tenant_1",
+            "https://primary.example.com/wh",
+        )
+        .expect("create should succeed");
+    let other = delivery_service
+        .create_delivery_for_event(
+            "evt_other_batch",
+            "risk.review.required",
+            "tenant_1",
+            "https://backup.example.com/wh",
+        )
+        .expect("create should succeed");
+
+    for delivery in [&matching, &other] {
+        for _ in 0..MAX_DELIVERY_ATTEMPTS {
+            delivery_service
+                .schedule_retry(
+                    &delivery.id,
+                    "Server error",
+                    Some(500),
+                    Some(serde_json::json!({
+                        "type": delivery.event_type.clone().unwrap(),
+                        "data": {"deliveryId": delivery.id}
+                    })),
+                )
+                .ok();
+        }
+    }
+
+    let replayed = dlq_service
+        .replay_event_from_dlq("tenant_1", "evt_replay_batch")
+        .expect("replay-by-event should succeed");
+
+    assert_eq!(replayed.len(), 1);
+    assert_eq!(replayed[0].event_id, "evt_replay_batch");
+    assert_eq!(
+        replayed[0].event_type.as_deref(),
+        Some("intent.status.changed")
+    );
+}
+
+// ============================================================================
+// Test 15: Replay-by-event only targets unique endpoints from the original set
+// ============================================================================
+#[test]
+fn test_replay_deliveries_for_event_deduplicates_endpoints_and_skips_prior_replays() {
+    let service = WebhookDeliveryService::new();
+
+    let original_primary = service
+        .create_delivery_for_event(
+            "evt_replay_safe",
+            "intent.status.changed",
+            "tenant_1",
+            "https://primary.example.com/wh",
+        )
+        .expect("create should succeed");
+    let _duplicate_primary = service
+        .create_delivery_for_event(
+            "evt_replay_safe",
+            "intent.status.changed",
+            "tenant_1",
+            "https://primary.example.com/wh",
+        )
+        .expect("create should succeed");
+    let original_backup = service
+        .create_delivery_for_event(
+            "evt_replay_safe",
+            "intent.status.changed",
+            "tenant_1",
+            "https://backup.example.com/wh",
+        )
+        .expect("create should succeed");
+
+    let first_replay = service
+        .replay_deliveries_for_event("evt_replay_safe")
+        .expect("first replay should succeed");
+
+    assert_eq!(
+        first_replay.len(),
+        2,
+        "replay-by-event should fan out to each unique endpoint once"
+    );
+    assert_eq!(
+        first_replay
+            .iter()
+            .filter(|delivery| delivery.endpoint_url == "https://primary.example.com/wh")
+            .count(),
+        1
+    );
+    assert_eq!(
+        first_replay
+            .iter()
+            .filter(|delivery| delivery.endpoint_url == "https://backup.example.com/wh")
+            .count(),
+        1
+    );
+
+    let second_replay = service
+        .replay_deliveries_for_event("evt_replay_safe")
+        .expect("second replay should succeed");
+
+    assert_eq!(
+        second_replay.len(),
+        2,
+        "prior replay deliveries must not become replay sources themselves"
+    );
+    assert!(second_replay.iter().all(|delivery| {
+        delivery.id != original_primary.id && delivery.id != original_backup.id
+    }));
+}
+
+// ============================================================================
+// Test 16: Ed25519 key pair from seed is deterministic
 // ============================================================================
 #[test]
 fn test_signing_key_deterministic_from_seed() {
@@ -380,11 +596,14 @@ fn test_signing_key_deterministic_from_seed() {
     let payload = b"deterministic test";
     let sig = service1.sign_v2(payload).expect("sign should succeed");
     let verified = service2.verify_v2(&sig.header_value, payload, 300);
-    assert!(verified.is_ok(), "Cross-service verification should succeed");
+    assert!(
+        verified.is_ok(),
+        "Cross-service verification should succeed"
+    );
 }
 
 // ============================================================================
-// Test 13: Verify with external public key
+// Test 17: Verify with external public key
 // ============================================================================
 #[test]
 fn test_verify_with_external_key() {
@@ -398,17 +617,16 @@ fn test_verify_with_external_key() {
     let pub_key = service.public_key_bytes();
 
     // Verify using static method with external key
-    let verified = WebhookSigningService::verify_v2_with_key(
-        &pub_key,
-        &result.header_value,
-        payload,
-        300,
+    let verified =
+        WebhookSigningService::verify_v2_with_key(&pub_key, &result.header_value, payload, 300);
+    assert!(
+        verified.is_ok(),
+        "Verification with external key should succeed"
     );
-    assert!(verified.is_ok(), "Verification with external key should succeed");
 }
 
 // ============================================================================
-// Test 14: DLQ stats
+// Test 18: DLQ stats
 // ============================================================================
 #[test]
 fn test_dlq_stats() {
@@ -416,14 +634,20 @@ fn test_dlq_stats() {
     let dlq_service = WebhookDlqService::new(delivery_service.clone());
 
     // Initially empty
-    let stats = dlq_service.get_dlq_stats("tenant_1").expect("stats should succeed");
+    let stats = dlq_service
+        .get_dlq_stats("tenant_1")
+        .expect("stats should succeed");
     assert_eq!(stats.total_entries, 0);
     assert!(stats.oldest_entry_at.is_none());
 
     // Create and exhaust two deliveries
     for i in 0..2 {
         let d = delivery_service
-            .create_delivery(&format!("evt_stat_{}", i), "tenant_1", "https://example.com/wh")
+            .create_delivery(
+                &format!("evt_stat_{}", i),
+                "tenant_1",
+                "https://example.com/wh",
+            )
             .expect("create should succeed");
 
         for _ in 0..MAX_DELIVERY_ATTEMPTS {
@@ -433,14 +657,16 @@ fn test_dlq_stats() {
         }
     }
 
-    let stats = dlq_service.get_dlq_stats("tenant_1").expect("stats should succeed");
+    let stats = dlq_service
+        .get_dlq_stats("tenant_1")
+        .expect("stats should succeed");
     assert_eq!(stats.total_entries, 2);
     assert!(stats.oldest_entry_at.is_some());
     assert!(stats.newest_entry_at.is_some());
 }
 
 // ============================================================================
-// Test 15: WebhookRetryWorker processes pending deliveries
+// Test 19: WebhookRetryWorker processes pending deliveries
 // ============================================================================
 #[tokio::test]
 async fn test_webhook_retry_worker_processes_pending() {
@@ -454,16 +680,18 @@ async fn test_webhook_retry_worker_processes_pending() {
         .create_delivery("evt_worker_2", "tenant_1", "https://example.com/wh")
         .expect("create should succeed");
 
-    let worker = WebhookRetryWorker::new(delivery_service.clone())
-        .with_batch_size(10);
+    let worker = WebhookRetryWorker::new(delivery_service.clone()).with_batch_size(10);
 
     // Process pending
-    let count = worker.process_pending().await.expect("process should succeed");
+    let count = worker
+        .process_pending()
+        .await
+        .expect("process should succeed");
     assert_eq!(count, 2, "Should process 2 pending deliveries");
 }
 
 // ============================================================================
-// Test 16: Malformed v2 signature headers are rejected
+// Test 20: Malformed v2 signature headers are rejected
 // ============================================================================
 #[test]
 fn test_malformed_v2_headers() {

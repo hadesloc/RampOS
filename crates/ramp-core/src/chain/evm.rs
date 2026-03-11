@@ -9,16 +9,16 @@
 //! - BSC
 //! - Avalanche
 
-use async_trait::async_trait;
-use alloy::primitives::{Address, Bytes, U256, B256};
+use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::providers::Provider;
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
 use super::{
-    Balance, Chain, ChainError, ChainId, ChainType, FeeEstimate, FeeOption, Result,
-    TokenBalance, Transaction, TxHash, TxState, TxStatus, UnifiedAddress,
+    Balance, Chain, ChainError, ChainId, ChainType, FeeEstimate, FeeOption, Result, TokenBalance,
+    Transaction, TxHash, TxState, TxStatus, UnifiedAddress,
 };
 
 /// EVM Chain configuration
@@ -159,19 +159,19 @@ pub struct EvmChain {
 impl EvmChain {
     /// Create a new EVM chain instance
     pub fn new(config: EvmChainConfig) -> Result<Self> {
-        let url: reqwest::Url = config.rpc_url.parse()
+        let url: reqwest::Url = config
+            .rpc_url
+            .parse()
             .map_err(|e| ChainError::RpcError(format!("Invalid RPC URL: {}", e)))?;
-        let provider = alloy::providers::ProviderBuilder::new()
-            .on_http(url);
+        let provider = alloy::providers::ProviderBuilder::new().on_http(url);
 
-        Ok(Self {
-            config,
-            provider,
-        })
+        Ok(Self { config, provider })
     }
 
     /// Get the provider
-    pub fn provider(&self) -> &alloy::providers::RootProvider<alloy::transports::http::Http<reqwest::Client>> {
+    pub fn provider(
+        &self,
+    ) -> &alloy::providers::RootProvider<alloy::transports::http::Http<reqwest::Client>> {
         &self.provider
     }
 
@@ -191,7 +191,9 @@ impl EvmChain {
 
     /// Parse U256 from string
     fn parse_u256(value: &str) -> Result<U256> {
-        value.parse::<U256>().map_err(|e| ChainError::Internal(e.to_string()))
+        value
+            .parse::<U256>()
+            .map_err(|e| ChainError::Internal(e.to_string()))
     }
 }
 
@@ -254,7 +256,9 @@ impl Chain for EvmChain {
 
         let call = alloy::rpc::types::TransactionRequest::default()
             .to(token_addr)
-            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(calldata)));
+            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(
+                calldata,
+            )));
 
         let result = self
             .provider
@@ -273,7 +277,9 @@ impl Chain for EvmChain {
         let decimals_calldata = hex::decode("313ce567").unwrap(); // decimals selector
         let decimals_call = alloy::rpc::types::TransactionRequest::default()
             .to(token_addr)
-            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(decimals_calldata)));
+            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(
+                decimals_calldata,
+            )));
 
         let decimals_result = self
             .provider
@@ -292,13 +298,11 @@ impl Chain for EvmChain {
         let symbol_calldata = hex::decode("95d89b41").unwrap(); // symbol selector
         let symbol_call = alloy::rpc::types::TransactionRequest::default()
             .to(token_addr)
-            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(symbol_calldata)));
+            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(
+                symbol_calldata,
+            )));
 
-        let symbol_result = self
-            .provider
-            .call(&symbol_call)
-            .await
-            .unwrap_or_default();
+        let symbol_result = self.provider.call(&symbol_call).await.unwrap_or_default();
 
         let symbol_bytes: &[u8] = symbol_result.as_ref();
         let symbol = if symbol_bytes.len() > 64 {
@@ -350,7 +354,8 @@ impl Chain for EvmChain {
             .value(value);
 
         if let Some(data) = &tx.data {
-            tx_request.input = alloy::rpc::types::TransactionInput::new(Bytes::copy_from_slice(data));
+            tx_request.input =
+                alloy::rpc::types::TransactionInput::new(Bytes::copy_from_slice(data));
         }
 
         if let Some(gas_limit) = tx.gas_limit {
@@ -515,7 +520,8 @@ impl Chain for EvmChain {
             .value(value);
 
         if let Some(data) = &tx.data {
-            tx_request.input = alloy::rpc::types::TransactionInput::new(Bytes::copy_from_slice(data));
+            tx_request.input =
+                alloy::rpc::types::TransactionInput::new(Bytes::copy_from_slice(data));
         }
 
         // Estimate gas

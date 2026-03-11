@@ -282,16 +282,16 @@ fn verify_hmac_signature(
     // Parse timestamp to ensure it's valid (ISO8601 or unix seconds/millis)
     parse_timestamp(timestamp).map_err(|_| SignatureValidationError::InvalidTimestamp)?;
 
-    // Get the API secret (decrypted)
-    // In production, this should use proper decryption
     let api_secret = tenant
         .api_secret_encrypted
         .as_ref()
         .ok_or(SignatureValidationError::NoApiSecret)?;
 
-    // For now, api_secret is stored as plain bytes (TODO: implement proper encryption)
-    let api_secret_str =
-        String::from_utf8(api_secret.clone()).map_err(|_| SignatureValidationError::NoApiSecret)?;
+    let api_secret_str = String::from_utf8(
+        decode_stored_api_secret(api_secret)
+            .map_err(|_| SignatureValidationError::NoApiSecret)?,
+    )
+    .map_err(|_| SignatureValidationError::NoApiSecret)?;
 
     // Reconstruct the message: method\npath\ntimestamp\nbody
     // This matches the SDK signing format
@@ -300,7 +300,10 @@ fn verify_hmac_signature(
 
     debug!("HMAC verification - message: {:?}", message);
     debug!("HMAC verification - secret: [REDACTED]");
-    debug!("HMAC verification - provided signature: {}", provided_signature);
+    debug!(
+        "HMAC verification - provided signature: {}",
+        provided_signature
+    );
 
     // Compute HMAC-SHA256
     let mut mac = HmacSha256::new_from_slice(api_secret_str.as_bytes())
@@ -308,7 +311,10 @@ fn verify_hmac_signature(
     mac.update(message.as_bytes());
     let expected_signature = hex::encode(mac.finalize().into_bytes());
 
-    debug!("HMAC verification - expected signature: {}", expected_signature);
+    debug!(
+        "HMAC verification - expected signature: {}",
+        expected_signature
+    );
 
     // Constant-time comparison to prevent timing attacks
     let provided_bytes = provided_signature.as_bytes();
@@ -323,6 +329,10 @@ fn verify_hmac_signature(
     } else {
         Err(SignatureValidationError::InvalidSignature)
     }
+}
+
+fn decode_stored_api_secret(secret: &[u8]) -> std::result::Result<Vec<u8>, ramp_common::Error> {
+    ramp_core::service::crypto::decode_secret_from_storage(secret, "API secret")
 }
 
 fn parse_timestamp(timestamp_str: &str) -> Result<DateTime<Utc>, TimestampValidationError> {
@@ -496,5 +506,19 @@ mod tests {
             ),
             "Wrong signature should fail"
         );
+    }
+
+    #[test]
+    fn test_decode_stored_api_secret_rejects_legacy_raw_secret_in_production_without_key() {
+        std::env::set_var("RUST_ENV", "production");
+        std::env::remove_var("ENCRYPTION_MASTER_KEY");
+
+        let err = decode_stored_api_secret(b"test-secret").unwrap_err();
+        assert!(
+            format!("{err}").contains("migration"),
+            "expected production mode to reject raw stored secret, got {err}"
+        );
+
+        std::env::remove_var("RUST_ENV");
     }
 }

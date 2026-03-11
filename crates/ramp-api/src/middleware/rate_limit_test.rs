@@ -1,7 +1,6 @@
+use crate::middleware::tenant::{TenantContext, TenantTier};
 use crate::middleware::{rate_limit_middleware, RateLimitConfig, RateLimitError, RateLimitResult};
 use crate::middleware::{RateLimitStore, RateLimiter};
-use crate::middleware::tenant::{TenantContext, TenantTier};
-use ramp_common::types::TenantId;
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -9,6 +8,7 @@ use axum::{
     routing::get,
     Router,
 };
+use ramp_common::types::TenantId;
 use std::sync::{Arc, Mutex};
 use tokio::time::Duration;
 use tower::ServiceExt; // for oneshot
@@ -158,13 +158,13 @@ async fn test_enterprise_rate_limit() {
         name: "Standard Tenant".to_string(),
         tier: TenantTier::Standard,
     };
-    
+
     let mut req = Request::builder().uri("/").body(Body::empty()).unwrap();
     req.extensions_mut().insert(context);
 
     let response = app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let limit_header = response.headers().get("X-RateLimit-Limit").unwrap();
     assert_eq!(limit_header, "100");
 

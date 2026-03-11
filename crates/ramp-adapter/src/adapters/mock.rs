@@ -261,10 +261,7 @@ impl RailsAdapter for MockAdapter {
 
         // Set initial status
         let mut statuses = self.payout_statuses.write().await;
-        statuses.insert(
-            request.reference_code,
-            self.behavior.default_payout_status,
-        );
+        statuses.insert(request.reference_code, self.behavior.default_payout_status);
 
         info!(
             provider_tx_id = %result.provider_tx_id,

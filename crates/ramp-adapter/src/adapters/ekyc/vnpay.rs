@@ -208,7 +208,7 @@ impl VnpayEkycProvider {
 struct VnpayIdVerifyRequest {
     request_id: String,
     document_type: String,
-    front_image: String, // Base64
+    front_image: String,        // Base64
     back_image: Option<String>, // Base64
 }
 
@@ -245,7 +245,7 @@ struct VnpayOcrResult {
 #[derive(Debug, Serialize)]
 struct VnpayFaceMatchRequest {
     request_id: String,
-    selfie_image: String, // Base64
+    selfie_image: String,   // Base64
     id_photo_image: String, // Base64
 }
 
@@ -318,9 +318,8 @@ impl EkycProvider for VnpayEkycProvider {
             }),
         };
 
-        let response: VnpayIdVerifyResponse = self
-            .make_request("/ocr/verify", &vnpay_request)
-            .await?;
+        let response: VnpayIdVerifyResponse =
+            self.make_request("/ocr/verify", &vnpay_request).await?;
 
         if response.code != "00" && response.code != "0" && response.code != "200" {
             return Ok(IdVerification {
@@ -403,9 +402,8 @@ impl EkycProvider for VnpayEkycProvider {
             ),
         };
 
-        let response: VnpayFaceMatchResponse = self
-            .make_request("/face/match", &vnpay_request)
-            .await?;
+        let response: VnpayFaceMatchResponse =
+            self.make_request("/face/match", &vnpay_request).await?;
 
         if response.code != "00" && response.code != "0" && response.code != "200" {
             return Ok(FaceMatch {
@@ -464,9 +462,8 @@ impl EkycProvider for VnpayEkycProvider {
             check_type: check_type_str.to_string(),
         };
 
-        let response: VnpayLivenessResponse = self
-            .make_request("/liveness/check", &vnpay_request)
-            .await?;
+        let response: VnpayLivenessResponse =
+            self.make_request("/liveness/check", &vnpay_request).await?;
 
         if response.code != "00" && response.code != "0" && response.code != "200" {
             return Ok(LivenessResult {
@@ -532,7 +529,10 @@ impl EkycProvider for VnpayEkycProvider {
             check: "ping".to_string(),
         };
 
-        match self.make_request::<_, HealthResponse>("/health", &request).await {
+        match self
+            .make_request::<_, HealthResponse>("/health", &request)
+            .await
+        {
             Ok(resp) => Ok(resp.code == "00" || resp.code == "0" || resp.code == "200"),
             Err(e) => {
                 warn!(error = %e, "VNPay health check failed");
@@ -555,8 +555,14 @@ mod tests {
 
     #[test]
     fn test_doc_type_conversion() {
-        assert_eq!(VnpayEkycProvider::doc_type_to_vnpay(IdDocumentType::Cccd), "CCCD");
-        assert_eq!(VnpayEkycProvider::doc_type_to_vnpay(IdDocumentType::Passport), "PASSPORT");
+        assert_eq!(
+            VnpayEkycProvider::doc_type_to_vnpay(IdDocumentType::Cccd),
+            "CCCD"
+        );
+        assert_eq!(
+            VnpayEkycProvider::doc_type_to_vnpay(IdDocumentType::Passport),
+            "PASSPORT"
+        );
 
         assert!(matches!(
             VnpayEkycProvider::vnpay_to_doc_type("CCCD"),

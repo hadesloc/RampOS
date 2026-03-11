@@ -7,12 +7,12 @@ mod metering;
 mod stripe;
 
 pub use metering::{
-    MeterEvent, MeterType, MetricAggregation, MetricValue, UsageMeter, UsageMetrics,
-    UsagePeriod, UsageRecord, UsageSummary,
+    MeterEvent, MeterType, MetricAggregation, MetricValue, UsageMeter, UsageMetrics, UsagePeriod,
+    UsageRecord, UsageSummary,
 };
 pub use stripe::{
-    BillingPlan, BillingPlanTier, Invoice, InvoiceItem, InvoiceStatus, PlanFeature,
-    PricingModel, StripeClient, StripeConfig, StripeError, Subscription, SubscriptionStatus,
+    BillingPlan, BillingPlanTier, Invoice, InvoiceItem, InvoiceStatus, PlanFeature, PricingModel,
+    StripeClient, StripeConfig, StripeError, Subscription, SubscriptionStatus,
 };
 
 use async_trait::async_trait;
@@ -115,7 +115,8 @@ pub enum BillingEventType {
 #[async_trait]
 pub trait BillingDataProvider: Send + Sync {
     /// Get tenant billing status
-    async fn get_tenant_billing(&self, tenant_id: &TenantId) -> Result<Option<TenantBillingStatus>>;
+    async fn get_tenant_billing(&self, tenant_id: &TenantId)
+        -> Result<Option<TenantBillingStatus>>;
 
     /// Store tenant billing status
     async fn store_tenant_billing(&self, status: &TenantBillingStatus) -> Result<()>;
@@ -147,10 +148,7 @@ pub struct BillingService {
 }
 
 impl BillingService {
-    pub fn new(
-        config: BillingConfig,
-        data_provider: Arc<dyn BillingDataProvider>,
-    ) -> Self {
+    pub fn new(config: BillingConfig, data_provider: Arc<dyn BillingDataProvider>) -> Self {
         let stripe_client = Arc::new(StripeClient::new(config.stripe.clone()));
         let usage_meter = Arc::new(UsageMeter::new());
 
@@ -199,11 +197,10 @@ impl BillingService {
         plan_id: &str,
         stripe_customer_id: &str,
     ) -> Result<Subscription> {
-        let plan = self
-            .data_provider
-            .get_plan(plan_id)
-            .await?
-            .ok_or_else(|| ramp_common::Error::Validation(format!("Plan {} not found", plan_id)))?;
+        let plan =
+            self.data_provider.get_plan(plan_id).await?.ok_or_else(|| {
+                ramp_common::Error::Validation(format!("Plan {} not found", plan_id))
+            })?;
 
         let subscription = self
             .stripe_client
@@ -459,7 +456,10 @@ pub mod mock {
         }
 
         async fn record_event(&self, event: &BillingEvent) -> Result<()> {
-            self.events.lock().expect("Lock poisoned").push(event.clone());
+            self.events
+                .lock()
+                .expect("Lock poisoned")
+                .push(event.clone());
             Ok(())
         }
 
@@ -475,9 +475,7 @@ pub mod mock {
                 .expect("Lock poisoned")
                 .iter()
                 .filter(|e| {
-                    e.tenant_id.0 == tenant_id.0
-                        && e.created_at >= from
-                        && e.created_at <= to
+                    e.tenant_id.0 == tenant_id.0 && e.created_at >= from && e.created_at <= to
                 })
                 .cloned()
                 .collect())
@@ -571,7 +569,10 @@ mod tests {
             .unwrap();
 
         let usage = service.get_usage(&tenant_id).await.unwrap();
-        assert_eq!(usage.transaction_volume, rust_decimal::Decimal::from(50_000_000));
+        assert_eq!(
+            usage.transaction_volume,
+            rust_decimal::Decimal::from(50_000_000)
+        );
     }
 
     #[tokio::test]
@@ -580,7 +581,11 @@ mod tests {
         let tenant_id = TenantId::new("test_tenant");
 
         service
-            .record_usage(&tenant_id, MeterType::StorageBytes, MetricValue::Bytes(1024 * 1024))
+            .record_usage(
+                &tenant_id,
+                MeterType::StorageBytes,
+                MetricValue::Bytes(1024 * 1024),
+            )
             .await
             .unwrap();
 

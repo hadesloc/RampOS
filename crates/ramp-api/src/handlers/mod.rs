@@ -2,21 +2,21 @@
 
 pub mod aa;
 pub mod admin;
+pub mod auth;
 pub mod balance;
 pub mod bank_webhooks;
+pub mod chain;
+pub mod custody;
+pub mod domain;
 pub mod health;
 pub mod intent;
+pub mod lp;
 pub mod payin;
 pub mod payout;
 pub mod portal;
-pub mod domain;
 pub mod stablecoin;
 pub mod trade;
-pub mod auth;
-pub mod chain;
-pub mod custody;
 pub mod ws;
-pub mod lp;
 
 pub use aa::*;
 pub use admin::*;

@@ -7,7 +7,7 @@
 //! - Create session keys
 //! - Get deposit info
 
-use alloy::primitives::{Address, keccak256};
+use alloy::primitives::{keccak256, Address};
 use axum::{
     extract::{Query, State},
     routing::{get, post},
@@ -366,10 +366,9 @@ pub async fn get_deposit_info(
         ));
     }
 
-    let aa_service = app_state
-        .aa_service
-        .as_ref()
-        .ok_or_else(|| ApiError::Internal("Deposit information service not configured".to_string()))?;
+    let aa_service = app_state.aa_service.as_ref().ok_or_else(|| {
+        ApiError::Internal("Deposit information service not configured".to_string())
+    })?;
 
     let repo = aa_service
         .smart_account_repo

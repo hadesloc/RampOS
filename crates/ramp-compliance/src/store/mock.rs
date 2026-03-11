@@ -146,7 +146,12 @@ impl CaseStore for InMemoryCaseStore {
         Ok(())
     }
 
-    async fn assign_case(&self, tenant_id: &TenantId, case_id: &str, assigned_to: &str) -> Result<()> {
+    async fn assign_case(
+        &self,
+        tenant_id: &TenantId,
+        case_id: &str,
+        assigned_to: &str,
+    ) -> Result<()> {
         if let Some(case) = self.cases.lock().await.get_mut(case_id) {
             if &case.tenant_id != tenant_id {
                 return Err(Error::NotFound("Case not found".to_string()));

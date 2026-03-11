@@ -138,12 +138,7 @@ impl FeeCalculator {
     }
 
     /// Calculate deposit fee
-    pub fn calculate_deposit_fee(
-        &self,
-        amount: Decimal,
-        _currency: &str,
-        tenant_id: &str,
-    ) -> Fee {
+    pub fn calculate_deposit_fee(&self, amount: Decimal, _currency: &str, tenant_id: &str) -> Fee {
         let config = self.get_config(tenant_id);
         self.calculate(&config.deposit, amount)
     }
@@ -160,12 +155,7 @@ impl FeeCalculator {
     }
 
     /// Calculate trade fee
-    pub fn calculate_trade_fee(
-        &self,
-        amount: Decimal,
-        _currency: &str,
-        tenant_id: &str,
-    ) -> Fee {
+    pub fn calculate_trade_fee(&self, amount: Decimal, _currency: &str, tenant_id: &str) -> Fee {
         let config = self.get_config(tenant_id);
         self.calculate(&config.trade, amount)
     }
@@ -226,8 +216,7 @@ impl FeeCalculator {
 
         // Find the matching tier based on the amount
         for tier in tiers {
-            let in_range = amount >= tier.from
-                && tier.to.map_or(true, |to| amount < to);
+            let in_range = amount >= tier.from && tier.to.map_or(true, |to| amount < to);
             if in_range {
                 return amount * tier.rate;
             }

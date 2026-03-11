@@ -23,8 +23,7 @@ pub struct StripeConfig {
 impl Default for StripeConfig {
     fn default() -> Self {
         Self {
-            secret_key: std::env::var("STRIPE_SECRET_KEY")
-                .unwrap_or_else(|_| String::new()),
+            secret_key: std::env::var("STRIPE_SECRET_KEY").unwrap_or_else(|_| String::new()),
             publishable_key: std::env::var("STRIPE_PUBLISHABLE_KEY")
                 .unwrap_or_else(|_| String::new()),
             webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET")
@@ -172,28 +171,27 @@ impl StripeClient {
                 return Err(Self::missing_key_error());
             }
             warn!("Stripe API key not configured -- returning mock customer ID");
-            return Ok(format!("cus_mock_{}_{}", tenant_id.0, Utc::now().timestamp()));
+            return Ok(format!(
+                "cus_mock_{}_{}",
+                tenant_id.0,
+                Utc::now().timestamp()
+            ));
         }
 
         let tenant_str = tenant_id.0.clone();
         let resp = self
             .stripe_post(
                 "customers",
-                &[
-                    ("email", email),
-                    ("metadata[tenant_id]", &tenant_str),
-                ],
+                &[("email", email), ("metadata[tenant_id]", &tenant_str)],
             )
             .await?;
 
         resp["id"]
             .as_str()
             .map(String::from)
-            .ok_or_else(|| {
-                ramp_common::Error::ExternalService {
-                    service: "stripe".into(),
-                    message: "Missing customer ID in Stripe response".into(),
-                }
+            .ok_or_else(|| ramp_common::Error::ExternalService {
+                service: "stripe".into(),
+                message: "Missing customer ID in Stripe response".into(),
             })
     }
 
@@ -222,10 +220,7 @@ impl StripeClient {
         let resp = self
             .stripe_post(
                 "subscriptions",
-                &[
-                    ("customer", customer_id),
-                    ("items[0][price]", &plan.id),
-                ],
+                &[("customer", customer_id), ("items[0][price]", &plan.id)],
             )
             .await?;
 
@@ -259,12 +254,12 @@ impl StripeClient {
             .stripe_get(&format!("subscriptions/{}", subscription_id))
             .await?;
 
-        let item_id = current["items"]["data"][0]["id"]
-            .as_str()
-            .ok_or_else(|| ramp_common::Error::ExternalService {
+        let item_id = current["items"]["data"][0]["id"].as_str().ok_or_else(|| {
+            ramp_common::Error::ExternalService {
                 service: "stripe".into(),
                 message: "Cannot find subscription item to update".into(),
-            })?;
+            }
+        })?;
 
         let endpoint = format!("subscriptions/{}", subscription_id);
         let resp = self
@@ -317,12 +312,12 @@ impl StripeClient {
             .stripe_get(&format!("subscriptions/{}", subscription_id))
             .await?;
 
-        let item_id = sub["items"]["data"][0]["id"]
-            .as_str()
-            .ok_or_else(|| ramp_common::Error::ExternalService {
+        let item_id = sub["items"]["data"][0]["id"].as_str().ok_or_else(|| {
+            ramp_common::Error::ExternalService {
                 service: "stripe".into(),
                 message: "No subscription item found for usage reporting".into(),
-            })?;
+            }
+        })?;
 
         let quantity = usage.api_calls.to_string();
         let timestamp = Utc::now().timestamp().to_string();
@@ -445,13 +440,12 @@ impl StripeClient {
 
 /// Parse a Stripe subscription JSON object into our domain `Subscription`.
 fn parse_subscription(resp: &serde_json::Value) -> Result<Subscription> {
-    let id = resp["id"]
-        .as_str()
-        .map(String::from)
-        .ok_or_else(|| ramp_common::Error::ExternalService {
+    let id = resp["id"].as_str().map(String::from).ok_or_else(|| {
+        ramp_common::Error::ExternalService {
             service: "stripe".into(),
             message: "Missing subscription ID".into(),
-        })?;
+        }
+    })?;
 
     let customer_id = resp["customer"]
         .as_str()
@@ -541,8 +535,16 @@ impl BillingPlan {
             currency: "usd".to_string(),
             interval: "month".to_string(),
             features: vec![
-                PlanFeature { code: "api_access".to_string(), name: "API Access".to_string(), included: true },
-                PlanFeature { code: "sso".to_string(), name: "SSO".to_string(), included: false },
+                PlanFeature {
+                    code: "api_access".to_string(),
+                    name: "API Access".to_string(),
+                    included: true,
+                },
+                PlanFeature {
+                    code: "sso".to_string(),
+                    name: "SSO".to_string(),
+                    included: false,
+                },
             ],
             limits: PlanLimits {
                 api_calls: 10_000,
@@ -561,8 +563,16 @@ impl BillingPlan {
             currency: "usd".to_string(),
             interval: "month".to_string(),
             features: vec![
-                PlanFeature { code: "api_access".to_string(), name: "API Access".to_string(), included: true },
-                PlanFeature { code: "sso".to_string(), name: "SSO".to_string(), included: false },
+                PlanFeature {
+                    code: "api_access".to_string(),
+                    name: "API Access".to_string(),
+                    included: true,
+                },
+                PlanFeature {
+                    code: "sso".to_string(),
+                    name: "SSO".to_string(),
+                    included: false,
+                },
             ],
             limits: PlanLimits {
                 api_calls: 100_000,
@@ -581,8 +591,16 @@ impl BillingPlan {
             currency: "usd".to_string(),
             interval: "month".to_string(),
             features: vec![
-                PlanFeature { code: "api_access".to_string(), name: "API Access".to_string(), included: true },
-                PlanFeature { code: "sso".to_string(), name: "SSO".to_string(), included: true },
+                PlanFeature {
+                    code: "api_access".to_string(),
+                    name: "API Access".to_string(),
+                    included: true,
+                },
+                PlanFeature {
+                    code: "sso".to_string(),
+                    name: "SSO".to_string(),
+                    included: true,
+                },
             ],
             limits: PlanLimits {
                 api_calls: 1_000_000,
@@ -601,9 +619,21 @@ impl BillingPlan {
             currency: "usd".to_string(),
             interval: "month".to_string(),
             features: vec![
-                PlanFeature { code: "api_access".to_string(), name: "API Access".to_string(), included: true },
-                PlanFeature { code: "sso".to_string(), name: "SSO".to_string(), included: true },
-                PlanFeature { code: "sla".to_string(), name: "99.9% SLA".to_string(), included: true },
+                PlanFeature {
+                    code: "api_access".to_string(),
+                    name: "API Access".to_string(),
+                    included: true,
+                },
+                PlanFeature {
+                    code: "sso".to_string(),
+                    name: "SSO".to_string(),
+                    included: true,
+                },
+                PlanFeature {
+                    code: "sla".to_string(),
+                    name: "99.9% SLA".to_string(),
+                    included: true,
+                },
             ],
             limits: PlanLimits {
                 api_calls: 10_000_000,
@@ -975,7 +1005,10 @@ mod tests {
         };
         let client = StripeClient::new(config);
         let plan = BillingPlan::growth();
-        let sub = client.update_subscription("sub_existing", &plan).await.unwrap();
+        let sub = client
+            .update_subscription("sub_existing", &plan)
+            .await
+            .unwrap();
         assert_eq!(sub.id, "sub_existing");
         assert_eq!(sub.plan_id, "plan_growth");
         assert_eq!(sub.status, SubscriptionStatus::Active);
@@ -1036,7 +1069,10 @@ mod tests {
             storage_bytes: 0,
         };
         let tenant_id = ramp_common::types::TenantId::new("t1");
-        let invoice = client.create_invoice(&tenant_id, &plan, &usage).await.unwrap();
+        let invoice = client
+            .create_invoice(&tenant_id, &plan, &usage)
+            .await
+            .unwrap();
         assert!(invoice.id.starts_with("in_mock_"));
         assert_eq!(invoice.status, InvoiceStatus::Draft);
         assert_eq!(invoice.currency, "usd");

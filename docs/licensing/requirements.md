@@ -50,6 +50,11 @@ The resolution applies to:
 | 1.5 | Organization Chart | Current structure with names | PDF |
 | 1.6 | Proof of Registered Office | Lease or ownership documents | Certified copy |
 
+Ownership-edge review notes for W14:
+- Treat shareholder register, directors, UBOs, and controllers as relational review edges first.
+- Keep the KYB graph as a bounded completeness/review layer tied to licensing requirements.
+- Do not assume an external graph database or autonomous ownership-resolution engine in the first slice.
+
 ### 2. Capital and Financial Documents
 
 | # | Document | Description | Format |

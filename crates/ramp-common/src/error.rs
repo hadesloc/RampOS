@@ -216,7 +216,10 @@ impl Error {
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
-            Error::Database(_) | Error::ExternalService { .. } | Error::RailsProviderError { .. } | Error::External(_)
+            Error::Database(_)
+                | Error::ExternalService { .. }
+                | Error::RailsProviderError { .. }
+                | Error::External(_)
         )
     }
 }

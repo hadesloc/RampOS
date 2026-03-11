@@ -1,10 +1,10 @@
-use chrono::{DateTime, Utc, Timelike};
-use rust_decimal::Decimal;
+use chrono::{DateTime, Timelike, Utc};
 use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 /// All extracted features for a single transaction, used as input to the scorer.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FraudFeatureVector {
     /// Percentile of this amount relative to user's history (0.0-1.0)
     pub amount_percentile: f64,
@@ -101,8 +101,14 @@ impl FraudFeatureExtractor {
             velocity_7d: ctx.txn_timestamps_7d.len() as f64,
             time_of_day_anomaly: Self::compute_time_anomaly(ctx.timestamp, &ctx.user_typical_hours),
             amount_rounding_pattern: Self::compute_rounding(ctx.amount),
-            recipient_recency: Self::compute_recipient_recency(ctx.recipient_first_seen, ctx.timestamp),
-            historical_dispute_rate: Self::compute_dispute_rate(ctx.total_disputes, ctx.total_transactions),
+            recipient_recency: Self::compute_recipient_recency(
+                ctx.recipient_first_seen,
+                ctx.timestamp,
+            ),
+            historical_dispute_rate: Self::compute_dispute_rate(
+                ctx.total_disputes,
+                ctx.total_transactions,
+            ),
             account_age_days: Self::compute_account_age(ctx.account_created_at, ctx.timestamp),
             amount_to_avg_ratio: Self::compute_amount_ratio(&ctx.historical_amounts, &ctx.amount),
             distinct_recipients_24h: ctx.distinct_recipients_24h as f64,
@@ -215,7 +221,10 @@ mod tests {
             account_created_at: now - chrono::Duration::days(90),
             historical_amounts: vec![dec!(500_000), dec!(1_000_000), dec!(2_000_000)],
             txn_timestamps_1h: vec![now - chrono::Duration::minutes(30)],
-            txn_timestamps_24h: vec![now - chrono::Duration::hours(2), now - chrono::Duration::hours(5)],
+            txn_timestamps_24h: vec![
+                now - chrono::Duration::hours(2),
+                now - chrono::Duration::hours(5),
+            ],
             txn_timestamps_7d: vec![
                 now - chrono::Duration::days(1),
                 now - chrono::Duration::days(3),

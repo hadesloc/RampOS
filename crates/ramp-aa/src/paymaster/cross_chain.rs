@@ -3,9 +3,9 @@
 //! Enables paying gas on one chain using tokens from another chain,
 //! with bridging and settlement handled by the paymaster.
 
+use alloy::primitives::{keccak256, Address, Bytes, B256, U256};
 use async_trait::async_trait;
 use chrono::Utc;
-use alloy::primitives::{Address, Bytes, B256, U256, keccak256};
 use ramp_common::{types::TenantId, Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

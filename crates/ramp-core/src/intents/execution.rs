@@ -5,8 +5,8 @@
 //! - Failure handling with rollback/retry
 //! - Progress event emission
 
-use super::spec::{ExecutionPlan, ExecutionStepKind, IntentSpec};
 use super::solver::IntentSolver;
+use super::spec::{ExecutionPlan, ExecutionStepKind, IntentSpec};
 use chrono::{DateTime, Utc};
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -231,7 +231,9 @@ impl IntentExecution {
             self.steps[idx].started_at = Some(Utc::now());
             let step_kind_str = format!("{}", self.steps[idx].kind);
             self.emit_event(
-                ProgressEventType::StepStarted { step_index: self.current_step },
+                ProgressEventType::StepStarted {
+                    step_index: self.current_step,
+                },
                 serde_json::json!({ "step_kind": step_kind_str }),
             );
             true
@@ -251,7 +253,9 @@ impl IntentExecution {
             step.gas_used = gas_used;
 
             self.emit_event(
-                ProgressEventType::StepCompleted { step_index: self.current_step },
+                ProgressEventType::StepCompleted {
+                    step_index: self.current_step,
+                },
                 serde_json::json!({}),
             );
 
@@ -269,7 +273,9 @@ impl IntentExecution {
             self.steps[idx].completed_at = Some(Utc::now());
 
             self.emit_event(
-                ProgressEventType::StepFailed { step_index: self.current_step },
+                ProgressEventType::StepFailed {
+                    step_index: self.current_step,
+                },
                 serde_json::json!({ "error": error }),
             );
         }
@@ -292,7 +298,10 @@ impl IntentExecution {
 
     /// Get the number of completed steps
     pub fn completed_steps(&self) -> usize {
-        self.steps.iter().filter(|s| s.status == StepExecutionStatus::Completed).count()
+        self.steps
+            .iter()
+            .filter(|s| s.status == StepExecutionStatus::Completed)
+            .count()
     }
 
     /// Get progress as a percentage
@@ -408,7 +417,10 @@ impl ExecutionEngine {
 
             // Simulate step execution
             // In production, this would call actual on-chain operations
-            match self.execute_step(&execution.steps[step_idx as usize].kind).await {
+            match self
+                .execute_step(&execution.steps[step_idx as usize].kind)
+                .await
+            {
                 Ok((tx_hash, gas)) => {
                     execution.complete_current_step(tx_hash, gas);
                 }
@@ -577,8 +589,8 @@ impl ExecutionEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::intents::spec::{AssetId, IntentAction};
     use crate::intents::solver::LocalSolver;
+    use crate::intents::spec::{AssetId, IntentAction};
 
     fn make_test_spec() -> IntentSpec {
         IntentSpec::new(
@@ -737,7 +749,10 @@ mod tests {
         execution.fail_current_step("Insufficient liquidity");
 
         assert_eq!(execution.steps[0].status, StepExecutionStatus::Failed);
-        assert_eq!(execution.steps[0].error.as_deref(), Some("Insufficient liquidity"));
+        assert_eq!(
+            execution.steps[0].error.as_deref(),
+            Some("Insufficient liquidity")
+        );
     }
 
     #[test]

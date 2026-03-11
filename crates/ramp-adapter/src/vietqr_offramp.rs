@@ -139,12 +139,7 @@ impl VietQROffRampService {
             .ok_or_else(|| format!("Unknown bank code: {}", bank_code))?;
 
         // Build EMVCo QR code string
-        let qr_string = self.build_emvco_string(
-            &bank.bin,
-            account,
-            amount,
-            reference,
-        );
+        let qr_string = self.build_emvco_string(&bank.bin, account, amount, reference);
 
         let is_dynamic = amount.is_some();
 
@@ -160,7 +155,9 @@ impl VietQROffRampService {
 
     /// Get bank information by code
     pub fn get_bank(&self, bank_code: &str) -> Option<&VietQRBank> {
-        self.banks.iter().find(|b| b.code == bank_code.to_uppercase())
+        self.banks
+            .iter()
+            .find(|b| b.code == bank_code.to_uppercase())
     }
 
     /// List all supported banks

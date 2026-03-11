@@ -104,6 +104,40 @@ impl WsState {
         // Ignore send errors (no receivers connected)
         let _ = self.tx.send(event);
     }
+
+    /// Publish a tenant-scoped incident timeline update using the existing event envelope.
+    pub fn publish_incident_timeline_update(
+        &self,
+        tenant_id: impl Into<String>,
+        user_id: impl Into<String>,
+        incident_id: impl Into<String>,
+        intent_id: Option<&str>,
+        data: serde_json::Value,
+    ) {
+        self.publish(WsEvent {
+            event_type: "incident.timeline.updated".to_string(),
+            intent_id: intent_id.map(|value| value.to_string()),
+            user_id: user_id.into(),
+            tenant_id: tenant_id.into(),
+            data: serde_json::json!({
+                "incidentId": incident_id.into(),
+                "timeline": data,
+            }),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        });
+    }
+}
+
+fn should_deliver_event_to_client(event: &WsEvent, user_id: &str, tenant_id: &str) -> bool {
+    if event.tenant_id != tenant_id {
+        return false;
+    }
+
+    if event.event_type == "incident.timeline.updated" {
+        return event.user_id == user_id;
+    }
+
+    event.user_id == user_id || event.user_id == "system"
 }
 
 /// Query parameters for WebSocket connection
@@ -179,12 +213,7 @@ pub async fn ws_handler(
 }
 
 /// Handle an individual WebSocket connection
-async fn handle_socket(
-    socket: WebSocket,
-    user_id: Uuid,
-    tenant_id: Uuid,
-    ws_state: Arc<WsState>,
-) {
+async fn handle_socket(socket: WebSocket, user_id: Uuid, tenant_id: Uuid, ws_state: Arc<WsState>) {
     let (mut sender, mut receiver) = socket.split();
 
     // Track subscriptions for this client
@@ -224,8 +253,11 @@ async fn handle_socket(
                 result = rx.recv() => {
                     match result {
                         Ok(event) => {
-                            // Filter: only send events for this user/tenant
-                            if event.user_id != user_id_filter && event.tenant_id != tenant_id_filter {
+                            if !should_deliver_event_to_client(
+                                &event,
+                                &user_id_filter,
+                                &tenant_id_filter,
+                            ) {
                                 continue;
                             }
 
@@ -367,8 +399,8 @@ async fn handle_socket(
 }
 
 // We need futures::StreamExt for receiver.next()
-use futures::StreamExt as _;
 use futures::SinkExt as _;
+use futures::StreamExt as _;
 
 #[cfg(test)]
 mod tests {
@@ -489,8 +521,66 @@ mod tests {
 
     #[test]
     fn test_ws_query_deserialization() {
-        let query: WsQuery =
-            serde_json::from_str(r#"{"token":"eyJ..."}"#).expect("should parse");
+        let query: WsQuery = serde_json::from_str(r#"{"token":"eyJ..."}"#).expect("should parse");
         assert_eq!(query.token, "eyJ...");
+    }
+
+    #[test]
+    fn test_publish_incident_timeline_update_uses_existing_ws_event_shape() {
+        let state = WsState::new("secret".to_string());
+        let mut rx = state.tx.subscribe();
+
+        state.publish_incident_timeline_update(
+            "tenant-incident",
+            "system",
+            "incident_intent_001",
+            Some("intent_001"),
+            serde_json::json!({
+                "entryCount": 3,
+                "recommendationCount": 1,
+            }),
+        );
+
+        let event = rx.try_recv().expect("should receive incident update");
+        assert_eq!(event.event_type, "incident.timeline.updated");
+        assert_eq!(event.intent_id.as_deref(), Some("intent_001"));
+        assert_eq!(event.tenant_id, "tenant-incident");
+        assert_eq!(event.data["incidentId"], "incident_intent_001");
+        assert_eq!(event.data["timeline"]["entryCount"], 3);
+    }
+
+    #[test]
+    fn test_incident_timeline_updates_are_not_delivered_by_tenant_match_alone() {
+        let event = WsEvent {
+            event_type: "incident.timeline.updated".to_string(),
+            intent_id: Some("intent-incident".to_string()),
+            user_id: "system".to_string(),
+            tenant_id: "tenant-incident".to_string(),
+            data: serde_json::json!({"incidentId": "incident_intent_001"}),
+            timestamp: "2026-02-08T00:00:00Z".to_string(),
+        };
+
+        assert!(
+            !should_deliver_event_to_client(&event, "user-1", "tenant-incident"),
+            "incident timeline updates must not fan out to same-tenant portal clients"
+        );
+    }
+
+    #[test]
+    fn test_non_incident_events_still_allow_tenant_scoped_delivery() {
+        let event = WsEvent {
+            event_type: "intent.updated".to_string(),
+            intent_id: Some("intent-1".to_string()),
+            user_id: "system".to_string(),
+            tenant_id: "tenant-incident".to_string(),
+            data: serde_json::json!({"status": "PROCESSING"}),
+            timestamp: "2026-02-08T00:00:00Z".to_string(),
+        };
+
+        assert!(should_deliver_event_to_client(
+            &event,
+            "user-1",
+            "tenant-incident"
+        ));
     }
 }

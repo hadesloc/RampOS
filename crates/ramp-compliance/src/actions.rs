@@ -76,19 +76,10 @@ impl ActionTrigger {
                 Ok(())
             }
             ComplianceAction::HoldForReview { case_id } => {
-                // Pause intent + create case
-                // We map the generated Uuid to the string ID expected by CaseManager if possible,
-                // or we accept CaseManager generates its own ID.
-                // The requirement says "HoldForReview { case_id: Uuid }".
-                // Our CaseManager::create_case generates a new ID.
-                // For consistency, we might want to pass this ID to CaseManager if it supported it.
-                // Since CaseManager doesn't support passing ID, we'll let it generate one
-                // and log the correlation.
-                // Ideally, we would update CaseManager to accept an ID.
-
-                let _created_case_id = self
+                let created_case_id = self
                     .case_manager
-                    .create_case(
+                    .create_case_with_id(
+                        format!("case_{case_id}"),
                         tenant_id,
                         user_id,
                         intent_id,
@@ -100,7 +91,7 @@ impl ActionTrigger {
 
                 tracing::info!(
                     action_case_id = %case_id,
-                    created_case_id = %_created_case_id,
+                    created_case_id = %created_case_id,
                     "Compliance action: HoldForReview executed"
                 );
                 Ok(())
@@ -150,9 +141,14 @@ impl ActionTrigger {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
+    use crate::store::mock::InMemoryCaseStore;
+    use crate::store::postgres::CaseStore;
     // use crate::config::ThresholdManager; // Unused
     use crate::types::RiskScore;
+    use ramp_common::types::{IntentId, TenantId, UserId};
 
     #[test]
     fn test_evaluate_approve() {
@@ -199,5 +195,34 @@ mod tests {
             }
             _ => panic!("Expected Block"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_execute_hold_for_review_preserves_generated_case_id() {
+        let store = Arc::new(InMemoryCaseStore::new());
+        let trigger = ActionTrigger::new(CaseManager::new(store.clone()));
+        let tenant_id = TenantId::new("tenant_123");
+        let user_id = UserId::new("user_123");
+        let intent_id = IntentId::new_payin();
+        let case_uuid = Uuid::now_v7();
+
+        trigger
+            .execute(
+                &ComplianceAction::HoldForReview { case_id: case_uuid },
+                &tenant_id,
+                Some(&user_id),
+                Some(&intent_id),
+                serde_json::json!({ "reason": "audit regression" }),
+            )
+            .await
+            .expect("hold for review execution should succeed");
+
+        let persisted_case_id = format!("case_{case_uuid}");
+        let case = store
+            .get_case(&tenant_id, &persisted_case_id)
+            .await
+            .expect("case lookup should succeed");
+
+        assert!(case.is_some(), "expected persisted case to reuse generated id");
     }
 }

@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
+  authApi,
   walletApi,
   AuthUser,
   SmartAccount,
@@ -30,71 +31,128 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const GUEST_USER: AuthUser = {
-  id: "guest-user",
-  email: "guest@rampos.local",
-  kycStatus: "NONE",
-  kycTier: 0,
-  status: "ACTIVE",
-  createdAt: new Date(0).toISOString(),
-};
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user] = useState<AuthUser | null>(GUEST_USER);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [wallet, setWallet] = useState<SmartAccount | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const router = useRouter();
 
-  const isAuthenticated = true;
-
-  // Login is disabled: bootstrap guest state and attempt wallet fetch.
+  // Fail closed until the backend confirms a real authenticated session.
   useEffect(() => {
-    const initGuest = async () => {
+    const initSession = async () => {
       try {
-        const walletData = await walletApi.getAccount();
-        setWallet(walletData);
-      } catch {
-        // Guest mode may not have a wallet yet.
+        const session = await authApi.checkSession();
+        if (session.authenticated && session.user) {
+          setUser(session.user);
+          setIsAuthenticated(true);
+          try {
+            const walletData = await walletApi.getAccount();
+            setWallet(walletData);
+          } catch {
+            setWallet(null);
+          }
+        } else {
+          setUser(null);
+          setWallet(null);
+          setIsAuthenticated(false);
+        }
+      } catch (err) {
+        setUser(null);
+        setWallet(null);
+        setIsAuthenticated(false);
+        if (!(err instanceof PortalApiError && err.status === 401)) {
+          setError(err instanceof Error ? err.message : "Failed to load session");
+        }
       } finally {
         setIsLoading(false);
       }
     };
 
-    initGuest();
+    void initSession();
   }, []);
 
   const loginWithPasskey = useCallback(async (_email?: string) => {
     setIsLoading(true);
     setError(null);
-    router.push("/portal");
-    setIsLoading(false);
-  }, [router]);
+    try {
+      throw new Error("Passkey login requires a verified backend WebAuthn flow.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Passkey login failed";
+      setIsAuthenticated(false);
+      setUser(null);
+      setWallet(null);
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   const registerWithPasskey = useCallback(async (_email: string) => {
     setIsLoading(true);
     setError(null);
-    router.push("/portal");
-    setIsLoading(false);
-  }, [router]);
+    try {
+      throw new Error("Passkey registration requires a verified backend WebAuthn flow.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Passkey registration failed";
+      setIsAuthenticated(false);
+      setUser(null);
+      setWallet(null);
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  const loginWithMagicLink = useCallback(async (_email: string) => {
+  const loginWithMagicLink = useCallback(async (email: string) => {
     setIsLoading(true);
     setError(null);
-    router.push("/portal");
-    setIsLoading(false);
-  }, [router]);
+    try {
+      await authApi.requestMagicLink(email);
+    } catch (err) {
+      const message =
+        err instanceof PortalApiError ? err.message : "Magic link request failed";
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  const verifyMagicLink = useCallback(async (_token: string) => {
+  const verifyMagicLink = useCallback(async (token: string) => {
     setIsLoading(true);
     setError(null);
-    router.push("/portal");
-    setIsLoading(false);
+    try {
+      const response = await authApi.verifyMagicLink(token);
+      setUser(response.user);
+      setIsAuthenticated(true);
+      router.push("/portal");
+    } catch (err) {
+      const message =
+        err instanceof PortalApiError ? err.message : "Magic link verification failed";
+      setIsAuthenticated(false);
+      setUser(null);
+      setWallet(null);
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
   }, [router]);
 
   const logout = useCallback(async () => {
     setError(null);
-    router.push("/portal");
+    try {
+      await authApi.logout();
+    } finally {
+      setUser(null);
+      setWallet(null);
+      setIsAuthenticated(false);
+      router.push("/portal/login");
+    }
   }, [router]);
 
   const refreshWallet = useCallback(async () => {
@@ -161,7 +219,14 @@ export function withAuth<P extends object>(
   Component: React.ComponentType<P>
 ): React.FC<P> {
   return function ProtectedRoute(props: P) {
-    const { isLoading } = useAuth();
+    const { isLoading, isAuthenticated } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+      if (!isLoading && !isAuthenticated) {
+        router.push("/portal/login");
+      }
+    }, [isAuthenticated, isLoading, router]);
 
     if (isLoading) {
       return (
@@ -169,6 +234,10 @@ export function withAuth<P extends object>(
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
       );
+    }
+
+    if (!isAuthenticated) {
+      return null;
     }
 
     return <Component {...props} />;

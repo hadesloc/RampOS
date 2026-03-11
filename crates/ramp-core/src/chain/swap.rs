@@ -72,11 +72,7 @@ pub trait SwapAdapter: Send + Sync {
     ) -> Result<SwapQuote>;
 
     /// Execute a swap based on a quote
-    async fn execute_swap(
-        &self,
-        quote: &SwapQuote,
-        sender: &str,
-    ) -> Result<SwapResult>;
+    async fn execute_swap(&self, quote: &SwapQuote, sender: &str) -> Result<SwapResult>;
 }
 
 /// Mock DEX swap adapter simulating a 1inch-like aggregator.
@@ -146,7 +142,11 @@ impl SwapAdapter for MockDexSwapAdapter {
         };
 
         let route = vec![RouteStep {
-            pool: format!("mock-pool-{}-{}", &from_token[..6.min(from_token.len())], &to_token[..6.min(to_token.len())]),
+            pool: format!(
+                "mock-pool-{}-{}",
+                &from_token[..6.min(from_token.len())],
+                &to_token[..6.min(to_token.len())]
+            ),
             token_in: from_token.to_string(),
             token_out: to_token.to_string(),
             fee_bps: self.fee_bps,
@@ -171,11 +171,7 @@ impl SwapAdapter for MockDexSwapAdapter {
         })
     }
 
-    async fn execute_swap(
-        &self,
-        quote: &SwapQuote,
-        sender: &str,
-    ) -> Result<SwapResult> {
+    async fn execute_swap(&self, quote: &SwapQuote, sender: &str) -> Result<SwapResult> {
         if sender.is_empty() {
             return Err(ChainError::InvalidAddress("Sender address is empty".into()));
         }
@@ -207,7 +203,7 @@ mod tests {
                 ChainId::ETHEREUM,
                 "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH
                 "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
-                1_000_000_000_000_000_000, // 1 ETH in wei
+                1_000_000_000_000_000_000,                    // 1 ETH in wei
             )
             .await
             .unwrap();
@@ -303,7 +299,12 @@ mod tests {
             .unwrap();
 
         let large = adapter
-            .get_quote(ChainId::ETHEREUM, "WETH", "USDC", 10_000_000_000_000_000_000)
+            .get_quote(
+                ChainId::ETHEREUM,
+                "WETH",
+                "USDC",
+                10_000_000_000_000_000_000,
+            )
             .await
             .unwrap();
 
@@ -327,6 +328,9 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(q1.amount_out, q2.amount_out, "Quotes should be deterministic");
+        assert_eq!(
+            q1.amount_out, q2.amount_out,
+            "Quotes should be deterministic"
+        );
     }
 }

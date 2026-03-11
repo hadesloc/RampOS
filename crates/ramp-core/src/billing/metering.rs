@@ -189,8 +189,22 @@ mod tests {
         let meter = UsageMeter::new();
         let tenant_id = TenantId::new("t1");
 
-        meter.record(make_record(&tenant_id, MeterType::ApiCalls, MetricValue::Count(50))).await.unwrap();
-        meter.record(make_record(&tenant_id, MeterType::ApiCalls, MetricValue::Count(30))).await.unwrap();
+        meter
+            .record(make_record(
+                &tenant_id,
+                MeterType::ApiCalls,
+                MetricValue::Count(50),
+            ))
+            .await
+            .unwrap();
+        meter
+            .record(make_record(
+                &tenant_id,
+                MeterType::ApiCalls,
+                MetricValue::Count(30),
+            ))
+            .await
+            .unwrap();
 
         let summary = meter.get_summary(&tenant_id).await.unwrap();
         assert_eq!(summary.api_calls, 80);
@@ -201,8 +215,22 @@ mod tests {
         let meter = UsageMeter::new();
         let tenant_id = TenantId::new("t1");
 
-        meter.record(make_record(&tenant_id, MeterType::TransactionVolume, MetricValue::Volume(Decimal::from(1000)))).await.unwrap();
-        meter.record(make_record(&tenant_id, MeterType::TransactionVolume, MetricValue::Volume(Decimal::from(2000)))).await.unwrap();
+        meter
+            .record(make_record(
+                &tenant_id,
+                MeterType::TransactionVolume,
+                MetricValue::Volume(Decimal::from(1000)),
+            ))
+            .await
+            .unwrap();
+        meter
+            .record(make_record(
+                &tenant_id,
+                MeterType::TransactionVolume,
+                MetricValue::Volume(Decimal::from(2000)),
+            ))
+            .await
+            .unwrap();
 
         let summary = meter.get_summary(&tenant_id).await.unwrap();
         assert_eq!(summary.transaction_volume, Decimal::from(3000));
@@ -213,8 +241,22 @@ mod tests {
         let meter = UsageMeter::new();
         let tenant_id = TenantId::new("t1");
 
-        meter.record(make_record(&tenant_id, MeterType::ActiveUsers, MetricValue::Count(10))).await.unwrap();
-        meter.record(make_record(&tenant_id, MeterType::ActiveUsers, MetricValue::Count(5))).await.unwrap();
+        meter
+            .record(make_record(
+                &tenant_id,
+                MeterType::ActiveUsers,
+                MetricValue::Count(10),
+            ))
+            .await
+            .unwrap();
+        meter
+            .record(make_record(
+                &tenant_id,
+                MeterType::ActiveUsers,
+                MetricValue::Count(5),
+            ))
+            .await
+            .unwrap();
 
         let summary = meter.get_summary(&tenant_id).await.unwrap();
         assert_eq!(summary.active_users, 15);
@@ -225,9 +267,30 @@ mod tests {
         let meter = UsageMeter::new();
         let tenant_id = TenantId::new("t1");
 
-        meter.record(make_record(&tenant_id, MeterType::StorageBytes, MetricValue::Bytes(1000))).await.unwrap();
-        meter.record(make_record(&tenant_id, MeterType::StorageBytes, MetricValue::Bytes(5000))).await.unwrap();
-        meter.record(make_record(&tenant_id, MeterType::StorageBytes, MetricValue::Bytes(3000))).await.unwrap();
+        meter
+            .record(make_record(
+                &tenant_id,
+                MeterType::StorageBytes,
+                MetricValue::Bytes(1000),
+            ))
+            .await
+            .unwrap();
+        meter
+            .record(make_record(
+                &tenant_id,
+                MeterType::StorageBytes,
+                MetricValue::Bytes(5000),
+            ))
+            .await
+            .unwrap();
+        meter
+            .record(make_record(
+                &tenant_id,
+                MeterType::StorageBytes,
+                MetricValue::Bytes(3000),
+            ))
+            .await
+            .unwrap();
 
         let summary = meter.get_summary(&tenant_id).await.unwrap();
         assert_eq!(summary.storage_bytes, 5000);
@@ -250,7 +313,14 @@ mod tests {
         let meter = UsageMeter::new();
         let tenant_id = TenantId::new("t1");
 
-        meter.record(make_record(&tenant_id, MeterType::ApiCalls, MetricValue::Count(100))).await.unwrap();
+        meter
+            .record(make_record(
+                &tenant_id,
+                MeterType::ApiCalls,
+                MetricValue::Count(100),
+            ))
+            .await
+            .unwrap();
 
         let summary = meter.get_summary(&tenant_id).await.unwrap();
         assert_eq!(summary.api_calls, 100);
@@ -275,11 +345,25 @@ mod tests {
         let meter = UsageMeter::new();
         let tenant_id = TenantId::new("t1");
 
-        meter.record(make_record(&tenant_id, MeterType::ApiCalls, MetricValue::Count(100))).await.unwrap();
+        meter
+            .record(make_record(
+                &tenant_id,
+                MeterType::ApiCalls,
+                MetricValue::Count(100),
+            ))
+            .await
+            .unwrap();
         meter.mark_synced(&tenant_id).await.unwrap();
 
         // Record new usage after sync
-        meter.record(make_record(&tenant_id, MeterType::ApiCalls, MetricValue::Count(50))).await.unwrap();
+        meter
+            .record(make_record(
+                &tenant_id,
+                MeterType::ApiCalls,
+                MetricValue::Count(50),
+            ))
+            .await
+            .unwrap();
 
         let summary = meter.get_summary(&tenant_id).await.unwrap();
         assert_eq!(summary.api_calls, 50);
@@ -291,8 +375,22 @@ mod tests {
         let t1 = TenantId::new("tenant1");
         let t2 = TenantId::new("tenant2");
 
-        meter.record(make_record(&t1, MeterType::ApiCalls, MetricValue::Count(100))).await.unwrap();
-        meter.record(make_record(&t2, MeterType::ApiCalls, MetricValue::Count(200))).await.unwrap();
+        meter
+            .record(make_record(
+                &t1,
+                MeterType::ApiCalls,
+                MetricValue::Count(100),
+            ))
+            .await
+            .unwrap();
+        meter
+            .record(make_record(
+                &t2,
+                MeterType::ApiCalls,
+                MetricValue::Count(200),
+            ))
+            .await
+            .unwrap();
 
         let s1 = meter.get_summary(&t1).await.unwrap();
         let s2 = meter.get_summary(&t2).await.unwrap();
@@ -307,7 +405,14 @@ mod tests {
         let tenant_id = TenantId::new("t1");
 
         // Record Volume type with Count value (mismatched, will be ignored in aggregation)
-        meter.record(make_record(&tenant_id, MeterType::ApiCalls, MetricValue::Volume(Decimal::from(100)))).await.unwrap();
+        meter
+            .record(make_record(
+                &tenant_id,
+                MeterType::ApiCalls,
+                MetricValue::Volume(Decimal::from(100)),
+            ))
+            .await
+            .unwrap();
 
         let summary = meter.get_summary(&tenant_id).await.unwrap();
         // ApiCalls expects Count, not Volume, so it should be 0

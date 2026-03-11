@@ -50,7 +50,9 @@ mock! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::service::webhook::{WebhookEventType, WebhookService};
+    use crate::service::event_catalog::EventCatalog;
+    use crate::service::incident_timeline::IncidentTimelineSourceKind;
+    use crate::service::webhook::{build_catalog_payload, WebhookEventType, WebhookService};
     use serde_json::json;
     use std::sync::Arc;
 
@@ -104,7 +106,8 @@ mod tests {
             .times(1)
             .returning(|_| Ok(()));
 
-        let service = WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let tenant_id = TenantId::new("tenant_1");
         let result = service
@@ -132,11 +135,39 @@ mod tests {
             .times(1)
             .returning(move |_| Ok(vec![event_clone.clone()]));
 
-        let service = WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let result = service.process_pending_events(10).await;
 
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_incident_timeline_entries_for_intent_map_webhook_rows() {
+        let mut mock_webhook_repo = MockWebhookRepository::new();
+        let mock_tenant_repo = MockTenantRepository::new();
+        let tenant_id = TenantId::new("tenant_1");
+        let intent_id = IntentId::new("intent_1");
+        let event = create_dummy_event();
+        let event_for_repo = event.clone();
+
+        mock_webhook_repo
+            .expect_get_events_by_intent()
+            .times(1)
+            .returning(move |_, _| Ok(vec![event_for_repo.clone()]));
+
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
+
+        let entries = service
+            .incident_timeline_entries_for_intent(&tenant_id, &intent_id)
+            .await
+            .unwrap();
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].source_kind, IncidentTimelineSourceKind::Webhook);
+        assert_eq!(entries[0].source_reference_id, event.id);
     }
 
     // ========================================================================
@@ -148,16 +179,16 @@ mod tests {
         // Verify the exponential backoff formula used in webhook.rs schedule_retry:
         // delay = 2^attempts seconds, capped at 3600s
         let test_cases: Vec<(u32, i64)> = vec![
-            (0, 1),    // 2^0 = 1s
-            (1, 2),    // 2^1 = 2s
-            (2, 4),    // 2^2 = 4s
-            (3, 8),    // 2^3 = 8s
-            (4, 16),   // 2^4 = 16s
-            (5, 32),   // 2^5 = 32s
-            (6, 64),   // 2^6 = 64s
-            (7, 128),  // 2^7 = 128s
-            (8, 256),  // 2^8 = 256s
-            (9, 512),  // 2^9 = 512s
+            (0, 1),   // 2^0 = 1s
+            (1, 2),   // 2^1 = 2s
+            (2, 4),   // 2^2 = 4s
+            (3, 8),   // 2^3 = 8s
+            (4, 16),  // 2^4 = 16s
+            (5, 32),  // 2^5 = 32s
+            (6, 64),  // 2^6 = 64s
+            (7, 128), // 2^7 = 128s
+            (8, 256), // 2^8 = 256s
+            (9, 512), // 2^9 = 512s
         ];
 
         for (attempts, expected_delay) in test_cases {
@@ -194,23 +225,40 @@ mod tests {
             .expect("signature generation should succeed");
 
         // Verify format: t=<timestamp>,v1=<hex>
-        assert!(signature.starts_with("t="), "Signature should start with t=");
+        assert!(
+            signature.starts_with("t="),
+            "Signature should start with t="
+        );
         assert!(signature.contains(",v1="), "Signature should contain ,v1=");
 
         // Verify signature
-        let result = ramp_common::crypto::verify_webhook_signature(secret, &signature, payload, 300);
+        let result =
+            ramp_common::crypto::verify_webhook_signature(secret, &signature, payload, 300);
         assert!(result.is_ok(), "Valid signature should verify successfully");
-        assert_eq!(result.unwrap(), timestamp, "Verified timestamp should match");
+        assert_eq!(
+            result.unwrap(),
+            timestamp,
+            "Verified timestamp should match"
+        );
 
         // Verify with wrong secret fails
         let wrong_secret = b"wrong_secret";
-        let bad_result = ramp_common::crypto::verify_webhook_signature(wrong_secret, &signature, payload, 300);
+        let bad_result =
+            ramp_common::crypto::verify_webhook_signature(wrong_secret, &signature, payload, 300);
         assert!(bad_result.is_err(), "Wrong secret should fail verification");
 
         // Verify with tampered payload fails
         let tampered_payload = br#"{"event":"hacked"}"#;
-        let tampered_result = ramp_common::crypto::verify_webhook_signature(secret, &signature, tampered_payload, 300);
-        assert!(tampered_result.is_err(), "Tampered payload should fail verification");
+        let tampered_result = ramp_common::crypto::verify_webhook_signature(
+            secret,
+            &signature,
+            tampered_payload,
+            300,
+        );
+        assert!(
+            tampered_result.is_err(),
+            "Tampered payload should fail verification"
+        );
     }
 
     #[tokio::test]
@@ -233,10 +281,8 @@ mod tests {
             })
             .returning(|_| Ok(()));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let tenant_id = TenantId::new("tenant_delivery_test");
         let intent_id = IntentId::new("intent_999");
@@ -278,10 +324,8 @@ mod tests {
             .times(1)
             .returning(move |_| Ok(events_clone.clone()));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let result = service.process_pending_events(10).await;
         assert!(result.is_ok(), "process_pending_events should succeed");
@@ -313,14 +357,16 @@ mod tests {
             .times(1)
             .returning(|_| Ok(vec![])); // No pending events
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let result = service.process_pending_events(10).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 0, "No events should be processed when all are exhausted");
+        assert_eq!(
+            result.unwrap(),
+            0,
+            "No events should be processed when all are exhausted"
+        );
 
         // Verify the exhausted event has correct state
         assert_eq!(exhausted_clone.attempts, exhausted_clone.max_attempts);
@@ -353,10 +399,19 @@ mod tests {
         };
 
         // Verify all event_type display strings
-        assert_eq!(WebhookEventType::IntentStatusChanged.to_string(), "intent.status.changed");
-        assert_eq!(WebhookEventType::RiskReviewRequired.to_string(), "risk.review.required");
+        assert_eq!(
+            WebhookEventType::IntentStatusChanged.to_string(),
+            "intent.status.changed"
+        );
+        assert_eq!(
+            WebhookEventType::RiskReviewRequired.to_string(),
+            "risk.review.required"
+        );
         assert_eq!(WebhookEventType::KycFlagged.to_string(), "kyc.flagged");
-        assert_eq!(WebhookEventType::ReconBatchReady.to_string(), "recon.batch.ready");
+        assert_eq!(
+            WebhookEventType::ReconBatchReady.to_string(),
+            "recon.batch.ready"
+        );
 
         // Verify payload JSON fields
         assert_eq!(event.payload["intent_id"], "intent_fmt_1");
@@ -374,7 +429,8 @@ mod tests {
 
         // Verify serialization roundtrip
         let serialized = serde_json::to_string(&event.payload).expect("should serialize");
-        let deserialized: serde_json::Value = serde_json::from_str(&serialized).expect("should deserialize");
+        let deserialized: serde_json::Value =
+            serde_json::from_str(&serialized).expect("should deserialize");
         assert_eq!(deserialized, event.payload);
     }
 
@@ -396,17 +452,27 @@ mod tests {
         // Encrypt
         let (nonce, ciphertext) = crypto.encrypt_secret(original_secret).unwrap();
         assert_eq!(nonce.len(), 12, "AES-256-GCM nonce must be 12 bytes");
-        assert_ne!(&ciphertext[..], original_secret, "Ciphertext must differ from plaintext");
+        assert_ne!(
+            &ciphertext[..],
+            original_secret,
+            "Ciphertext must differ from plaintext"
+        );
 
         // Build the stored blob: nonce || ciphertext (same format deliver_event expects)
         let mut encrypted_blob = nonce.clone();
         encrypted_blob.extend_from_slice(&ciphertext);
-        assert!(encrypted_blob.len() > 12, "Encrypted blob must be longer than nonce");
+        assert!(
+            encrypted_blob.len() > 12,
+            "Encrypted blob must be longer than nonce"
+        );
 
         // Decrypt using the same split logic as deliver_event
         let (dec_nonce, dec_ciphertext) = encrypted_blob.split_at(12);
         let decrypted = crypto.decrypt_secret(dec_nonce, dec_ciphertext).unwrap();
-        assert_eq!(decrypted, original_secret, "Decrypted secret must match original");
+        assert_eq!(
+            decrypted, original_secret,
+            "Decrypted secret must match original"
+        );
     }
 
     #[test]
@@ -429,19 +495,30 @@ mod tests {
         let decrypted = crypto.decrypt_secret(dec_nonce, dec_ciphertext).unwrap();
 
         // Sign with the decrypted key
-        let payload = br#"{"id":"evt_123","type":"intent.status.changed","data":{"status":"completed"}}"#;
+        let payload =
+            br#"{"id":"evt_123","type":"intent.status.changed","data":{"status":"completed"}}"#;
         let timestamp = chrono::Utc::now().timestamp();
-        let signature = ramp_common::crypto::generate_webhook_signature(&decrypted, timestamp, payload)
-            .expect("signature generation should succeed");
+        let signature =
+            ramp_common::crypto::generate_webhook_signature(&decrypted, timestamp, payload)
+                .expect("signature generation should succeed");
 
         // Verify with the original (plaintext) key - must match
-        let result = ramp_common::crypto::verify_webhook_signature(original_secret, &signature, payload, 300);
-        assert!(result.is_ok(), "Signature from decrypted key must verify against original key");
+        let result = ramp_common::crypto::verify_webhook_signature(
+            original_secret,
+            &signature,
+            payload,
+            300,
+        );
+        assert!(
+            result.is_ok(),
+            "Signature from decrypted key must verify against original key"
+        );
         assert_eq!(result.unwrap(), timestamp);
 
         // Verify with a wrong key fails
         let wrong_key = b"wrong_key_entirely";
-        let bad_result = ramp_common::crypto::verify_webhook_signature(wrong_key, &signature, payload, 300);
+        let bad_result =
+            ramp_common::crypto::verify_webhook_signature(wrong_key, &signature, payload, 300);
         assert!(bad_result.is_err(), "Wrong key must fail verification");
     }
 
@@ -475,7 +552,8 @@ mod tests {
             Arc::new(mock_webhook_repo),
             Arc::new(mock_tenant_repo),
             crypto,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Queue an event
         let tenant_id = TenantId::new("tenant_crypto_test");
@@ -487,7 +565,10 @@ mod tests {
                 json!({"status": "completed", "amount": 500000}),
             )
             .await;
-        assert!(result.is_ok(), "queue_event should succeed with crypto service");
+        assert!(
+            result.is_ok(),
+            "queue_event should succeed with crypto service"
+        );
 
         // Process pending events (without http-client, this logs and returns success)
         let processed = service.process_pending_events(10).await;
@@ -514,20 +595,24 @@ mod tests {
             .times(1)
             .returning(|_, _| Ok(()));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         // Retryable case: attempts = 3 (< max_attempts = 10)
         let event_id = EventId::new();
         let retry_result = service.schedule_retry(&event_id, "HTTP 500", 3).await;
-        assert!(retry_result.is_ok(), "Retryable schedule_retry should succeed");
+        assert!(
+            retry_result.is_ok(),
+            "Retryable schedule_retry should succeed"
+        );
 
         // Exhausted case: attempts = 10 (>= max_attempts = 10)
         let exhausted_id = EventId::new();
         let exhaust_result = service.schedule_retry(&exhausted_id, "HTTP 500", 10).await;
-        assert!(exhaust_result.is_ok(), "Exhausted schedule_retry should succeed");
+        assert!(
+            exhaust_result.is_ok(),
+            "Exhausted schedule_retry should succeed"
+        );
     }
 
     /// Helper: deterministic 32-byte key for CryptoService in tests
@@ -590,7 +675,11 @@ mod tests {
 
             // Verify roundtrip
             let result = ramp_common::crypto::verify_webhook_signature(secret, &sig, payload, 300);
-            assert!(result.is_ok(), "Valid signature should verify: {:?}", result.err());
+            assert!(
+                result.is_ok(),
+                "Valid signature should verify: {:?}",
+                result.err()
+            );
             assert_eq!(result.unwrap(), timestamp);
         }
     }
@@ -611,7 +700,10 @@ mod tests {
 
         // 15 minute tolerance should accept it
         let result = ramp_common::crypto::verify_webhook_signature(secret, &sig, payload, 900);
-        assert!(result.is_ok(), "Within-tolerance timestamp should be accepted");
+        assert!(
+            result.is_ok(),
+            "Within-tolerance timestamp should be accepted"
+        );
     }
 
     #[test]
@@ -620,37 +712,67 @@ mod tests {
         // matches the documented contract:
         // { "id": "<event_id>", "type": "<event_type>", "created_at": "<rfc3339>", "data": <payload> }
         let event = create_dummy_event();
-        let payload = serde_json::json!({
-            "id": event.id,
-            "type": event.event_type,
-            "created_at": event.created_at.to_rfc3339(),
-            "data": event.payload,
-        });
+        let payload =
+            build_catalog_payload(&event).expect("payload should match the event catalog");
 
         // Verify all required fields exist
         assert!(payload.get("id").is_some(), "Payload must have 'id' field");
-        assert!(payload.get("type").is_some(), "Payload must have 'type' field");
-        assert!(payload.get("created_at").is_some(), "Payload must have 'created_at' field");
-        assert!(payload.get("data").is_some(), "Payload must have 'data' field");
+        assert!(
+            payload.get("type").is_some(),
+            "Payload must have 'type' field"
+        );
+        assert!(
+            payload.get("created_at").is_some(),
+            "Payload must have 'created_at' field"
+        );
+        assert!(
+            payload.get("data").is_some(),
+            "Payload must have 'data' field"
+        );
 
         // Verify types
         assert!(payload["id"].is_string(), "'id' must be a string");
         assert!(payload["type"].is_string(), "'type' must be a string");
-        assert!(payload["created_at"].is_string(), "'created_at' must be a string");
+        assert!(
+            payload["created_at"].is_string(),
+            "'created_at' must be a string"
+        );
 
         // Verify created_at is valid RFC3339
         let created_at_str = payload["created_at"].as_str().unwrap();
         let parsed = chrono::DateTime::parse_from_rfc3339(created_at_str);
-        assert!(parsed.is_ok(), "created_at must be valid RFC3339: {}", created_at_str);
+        assert!(
+            parsed.is_ok(),
+            "created_at must be valid RFC3339: {}",
+            created_at_str
+        );
 
         // Verify serialization roundtrip
         let serialized = serde_json::to_vec(&payload).expect("should serialize");
-        let deserialized: serde_json::Value = serde_json::from_slice(&serialized).expect("should deserialize");
-        assert_eq!(deserialized, payload, "Payload must survive serialization roundtrip");
+        let deserialized: serde_json::Value =
+            serde_json::from_slice(&serialized).expect("should deserialize");
+        assert_eq!(
+            deserialized, payload,
+            "Payload must survive serialization roundtrip"
+        );
 
         // Verify no extra top-level fields (only id, type, created_at, data)
         let obj = payload.as_object().unwrap();
-        assert_eq!(obj.len(), 4, "Webhook payload must have exactly 4 top-level fields");
+        assert_eq!(
+            obj.len(),
+            4,
+            "Webhook payload must have exactly 4 top-level fields"
+        );
+
+        let catalog = EventCatalog::current();
+        let entry = catalog
+            .find(payload["type"].as_str().unwrap())
+            .expect("event payload should be registered in the catalog");
+        assert_eq!(entry.payload_wrapper, "webhook_event");
+        assert!(entry
+            .payload_fields
+            .iter()
+            .any(|field| field.path == "data.intentId"));
     }
 
     #[tokio::test]
@@ -658,7 +780,10 @@ mod tests {
         // Verify that different event types can be queued and their
         // event_type strings are correctly set in the stored event.
         let event_types = vec![
-            (WebhookEventType::IntentStatusChanged, "intent.status.changed"),
+            (
+                WebhookEventType::IntentStatusChanged,
+                "intent.status.changed",
+            ),
             (WebhookEventType::RiskReviewRequired, "risk.review.required"),
             (WebhookEventType::KycFlagged, "kyc.flagged"),
             (WebhookEventType::ReconBatchReady, "recon.batch.ready"),
@@ -672,27 +797,23 @@ mod tests {
             mock_webhook_repo
                 .expect_queue_event()
                 .times(1)
-                .withf(move |event: &WebhookEventRow| {
-                    event.event_type == expected
-                })
+                .withf(move |event: &WebhookEventRow| event.event_type == expected)
                 .returning(|_| Ok(()));
 
-            let service = WebhookService::new(
-                Arc::new(mock_webhook_repo),
-                Arc::new(mock_tenant_repo),
-            ).unwrap();
+            let service =
+                WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo))
+                    .unwrap();
 
             let tenant_id = TenantId::new("tenant_filter_test");
             let result = service
-                .queue_event(
-                    &tenant_id,
-                    event_type,
-                    None,
-                    json!({"test": true}),
-                )
+                .queue_event(&tenant_id, event_type, None, json!({"test": true}))
                 .await;
 
-            assert!(result.is_ok(), "Queueing event type '{}' should succeed", expected_str);
+            assert!(
+                result.is_ok(),
+                "Queueing event type '{}' should succeed",
+                expected_str
+            );
         }
     }
 
@@ -715,22 +836,29 @@ mod tests {
             .times(1)
             .returning(|_, _| Ok(()));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let event_id = EventId::new();
 
         // Attempts 0 through 9: should call mark_failed (retryable)
         for attempt in 0..10 {
-            let result = service.schedule_retry(&event_id, &format!("Error at attempt {}", attempt), attempt).await;
-            assert!(result.is_ok(), "schedule_retry at attempt {} should succeed", attempt);
+            let result = service
+                .schedule_retry(&event_id, &format!("Error at attempt {}", attempt), attempt)
+                .await;
+            assert!(
+                result.is_ok(),
+                "schedule_retry at attempt {} should succeed",
+                attempt
+            );
         }
 
         // Attempt 10: should call mark_permanently_failed
         let result = service.schedule_retry(&event_id, "Final failure", 10).await;
-        assert!(result.is_ok(), "schedule_retry at max attempts should succeed");
+        assert!(
+            result.is_ok(),
+            "schedule_retry at max attempts should succeed"
+        );
     }
 
     #[tokio::test]
@@ -748,10 +876,8 @@ mod tests {
             })
             .returning(|_, _, _| Ok(()));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let event_id = EventId::new();
         let result = service
@@ -771,15 +897,11 @@ mod tests {
         mock_webhook_repo
             .expect_queue_event()
             .times(3)
-            .withf(|event: &WebhookEventRow| {
-                event.tenant_id == "tenant_multi_endpoint"
-            })
+            .withf(|event: &WebhookEventRow| event.tenant_id == "tenant_multi_endpoint")
             .returning(|_| Ok(()));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let tenant_id = TenantId::new("tenant_multi_endpoint");
 
@@ -838,10 +960,8 @@ mod tests {
             })
             .returning(move |_, _, _| Ok(events_clone[1..3].to_vec()));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let result = service
             .list_events(&TenantId::new("tenant_page"), 2, 1)
@@ -865,15 +985,11 @@ mod tests {
         mock_webhook_repo
             .expect_get_event()
             .times(1)
-            .withf(|tid: &TenantId, eid: &str| {
-                tid.0 == "tenant_get" && eid == "evt_specific_123"
-            })
+            .withf(|tid: &TenantId, eid: &str| tid.0 == "tenant_get" && eid == "evt_specific_123")
             .returning(move |_, _| Ok(Some(event_clone.clone())));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let result = service
             .get_event(&TenantId::new("tenant_get"), "evt_specific_123")
@@ -893,15 +1009,11 @@ mod tests {
         mock_webhook_repo
             .expect_retry_event()
             .times(1)
-            .withf(|tid: &TenantId, eid: &str| {
-                tid.0 == "tenant_retry" && eid == "evt_retry_me"
-            })
+            .withf(|tid: &TenantId, eid: &str| tid.0 == "tenant_retry" && eid == "evt_retry_me")
             .returning(|_, _| Ok(()));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let result = service
             .retry_event(&TenantId::new("tenant_retry"), "evt_retry_me")
@@ -928,10 +1040,8 @@ mod tests {
             })
             .returning(move |_, _| Ok(vec![e1_clone.clone()]));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let result = service
             .get_events_by_intent(
@@ -964,10 +1074,8 @@ mod tests {
             .times(1)
             .returning(|_, _| Ok(()));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         // Boundary: attempt 9 is the last retryable
         let event_id_9 = EventId::new();
@@ -996,18 +1104,15 @@ mod tests {
         let queued_ids = Arc::new(std::sync::Mutex::new(Vec::new()));
         let queued_ids_clone = queued_ids.clone();
 
-        mock_webhook_repo
-            .expect_queue_event()
-            .times(5)
-            .returning(move |event: &WebhookEventRow| {
+        mock_webhook_repo.expect_queue_event().times(5).returning(
+            move |event: &WebhookEventRow| {
                 queued_ids_clone.lock().unwrap().push(event.id.clone());
                 Ok(())
-            });
+            },
+        );
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let tenant_id = TenantId::new("tenant_dedup");
         let payload = json!({"status": "completed"});
@@ -1032,7 +1137,8 @@ mod tests {
             for j in (i + 1)..event_ids.len() {
                 assert_ne!(
                     event_ids[i].0, event_ids[j].0,
-                    "EventIds {} and {} must be unique", i, j
+                    "EventIds {} and {} must be unique",
+                    i, j
                 );
             }
         }
@@ -1054,20 +1160,17 @@ mod tests {
         let captured_created_at = Arc::new(std::sync::Mutex::new(None));
         let captured_clone = captured_created_at.clone();
 
-        mock_webhook_repo
-            .expect_queue_event()
-            .times(1)
-            .returning(move |event: &WebhookEventRow| {
+        mock_webhook_repo.expect_queue_event().times(1).returning(
+            move |event: &WebhookEventRow| {
                 *captured_clone.lock().unwrap() = Some(event.created_at);
                 Ok(())
-            });
+            },
+        );
 
         let before = Utc::now();
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let tenant_id = TenantId::new("tenant_fresh");
         service
@@ -1082,11 +1185,16 @@ mod tests {
 
         let after = Utc::now();
 
-        let created_at = captured_created_at.lock().unwrap().expect("created_at should be captured");
+        let created_at = captured_created_at
+            .lock()
+            .unwrap()
+            .expect("created_at should be captured");
         assert!(
             created_at >= before && created_at <= after,
             "created_at ({}) must be between before ({}) and after ({})",
-            created_at, before, after
+            created_at,
+            before,
+            after
         );
 
         // Verify next_attempt_at is also fresh (should be set to now)
@@ -1116,22 +1224,25 @@ mod tests {
             .times(1)
             .returning(move |_| Ok(events_clone.clone()));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         // Without http-client feature, all events should be "delivered" successfully
         let result = service.process_pending_events(10).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 5, "All 5 ordered events should be processed");
+        assert_eq!(
+            result.unwrap(),
+            5,
+            "All 5 ordered events should be processed"
+        );
 
         // Verify ordering is maintained by checking event IDs are sequential
         for (i, event) in events.iter().enumerate() {
             assert_eq!(
                 event.id,
                 format!("evt_order_{:03}", i),
-                "Event at position {} should have sequential ID", i
+                "Event at position {} should have sequential ID",
+                i
             );
         }
     }
@@ -1156,19 +1267,34 @@ mod tests {
 
         // Changing any single input must produce a different signature
         let diff_secret = ramp_common::crypto::generate_webhook_signature(
-            b"different_secret", timestamp, payload,
-        ).unwrap();
-        assert_ne!(sig1, diff_secret, "Different secret must produce different signature");
+            b"different_secret",
+            timestamp,
+            payload,
+        )
+        .unwrap();
+        assert_ne!(
+            sig1, diff_secret,
+            "Different secret must produce different signature"
+        );
 
-        let diff_ts = ramp_common::crypto::generate_webhook_signature(
-            secret, timestamp + 1, payload,
-        ).unwrap();
-        assert_ne!(sig1, diff_ts, "Different timestamp must produce different signature");
+        let diff_ts =
+            ramp_common::crypto::generate_webhook_signature(secret, timestamp + 1, payload)
+                .unwrap();
+        assert_ne!(
+            sig1, diff_ts,
+            "Different timestamp must produce different signature"
+        );
 
         let diff_payload = ramp_common::crypto::generate_webhook_signature(
-            secret, timestamp, br#"{"different":true}"#,
-        ).unwrap();
-        assert_ne!(sig1, diff_payload, "Different payload must produce different signature");
+            secret,
+            timestamp,
+            br#"{"different":true}"#,
+        )
+        .unwrap();
+        assert_ne!(
+            sig1, diff_payload,
+            "Different payload must produce different signature"
+        );
     }
 
     #[tokio::test]
@@ -1184,10 +1310,9 @@ mod tests {
             .times(4)
             .returning(|_, _, _| Ok(()));
 
-        let service = Arc::new(WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap());
+        let service = Arc::new(
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap(),
+        );
 
         // Spawn 4 concurrent retry operations for different events
         let handles: Vec<_> = (0..4)
@@ -1195,12 +1320,8 @@ mod tests {
                 let svc = service.clone();
                 let event_id = EventId::new();
                 tokio::spawn(async move {
-                    svc.schedule_retry(
-                        &event_id,
-                        &format!("Concurrent error {}", i),
-                        i as i32,
-                    )
-                    .await
+                    svc.schedule_retry(&event_id, &format!("Concurrent error {}", i), i as i32)
+                        .await
                 })
             })
             .collect();
@@ -1209,7 +1330,8 @@ mod tests {
         for (i, result) in results.iter().enumerate() {
             assert!(
                 result.as_ref().unwrap().is_ok(),
-                "Concurrent schedule_retry {} should succeed", i
+                "Concurrent schedule_retry {} should succeed",
+                i
             );
         }
     }
@@ -1220,11 +1342,11 @@ mod tests {
         // (nonce length) is properly rejected during the split_at(12) logic.
         // This mirrors the validation in deliver_event with http-client enabled.
         let short_blobs: Vec<Vec<u8>> = vec![
-            vec![],                       // 0 bytes
-            vec![0x01],                   // 1 byte
-            vec![0x01; 5],               // 5 bytes
-            vec![0x01; 11],              // 11 bytes (just under nonce size)
-            vec![0x01; 12],              // 12 bytes (nonce only, no ciphertext)
+            vec![],         // 0 bytes
+            vec![0x01],     // 1 byte
+            vec![0x01; 5],  // 5 bytes
+            vec![0x01; 11], // 11 bytes (just under nonce size)
+            vec![0x01; 12], // 12 bytes (nonce only, no ciphertext)
         ];
 
         for blob in &short_blobs {
@@ -1233,14 +1355,18 @@ mod tests {
                 // "Encrypted webhook secret too short (must be nonce + ciphertext)"
                 assert!(
                     blob.len() <= 12,
-                    "Blob of length {} should be rejected as too short", blob.len()
+                    "Blob of length {} should be rejected as too short",
+                    blob.len()
                 );
             }
         }
 
         // A valid blob must be > 12 bytes
         let valid_blob = vec![0x01; 28]; // 12 nonce + 16 ciphertext
-        assert!(valid_blob.len() > 12, "Valid blob must be longer than nonce");
+        assert!(
+            valid_blob.len() > 12,
+            "Valid blob must be longer than nonce"
+        );
         let (nonce, ciphertext) = valid_blob.split_at(12);
         assert_eq!(nonce.len(), 12, "Nonce must be 12 bytes");
         assert!(!ciphertext.is_empty(), "Ciphertext must not be empty");
@@ -1275,10 +1401,9 @@ mod tests {
                     })
                     .returning(|_| Ok(()));
 
-                let service = WebhookService::new(
-                    Arc::new(mock_webhook_repo),
-                    Arc::new(mock_tenant_repo),
-                ).unwrap();
+                let service =
+                    WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo))
+                        .unwrap();
 
                 let tenant_id = TenantId::new("tenant_matrix");
                 let intent_id = IntentId::new("intent_matrix");
@@ -1295,7 +1420,8 @@ mod tests {
                 assert!(
                     result.is_ok(),
                     "queue_event for {:?} with_intent={} should succeed",
-                    event_type, with_intent
+                    event_type,
+                    with_intent
                 );
             }
         }
@@ -1331,18 +1457,25 @@ mod tests {
         // Step 3: Sign (mirrors deliver_event line 210-212)
         let timestamp = Utc::now().timestamp();
         let signature = ramp_common::crypto::generate_webhook_signature(
-            webhook_secret, timestamp, &payload_bytes,
-        ).expect("signature generation should succeed");
+            webhook_secret,
+            timestamp,
+            &payload_bytes,
+        )
+        .expect("signature generation should succeed");
 
         // Step 4: Verify as receiver (consumer-side verification)
         let verified_ts = ramp_common::crypto::verify_webhook_signature(
-            webhook_secret, &signature, &payload_bytes, 300,
-        ).expect("signature should verify successfully");
+            webhook_secret,
+            &signature,
+            &payload_bytes,
+            300,
+        )
+        .expect("signature should verify successfully");
         assert_eq!(verified_ts, timestamp, "Verified timestamp must match");
 
         // Step 5: Deserialize payload and validate structure
-        let received: serde_json::Value = serde_json::from_slice(&payload_bytes)
-            .expect("receiver should deserialize payload");
+        let received: serde_json::Value =
+            serde_json::from_slice(&payload_bytes).expect("receiver should deserialize payload");
         assert_eq!(received["id"].as_str().unwrap(), event.id);
         assert_eq!(received["type"].as_str().unwrap(), event.event_type);
         assert!(received["data"].is_object(), "data field must be an object");
@@ -1366,14 +1499,21 @@ mod tests {
         let payload_bytes = serde_json::to_vec(&payload).unwrap();
         let timestamp = Utc::now().timestamp();
 
-        let signature = ramp_common::crypto::generate_webhook_signature(
-            secret, timestamp, &payload_bytes,
-        ).unwrap();
+        let signature =
+            ramp_common::crypto::generate_webhook_signature(secret, timestamp, &payload_bytes)
+                .unwrap();
 
         // Validate X-Webhook-Signature format
         let parts: Vec<&str> = signature.splitn(2, ',').collect();
-        assert_eq!(parts.len(), 2, "Signature must have 2 parts separated by comma");
-        assert!(parts[0].starts_with("t="), "First part must be t=<timestamp>");
+        assert_eq!(
+            parts.len(),
+            2,
+            "Signature must have 2 parts separated by comma"
+        );
+        assert!(
+            parts[0].starts_with("t="),
+            "First part must be t=<timestamp>"
+        );
         assert!(parts[1].starts_with("v1="), "Second part must be v1=<hex>");
 
         // Parse timestamp from header
@@ -1407,31 +1547,28 @@ mod tests {
         let errors_seen = Arc::new(std::sync::Mutex::new(Vec::new()));
         let errors_clone = errors_seen.clone();
 
-        mock_webhook_repo
-            .expect_mark_failed()
-            .times(3)
-            .returning(move |_id: &EventId, error: &str, next: chrono::DateTime<Utc>| {
+        mock_webhook_repo.expect_mark_failed().times(3).returning(
+            move |_id: &EventId, error: &str, next: chrono::DateTime<Utc>| {
                 errors_clone.lock().unwrap().push((error.to_string(), next));
                 Ok(())
-            });
+            },
+        );
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let event_id = EventId::new();
 
         // Simulate 3 consecutive 5xx failures (as deliver_event would do)
-        let http_errors = vec![
-            ("HTTP 500", 0),
-            ("HTTP 502", 1),
-            ("HTTP 503", 2),
-        ];
+        let http_errors = vec![("HTTP 500", 0), ("HTTP 502", 1), ("HTTP 503", 2)];
 
         for (error_msg, attempt) in &http_errors {
             let result = service.schedule_retry(&event_id, error_msg, *attempt).await;
-            assert!(result.is_ok(), "schedule_retry for {} should succeed", error_msg);
+            assert!(
+                result.is_ok(),
+                "schedule_retry for {} should succeed",
+                error_msg
+            );
         }
 
         // Verify escalating backoff delays
@@ -1443,8 +1580,10 @@ mod tests {
 
         // Verify next_attempt_at times are in the future and increasing
         for i in 0..errors.len() {
-            assert!(errors[i].1 > Utc::now() - chrono::Duration::seconds(5),
-                "next_attempt_at should be in the future");
+            assert!(
+                errors[i].1 > Utc::now() - chrono::Duration::seconds(5),
+                "next_attempt_at should be in the future"
+            );
         }
         // Backoff: 2^0=1s, 2^1=2s, 2^2=4s -> each delay should be larger
         // (the actual times depend on when Utc::now() is called, but the offsets increase)
@@ -1476,10 +1615,8 @@ mod tests {
                 Ok(())
             });
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let event_id = EventId::new();
 
@@ -1492,13 +1629,15 @@ mod tests {
 
         // Attempts 0-9 should call mark_failed (10 times)
         assert_eq!(
-            fail_count.load(std::sync::atomic::Ordering::SeqCst), 10,
+            fail_count.load(std::sync::atomic::Ordering::SeqCst),
+            10,
             "Should have 10 retryable failures"
         );
 
         // Attempt 10 should call mark_permanently_failed (1 time)
         assert_eq!(
-            perm_fail_count.load(std::sync::atomic::Ordering::SeqCst), 1,
+            perm_fail_count.load(std::sync::atomic::Ordering::SeqCst),
+            1,
             "Should have 1 permanent failure (dead letter)"
         );
     }
@@ -1518,14 +1657,16 @@ mod tests {
             .times(1)
             .returning(|_| Ok(vec![]));
 
-        let service = WebhookService::new(
-            Arc::new(mock_webhook_repo),
-            Arc::new(mock_tenant_repo),
-        ).unwrap();
+        let service =
+            WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
         let result = service.process_pending_events(10).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 0, "No events should be delivered when queue is empty");
+        assert_eq!(
+            result.unwrap(),
+            0,
+            "No events should be delivered when queue is empty"
+        );
 
         // Test that queue_event fails when repository returns error
         let mut mock_repo_err = MockWebhookRepository::new();
@@ -1536,10 +1677,8 @@ mod tests {
             .times(1)
             .returning(|_| Err(ramp_common::Error::Internal("DB connection failed".into())));
 
-        let service_err = WebhookService::new(
-            Arc::new(mock_repo_err),
-            Arc::new(mock_tenant_err),
-        ).unwrap();
+        let service_err =
+            WebhookService::new(Arc::new(mock_repo_err), Arc::new(mock_tenant_err)).unwrap();
 
         let result = service_err
             .queue_event(
@@ -1551,7 +1690,11 @@ mod tests {
             .await;
         assert!(result.is_err(), "queue_event should fail on DB error");
         let err_msg = format!("{}", result.unwrap_err());
-        assert!(err_msg.contains("DB connection failed"), "Error should propagate: {}", err_msg);
+        assert!(
+            err_msg.contains("DB connection failed"),
+            "Error should propagate: {}",
+            err_msg
+        );
     }
 
     #[test]
@@ -1572,36 +1715,50 @@ mod tests {
         // Sign with a timestamp from 10 minutes ago (simulating delayed delivery)
         let stale_timestamp = Utc::now().timestamp() - 600;
         let signature = ramp_common::crypto::generate_webhook_signature(
-            secret, stale_timestamp, &payload_bytes,
-        ).unwrap();
+            secret,
+            stale_timestamp,
+            &payload_bytes,
+        )
+        .unwrap();
 
         // Receiver with 5-minute tolerance REJECTS
-        let result_strict = ramp_common::crypto::verify_webhook_signature(
-            secret, &signature, &payload_bytes, 300,
+        let result_strict =
+            ramp_common::crypto::verify_webhook_signature(secret, &signature, &payload_bytes, 300);
+        assert!(
+            result_strict.is_err(),
+            "5-min tolerance should reject 10-min-old signature"
         );
-        assert!(result_strict.is_err(), "5-min tolerance should reject 10-min-old signature");
 
         // Receiver with 15-minute tolerance ACCEPTS
-        let result_lenient = ramp_common::crypto::verify_webhook_signature(
-            secret, &signature, &payload_bytes, 900,
+        let result_lenient =
+            ramp_common::crypto::verify_webhook_signature(secret, &signature, &payload_bytes, 900);
+        assert!(
+            result_lenient.is_ok(),
+            "15-min tolerance should accept 10-min-old signature"
         );
-        assert!(result_lenient.is_ok(), "15-min tolerance should accept 10-min-old signature");
 
         // Sign with fresh timestamp
         let fresh_timestamp = Utc::now().timestamp();
         let fresh_sig = ramp_common::crypto::generate_webhook_signature(
-            secret, fresh_timestamp, &payload_bytes,
-        ).unwrap();
+            secret,
+            fresh_timestamp,
+            &payload_bytes,
+        )
+        .unwrap();
 
         // Both tolerances should accept fresh signature
-        let fresh_strict = ramp_common::crypto::verify_webhook_signature(
-            secret, &fresh_sig, &payload_bytes, 300,
+        let fresh_strict =
+            ramp_common::crypto::verify_webhook_signature(secret, &fresh_sig, &payload_bytes, 300);
+        assert!(
+            fresh_strict.is_ok(),
+            "Fresh signature should pass strict tolerance"
         );
-        assert!(fresh_strict.is_ok(), "Fresh signature should pass strict tolerance");
 
-        let fresh_lenient = ramp_common::crypto::verify_webhook_signature(
-            secret, &fresh_sig, &payload_bytes, 900,
+        let fresh_lenient =
+            ramp_common::crypto::verify_webhook_signature(secret, &fresh_sig, &payload_bytes, 900);
+        assert!(
+            fresh_lenient.is_ok(),
+            "Fresh signature should pass lenient tolerance"
         );
-        assert!(fresh_lenient.is_ok(), "Fresh signature should pass lenient tolerance");
     }
 }

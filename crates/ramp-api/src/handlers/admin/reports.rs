@@ -310,7 +310,7 @@ pub async fn trigger_ctr_generation(
     State(report_generator): State<Arc<ReportGenerator>>,
     Json(params): Json<CtrQueryParams>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    super::tier::check_admin_key(&headers)?;
+    super::tier::check_admin_key_operator(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         "Triggering CTR report generation"

@@ -153,7 +153,14 @@ impl CaseNoteManager {
         author_id: Option<String>,
     ) -> Result<CaseNote> {
         let content = format!("Case resolved: {}", resolution);
-        self.add_note(tenant_id, case_id, author_id, content, NoteType::Decision, true)
-            .await
+        self.add_note(
+            tenant_id,
+            case_id,
+            author_id,
+            content,
+            NoteType::Decision,
+            true,
+        )
+        .await
     }
 }

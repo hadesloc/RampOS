@@ -154,7 +154,10 @@ impl PasskeyService {
     }
 
     /// List all passkey credentials for a user
-    pub async fn list_passkeys(&self, user_id: &str) -> Result<Vec<PasskeyCredential>, PasskeyError> {
+    pub async fn list_passkeys(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<PasskeyCredential>, PasskeyError> {
         let store = self.credentials.read().await;
 
         Ok(store
@@ -220,11 +223,7 @@ impl PasskeyService {
     }
 
     /// Update the last_used_at timestamp for a credential
-    pub async fn mark_used(
-        &self,
-        user_id: &str,
-        credential_id: &str,
-    ) -> Result<(), PasskeyError> {
+    pub async fn mark_used(&self, user_id: &str, credential_id: &str) -> Result<(), PasskeyError> {
         let mut store = self.credentials.write().await;
 
         let user_creds = store
@@ -338,7 +337,10 @@ mod tests {
 
         let result = service.register_passkey(request).await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), PasskeyError::CredentialAlreadyExists));
+        assert!(matches!(
+            result.unwrap_err(),
+            PasskeyError::CredentialAlreadyExists
+        ));
     }
 
     #[tokio::test]
@@ -477,7 +479,10 @@ mod tests {
 
         let result = service.register_passkey(request).await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), PasskeyError::InvalidPublicKey(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            PasskeyError::InvalidPublicKey(_)
+        ));
     }
 
     #[tokio::test]
@@ -488,7 +493,10 @@ mod tests {
 
         let result = service.register_passkey(request).await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), PasskeyError::InvalidCredentialId));
+        assert!(matches!(
+            result.unwrap_err(),
+            PasskeyError::InvalidCredentialId
+        ));
     }
 
     #[tokio::test]

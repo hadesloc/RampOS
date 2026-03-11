@@ -138,10 +138,7 @@ impl MpcKeyService {
     ///
     /// In a real MPC system, this would use a proactive share refresh protocol.
     /// Here we simulate it by re-splitting the reconstructed secret.
-    pub fn refresh_key_shares(
-        &self,
-        user_id: &str,
-    ) -> ramp_common::Result<MpcKeyGenResult> {
+    pub fn refresh_key_shares(&self, user_id: &str) -> ramp_common::Result<MpcKeyGenResult> {
         let existing_shares = self.get_key_shares(user_id);
         if existing_shares.len() < 2 {
             return Err(ramp_common::Error::Validation(
@@ -199,11 +196,7 @@ impl MpcKeyService {
             shares_map.insert(user_id.to_string(), new_shares.clone());
         }
 
-        info!(
-            user_id,
-            generation = new_generation,
-            "Refreshed key shares"
-        );
+        info!(user_id, generation = new_generation, "Refreshed key shares");
 
         Ok(MpcKeyGenResult {
             shares: new_shares,
@@ -230,7 +223,9 @@ impl MpcKeyService {
         num_shares: usize,
         rng: &mut impl Rng,
     ) -> Vec<Vec<u8>> {
-        let mut shares: Vec<Vec<u8>> = (0..num_shares).map(|_| Vec::with_capacity(secret.len())).collect();
+        let mut shares: Vec<Vec<u8>> = (0..num_shares)
+            .map(|_| Vec::with_capacity(secret.len()))
+            .collect();
 
         for &secret_byte in secret {
             // Random coefficients for the polynomial: a_0 = secret_byte, a_1..a_{t-1} = random
@@ -481,7 +476,10 @@ mod tests {
         // Generation incremented
         assert_eq!(refreshed.generation, 2);
         // Shares should be different (new random polynomial)
-        assert_ne!(refreshed.shares[0].share_bytes, result.shares[0].share_bytes);
+        assert_ne!(
+            refreshed.shares[0].share_bytes,
+            result.shares[0].share_bytes
+        );
     }
 
     #[test]

@@ -124,6 +124,22 @@ describe('RampOSEventEmitter', () => {
     expect(readyHandler).toHaveBeenCalledOnce();
     expect(closeHandler).not.toHaveBeenCalled();
   });
+
+  it('uses current origin as the default postMessage target instead of wildcard', () => {
+    const emitter = RampOSEventEmitter.getInstance();
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'parent', {
+      value: { postMessage },
+      configurable: true,
+    });
+
+    emitter.emit('CHECKOUT_READY');
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'rampos-widget' }),
+      window.location.origin
+    );
+  });
 });
 
 describe('onRampOSMessage', () => {

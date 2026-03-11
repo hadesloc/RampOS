@@ -80,6 +80,17 @@ impl UserService {
             .ok_or_else(|| Error::NotFound(format!("User {}", user_id)))
     }
 
+    pub async fn list_due_for_rescreening(
+        &self,
+        tenant_id: &TenantId,
+        due_before: chrono::DateTime<chrono::Utc>,
+        limit: i64,
+    ) -> Result<Vec<UserRow>> {
+        self.repo
+            .list_due_for_rescreening(tenant_id, due_before, limit)
+            .await
+    }
+
     pub async fn list_users(
         &self,
         tenant_id: &TenantId,
@@ -150,6 +161,17 @@ impl UserService {
         }
 
         Ok(())
+    }
+
+    pub async fn update_user_risk_flags(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        risk_flags: serde_json::Value,
+    ) -> Result<()> {
+        self.repo
+            .update_risk_flags(tenant_id, user_id, risk_flags)
+            .await
     }
 }
 

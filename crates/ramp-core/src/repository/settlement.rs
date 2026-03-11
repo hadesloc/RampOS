@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ramp_common::{Error, Result};
+use ramp_common::{types::TenantId, Error, Result};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
 use tracing::instrument;
@@ -27,6 +27,12 @@ pub trait SettlementRepository: Send + Sync {
     /// Get a settlement by ID
     async fn get_by_id(&self, id: &str) -> Result<Option<SettlementRow>>;
 
+    /// Get settlements for the provided IDs.
+    async fn list_by_ids(&self, ids: &[String]) -> Result<Vec<SettlementRow>>;
+
+    /// Get the latest settlement by bank reference.
+    async fn get_by_bank_reference(&self, bank_reference: &str) -> Result<Option<SettlementRow>>;
+
     /// Update settlement status
     async fn update_status(
         &self,
@@ -47,11 +53,27 @@ pub trait SettlementRepository: Send + Sync {
     /// List settlements using cursor-based pagination.
     /// Cursor is the ID of the last item from the previous page.
     /// Uses (created_at, id) keyset for stable ordering.
-    async fn list_by_cursor(
+    async fn list_by_cursor(&self, cursor: Option<&str>, limit: i64) -> Result<Vec<SettlementRow>>;
+
+    async fn list_by_offramp_in_tenant(
         &self,
-        cursor: Option<&str>,
-        limit: i64,
-    ) -> Result<Vec<SettlementRow>>;
+        tenant_id: &TenantId,
+        offramp_intent_id: &str,
+    ) -> Result<Vec<SettlementRow>> {
+        let _ = tenant_id;
+        self.list_by_offramp(offramp_intent_id).await
+    }
+
+    async fn list_by_bank_reference_in_tenant(
+        &self,
+        tenant_id: &TenantId,
+        bank_reference: &str,
+    ) -> Result<Vec<SettlementRow>> {
+        let _ = tenant_id;
+        self.get_by_bank_reference(bank_reference)
+            .await
+            .map(|row| row.into_iter().collect())
+    }
 }
 
 /// PostgreSQL implementation
@@ -93,10 +115,46 @@ impl SettlementRepository for PgSettlementRepository {
 
     #[instrument(skip(self), fields(settlement_id = %id))]
     async fn get_by_id(&self, id: &str) -> Result<Option<SettlementRow>> {
-        let row = sqlx::query_as::<_, SettlementRow>(
-            "SELECT * FROM settlements WHERE id = $1",
+        let row = sqlx::query_as::<_, SettlementRow>("SELECT * FROM settlements WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+        Ok(row)
+    }
+
+    #[instrument(skip(self, ids), fields(settlement_count = ids.len()))]
+    async fn list_by_ids(&self, ids: &[String]) -> Result<Vec<SettlementRow>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let rows = sqlx::query_as::<_, SettlementRow>(
+            r#"
+            SELECT * FROM settlements
+            WHERE id = ANY($1)
+            "#,
         )
-        .bind(id)
+        .bind(ids)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| Error::Database(e.to_string()))?;
+
+        Ok(rows)
+    }
+
+    #[instrument(skip(self), fields(bank_reference = %bank_reference))]
+    async fn get_by_bank_reference(&self, bank_reference: &str) -> Result<Option<SettlementRow>> {
+        let row = sqlx::query_as::<_, SettlementRow>(
+            r#"
+            SELECT * FROM settlements
+            WHERE bank_reference = $1
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(bank_reference)
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| Error::Database(e.to_string()))?;
@@ -183,11 +241,7 @@ impl SettlementRepository for PgSettlementRepository {
     }
 
     #[instrument(skip(self))]
-    async fn list_by_cursor(
-        &self,
-        cursor: Option<&str>,
-        limit: i64,
-    ) -> Result<Vec<SettlementRow>> {
+    async fn list_by_cursor(&self, cursor: Option<&str>, limit: i64) -> Result<Vec<SettlementRow>> {
         let rows = if let Some(cursor_id) = cursor {
             sqlx::query_as::<_, SettlementRow>(
                 r#"
@@ -225,31 +279,69 @@ impl SettlementRepository for PgSettlementRepository {
 /// In-memory implementation for tests
 pub struct InMemorySettlementRepository {
     store: std::sync::Mutex<std::collections::HashMap<String, SettlementRow>>,
+    offramp_tenant_scope: std::sync::Mutex<std::collections::HashMap<String, String>>,
 }
 
 impl InMemorySettlementRepository {
     pub fn new() -> Self {
         Self {
             store: std::sync::Mutex::new(std::collections::HashMap::new()),
+            offramp_tenant_scope: std::sync::Mutex::new(std::collections::HashMap::new()),
         }
+    }
+
+    pub fn bind_offramp_to_tenant(&self, offramp_intent_id: &str, tenant_id: &TenantId) {
+        let mut scope = self
+            .offramp_tenant_scope
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        scope.insert(offramp_intent_id.to_string(), tenant_id.0.clone());
     }
 }
 
 #[async_trait]
 impl SettlementRepository for InMemorySettlementRepository {
     async fn create(&self, row: &SettlementRow) -> Result<()> {
-        let mut store = self.store.lock().map_err(|e| {
-            Error::Internal(format!("Settlement store lock poisoned: {}", e))
-        })?;
+        let mut store = self
+            .store
+            .lock()
+            .map_err(|e| Error::Internal(format!("Settlement store lock poisoned: {}", e)))?;
         store.insert(row.id.clone(), row.clone());
         Ok(())
     }
 
     async fn get_by_id(&self, id: &str) -> Result<Option<SettlementRow>> {
-        let store = self.store.lock().map_err(|e| {
-            Error::Internal(format!("Settlement store lock poisoned: {}", e))
-        })?;
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| Error::Internal(format!("Settlement store lock poisoned: {}", e)))?;
         Ok(store.get(id).cloned())
+    }
+
+    async fn list_by_ids(&self, ids: &[String]) -> Result<Vec<SettlementRow>> {
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| Error::Internal(format!("Settlement store lock poisoned: {}", e)))?;
+
+        Ok(ids.iter().filter_map(|id| store.get(id).cloned()).collect())
+    }
+
+    async fn get_by_bank_reference(&self, bank_reference: &str) -> Result<Option<SettlementRow>> {
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| Error::Internal(format!("Settlement store lock poisoned: {}", e)))?;
+
+        Ok(store
+            .values()
+            .filter(|row| row.bank_reference.as_deref() == Some(bank_reference))
+            .max_by(|left, right| {
+                left.updated_at
+                    .cmp(&right.updated_at)
+                    .then_with(|| left.id.cmp(&right.id))
+            })
+            .cloned())
     }
 
     async fn update_status(
@@ -258,12 +350,13 @@ impl SettlementRepository for InMemorySettlementRepository {
         new_status: &str,
         error_message: Option<&str>,
     ) -> Result<()> {
-        let mut store = self.store.lock().map_err(|e| {
-            Error::Internal(format!("Settlement store lock poisoned: {}", e))
-        })?;
-        let row = store.get_mut(id).ok_or_else(|| {
-            Error::NotFound(format!("Settlement {} not found", id))
-        })?;
+        let mut store = self
+            .store
+            .lock()
+            .map_err(|e| Error::Internal(format!("Settlement store lock poisoned: {}", e)))?;
+        let row = store
+            .get_mut(id)
+            .ok_or_else(|| Error::NotFound(format!("Settlement {} not found", id)))?;
         row.status = new_status.to_string();
         row.error_message = error_message.map(|s| s.to_string());
         row.updated_at = Utc::now();
@@ -271,9 +364,10 @@ impl SettlementRepository for InMemorySettlementRepository {
     }
 
     async fn list_by_status(&self, status: &str, limit: i64) -> Result<Vec<SettlementRow>> {
-        let store = self.store.lock().map_err(|e| {
-            Error::Internal(format!("Settlement store lock poisoned: {}", e))
-        })?;
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| Error::Internal(format!("Settlement store lock poisoned: {}", e)))?;
         let mut rows: Vec<_> = store
             .values()
             .filter(|r| r.status == status)
@@ -285,9 +379,10 @@ impl SettlementRepository for InMemorySettlementRepository {
     }
 
     async fn list_by_offramp(&self, offramp_intent_id: &str) -> Result<Vec<SettlementRow>> {
-        let store = self.store.lock().map_err(|e| {
-            Error::Internal(format!("Settlement store lock poisoned: {}", e))
-        })?;
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| Error::Internal(format!("Settlement store lock poisoned: {}", e)))?;
         let mut rows: Vec<_> = store
             .values()
             .filter(|r| r.offramp_intent_id == offramp_intent_id)
@@ -298,9 +393,10 @@ impl SettlementRepository for InMemorySettlementRepository {
     }
 
     async fn list_all(&self, limit: i64, offset: i64) -> Result<Vec<SettlementRow>> {
-        let store = self.store.lock().map_err(|e| {
-            Error::Internal(format!("Settlement store lock poisoned: {}", e))
-        })?;
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| Error::Internal(format!("Settlement store lock poisoned: {}", e)))?;
         let mut rows: Vec<_> = store.values().cloned().collect();
         rows.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         let offset = offset as usize;
@@ -309,14 +405,11 @@ impl SettlementRepository for InMemorySettlementRepository {
         Ok(rows)
     }
 
-    async fn list_by_cursor(
-        &self,
-        cursor: Option<&str>,
-        limit: i64,
-    ) -> Result<Vec<SettlementRow>> {
-        let store = self.store.lock().map_err(|e| {
-            Error::Internal(format!("Settlement store lock poisoned: {}", e))
-        })?;
+    async fn list_by_cursor(&self, cursor: Option<&str>, limit: i64) -> Result<Vec<SettlementRow>> {
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| Error::Internal(format!("Settlement store lock poisoned: {}", e)))?;
         let mut rows: Vec<_> = store.values().cloned().collect();
 
         // Sort by created_at DESC, id DESC
@@ -335,6 +428,50 @@ impl SettlementRepository for InMemorySettlementRepository {
 
         rows.truncate(limit as usize);
         Ok(rows)
+    }
+
+    async fn list_by_offramp_in_tenant(
+        &self,
+        tenant_id: &TenantId,
+        offramp_intent_id: &str,
+    ) -> Result<Vec<SettlementRow>> {
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| Error::Internal(format!("Settlement store lock poisoned: {}", e)))?;
+        let scope = self
+            .offramp_tenant_scope
+            .lock()
+            .map_err(|e| Error::Internal(format!("Settlement scope lock poisoned: {}", e)))?;
+
+        Ok(store
+            .values()
+            .filter(|row| row.offramp_intent_id == offramp_intent_id)
+            .filter(|row| scope.get(&row.offramp_intent_id) == Some(&tenant_id.0))
+            .cloned()
+            .collect())
+    }
+
+    async fn list_by_bank_reference_in_tenant(
+        &self,
+        tenant_id: &TenantId,
+        bank_reference: &str,
+    ) -> Result<Vec<SettlementRow>> {
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| Error::Internal(format!("Settlement store lock poisoned: {}", e)))?;
+        let scope = self
+            .offramp_tenant_scope
+            .lock()
+            .map_err(|e| Error::Internal(format!("Settlement scope lock poisoned: {}", e)))?;
+
+        Ok(store
+            .values()
+            .filter(|row| row.bank_reference.as_deref() == Some(bank_reference))
+            .filter(|row| scope.get(&row.offramp_intent_id) == Some(&tenant_id.0))
+            .cloned()
+            .collect())
     }
 }
 
@@ -490,7 +627,12 @@ mod tests {
         assert_eq!(deserialized.offramp_intent_id, row.offramp_intent_id);
     }
 
-    fn make_row_at(id: &str, offramp_id: &str, status: &str, created_at: DateTime<Utc>) -> SettlementRow {
+    fn make_row_at(
+        id: &str,
+        offramp_id: &str,
+        status: &str,
+        created_at: DateTime<Utc>,
+    ) -> SettlementRow {
         SettlementRow {
             id: id.to_string(),
             offramp_intent_id: offramp_id.to_string(),
@@ -599,5 +741,69 @@ mod tests {
         // Invalid cursor ID - should return all items (cursor not found, no skip)
         let page = repo.list_by_cursor(Some("nonexistent"), 10).await.unwrap();
         assert_eq!(page.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_lookup_helpers_for_ids_and_bank_reference() {
+        let repo = InMemorySettlementRepository::new();
+        let row_a = make_row("stl_lookup_a", "ofr_lookup_a", "PROCESSING");
+        let row_b = make_row("stl_lookup_b", "ofr_lookup_b", "FAILED");
+        let bank_reference_b = row_b.bank_reference.clone().unwrap();
+
+        repo.create(&row_a).await.unwrap();
+        repo.create(&row_b).await.unwrap();
+
+        let rows = repo
+            .list_by_ids(&[
+                "stl_lookup_b".to_string(),
+                "stl_missing".to_string(),
+                "stl_lookup_a".to_string(),
+            ])
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].id, "stl_lookup_b");
+        assert_eq!(rows[1].id, "stl_lookup_a");
+
+        let by_bank_reference = repo
+            .get_by_bank_reference(&bank_reference_b)
+            .await
+            .unwrap()
+            .expect("expected settlement by bank reference");
+        assert_eq!(by_bank_reference.id, "stl_lookup_b");
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_tenant_scoped_lookup_excludes_other_tenant_rows() {
+        let repo = InMemorySettlementRepository::new();
+        let tenant_a = TenantId::new("tenant_a");
+        let tenant_b = TenantId::new("tenant_b");
+
+        repo.bind_offramp_to_tenant("ofr_tenant_a", &tenant_a);
+        repo.bind_offramp_to_tenant("ofr_tenant_b", &tenant_b);
+
+        let mut row_a = make_row("stl_tenant_a", "ofr_tenant_a", "PROCESSING");
+        row_a.bank_reference = Some("RAMP-SHARED".to_string());
+        let mut row_b = make_row("stl_tenant_b", "ofr_tenant_b", "FAILED");
+        row_b.bank_reference = Some("RAMP-SHARED".to_string());
+
+        repo.create(&row_a).await.unwrap();
+        repo.create(&row_b).await.unwrap();
+
+        let by_offramp = repo
+            .list_by_offramp_in_tenant(&tenant_a, "ofr_tenant_b")
+            .await
+            .unwrap();
+        assert!(
+            by_offramp.is_empty(),
+            "tenant-scoped offramp lookup must not return another tenant's settlement rows"
+        );
+
+        let by_bank_reference = repo
+            .list_by_bank_reference_in_tenant(&tenant_a, "RAMP-SHARED")
+            .await
+            .unwrap();
+        assert_eq!(by_bank_reference.len(), 1);
+        assert_eq!(by_bank_reference[0].id, "stl_tenant_a");
     }
 }

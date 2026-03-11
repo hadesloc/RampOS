@@ -7,8 +7,8 @@ use chrono::{TimeZone, Utc};
 use rust_decimal_macros::dec;
 
 use ramp_compliance::fraud::{
-    DecisionThresholds, FraudDecision, FraudDecisionEngine, FraudFeatureExtractor,
-    RiskScorer, RuleBasedScorer, TransactionContext,
+    DecisionThresholds, FraudDecision, FraudDecisionEngine, FraudFeatureExtractor, RiskScorer,
+    RuleBasedScorer, TransactionContext,
 };
 
 /// Helper: build a "normal user" transaction context
@@ -51,9 +51,7 @@ fn suspicious_context() -> TransactionContext {
         txn_timestamps_1h: (0..10)
             .map(|i| now - chrono::Duration::minutes(i * 5))
             .collect(), // 10 txns in 1h
-        txn_timestamps_24h: (0..25)
-            .map(|i| now - chrono::Duration::hours(i))
-            .collect(), // 25 txns in 24h
+        txn_timestamps_24h: (0..25).map(|i| now - chrono::Duration::hours(i)).collect(), // 25 txns in 24h
         txn_timestamps_7d: (0..60)
             .map(|i| now - chrono::Duration::hours(i * 3))
             .collect(),
@@ -431,9 +429,7 @@ fn test_fraud_score_velocity_anomaly_detection() {
             .map(|i| now - chrono::Duration::minutes(i * 5))
             .collect(),
         // 25 transactions in 24 hours -> triggers velocity_24h(+12)
-        txn_timestamps_24h: (0..25)
-            .map(|i| now - chrono::Duration::hours(i))
-            .collect(),
+        txn_timestamps_24h: (0..25).map(|i| now - chrono::Duration::hours(i)).collect(),
         txn_timestamps_7d: vec![],
         user_typical_hours: vec![9, 10, 11, 12, 13, 14, 15, 16, 17],
         recipient_first_seen: Some(now - chrono::Duration::days(60)),
@@ -634,9 +630,9 @@ fn test_fraud_decision_escalation_path() {
 
     // Scenario B: Medium risk -> Review (high value + new account + velocity = ~37)
     let medium_features = FraudFeatureVector {
-        amount_usd: 6_000.0,     // high_value_transaction: +10
-        account_age_days: 3.0,    // new_account: +12
-        velocity_1h: 6.0,        // velocity_1h_exceeded: +15
+        amount_usd: 6_000.0,   // high_value_transaction: +10
+        account_age_days: 3.0, // new_account: +12
+        velocity_1h: 6.0,      // velocity_1h_exceeded: +15
         velocity_24h: 3.0,
         velocity_7d: 10.0,
         device_novelty: 0.0,
@@ -655,16 +651,16 @@ fn test_fraud_decision_escalation_path() {
 
     // Scenario C: High risk -> Block (trigger enough rules to exceed 80)
     let high_features = FraudFeatureVector {
-        amount_usd: 60_000.0,        // high_value(+10) + very_high_value(+25)
-        account_age_days: 2.0,        // new_account(+12)
-        velocity_1h: 10.0,           // velocity_1h_exceeded(+15) + rapid_succession(+18)
-        velocity_24h: 25.0,          // velocity_24h_exceeded(+12)
-        velocity_7d: 60.0,           // velocity_7d_exceeded(+8)
-        device_novelty: 1.0,         // new_device_high_value(+10)
+        amount_usd: 60_000.0,  // high_value(+10) + very_high_value(+25)
+        account_age_days: 2.0, // new_account(+12)
+        velocity_1h: 10.0,     // velocity_1h_exceeded(+15) + rapid_succession(+18)
+        velocity_24h: 25.0,    // velocity_24h_exceeded(+12)
+        velocity_7d: 60.0,     // velocity_7d_exceeded(+8)
+        device_novelty: 1.0,   // new_device_high_value(+10)
         country_risk: 0.9,
-        is_cross_border: 1.0,        // cross_border_high_risk(+12)
-        recipient_recency: 1.0,      // new_recipient_high_value(+10)
-        time_of_day_anomaly: 0.8,    // unusual_hour(+8)
+        is_cross_border: 1.0,         // cross_border_high_risk(+12)
+        recipient_recency: 1.0,       // new_recipient_high_value(+10)
+        time_of_day_anomaly: 0.8,     // unusual_hour(+8)
         historical_dispute_rate: 0.1, // high_dispute_rate(+15)
         ..FraudFeatureVector::default()
     };
@@ -716,8 +712,8 @@ fn test_fraud_score_aggregation_across_features() {
     // Combined: velocity_1h(+15) + new_account(+12) + unusual_hour(+8) = 35
     let mut combined = FraudFeatureVector::default();
     combined.amount_usd = 50.0;
-    combined.velocity_1h = 6.0;         // +15
-    combined.account_age_days = 3.0;    // +12
+    combined.velocity_1h = 6.0; // +15
+    combined.account_age_days = 3.0; // +12
     combined.time_of_day_anomaly = 0.8; // +8
     let combined_score = scorer.score(&combined);
 
@@ -770,19 +766,31 @@ fn test_threshold_edge_case_exact_allow_boundary() {
     let engine = FraudDecisionEngine::new(); // allow_below=30, block_above=80
 
     // Score exactly 29 -> Allow (< 30)
-    let score_29 = RiskScore { score: 29, risk_factors: vec![] };
+    let score_29 = RiskScore {
+        score: 29,
+        risk_factors: vec![],
+    };
     assert_eq!(engine.decide(&score_29), FraudDecision::Allow);
 
     // Score exactly 30 -> Review (>= 30 and <= 80)
-    let score_30 = RiskScore { score: 30, risk_factors: vec![] };
+    let score_30 = RiskScore {
+        score: 30,
+        risk_factors: vec![],
+    };
     assert_eq!(engine.decide(&score_30), FraudDecision::Review);
 
     // Score exactly 80 -> Review (>= 30 and <= 80)
-    let score_80 = RiskScore { score: 80, risk_factors: vec![] };
+    let score_80 = RiskScore {
+        score: 80,
+        risk_factors: vec![],
+    };
     assert_eq!(engine.decide(&score_80), FraudDecision::Review);
 
     // Score exactly 81 -> Block (> 80)
-    let score_81 = RiskScore { score: 81, risk_factors: vec![] };
+    let score_81 = RiskScore {
+        score: 81,
+        risk_factors: vec![],
+    };
     assert_eq!(engine.decide(&score_81), FraudDecision::Block);
 }
 
@@ -796,10 +804,16 @@ fn test_threshold_edge_case_zero_and_max() {
 
     let engine = FraudDecisionEngine::new();
 
-    let score_0 = RiskScore { score: 0, risk_factors: vec![] };
+    let score_0 = RiskScore {
+        score: 0,
+        risk_factors: vec![],
+    };
     assert_eq!(engine.decide(&score_0), FraudDecision::Allow);
 
-    let score_100 = RiskScore { score: 100, risk_factors: vec![] };
+    let score_100 = RiskScore {
+        score: 100,
+        risk_factors: vec![],
+    };
     assert_eq!(engine.decide(&score_100), FraudDecision::Block);
 }
 
@@ -860,8 +874,8 @@ fn test_geographic_high_risk_country_domestic_no_trigger() {
 
     let scorer = RuleBasedScorer::new();
     let features = FraudFeatureVector {
-        country_risk: 0.9,     // high risk country
-        is_cross_border: 0.0,  // NOT cross-border (domestic)
+        country_risk: 0.9,    // high risk country
+        is_cross_border: 0.0, // NOT cross-border (domestic)
         amount_usd: 50.0,
         account_age_days: 365.0,
         ..FraudFeatureVector::default()
@@ -898,7 +912,10 @@ fn test_velocity_rapid_succession_threshold_boundary() {
         ..FraudFeatureVector::default()
     };
     let score_at = scorer.score(&features_at);
-    let has_rapid_at = score_at.risk_factors.iter().any(|f| f.rule_name == "rapid_succession");
+    let has_rapid_at = score_at
+        .risk_factors
+        .iter()
+        .any(|f| f.rule_name == "rapid_succession");
     assert!(
         !has_rapid_at,
         "velocity_1h exactly at 8.0 should NOT trigger rapid_succession"
@@ -907,7 +924,10 @@ fn test_velocity_rapid_succession_threshold_boundary() {
     // Just above threshold (8.1) - SHOULD trigger
     features_at.velocity_1h = 8.1;
     let score_above = scorer.score(&features_at);
-    let has_rapid_above = score_above.risk_factors.iter().any(|f| f.rule_name == "rapid_succession");
+    let has_rapid_above = score_above
+        .risk_factors
+        .iter()
+        .any(|f| f.rule_name == "rapid_succession");
     assert!(
         has_rapid_above,
         "velocity_1h at 8.1 should trigger rapid_succession"
@@ -926,11 +946,11 @@ fn test_feature_combination_geographic_velocity_amount() {
     let engine = FraudDecisionEngine::new();
 
     let features = FraudFeatureVector {
-        velocity_1h: 10.0,          // velocity_1h_exceeded(+15) + rapid_succession(+18)
-        velocity_24h: 25.0,         // velocity_24h_exceeded(+12)
-        amount_usd: 6_000.0,        // high_value_transaction(+10)
+        velocity_1h: 10.0,   // velocity_1h_exceeded(+15) + rapid_succession(+18)
+        velocity_24h: 25.0,  // velocity_24h_exceeded(+12)
+        amount_usd: 6_000.0, // high_value_transaction(+10)
         is_cross_border: 1.0,
-        country_risk: 0.9,          // cross_border_high_risk(+12)
+        country_risk: 0.9, // cross_border_high_risk(+12)
         account_age_days: 365.0,
         ..FraudFeatureVector::default()
     };
@@ -1015,9 +1035,21 @@ fn test_batch_scoring_multiple_transactions() {
         })
         .collect();
 
-    assert_eq!(results[0].1, FraudDecision::Allow, "First txn should be Allow");
-    assert_eq!(results[1].1, FraudDecision::Review, "Second txn should be Review");
-    assert_eq!(results[2].1, FraudDecision::Block, "Third txn should be Block");
+    assert_eq!(
+        results[0].1,
+        FraudDecision::Allow,
+        "First txn should be Allow"
+    );
+    assert_eq!(
+        results[1].1,
+        FraudDecision::Review,
+        "Second txn should be Review"
+    );
+    assert_eq!(
+        results[2].1,
+        FraudDecision::Block,
+        "Third txn should be Block"
+    );
 
     // Scores should be strictly ascending
     assert!(
@@ -1040,21 +1072,21 @@ fn test_score_clamping_with_all_rules_triggered() {
     // Trigger every single rule
     let features = FraudFeatureVector {
         amount_percentile: 1.0,
-        velocity_1h: 20.0,           // velocity_1h_exceeded(+15) + rapid_succession(+18)
-        velocity_24h: 50.0,          // velocity_24h_exceeded(+12) + structuring_suspected(+20)
-        velocity_7d: 100.0,          // velocity_7d_exceeded(+8)
-        time_of_day_anomaly: 1.0,    // unusual_hour(+8)
-        amount_rounding_pattern: 1.0,// round_amount_flag(+5)
-        recipient_recency: 1.0,      // new_recipient_high_value(+10)
-        historical_dispute_rate: 0.2,// high_dispute_rate(+15)
-        account_age_days: 1.0,       // new_account(+12)
-        amount_to_avg_ratio: 10.0,   // amount_deviation(+10)
-        distinct_recipients_24h: 20.0,// many_distinct_recipients(+10)
-        device_novelty: 1.0,         // new_device_high_value(+10)
+        velocity_1h: 20.0,  // velocity_1h_exceeded(+15) + rapid_succession(+18)
+        velocity_24h: 50.0, // velocity_24h_exceeded(+12) + structuring_suspected(+20)
+        velocity_7d: 100.0, // velocity_7d_exceeded(+8)
+        time_of_day_anomaly: 1.0, // unusual_hour(+8)
+        amount_rounding_pattern: 1.0, // round_amount_flag(+5)
+        recipient_recency: 1.0, // new_recipient_high_value(+10)
+        historical_dispute_rate: 0.2, // high_dispute_rate(+15)
+        account_age_days: 1.0, // new_account(+12)
+        amount_to_avg_ratio: 10.0, // amount_deviation(+10)
+        distinct_recipients_24h: 20.0, // many_distinct_recipients(+10)
+        device_novelty: 1.0, // new_device_high_value(+10)
         country_risk: 0.9,
-        is_cross_border: 1.0,        // cross_border_high_risk(+12)
-        amount_usd: 100_000.0,       // high_value(+10) + very_high_value(+25)
-        failed_txn_count_24h: 10.0,  // excessive_failed_txns(+10)
+        is_cross_border: 1.0,                 // cross_border_high_risk(+12)
+        amount_usd: 100_000.0,                // high_value(+10) + very_high_value(+25)
+        failed_txn_count_24h: 10.0,           // excessive_failed_txns(+10)
         cumulative_amount_24h_usd: 200_000.0, // cumulative_24h_exceeded(+12)
     };
 
@@ -1182,7 +1214,7 @@ fn test_analytics_daily_fraud_rate_aggregation() {
 #[test]
 fn test_analytics_top_risk_factors_ranking() {
     use chrono::NaiveDate;
-    use ramp_compliance::fraud::{FraudAnalytics, ScoredTransaction, RiskFactor};
+    use ramp_compliance::fraud::{FraudAnalytics, RiskFactor, ScoredTransaction};
 
     let d = NaiveDate::from_ymd_opt(2025, 7, 10).unwrap();
 
@@ -1221,9 +1253,7 @@ fn test_analytics_top_risk_factors_ranking() {
             timestamp: d.and_hms_opt(12, 0, 0).unwrap().and_utc(),
             score: 30,
             decision: FraudDecision::Review,
-            risk_factors: vec![
-                mk_factor("velocity_1h_exceeded", 15),
-            ],
+            risk_factors: vec![mk_factor("velocity_1h_exceeded", 15)],
             confirmed_fraud: None,
         },
     ];
@@ -1290,7 +1320,11 @@ fn test_analytics_score_distribution_buckets() {
 
     // Total percentage should sum to 100%
     let total_pct: f64 = dist.iter().map(|b| b.percentage).sum();
-    assert!((total_pct - 100.0).abs() < 0.1, "Total percentage should be ~100%, got {}", total_pct);
+    assert!(
+        (total_pct - 100.0).abs() < 0.1,
+        "Total percentage should be ~100%, got {}",
+        total_pct
+    );
 }
 
 // ============================================================
@@ -1305,8 +1339,8 @@ fn test_structuring_detection_round_amounts() {
 
     // Structuring requires: velocity_24h > 10 AND amount_rounding_pattern >= 0.6
     let features = FraudFeatureVector {
-        velocity_24h: 15.0,             // > structuring_count_threshold (10)
-        amount_rounding_pattern: 0.6,    // >= structuring_rounding_threshold (0.6)
+        velocity_24h: 15.0,           // > structuring_count_threshold (10)
+        amount_rounding_pattern: 0.6, // >= structuring_rounding_threshold (0.6)
         amount_usd: 50.0,
         account_age_days: 365.0,
         ..FraudFeatureVector::default()
@@ -1338,7 +1372,10 @@ fn test_structuring_detection_round_amounts() {
         .risk_factors
         .iter()
         .any(|f| f.rule_name == "structuring_suspected");
-    assert!(!has_struct, "Rounding pattern 0.59 should NOT trigger structuring");
+    assert!(
+        !has_struct,
+        "Rounding pattern 0.59 should NOT trigger structuring"
+    );
 }
 
 // ============================================================
@@ -1353,9 +1390,9 @@ fn test_decision_audit_trail_completeness() {
 
     // Trigger exactly 3 known rules
     let features = FraudFeatureVector {
-        velocity_1h: 6.0,        // velocity_1h_exceeded(+15)
-        account_age_days: 3.0,   // new_account(+12)
-        amount_usd: 6_000.0,     // high_value_transaction(+10)
+        velocity_1h: 6.0,      // velocity_1h_exceeded(+15)
+        account_age_days: 3.0, // new_account(+12)
+        amount_usd: 6_000.0,   // high_value_transaction(+10)
         ..FraudFeatureVector::default()
     };
 
@@ -1363,20 +1400,36 @@ fn test_decision_audit_trail_completeness() {
 
     // Verify exactly 3 factors
     assert_eq!(
-        risk_score.risk_factors.len(), 3,
+        risk_score.risk_factors.len(),
+        3,
         "Expected exactly 3 risk factors, got {:?}",
-        risk_score.risk_factors.iter().map(|f| &f.rule_name).collect::<Vec<_>>()
+        risk_score
+            .risk_factors
+            .iter()
+            .map(|f| &f.rule_name)
+            .collect::<Vec<_>>()
     );
 
     // Each factor has non-empty description
     for factor in &risk_score.risk_factors {
-        assert!(!factor.description.is_empty(), "Factor '{}' missing description", factor.rule_name);
-        assert!(factor.contribution > 0, "Factor '{}' has zero contribution", factor.rule_name);
+        assert!(
+            !factor.description.is_empty(),
+            "Factor '{}' missing description",
+            factor.rule_name
+        );
+        assert!(
+            factor.contribution > 0,
+            "Factor '{}' has zero contribution",
+            factor.rule_name
+        );
     }
 
     // Score equals sum of contributions
     let expected_score: u8 = risk_score.risk_factors.iter().map(|f| f.contribution).sum();
-    assert_eq!(risk_score.score, expected_score, "Score should match sum of contributions");
+    assert_eq!(
+        risk_score.score, expected_score,
+        "Score should match sum of contributions"
+    );
 }
 
 // ============================================================
@@ -1443,7 +1496,10 @@ fn test_error_handling_default_feature_vector() {
 
     // Should be score 0, no factors triggered
     assert_eq!(risk_score.score, 0, "Default features should score 0");
-    assert!(risk_score.risk_factors.is_empty(), "Default features should trigger no rules");
+    assert!(
+        risk_score.risk_factors.is_empty(),
+        "Default features should trigger no rules"
+    );
     assert_eq!(engine.decide(&risk_score), FraudDecision::Allow);
 }
 
@@ -1460,19 +1516,17 @@ fn test_full_pipeline_feature_extraction_to_decision() {
     // Build a context that should trigger multiple rules
     let ctx = TransactionContext {
         amount: dec!(100_000_000),
-        amount_usd: dec!(8_000),   // above high_amount_usd_threshold
+        amount_usd: dec!(8_000), // above high_amount_usd_threshold
         timestamp: now,
         account_created_at: now - chrono::Duration::days(5), // new account
-        historical_amounts: vec![dec!(500_000)], // amount_to_avg_ratio will be high
+        historical_amounts: vec![dec!(500_000)],             // amount_to_avg_ratio will be high
         txn_timestamps_1h: (0..7)
             .map(|i| now - chrono::Duration::minutes(i * 5))
             .collect(), // 7 txns in 1h
-        txn_timestamps_24h: (0..15)
-            .map(|i| now - chrono::Duration::hours(i))
-            .collect(),
+        txn_timestamps_24h: (0..15).map(|i| now - chrono::Duration::hours(i)).collect(),
         txn_timestamps_7d: vec![],
         user_typical_hours: vec![9, 10, 11, 14, 15], // 3 AM is unusual
-        recipient_first_seen: None, // brand new recipient
+        recipient_first_seen: None,                  // brand new recipient
         total_disputes: 3,
         total_transactions: 20, // dispute rate = 15%
         distinct_recipients_24h: 7,
@@ -1494,7 +1548,11 @@ fn test_full_pipeline_feature_extraction_to_decision() {
     // Step 2: Scoring
     let scorer = RuleBasedScorer::new();
     let risk_score = scorer.score(&features);
-    assert!(risk_score.score > 80, "Multi-flag txn should score > 80, got {}", risk_score.score);
+    assert!(
+        risk_score.score > 80,
+        "Multi-flag txn should score > 80, got {}",
+        risk_score.score
+    );
 
     // Step 3: Decision
     let engine = FraudDecisionEngine::new();
@@ -1512,7 +1570,10 @@ fn test_full_pipeline_feature_extraction_to_decision() {
     };
 
     let top_factors = FraudAnalytics::top_risk_factors(&[scored_txn.clone()], 5);
-    assert!(!top_factors.is_empty(), "Should have risk factors in analytics");
+    assert!(
+        !top_factors.is_empty(),
+        "Should have risk factors in analytics"
+    );
 
     let dist = FraudAnalytics::score_distribution(&[scored_txn]);
     let total_count: u64 = dist.iter().map(|b| b.count).sum();
@@ -1530,24 +1591,23 @@ fn test_analytics_false_positive_rate_mixed() {
 
     let d = NaiveDate::from_ymd_opt(2025, 7, 10).unwrap();
 
-    let mk_txn = |id: &str, score: u8, decision: FraudDecision, confirmed: Option<bool>| {
-        ScoredTransaction {
+    let mk_txn =
+        |id: &str, score: u8, decision: FraudDecision, confirmed: Option<bool>| ScoredTransaction {
             transaction_id: id.to_string(),
             timestamp: d.and_hms_opt(12, 0, 0).unwrap().and_utc(),
             score,
             decision,
             risk_factors: vec![],
             confirmed_fraud: confirmed,
-        }
-    };
+        };
 
     let transactions = vec![
-        mk_txn("t1", 90, FraudDecision::Block, Some(true)),   // true positive
-        mk_txn("t2", 85, FraudDecision::Block, Some(false)),  // false positive
+        mk_txn("t1", 90, FraudDecision::Block, Some(true)), // true positive
+        mk_txn("t2", 85, FraudDecision::Block, Some(false)), // false positive
         mk_txn("t3", 50, FraudDecision::Review, Some(false)), // false positive
-        mk_txn("t4", 40, FraudDecision::Review, Some(true)),  // true positive
-        mk_txn("t5", 10, FraudDecision::Allow, Some(false)),  // true negative (not counted)
-        mk_txn("t6", 60, FraudDecision::Review, None),        // no label (not counted)
+        mk_txn("t4", 40, FraudDecision::Review, Some(true)), // true positive
+        mk_txn("t5", 10, FraudDecision::Allow, Some(false)), // true negative (not counted)
+        mk_txn("t6", 60, FraudDecision::Review, None),      // no label (not counted)
     ];
 
     let fp_rate = FraudAnalytics::false_positive_rate(&transactions).unwrap();

@@ -213,10 +213,13 @@ async fn setup_test_app() -> TestContext {
         ledger_service,
         onboarding_service,
         user_service,
-        webhook_service: Arc::new(ramp_core::service::webhook::WebhookService::new(
-            Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
-            tenant_repo.clone(),
-        ).unwrap()),
+        webhook_service: Arc::new(
+            ramp_core::service::webhook::WebhookService::new(
+                Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
+                tenant_repo.clone(),
+            )
+            .unwrap(),
+        ),
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
         report_generator,
@@ -239,10 +242,12 @@ async fn setup_test_app() -> TestContext {
             ramp_core::billing::BillingConfig::default(),
             Arc::new(ramp_core::billing::mock::MockBillingDataProvider::new()),
         )),
-        vnst_protocol: Arc::new(ramp_core::stablecoin::vnst_protocol::VnstProtocolService::new(
-            ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
-            Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
-        )),
+        vnst_protocol: Arc::new(
+            ramp_core::stablecoin::vnst_protocol::VnstProtocolService::new(
+                ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
+                Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
+            ),
+        ),
         db_pool: None,
         ctr_service: None,
         ws_state: None,

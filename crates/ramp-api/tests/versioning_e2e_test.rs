@@ -100,15 +100,13 @@ fn build_tenant_pinned_app(pinned_version: &str) -> Router {
         .route("/version", get(echo_version_handler))
         .route("/test", get(|| async { "ok" }))
         .layer(middleware::from_fn(version_negotiation_middleware))
-        .layer(middleware::from_fn(
-            move |mut req: Request, next: Next| {
-                let version = pinned.clone();
-                async move {
-                    req.extensions_mut().insert(TenantApiVersion { version });
-                    Ok::<_, StatusCode>(next.run(req).await)
-                }
-            },
-        ))
+        .layer(middleware::from_fn(move |mut req: Request, next: Next| {
+            let version = pinned.clone();
+            async move {
+                req.extensions_mut().insert(TenantApiVersion { version });
+                Ok::<_, StatusCode>(next.run(req).await)
+            }
+        }))
 }
 
 /// Build an app that applies response downgrade transformations.
@@ -181,9 +179,8 @@ fn build_request_upgrade_app() -> Router {
                         let bytes = axum::body::to_bytes(body, 65536).await.unwrap();
 
                         if let Ok(payload) = serde_json::from_slice::<Value>(&bytes) {
-                            let upgraded = reg
-                                .upgrade_request(&ctx.version, &latest, payload)
-                                .unwrap();
+                            let upgraded =
+                                reg.upgrade_request(&ctx.version, &latest, payload).unwrap();
                             let new_body = serde_json::to_vec(&upgraded).unwrap();
                             // Update content-length
                             parts.headers.insert(
@@ -615,7 +612,10 @@ async fn test_response_downgrade_transformer_chain() {
     );
 
     // Unrelated fields preserved
-    assert_eq!(body["id"], "intent_abc123", "Unrelated fields should be preserved");
+    assert_eq!(
+        body["id"], "intent_abc123",
+        "Unrelated fields should be preserved"
+    );
     assert_eq!(body["description"], "Test payment");
 }
 
@@ -729,7 +729,10 @@ async fn test_request_no_upgrade_for_latest_version() {
     assert_eq!(body["amount_minor"], 99000);
     assert_eq!(body["currency"], "USD");
     assert_eq!(body["description"], "Latest-format payment");
-    assert!(body.get("amount").is_none(), "No 'amount' field should appear");
+    assert!(
+        body.get("amount").is_none(),
+        "No 'amount' field should appear"
+    );
 }
 
 // =============================================================================
@@ -790,7 +793,10 @@ async fn test_error_response_body_structure() {
     let body: Value = resp.json().await.unwrap();
 
     // Validate full error structure
-    assert!(body["error"].is_object(), "Error response should have an 'error' object");
+    assert!(
+        body["error"].is_object(),
+        "Error response should have an 'error' object"
+    );
     assert!(
         body["error"]["code"].is_string(),
         "Error should have a 'code' string"
@@ -1016,8 +1022,9 @@ async fn test_full_roundtrip_upgrade_and_downgrade() {
                         let (parts, body) = response.into_parts();
                         let bytes = axum::body::to_bytes(body, 65536).await.unwrap();
                         if let Ok(payload) = serde_json::from_slice::<Value>(&bytes) {
-                            let downgraded =
-                                reg.downgrade_response(&ctx.version, &latest, payload).unwrap();
+                            let downgraded = reg
+                                .downgrade_response(&ctx.version, &latest, payload)
+                                .unwrap();
                             let mut resp = Json(downgraded).into_response();
                             *resp.status_mut() = parts.status;
                             for (k, v) in parts.headers.iter() {
@@ -1050,8 +1057,7 @@ async fn test_full_roundtrip_upgrade_and_downgrade() {
                                 axum::http::header::CONTENT_LENGTH,
                                 new_body.len().to_string().parse().unwrap(),
                             );
-                            let req =
-                                Request::from_parts(parts, axum::body::Body::from(new_body));
+                            let req = Request::from_parts(parts, axum::body::Body::from(new_body));
                             return next.run(req).await;
                         }
                         let req = Request::from_parts(parts, axum::body::Body::from(bytes));

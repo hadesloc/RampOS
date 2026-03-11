@@ -3,9 +3,9 @@
 //! Handles cross-chain message passing and verification for intent execution.
 
 use crate::bridge::{ChainId, TxHash};
+use alloy::primitives::{Address, Bytes, B256, U256};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use alloy::primitives::{Address, Bytes, B256, U256};
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -267,26 +267,23 @@ impl CrossChainRelayer {
                             record.status = MessageStatus::ReadyToRelay;
                         }
                     }
-                    MessageStatus::ReadyToRelay => {
-                        match self.execute_relay(record).await {
-                            Ok(_) => processed += 1,
-                            Err(e) => {
-                                warn!(
-                                    message_id = %id,
-                                    error = %e,
-                                    "Relay failed"
-                                );
-                                record.errors.push(e.to_string());
-                                if record.attempts >= self.config.max_retries {
-                                    record.status = MessageStatus::Failed(
-                                        "Max retries exceeded".to_string()
-                                    );
-                                } else {
-                                    record.status = MessageStatus::ReadyToRelay;
-                                }
+                    MessageStatus::ReadyToRelay => match self.execute_relay(record).await {
+                        Ok(_) => processed += 1,
+                        Err(e) => {
+                            warn!(
+                                message_id = %id,
+                                error = %e,
+                                "Relay failed"
+                            );
+                            record.errors.push(e.to_string());
+                            if record.attempts >= self.config.max_retries {
+                                record.status =
+                                    MessageStatus::Failed("Max retries exceeded".to_string());
+                            } else {
+                                record.status = MessageStatus::ReadyToRelay;
                             }
                         }
-                    }
+                    },
                     MessageStatus::Relaying => {
                         // Check if relay completed
                         // In production, query for tx receipt
@@ -385,11 +382,7 @@ impl ProofVerifier {
     // could forge cross-chain messages and steal funds.
     // TODO(security): Implement full Merkle Patricia proof verification before mainnet.
     /// Verify a message proof
-    pub async fn verify_proof(
-        &self,
-        message: &CrossChainMessage,
-        proof: &[u8],
-    ) -> Result<bool> {
+    pub async fn verify_proof(&self, message: &CrossChainMessage, proof: &[u8]) -> Result<bool> {
         // Basic sanity checks to reject obviously invalid proofs.
         // These are NOT sufficient for production security - real Merkle proof
         // verification must be implemented before deployment.
@@ -403,7 +396,8 @@ impl ProofVerifier {
         // a 32-byte hash node
         if proof.len() < 32 {
             return Err(Error::Validation(
-                "Proof verification failed: proof data too short (minimum 32 bytes required)".to_string(),
+                "Proof verification failed: proof data too short (minimum 32 bytes required)"
+                    .to_string(),
             ));
         }
 
@@ -568,7 +562,10 @@ mod tests {
         // Valid-looking proof (non-empty, >= 32 bytes, not all zeros) should pass placeholder check
         let valid_proof = vec![1u8; 64];
         let result = verifier.verify_proof(&message, &valid_proof).await.unwrap();
-        assert!(result, "Valid-looking proof should pass placeholder verification");
+        assert!(
+            result,
+            "Valid-looking proof should pass placeholder verification"
+        );
     }
 
     #[test]
@@ -590,10 +587,20 @@ mod tests {
     fn test_message_hash_deterministic() {
         let tx_hash = B256::from(rand::random::<[u8; 32]>());
         let mut msg1 = CrossChainMessage::new(
-            1, 42161, tx_hash, Address::ZERO, Address::ZERO, Bytes::new(),
+            1,
+            42161,
+            tx_hash,
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
         );
         let mut msg2 = CrossChainMessage::new(
-            1, 42161, tx_hash, Address::ZERO, Address::ZERO, Bytes::new(),
+            1,
+            42161,
+            tx_hash,
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
         );
         msg1.nonce = 42;
         msg2.nonce = 42;
@@ -604,10 +611,20 @@ mod tests {
     fn test_message_hash_differs_by_nonce() {
         let tx_hash = B256::from(rand::random::<[u8; 32]>());
         let mut msg1 = CrossChainMessage::new(
-            1, 42161, tx_hash, Address::ZERO, Address::ZERO, Bytes::new(),
+            1,
+            42161,
+            tx_hash,
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
         );
         let mut msg2 = CrossChainMessage::new(
-            1, 42161, tx_hash, Address::ZERO, Address::ZERO, Bytes::new(),
+            1,
+            42161,
+            tx_hash,
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
         );
         msg1.nonce = 1;
         msg2.nonce = 2;
@@ -618,10 +635,20 @@ mod tests {
     fn test_message_hash_differs_by_chain() {
         let tx_hash = B256::from(rand::random::<[u8; 32]>());
         let msg1 = CrossChainMessage::new(
-            1, 42161, tx_hash, Address::ZERO, Address::ZERO, Bytes::new(),
+            1,
+            42161,
+            tx_hash,
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
         );
         let msg2 = CrossChainMessage::new(
-            10, 42161, tx_hash, Address::ZERO, Address::ZERO, Bytes::new(),
+            10,
+            42161,
+            tx_hash,
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
         );
         assert_ne!(msg1.message_hash(), msg2.message_hash());
     }
@@ -640,7 +667,12 @@ mod tests {
     #[test]
     fn test_relay_record_new() {
         let message = CrossChainMessage::new(
-            1, 42161, B256::from(rand::random::<[u8; 32]>()), Address::ZERO, Address::ZERO, Bytes::new(),
+            1,
+            42161,
+            B256::from(rand::random::<[u8; 32]>()),
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
         );
         let record = RelayRecord::new(message);
         assert_eq!(record.status, MessageStatus::PendingConfirmation);
@@ -656,7 +688,12 @@ mod tests {
         let relayer = CrossChainRelayer::with_default_config();
 
         let message = CrossChainMessage::new(
-            1, 42161, B256::from(rand::random::<[u8; 32]>()), Address::ZERO, Address::ZERO, Bytes::new(),
+            1,
+            42161,
+            B256::from(rand::random::<[u8; 32]>()),
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
         );
         let id = relayer.submit_message(message).await.unwrap();
 
@@ -681,7 +718,12 @@ mod tests {
         let relayer = CrossChainRelayer::with_default_config();
 
         let message = CrossChainMessage::new(
-            1, 42161, B256::from(rand::random::<[u8; 32]>()), Address::ZERO, Address::ZERO, Bytes::new(),
+            1,
+            42161,
+            B256::from(rand::random::<[u8; 32]>()),
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
         );
         relayer.submit_message(message).await.unwrap();
 
@@ -702,7 +744,12 @@ mod tests {
         let relayer = CrossChainRelayer::with_default_config();
 
         let message = CrossChainMessage::new(
-            1, 42161, B256::from(rand::random::<[u8; 32]>()), Address::ZERO, Address::ZERO, Bytes::new(),
+            1,
+            42161,
+            B256::from(rand::random::<[u8; 32]>()),
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
         );
         let id = relayer.submit_message(message).await.unwrap();
 
@@ -725,7 +772,12 @@ mod tests {
 
         for _ in 0..5 {
             let msg = CrossChainMessage::new(
-                1, 42161, B256::from(rand::random::<[u8; 32]>()), Address::ZERO, Address::ZERO, Bytes::new(),
+                1,
+                42161,
+                B256::from(rand::random::<[u8; 32]>()),
+                Address::ZERO,
+                Address::ZERO,
+                Bytes::new(),
             );
             relayer.submit_message(msg).await.unwrap();
         }
@@ -738,18 +790,31 @@ mod tests {
     async fn test_proof_verifier_same_chain_rejected() {
         let verifier = ProofVerifier::new();
         let message = CrossChainMessage::new(
-            1, 1, B256::from(rand::random::<[u8; 32]>()), Address::ZERO, Address::ZERO, Bytes::new(),
+            1,
+            1,
+            B256::from(rand::random::<[u8; 32]>()),
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
         );
         let proof = vec![1u8; 64];
         let result = verifier.verify_proof(&message, &proof).await;
-        assert!(result.is_err(), "Same chain message proof should be rejected");
+        assert!(
+            result.is_err(),
+            "Same chain message proof should be rejected"
+        );
     }
 
     #[tokio::test]
     async fn test_proof_verifier_zero_chain_rejected() {
         let verifier = ProofVerifier::new();
         let message = CrossChainMessage::new(
-            0, 42161, B256::from(rand::random::<[u8; 32]>()), Address::ZERO, Address::ZERO, Bytes::new(),
+            0,
+            42161,
+            B256::from(rand::random::<[u8; 32]>()),
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
         );
         let proof = vec![1u8; 64];
         let result = verifier.verify_proof(&message, &proof).await;
@@ -770,11 +835,11 @@ mod tests {
     #[test]
     fn test_relayer_config_all_chains() {
         let config = RelayerConfig::default();
-        assert!(config.rpc_endpoints.contains_key(&1));     // Ethereum
+        assert!(config.rpc_endpoints.contains_key(&1)); // Ethereum
         assert!(config.rpc_endpoints.contains_key(&42161)); // Arbitrum
-        assert!(config.rpc_endpoints.contains_key(&8453));  // Base
-        assert!(config.rpc_endpoints.contains_key(&10));    // Optimism
-        assert!(config.rpc_endpoints.contains_key(&137));   // Polygon
+        assert!(config.rpc_endpoints.contains_key(&8453)); // Base
+        assert!(config.rpc_endpoints.contains_key(&10)); // Optimism
+        assert!(config.rpc_endpoints.contains_key(&137)); // Polygon
         assert_eq!(config.max_gas_price_gwei, 100);
         assert_eq!(config.retry_delay_secs, 30);
         assert_eq!(config.max_retries, 5);

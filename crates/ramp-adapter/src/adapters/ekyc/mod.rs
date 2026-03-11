@@ -323,7 +323,10 @@ pub trait EkycProvider: Send + Sync {
     async fn check_liveness(&self, request: LivenessRequest) -> Result<LivenessResult>;
 
     /// Verify address (optional - not all providers support this)
-    async fn verify_address(&self, _request: AddressVerificationRequest) -> Result<AddressVerification> {
+    async fn verify_address(
+        &self,
+        _request: AddressVerificationRequest,
+    ) -> Result<AddressVerification> {
         // Default implementation returns not supported
         Err(ramp_common::Error::Internal(
             "Address verification not supported by this provider".to_string(),
@@ -415,8 +418,7 @@ impl FullEkycResult {
 
         let provider_reference = format!(
             "ekyc_{}_{}",
-            id_verification.verification_id,
-            face_match.match_id
+            id_verification.verification_id, face_match.match_id
         );
 
         Self {

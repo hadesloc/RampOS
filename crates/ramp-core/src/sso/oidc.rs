@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use tokio::sync::RwLock;
 
 use super::{
-    RampRole, RoleMapping, SsoAuthRequest, SsoAuthResponse, SsoCallback, SsoProtocol,
-    SsoProvider, SsoProviderType, SsoService, SsoUser,
+    RampRole, RoleMapping, SsoAuthRequest, SsoAuthResponse, SsoCallback, SsoProtocol, SsoProvider,
+    SsoProviderType, SsoService, SsoUser,
 };
 
 /// OIDC configuration
@@ -81,11 +81,7 @@ impl OidcConfig {
     }
 
     /// Create OIDC config for Azure AD
-    pub fn azure_ad(
-        client_id: String,
-        client_secret_encrypted: Vec<u8>,
-        tenant_id: &str,
-    ) -> Self {
+    pub fn azure_ad(client_id: String, client_secret_encrypted: Vec<u8>, tenant_id: &str) -> Self {
         let base_url = format!("https://login.microsoftonline.com/{}/v2.0", tenant_id);
         Self {
             client_id,
@@ -133,9 +129,7 @@ impl OidcConfig {
                 "https://accounts.google.com/o/oauth2/v2/auth".to_string(),
             ),
             token_endpoint: Some("https://oauth2.googleapis.com/token".to_string()),
-            userinfo_endpoint: Some(
-                "https://openidconnect.googleapis.com/v1/userinfo".to_string(),
-            ),
+            userinfo_endpoint: Some("https://openidconnect.googleapis.com/v1/userinfo".to_string()),
             jwks_uri: Some("https://www.googleapis.com/oauth2/v3/certs".to_string()),
             end_session_endpoint: None, // Google doesn't support RP-initiated logout
             scopes: vec![
@@ -177,9 +171,7 @@ impl OidcConfig {
             name_claim: "name".to_string(),
             extra_auth_params: HashMap::new(),
             default_redirect_uri: std::env::var("OIDC_REDIRECT_URI")
-                .unwrap_or_else(|_| {
-                    format!("https://{}/v1/auth/sso/auth0/callback", auth0_domain)
-                }),
+                .unwrap_or_else(|_| format!("https://{}/v1/auth/sso/auth0/callback", auth0_domain)),
         }
     }
 }
@@ -374,12 +366,8 @@ impl OidcProvider {
             .as_deref()
             .ok_or_else(|| ramp_common::Error::Internal("No JWKS URI configured".into()))?;
 
-        let response = self
-            .http_client
-            .get(jwks_uri)
-            .send()
-            .await
-            .map_err(|e| {
+        let response =
+            self.http_client.get(jwks_uri).send().await.map_err(|e| {
                 ramp_common::Error::External(format!("Failed to fetch JWKS: {}", e))
             })?;
 
@@ -451,8 +439,7 @@ impl OidcProvider {
             } else {
                 // If no kid in header, use the first RSA signing key
                 keys.iter().find(|k| {
-                    k.kty == "RSA"
-                        && k.use_.as_deref() != Some("enc") // exclude encryption keys
+                    k.kty == "RSA" && k.use_.as_deref() != Some("enc") // exclude encryption keys
                 })
             };
 
@@ -471,14 +458,10 @@ impl OidcProvider {
             }
 
             let n = jwk.n.as_deref().ok_or_else(|| {
-                ramp_common::Error::Authentication(
-                    "JWKS key missing RSA modulus (n)".into(),
-                )
+                ramp_common::Error::Authentication("JWKS key missing RSA modulus (n)".into())
             })?;
             let e = jwk.e.as_deref().ok_or_else(|| {
-                ramp_common::Error::Authentication(
-                    "JWKS key missing RSA exponent (e)".into(),
-                )
+                ramp_common::Error::Authentication("JWKS key missing RSA exponent (e)".into())
             })?;
 
             // Build the decoding key from RSA components
@@ -514,17 +497,14 @@ impl OidcProvider {
             validation.set_audience(&[&self.config.client_id]);
 
             // Decode and verify the token
-            let token_data = jsonwebtoken::decode::<IdTokenClaims>(
-                id_token,
-                &decoding_key,
-                &validation,
-            )
-            .map_err(|e| {
-                ramp_common::Error::Authentication(format!(
-                    "JWT signature verification failed: {}",
-                    e
-                ))
-            })?;
+            let token_data =
+                jsonwebtoken::decode::<IdTokenClaims>(id_token, &decoding_key, &validation)
+                    .map_err(|e| {
+                        ramp_common::Error::Authentication(format!(
+                            "JWT signature verification failed: {}",
+                            e
+                        ))
+                    })?;
 
             Ok(token_data.claims)
         } else {
@@ -584,18 +564,13 @@ impl SsoProvider for OidcProvider {
         }
 
         // Get authorization code
-        let code = callback
-            .code
-            .as_ref()
-            .ok_or_else(|| {
-                ramp_common::Error::Authentication("Missing authorization code".into())
-            })?;
+        let code = callback.code.as_ref().ok_or_else(|| {
+            ramp_common::Error::Authentication("Missing authorization code".into())
+        })?;
 
-        // Exchange code for tokens
-        // SECURITY: TODO - The redirect_uri should be stored with the state parameter
-        // during the authorize step and retrieved here, rather than using a default.
-        // Using a static default is acceptable for MVP but does not fully protect
-        // against redirect_uri manipulation in a multi-origin deployment.
+        // Exchange code for tokens.
+        // SECURITY: fail closed to the configured redirect URI instead of trusting
+        // a callback-supplied redirect_uri until state-bound redirect storage exists.
         let tokens = self
             .exchange_code(code, &self.config.default_redirect_uri)
             .await?;
@@ -687,8 +662,7 @@ mod tests {
 
     #[test]
     fn test_google_workspace_config() {
-        let config =
-            OidcConfig::google_workspace("client123".to_string(), b"secret".to_vec());
+        let config = OidcConfig::google_workspace("client123".to_string(), b"secret".to_vec());
 
         assert_eq!(config.issuer_url, "https://accounts.google.com");
         assert!(config.extra_auth_params.contains_key("hd"));
@@ -738,12 +712,12 @@ mod tests {
     #[test]
     fn test_azure_ad_config_endpoints() {
         let tenant = "aaaabbbb-cccc-dddd-eeee-ffffgggghhhh";
-        let config = OidcConfig::azure_ad(
-            "az_client".to_string(),
-            b"az_secret".to_vec(),
-            tenant,
-        );
-        assert!(config.authorization_endpoint.as_ref().unwrap().contains(tenant));
+        let config = OidcConfig::azure_ad("az_client".to_string(), b"az_secret".to_vec(), tenant);
+        assert!(config
+            .authorization_endpoint
+            .as_ref()
+            .unwrap()
+            .contains(tenant));
         assert!(config.token_endpoint.as_ref().unwrap().contains(tenant));
         assert!(config.jwks_uri.as_ref().unwrap().contains(tenant));
         assert!(config.scopes.contains(&"offline_access".to_string()));
@@ -791,14 +765,21 @@ mod tests {
         let google = OidcConfig::google_workspace("c".into(), vec![]);
         let auth0 = OidcConfig::auth0("c".into(), vec![], "test.auth0.com");
 
-        for (name, config) in [("okta", okta), ("azure", azure), ("google", google), ("auth0", auth0)] {
+        for (name, config) in [
+            ("okta", okta),
+            ("azure", azure),
+            ("google", google),
+            ("auth0", auth0),
+        ] {
             assert!(
                 config.scopes.contains(&"openid".to_string()),
-                "{} config missing openid scope", name
+                "{} config missing openid scope",
+                name
             );
             assert!(
                 config.scopes.contains(&"email".to_string()),
-                "{} config missing email scope", name
+                "{} config missing email scope",
+                name
             );
         }
     }
@@ -808,12 +789,9 @@ mod tests {
     #[tokio::test]
     async fn test_build_auth_url() {
         let config = OidcConfig::okta("my_client".to_string(), b"sec".to_vec(), "dev.okta.com");
-        let provider = OidcProvider::new(
-            SsoProviderType::Okta,
-            config,
-            vec![],
-            RampRole::Viewer,
-        ).await.unwrap();
+        let provider = OidcProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer)
+            .await
+            .unwrap();
 
         let request = SsoAuthRequest {
             tenant_id: ramp_common::types::TenantId::new("t1"),
@@ -834,12 +812,9 @@ mod tests {
     #[tokio::test]
     async fn test_build_auth_url_no_nonce() {
         let config = OidcConfig::okta("client1".to_string(), b"sec".to_vec(), "test.okta.com");
-        let provider = OidcProvider::new(
-            SsoProviderType::Okta,
-            config,
-            vec![],
-            RampRole::Viewer,
-        ).await.unwrap();
+        let provider = OidcProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer)
+            .await
+            .unwrap();
 
         let request = SsoAuthRequest {
             tenant_id: ramp_common::types::TenantId::new("t1"),
@@ -860,7 +835,9 @@ mod tests {
             config,
             vec![],
             RampRole::Viewer,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         let request = SsoAuthRequest {
             tenant_id: ramp_common::types::TenantId::new("t1"),
@@ -879,15 +856,15 @@ mod tests {
     #[tokio::test]
     async fn test_extract_groups_with_groups_claim() {
         let config = OidcConfig::okta("c".into(), vec![], "test.okta.com");
-        let provider = OidcProvider::new(
-            SsoProviderType::Okta,
-            config,
-            vec![],
-            RampRole::Viewer,
-        ).await.unwrap();
+        let provider = OidcProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer)
+            .await
+            .unwrap();
 
         let mut extra = HashMap::new();
-        extra.insert("groups".to_string(), serde_json::json!(["Admins", "Engineers"]));
+        extra.insert(
+            "groups".to_string(),
+            serde_json::json!(["Admins", "Engineers"]),
+        );
 
         let claims = IdTokenClaims {
             iss: "https://test.okta.com".to_string(),
@@ -913,12 +890,9 @@ mod tests {
     #[tokio::test]
     async fn test_extract_groups_missing_claim() {
         let config = OidcConfig::okta("c".into(), vec![], "test.okta.com");
-        let provider = OidcProvider::new(
-            SsoProviderType::Okta,
-            config,
-            vec![],
-            RampRole::Viewer,
-        ).await.unwrap();
+        let provider = OidcProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer)
+            .await
+            .unwrap();
 
         let claims = IdTokenClaims {
             iss: "https://test.okta.com".to_string(),
@@ -944,12 +918,9 @@ mod tests {
     #[tokio::test]
     async fn test_extract_groups_non_array_claim() {
         let config = OidcConfig::okta("c".into(), vec![], "test.okta.com");
-        let provider = OidcProvider::new(
-            SsoProviderType::Okta,
-            config,
-            vec![],
-            RampRole::Viewer,
-        ).await.unwrap();
+        let provider = OidcProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer)
+            .await
+            .unwrap();
 
         let mut extra = HashMap::new();
         extra.insert("groups".to_string(), serde_json::json!("not_an_array"));
@@ -1003,7 +974,8 @@ mod tests {
     async fn test_oidc_provider_type() {
         let config = OidcConfig::okta("c".into(), vec![], "test.okta.com");
         let provider = OidcProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer)
-            .await.unwrap();
+            .await
+            .unwrap();
         assert_eq!(provider.provider_type(), SsoProviderType::Okta);
         assert_eq!(provider.protocol(), SsoProtocol::Oidc);
     }
@@ -1012,7 +984,8 @@ mod tests {
     async fn test_oidc_authorize() {
         let config = OidcConfig::okta("client_x".into(), vec![], "dev.okta.com");
         let provider = OidcProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let request = SsoAuthRequest {
             tenant_id: ramp_common::types::TenantId::new("t1"),
@@ -1030,11 +1003,13 @@ mod tests {
     async fn test_oidc_authenticate_error_callback() {
         let config = OidcConfig::okta("c".into(), vec![], "test.okta.com");
         let provider = OidcProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let callback = SsoCallback {
             code: None,
             state: "state".to_string(),
+            redirect_uri: Some("https://localhost/callback".to_string()),
             error: Some("access_denied".to_string()),
             error_description: Some("User denied access".to_string()),
             saml_response: None,
@@ -1050,11 +1025,13 @@ mod tests {
     async fn test_oidc_authenticate_missing_code() {
         let config = OidcConfig::okta("c".into(), vec![], "test.okta.com");
         let provider = OidcProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let callback = SsoCallback {
             code: None,
             state: "state".to_string(),
+            redirect_uri: Some("https://localhost/callback".to_string()),
             error: None,
             error_description: None,
             saml_response: None,
@@ -1068,7 +1045,8 @@ mod tests {
     async fn test_oidc_validate_session_returns_none() {
         let config = OidcConfig::okta("c".into(), vec![], "test.okta.com");
         let provider = OidcProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let result = provider.validate_session("some_token").await.unwrap();
         assert!(result.is_none());
@@ -1078,7 +1056,8 @@ mod tests {
     async fn test_oidc_logout_returns_endpoint() {
         let config = OidcConfig::okta("c".into(), vec![], "test.okta.com");
         let provider = OidcProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let user = SsoUser {
             idp_user_id: "user1".to_string(),

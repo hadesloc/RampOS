@@ -21,7 +21,7 @@ use ramp_common::types::{BankAccount, CryptoSymbol};
 use ramp_common::{Error, Result};
 
 use super::exchange_rate::ExchangeRateService;
-use super::offramp_fees::{OffRampFeeCalculator, FeeBreakdown};
+use super::offramp_fees::{FeeBreakdown, OffRampFeeCalculator};
 
 // ============================================================================
 // Off-Ramp State Machine
@@ -55,7 +55,10 @@ impl OffRampState {
     pub fn is_terminal(&self) -> bool {
         matches!(
             self,
-            OffRampState::Completed | OffRampState::Failed | OffRampState::Expired | OffRampState::Cancelled
+            OffRampState::Completed
+                | OffRampState::Failed
+                | OffRampState::Expired
+                | OffRampState::Cancelled
         )
     }
 
@@ -71,18 +74,9 @@ impl OffRampState {
                 OffRampState::Expired,
                 OffRampState::Cancelled,
             ],
-            OffRampState::CryptoReceived => vec![
-                OffRampState::Converting,
-                OffRampState::Failed,
-            ],
-            OffRampState::Converting => vec![
-                OffRampState::VndTransferring,
-                OffRampState::Failed,
-            ],
-            OffRampState::VndTransferring => vec![
-                OffRampState::Completed,
-                OffRampState::Failed,
-            ],
+            OffRampState::CryptoReceived => vec![OffRampState::Converting, OffRampState::Failed],
+            OffRampState::Converting => vec![OffRampState::VndTransferring, OffRampState::Failed],
+            OffRampState::VndTransferring => vec![OffRampState::Completed, OffRampState::Failed],
             // Terminal states
             OffRampState::Completed
             | OffRampState::Failed
@@ -227,29 +221,35 @@ impl InMemoryOffRampStore {
 #[cfg(test)]
 impl OffRampIntentStore for InMemoryOffRampStore {
     fn save(&self, intent: OffRampIntent) -> Result<()> {
-        let mut intents = self.intents.lock().map_err(|_| {
-            Error::Internal("Failed to acquire intents lock".to_string())
-        })?;
+        let mut intents = self
+            .intents
+            .lock()
+            .map_err(|_| Error::Internal("Failed to acquire intents lock".to_string()))?;
         intents.push(intent);
         Ok(())
     }
 
     fn get(&self, id: &str) -> Result<Option<OffRampIntent>> {
-        let intents = self.intents.lock().map_err(|_| {
-            Error::Internal("Failed to acquire intents lock".to_string())
-        })?;
+        let intents = self
+            .intents
+            .lock()
+            .map_err(|_| Error::Internal("Failed to acquire intents lock".to_string()))?;
         Ok(intents.iter().find(|i| i.id == id).cloned())
     }
 
     fn update(&self, intent: &OffRampIntent) -> Result<()> {
-        let mut intents = self.intents.lock().map_err(|_| {
-            Error::Internal("Failed to acquire intents lock".to_string())
-        })?;
+        let mut intents = self
+            .intents
+            .lock()
+            .map_err(|_| Error::Internal("Failed to acquire intents lock".to_string()))?;
         if let Some(existing) = intents.iter_mut().find(|i| i.id == intent.id) {
             *existing = intent.clone();
             Ok(())
         } else {
-            Err(Error::NotFound(format!("Off-ramp intent not found: {}", intent.id)))
+            Err(Error::NotFound(format!(
+                "Off-ramp intent not found: {}",
+                intent.id
+            )))
         }
     }
 }
@@ -313,11 +313,9 @@ impl OffRampService {
         } else {
             "domestic"
         };
-        let fees = self.fee_calculator.calculate_fees(
-            gross_vnd,
-            crypto_asset,
-            bank_type,
-        );
+        let fees = self
+            .fee_calculator
+            .calculate_fees(gross_vnd, crypto_asset, bank_type);
 
         let net_vnd = fees.net_amount_vnd;
         let quote_expires_at = Utc::now() + Duration::minutes(5);
@@ -369,9 +367,10 @@ impl OffRampService {
 
     /// Confirm a quote, locking the rate for 60 seconds
     pub fn confirm_quote(&self, quote_id: &str) -> Result<OffRampIntent> {
-        let mut intent = self.store.get(quote_id)?.ok_or_else(|| {
-            Error::NotFound(format!("Off-ramp intent not found: {}", quote_id))
-        })?;
+        let mut intent = self
+            .store
+            .get(quote_id)?
+            .ok_or_else(|| Error::NotFound(format!("Off-ramp intent not found: {}", quote_id)))?;
 
         if intent.state != OffRampState::QuoteCreated {
             return Err(Error::InvalidStateTransition {
@@ -382,7 +381,11 @@ impl OffRampService {
 
         // Check if quote has expired
         if Utc::now() >= intent.quote_expires_at {
-            self.transition_state_internal(&mut intent, OffRampState::Expired, Some("Quote expired"))?;
+            self.transition_state_internal(
+                &mut intent,
+                OffRampState::Expired,
+                Some("Quote expired"),
+            )?;
             self.store.update(&intent)?;
             return Err(Error::IntentExpired(format!(
                 "Quote {} expired at {}",
@@ -391,11 +394,9 @@ impl OffRampService {
         }
 
         // Lock the rate for 60 seconds
-        let locked = self.exchange_rate_service.lock_rate(
-            intent.crypto_asset,
-            "VND",
-            60,
-        )?;
+        let locked = self
+            .exchange_rate_service
+            .lock_rate(intent.crypto_asset, "VND", 60)?;
 
         intent.locked_rate_id = Some(locked.id);
         intent.deposit_address = Some(format!(
@@ -403,7 +404,11 @@ impl OffRampService {
             uuid::Uuid::now_v7().as_u128() & u128::MAX
         ));
 
-        self.transition_state_internal(&mut intent, OffRampState::CryptoPending, Some("Quote confirmed, awaiting crypto deposit"))?;
+        self.transition_state_internal(
+            &mut intent,
+            OffRampState::CryptoPending,
+            Some("Quote confirmed, awaiting crypto deposit"),
+        )?;
         self.store.update(&intent)?;
 
         info!(intent_id = %quote_id, "Off-ramp quote confirmed");
@@ -411,14 +416,11 @@ impl OffRampService {
     }
 
     /// Confirm that crypto has been received on-chain
-    pub fn confirm_crypto_received(
-        &self,
-        intent_id: &str,
-        tx_hash: &str,
-    ) -> Result<OffRampIntent> {
-        let mut intent = self.store.get(intent_id)?.ok_or_else(|| {
-            Error::NotFound(format!("Off-ramp intent not found: {}", intent_id))
-        })?;
+    pub fn confirm_crypto_received(&self, intent_id: &str, tx_hash: &str) -> Result<OffRampIntent> {
+        let mut intent = self
+            .store
+            .get(intent_id)?
+            .ok_or_else(|| Error::NotFound(format!("Off-ramp intent not found: {}", intent_id)))?;
 
         if intent.state != OffRampState::CryptoPending {
             return Err(Error::InvalidStateTransition {
@@ -441,9 +443,10 @@ impl OffRampService {
 
     /// Initiate the bank transfer (VND payout)
     pub fn initiate_bank_transfer(&self, intent_id: &str) -> Result<OffRampIntent> {
-        let mut intent = self.store.get(intent_id)?.ok_or_else(|| {
-            Error::NotFound(format!("Off-ramp intent not found: {}", intent_id))
-        })?;
+        let mut intent = self
+            .store
+            .get(intent_id)?
+            .ok_or_else(|| Error::NotFound(format!("Off-ramp intent not found: {}", intent_id)))?;
 
         if intent.state != OffRampState::CryptoReceived {
             return Err(Error::InvalidStateTransition {
@@ -453,7 +456,11 @@ impl OffRampService {
         }
 
         // Move through Converting to VndTransferring
-        self.transition_state_internal(&mut intent, OffRampState::Converting, Some("Converting crypto to VND"))?;
+        self.transition_state_internal(
+            &mut intent,
+            OffRampState::Converting,
+            Some("Converting crypto to VND"),
+        )?;
 
         // Generate bank reference
         let bank_ref = format!("RAMP-{}", &Uuid::now_v7().to_string()[..8].to_uppercase());
@@ -472,9 +479,10 @@ impl OffRampService {
 
     /// Mark the off-ramp as completed
     pub fn complete(&self, intent_id: &str) -> Result<OffRampIntent> {
-        let mut intent = self.store.get(intent_id)?.ok_or_else(|| {
-            Error::NotFound(format!("Off-ramp intent not found: {}", intent_id))
-        })?;
+        let mut intent = self
+            .store
+            .get(intent_id)?
+            .ok_or_else(|| Error::NotFound(format!("Off-ramp intent not found: {}", intent_id)))?;
 
         if intent.state != OffRampState::VndTransferring {
             return Err(Error::InvalidStateTransition {
@@ -483,7 +491,11 @@ impl OffRampService {
             });
         }
 
-        self.transition_state_internal(&mut intent, OffRampState::Completed, Some("Off-ramp completed successfully"))?;
+        self.transition_state_internal(
+            &mut intent,
+            OffRampState::Completed,
+            Some("Off-ramp completed successfully"),
+        )?;
         self.store.update(&intent)?;
 
         info!(intent_id = %intent_id, "Off-ramp completed");
@@ -492,9 +504,10 @@ impl OffRampService {
 
     /// Cancel an off-ramp (only from cancellable states)
     pub fn cancel(&self, intent_id: &str) -> Result<OffRampIntent> {
-        let mut intent = self.store.get(intent_id)?.ok_or_else(|| {
-            Error::NotFound(format!("Off-ramp intent not found: {}", intent_id))
-        })?;
+        let mut intent = self
+            .store
+            .get(intent_id)?
+            .ok_or_else(|| Error::NotFound(format!("Off-ramp intent not found: {}", intent_id)))?;
 
         if !intent.state.can_transition_to(OffRampState::Cancelled) {
             return Err(Error::InvalidStateTransition {
@@ -503,7 +516,11 @@ impl OffRampService {
             });
         }
 
-        self.transition_state_internal(&mut intent, OffRampState::Cancelled, Some("Cancelled by user"))?;
+        self.transition_state_internal(
+            &mut intent,
+            OffRampState::Cancelled,
+            Some("Cancelled by user"),
+        )?;
         self.store.update(&intent)?;
 
         info!(intent_id = %intent_id, "Off-ramp cancelled");
@@ -512,9 +529,9 @@ impl OffRampService {
 
     /// Get an off-ramp intent by ID
     pub fn get_offramp(&self, intent_id: &str) -> Result<OffRampIntent> {
-        self.store.get(intent_id)?.ok_or_else(|| {
-            Error::NotFound(format!("Off-ramp intent not found: {}", intent_id))
-        })
+        self.store
+            .get(intent_id)?
+            .ok_or_else(|| Error::NotFound(format!("Off-ramp intent not found: {}", intent_id)))
     }
 
     /// Internal helper to transition state with history tracking

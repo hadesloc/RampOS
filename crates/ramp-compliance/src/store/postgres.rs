@@ -42,7 +42,12 @@ pub trait CaseStore: Send + Sync {
         resolved_at: Option<DateTime<Utc>>,
         resolution: Option<String>,
     ) -> Result<()>;
-    async fn assign_case(&self, tenant_id: &TenantId, case_id: &str, assigned_to: &str) -> Result<()>;
+    async fn assign_case(
+        &self,
+        tenant_id: &TenantId,
+        case_id: &str,
+        assigned_to: &str,
+    ) -> Result<()>;
     async fn add_note(&self, tenant_id: &TenantId, note: &CaseNote) -> Result<()>;
     async fn get_notes(&self, tenant_id: &TenantId, case_id: &str) -> Result<Vec<CaseNote>>;
     async fn get_user_cases(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<Vec<AmlCase>>;
@@ -283,7 +288,12 @@ impl CaseStore for PostgresCaseStore {
         Ok(())
     }
 
-    async fn assign_case(&self, tenant_id: &TenantId, case_id: &str, assigned_to: &str) -> Result<()> {
+    async fn assign_case(
+        &self,
+        tenant_id: &TenantId,
+        case_id: &str,
+        assigned_to: &str,
+    ) -> Result<()> {
         sqlx::query(
             r#"
             UPDATE aml_cases
@@ -449,4 +459,3 @@ impl PostgresCaseStore {
         Ok(cases)
     }
 }
-

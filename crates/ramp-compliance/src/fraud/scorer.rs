@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::features::FraudFeatureVector;
 
 /// A single risk factor identified by the scorer.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RiskFactor {
     pub rule_name: String,
     pub contribution: u8,
@@ -11,12 +11,31 @@ pub struct RiskFactor {
 }
 
 /// Aggregated risk score from all rules.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RiskScore {
     /// Overall score 0-100
     pub score: u8,
     /// Individual factors that contributed
     pub risk_factors: Vec<RiskFactor>,
+}
+
+/// Replay/explainability metadata for a scoring run.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RiskScoreMetadata {
+    pub rule_version_id: Option<String>,
+    pub scorer: String,
+    pub safe_fallback_used: bool,
+    pub raw_score: u16,
+    pub triggered_rules: Vec<String>,
+    pub top_risk_factors: Vec<RiskFactor>,
+    pub feature_snapshot: FraudFeatureVector,
+}
+
+/// Risk score plus the metadata needed for replay/explainability surfaces.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExplainedRiskScore {
+    pub risk_score: RiskScore,
+    pub metadata: RiskScoreMetadata,
 }
 
 /// Trait for scoring a feature vector.
@@ -29,7 +48,7 @@ pub struct RuleBasedScorer {
     pub config: ScorerConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScorerConfig {
     pub velocity_1h_limit: f64,
     pub velocity_24h_limit: f64,
@@ -80,6 +99,24 @@ impl RuleBasedScorer {
     pub fn with_config(config: ScorerConfig) -> Self {
         Self { config }
     }
+
+    pub fn score_with_metadata(
+        &self,
+        features: &FraudFeatureVector,
+        rule_version_id: Option<&str>,
+    ) -> ExplainedRiskScore {
+        let risk_score = self.score(features);
+        ExplainedRiskScore {
+            metadata: build_score_metadata(
+                &risk_score,
+                features,
+                rule_version_id,
+                "rule_based",
+                false,
+            ),
+            risk_score,
+        }
+    }
 }
 
 impl Default for RuleBasedScorer {
@@ -98,7 +135,10 @@ impl RiskScorer for RuleBasedScorer {
             factors.push(RiskFactor {
                 rule_name: "velocity_1h_exceeded".into(),
                 contribution: 15,
-                description: format!("{} txns in 1h (limit {})", f.velocity_1h, cfg.velocity_1h_limit),
+                description: format!(
+                    "{} txns in 1h (limit {})",
+                    f.velocity_1h, cfg.velocity_1h_limit
+                ),
             });
         }
 
@@ -107,7 +147,10 @@ impl RiskScorer for RuleBasedScorer {
             factors.push(RiskFactor {
                 rule_name: "velocity_24h_exceeded".into(),
                 contribution: 12,
-                description: format!("{} txns in 24h (limit {})", f.velocity_24h, cfg.velocity_24h_limit),
+                description: format!(
+                    "{} txns in 24h (limit {})",
+                    f.velocity_24h, cfg.velocity_24h_limit
+                ),
             });
         }
 
@@ -116,7 +159,10 @@ impl RiskScorer for RuleBasedScorer {
             factors.push(RiskFactor {
                 rule_name: "velocity_7d_exceeded".into(),
                 contribution: 8,
-                description: format!("{} txns in 7d (limit {})", f.velocity_7d, cfg.velocity_7d_limit),
+                description: format!(
+                    "{} txns in 7d (limit {})",
+                    f.velocity_7d, cfg.velocity_7d_limit
+                ),
             });
         }
 
@@ -125,7 +171,10 @@ impl RiskScorer for RuleBasedScorer {
             factors.push(RiskFactor {
                 rule_name: "high_value_transaction".into(),
                 contribution: 10,
-                description: format!("${:.2} exceeds ${:.2} threshold", f.amount_usd, cfg.high_amount_usd_threshold),
+                description: format!(
+                    "${:.2} exceeds ${:.2} threshold",
+                    f.amount_usd, cfg.high_amount_usd_threshold
+                ),
             });
         }
 
@@ -134,7 +183,10 @@ impl RiskScorer for RuleBasedScorer {
             factors.push(RiskFactor {
                 rule_name: "very_high_value_transaction".into(),
                 contribution: 25,
-                description: format!("${:.2} exceeds ${:.2} threshold", f.amount_usd, cfg.very_high_amount_usd_threshold),
+                description: format!(
+                    "${:.2} exceeds ${:.2} threshold",
+                    f.amount_usd, cfg.very_high_amount_usd_threshold
+                ),
             });
         }
 
@@ -143,12 +195,17 @@ impl RiskScorer for RuleBasedScorer {
             factors.push(RiskFactor {
                 rule_name: "new_account".into(),
                 contribution: 12,
-                description: format!("Account is {:.0} days old (threshold {} days)", f.account_age_days, cfg.new_account_days_threshold),
+                description: format!(
+                    "Account is {:.0} days old (threshold {} days)",
+                    f.account_age_days, cfg.new_account_days_threshold
+                ),
             });
         }
 
         // Rule 7: structuring_detection (many round-amount txns)
-        if f.velocity_24h > cfg.structuring_count_threshold && f.amount_rounding_pattern >= cfg.structuring_rounding_threshold {
+        if f.velocity_24h > cfg.structuring_count_threshold
+            && f.amount_rounding_pattern >= cfg.structuring_rounding_threshold
+        {
             factors.push(RiskFactor {
                 rule_name: "structuring_suspected".into(),
                 contribution: 20,
@@ -161,7 +218,10 @@ impl RiskScorer for RuleBasedScorer {
             factors.push(RiskFactor {
                 rule_name: "round_amount_flag".into(),
                 contribution: 5,
-                description: format!("Round amount (rounding={:.1}) above $1000", f.amount_rounding_pattern),
+                description: format!(
+                    "Round amount (rounding={:.1}) above $1000",
+                    f.amount_rounding_pattern
+                ),
             });
         }
 
@@ -170,7 +230,10 @@ impl RiskScorer for RuleBasedScorer {
             factors.push(RiskFactor {
                 rule_name: "unusual_hour".into(),
                 contribution: 8,
-                description: format!("Time anomaly score {:.2} exceeds threshold", f.time_of_day_anomaly),
+                description: format!(
+                    "Time anomaly score {:.2} exceeds threshold",
+                    f.time_of_day_anomaly
+                ),
             });
         }
 
@@ -197,7 +260,11 @@ impl RiskScorer for RuleBasedScorer {
             factors.push(RiskFactor {
                 rule_name: "high_dispute_rate".into(),
                 contribution: 15,
-                description: format!("Dispute rate {:.2}% exceeds {:.2}%", f.historical_dispute_rate * 100.0, cfg.dispute_rate_threshold * 100.0),
+                description: format!(
+                    "Dispute rate {:.2}% exceeds {:.2}%",
+                    f.historical_dispute_rate * 100.0,
+                    cfg.dispute_rate_threshold * 100.0
+                ),
             });
         }
 
@@ -215,7 +282,10 @@ impl RiskScorer for RuleBasedScorer {
             factors.push(RiskFactor {
                 rule_name: "many_distinct_recipients".into(),
                 contribution: 10,
-                description: format!("{:.0} distinct recipients in 24h", f.distinct_recipients_24h),
+                description: format!(
+                    "{:.0} distinct recipients in 24h",
+                    f.distinct_recipients_24h
+                ),
             });
         }
 
@@ -233,7 +303,10 @@ impl RiskScorer for RuleBasedScorer {
             factors.push(RiskFactor {
                 rule_name: "cross_border_high_risk".into(),
                 contribution: 12,
-                description: format!("Cross-border to high-risk country (risk={:.2})", f.country_risk),
+                description: format!(
+                    "Cross-border to high-risk country (risk={:.2})",
+                    f.country_risk
+                ),
             });
         }
 
@@ -242,7 +315,10 @@ impl RiskScorer for RuleBasedScorer {
             factors.push(RiskFactor {
                 rule_name: "cumulative_24h_exceeded".into(),
                 contribution: 12,
-                description: format!("${:.2} total in 24h exceeds ${:.2}", f.cumulative_amount_24h_usd, cfg.cumulative_24h_usd_threshold),
+                description: format!(
+                    "${:.2} total in 24h exceeds ${:.2}",
+                    f.cumulative_amount_24h_usd, cfg.cumulative_24h_usd_threshold
+                ),
             });
         }
 
@@ -310,6 +386,63 @@ impl OnnxModelScorer {
     pub fn model_path(&self) -> &str {
         &self.model_path
     }
+
+    pub fn score_with_metadata(
+        &self,
+        features: &FraudFeatureVector,
+        rule_version_id: Option<&str>,
+    ) -> ExplainedRiskScore {
+        let risk_score = self.score(features);
+        ExplainedRiskScore {
+            metadata: build_score_metadata(
+                &risk_score,
+                features,
+                rule_version_id,
+                if self.model_loaded {
+                    "onnx_model"
+                } else {
+                    "onnx_heuristic"
+                },
+                !self.model_loaded,
+            ),
+            risk_score,
+        }
+    }
+}
+
+fn build_score_metadata(
+    risk_score: &RiskScore,
+    features: &FraudFeatureVector,
+    rule_version_id: Option<&str>,
+    scorer: &str,
+    safe_fallback_used: bool,
+) -> RiskScoreMetadata {
+    let mut top_risk_factors = risk_score.risk_factors.clone();
+    top_risk_factors.sort_by(|left, right| {
+        right
+            .contribution
+            .cmp(&left.contribution)
+            .then_with(|| left.rule_name.cmp(&right.rule_name))
+    });
+    top_risk_factors.truncate(3);
+
+    RiskScoreMetadata {
+        rule_version_id: rule_version_id.map(str::to_string),
+        scorer: scorer.to_string(),
+        safe_fallback_used,
+        raw_score: risk_score
+            .risk_factors
+            .iter()
+            .map(|factor| u16::from(factor.contribution))
+            .sum(),
+        triggered_rules: risk_score
+            .risk_factors
+            .iter()
+            .map(|factor| factor.rule_name.clone())
+            .collect(),
+        top_risk_factors,
+        feature_snapshot: features.clone(),
+    }
 }
 
 impl RiskScorer for OnnxModelScorer {
@@ -325,10 +458,7 @@ impl RiskScorer for OnnxModelScorer {
             factors.push(RiskFactor {
                 rule_name: "onnx_amount_signal".into(),
                 contribution: contribution as u8,
-                description: format!(
-                    "Amount ${:.2} is {:.1}x threshold",
-                    f.amount_usd, ratio
-                ),
+                description: format!("Amount ${:.2} is {:.1}x threshold", f.amount_usd, ratio),
             });
         }
 
@@ -367,10 +497,7 @@ impl RiskScorer for OnnxModelScorer {
                 factors.push(RiskFactor {
                     rule_name: "onnx_geo_risk".into(),
                     contribution: contribution as u8,
-                    description: format!(
-                        "Cross-border with country risk {:.2}",
-                        f.country_risk
-                    ),
+                    description: format!("Cross-border with country risk {:.2}", f.country_risk),
                 });
             }
         }
@@ -437,7 +564,10 @@ mod tests {
         let mut f = low_risk_features();
         f.velocity_1h = 6.0;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "velocity_1h_exceeded"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "velocity_1h_exceeded"));
     }
 
     #[test]
@@ -446,7 +576,10 @@ mod tests {
         let mut f = low_risk_features();
         f.velocity_24h = 25.0;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "velocity_24h_exceeded"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "velocity_24h_exceeded"));
     }
 
     #[test]
@@ -455,7 +588,10 @@ mod tests {
         let mut f = low_risk_features();
         f.amount_usd = 6_000.0;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "high_value_transaction"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "high_value_transaction"));
     }
 
     #[test]
@@ -464,8 +600,14 @@ mod tests {
         let mut f = low_risk_features();
         f.amount_usd = 60_000.0;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "very_high_value_transaction"));
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "high_value_transaction"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "very_high_value_transaction"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "high_value_transaction"));
     }
 
     #[test]
@@ -474,7 +616,10 @@ mod tests {
         let mut f = low_risk_features();
         f.account_age_days = 3.0;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "new_account"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "new_account"));
     }
 
     #[test]
@@ -484,7 +629,10 @@ mod tests {
         f.velocity_24h = 15.0;
         f.amount_rounding_pattern = 0.8;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "structuring_suspected"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "structuring_suspected"));
     }
 
     #[test]
@@ -493,7 +641,10 @@ mod tests {
         let mut f = low_risk_features();
         f.time_of_day_anomaly = 0.8;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "unusual_hour"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "unusual_hour"));
     }
 
     #[test]
@@ -503,7 +654,10 @@ mod tests {
         f.recipient_recency = 1.0;
         f.amount_usd = 2_000.0;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "new_recipient_high_value"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "new_recipient_high_value"));
     }
 
     #[test]
@@ -513,7 +667,10 @@ mod tests {
         f.is_cross_border = 1.0;
         f.country_risk = 0.8;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "cross_border_high_risk"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "cross_border_high_risk"));
     }
 
     #[test]
@@ -554,7 +711,10 @@ mod tests {
         let mut f = low_risk_features();
         f.velocity_1h = 3.0; // above custom limit of 2
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "velocity_1h_exceeded"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "velocity_1h_exceeded"));
     }
 
     #[test]
@@ -563,7 +723,10 @@ mod tests {
         let mut f = low_risk_features();
         f.cumulative_amount_24h_usd = 25_000.0;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "cumulative_24h_exceeded"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "cumulative_24h_exceeded"));
     }
 
     #[test]
@@ -572,7 +735,45 @@ mod tests {
         let mut f = low_risk_features();
         f.failed_txn_count_24h = 5.0;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "excessive_failed_txns"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "excessive_failed_txns"));
+    }
+
+    #[test]
+    fn test_rule_based_score_with_metadata_includes_rule_version_and_top_factor() {
+        let scorer = RuleBasedScorer::new();
+        let mut f = low_risk_features();
+        f.amount_usd = 60_000.0;
+        f.velocity_1h = 10.0;
+        f.account_age_days = 1.0;
+
+        let explained = scorer.score_with_metadata(&f, Some("fraud-rules-v3"));
+
+        assert_eq!(
+            explained.metadata.rule_version_id.as_deref(),
+            Some("fraud-rules-v3")
+        );
+        assert_eq!(explained.metadata.scorer, "rule_based");
+        assert!(!explained.metadata.safe_fallback_used);
+        assert_eq!(
+            explained.metadata.raw_score,
+            explained
+                .risk_score
+                .risk_factors
+                .iter()
+                .map(|factor| u16::from(factor.contribution))
+                .sum::<u16>()
+        );
+        assert!(explained
+            .metadata
+            .triggered_rules
+            .contains(&"very_high_value_transaction".to_string()));
+        assert_eq!(
+            explained.metadata.top_risk_factors[0].rule_name,
+            "very_high_value_transaction"
+        );
     }
 
     // ===== OnnxModelScorer tests =====
@@ -616,7 +817,10 @@ mod tests {
         f.amount_usd = 10_000.0;
         let result = scorer.score(&f);
         assert!(result.score > 0);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "onnx_amount_signal"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "onnx_amount_signal"));
     }
 
     #[test]
@@ -626,7 +830,10 @@ mod tests {
         f.velocity_1h = 10.0;
         f.velocity_24h = 30.0;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "onnx_velocity_signal"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "onnx_velocity_signal"));
     }
 
     #[test]
@@ -636,7 +843,10 @@ mod tests {
         f.account_age_days = 3.0;
         f.device_novelty = 0.9;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "onnx_new_account_device"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "onnx_new_account_device"));
         assert!(result.score >= 15);
     }
 
@@ -647,7 +857,10 @@ mod tests {
         f.is_cross_border = 1.0;
         f.country_risk = 0.8;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "onnx_geo_risk"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "onnx_geo_risk"));
     }
 
     #[test]
@@ -656,7 +869,10 @@ mod tests {
         let mut f = low_risk_features();
         f.historical_dispute_rate = 0.1;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "onnx_dispute_signal"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "onnx_dispute_signal"));
     }
 
     #[test]
@@ -665,7 +881,10 @@ mod tests {
         let mut f = low_risk_features();
         f.amount_usd = 2_000.0;
         let result = scorer.score(&f);
-        assert!(result.risk_factors.iter().any(|r| r.rule_name == "onnx_amount_signal"));
+        assert!(result
+            .risk_factors
+            .iter()
+            .any(|r| r.rule_name == "onnx_amount_signal"));
     }
 
     #[test]
@@ -692,5 +911,20 @@ mod tests {
         };
         let result = scorer.score(&f);
         assert_eq!(result.score, 100);
+    }
+
+    #[test]
+    fn test_onnx_score_with_metadata_marks_safe_fallback_until_model_is_loaded() {
+        let mut scorer = OnnxModelScorer::new("/models/fraud_v1.onnx");
+        let mut f = low_risk_features();
+        f.amount_usd = 10_000.0;
+
+        let unloaded = scorer.score_with_metadata(&f, None);
+        assert_eq!(unloaded.metadata.scorer, "onnx_heuristic");
+        assert!(unloaded.metadata.safe_fallback_used);
+
+        scorer.load_model().unwrap();
+        let loaded = scorer.score_with_metadata(&f, None);
+        assert!(!loaded.metadata.safe_fallback_used);
     }
 }

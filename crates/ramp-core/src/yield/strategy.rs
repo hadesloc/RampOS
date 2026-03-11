@@ -7,9 +7,9 @@
 //!
 //! Includes auto-rebalancing based on APY changes and risk controls.
 
+use alloy::primitives::{Address, B256, U256};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-use alloy::primitives::{Address, B256, U256};
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -97,6 +97,29 @@ impl Default for StrategyConfig {
     }
 }
 
+impl StrategyConfig {
+    pub fn treasury_posture_label(&self) -> &'static str {
+        match self.risk_level {
+            RiskLevel::Low => "capital_preservation",
+            RiskLevel::Medium => "balanced_yield",
+            RiskLevel::High => "yield_seeking",
+        }
+    }
+
+    pub fn max_protocol_exposure_ratio(&self) -> f64 {
+        self.max_protocol_exposure as f64 / 100.0
+    }
+}
+
+impl StrategyConfig {
+    pub fn treasury_policy_hint(&self) -> String {
+        format!(
+            "{} strategy keeps protocol exposure under {}% and only recommends rebalancing when APY delta exceeds {:.1}%.",
+            self.name, self.max_protocol_exposure, self.rebalance_apy_threshold
+        )
+    }
+}
+
 /// Yield strategy trait
 #[async_trait]
 pub trait YieldStrategy: Send + Sync {
@@ -126,17 +149,10 @@ pub trait YieldStrategy: Send + Sync {
     ) -> Result<Vec<(ProtocolId, U256)>>;
 
     /// Execute rebalancing based on strategy rules
-    async fn execute_rebalance(
-        &self,
-        service: &YieldService,
-        token: Address,
-    ) -> Result<Vec<B256>>;
+    async fn execute_rebalance(&self, service: &YieldService, token: Address) -> Result<Vec<B256>>;
 
     /// Check if emergency exit is needed
-    async fn check_emergency_exit(
-        &self,
-        registry: &ProtocolRegistry,
-    ) -> Result<Vec<ProtocolId>>;
+    async fn check_emergency_exit(&self, registry: &ProtocolRegistry) -> Result<Vec<ProtocolId>>;
 
     /// Estimate gas cost for rebalancing
     fn estimate_rebalance_gas(&self, num_operations: usize) -> U256;
@@ -154,13 +170,14 @@ impl ConservativeStrategy {
                 id: StrategyId::Conservative,
                 name: "Conservative Strategy".to_string(),
                 description: "Low risk strategy prioritizing safety and stable yields. \
-                    Limits exposure to well-established protocols only.".to_string(),
+                    Limits exposure to well-established protocols only."
+                    .to_string(),
                 risk_level: RiskLevel::Low,
                 max_protocol_exposure: 40, // Max 40% per protocol
                 max_token_exposure: 50,
-                min_apy_threshold: 2.0, // Only accept 2%+ APY
+                min_apy_threshold: 2.0,       // Only accept 2%+ APY
                 rebalance_apy_threshold: 1.0, // Higher threshold to reduce churn
-                min_health_factor: 2.0, // Higher safety margin
+                min_health_factor: 2.0,       // Higher safety margin
                 allowed_protocols: vec![ProtocolId::AaveV3], // Only Aave (more established)
                 rebalance_interval_secs: 86400, // Daily check
                 gas_aware_rebalancing: true,
@@ -192,7 +209,11 @@ impl YieldStrategy for ConservativeStrategy {
         let mut apys: Vec<(ProtocolId, f64)> = Vec::new();
 
         for protocol in registry.all() {
-            if !self.config.allowed_protocols.contains(&protocol.protocol_id()) {
+            if !self
+                .config
+                .allowed_protocols
+                .contains(&protocol.protocol_id())
+            {
                 continue;
             }
             if !protocol.supports_token(token) {
@@ -210,8 +231,14 @@ impl YieldStrategy for ConservativeStrategy {
         apys.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let best_apy = apys[0].1;
-        let current_apy = apys.iter()
-            .find(|(id, _)| current_allocations.get(id).map(|a| !a.is_zero()).unwrap_or(false))
+        let current_apy = apys
+            .iter()
+            .find(|(id, _)| {
+                current_allocations
+                    .get(id)
+                    .map(|a| !a.is_zero())
+                    .unwrap_or(false)
+            })
             .map(|(_, apy)| *apy)
             .unwrap_or(0.0);
 
@@ -256,11 +283,7 @@ impl YieldStrategy for ConservativeStrategy {
         }
     }
 
-    async fn execute_rebalance(
-        &self,
-        service: &YieldService,
-        token: Address,
-    ) -> Result<Vec<B256>> {
+    async fn execute_rebalance(&self, service: &YieldService, token: Address) -> Result<Vec<B256>> {
         info!(
             strategy = %self.config.name,
             "Executing conservative rebalance"
@@ -274,25 +297,28 @@ impl YieldStrategy for ConservativeStrategy {
 
         // 2. Calculate target allocation
         let current_allocations = service.get_allocations().await?;
-        let targets = self.calculate_allocation(
-            service.registry(),
-            token,
-            total_balance,
-            &current_allocations
-        ).await?;
+        let targets = self
+            .calculate_allocation(
+                service.registry(),
+                token,
+                total_balance,
+                &current_allocations,
+            )
+            .await?;
 
         // 3. Execute reallocation
         service.reallocate(token, targets).await
     }
 
-    async fn check_emergency_exit(
-        &self,
-        registry: &ProtocolRegistry,
-    ) -> Result<Vec<ProtocolId>> {
+    async fn check_emergency_exit(&self, registry: &ProtocolRegistry) -> Result<Vec<ProtocolId>> {
         let mut exit_protocols = Vec::new();
 
         for protocol in registry.all() {
-            if !self.config.allowed_protocols.contains(&protocol.protocol_id()) {
+            if !self
+                .config
+                .allowed_protocols
+                .contains(&protocol.protocol_id())
+            {
                 continue;
             }
 
@@ -329,7 +355,8 @@ impl BalancedStrategy {
                 id: StrategyId::Balanced,
                 name: "Balanced Strategy".to_string(),
                 description: "Moderate risk strategy balancing yield and safety. \
-                    Diversifies across multiple protocols.".to_string(),
+                    Diversifies across multiple protocols."
+                    .to_string(),
                 risk_level: RiskLevel::Medium,
                 max_protocol_exposure: 50,
                 max_token_exposure: 60,
@@ -366,14 +393,19 @@ impl YieldStrategy for BalancedStrategy {
         let mut apys: Vec<(ProtocolId, f64, U256)> = Vec::new();
 
         for protocol in registry.all() {
-            if !self.config.allowed_protocols.contains(&protocol.protocol_id()) {
+            if !self
+                .config
+                .allowed_protocols
+                .contains(&protocol.protocol_id())
+            {
                 continue;
             }
             if !protocol.supports_token(token) {
                 continue;
             }
             let apy = protocol.current_apy(token).await.unwrap_or(0.0);
-            let allocation = current_allocations.get(&protocol.protocol_id())
+            let allocation = current_allocations
+                .get(&protocol.protocol_id())
                 .copied()
                 .unwrap_or_default();
             apys.push((protocol.protocol_id(), apy, allocation));
@@ -387,7 +419,10 @@ impl YieldStrategy for BalancedStrategy {
 
         // Check if highest APY protocol has less allocation than it should
         let best = &apys[0];
-        let total: U256 = apys.iter().map(|(_, _, a)| *a).fold(U256::ZERO, |acc, a| acc + a);
+        let total: U256 = apys
+            .iter()
+            .map(|(_, _, a)| *a)
+            .fold(U256::ZERO, |acc, a| acc + a);
 
         if total.is_zero() {
             return Ok(false);
@@ -453,11 +488,7 @@ impl YieldStrategy for BalancedStrategy {
         Ok(allocations)
     }
 
-    async fn execute_rebalance(
-        &self,
-        service: &YieldService,
-        token: Address,
-    ) -> Result<Vec<B256>> {
+    async fn execute_rebalance(&self, service: &YieldService, token: Address) -> Result<Vec<B256>> {
         info!(
             strategy = %self.config.name,
             "Executing balanced rebalance"
@@ -469,24 +500,27 @@ impl YieldStrategy for BalancedStrategy {
         }
 
         let current_allocations = service.get_allocations().await?;
-        let targets = self.calculate_allocation(
-            service.registry(),
-            token,
-            total_balance,
-            &current_allocations
-        ).await?;
+        let targets = self
+            .calculate_allocation(
+                service.registry(),
+                token,
+                total_balance,
+                &current_allocations,
+            )
+            .await?;
 
         service.reallocate(token, targets).await
     }
 
-    async fn check_emergency_exit(
-        &self,
-        registry: &ProtocolRegistry,
-    ) -> Result<Vec<ProtocolId>> {
+    async fn check_emergency_exit(&self, registry: &ProtocolRegistry) -> Result<Vec<ProtocolId>> {
         let mut exit_protocols = Vec::new();
 
         for protocol in registry.all() {
-            if !self.config.allowed_protocols.contains(&protocol.protocol_id()) {
+            if !self
+                .config
+                .allowed_protocols
+                .contains(&protocol.protocol_id())
+            {
                 continue;
             }
 
@@ -516,7 +550,8 @@ impl AggressiveStrategy {
                 id: StrategyId::Aggressive,
                 name: "Aggressive Strategy".to_string(),
                 description: "High yield strategy accepting more risk. \
-                    Actively chases highest APY with frequent rebalancing.".to_string(),
+                    Actively chases highest APY with frequent rebalancing."
+                    .to_string(),
                 risk_level: RiskLevel::High,
                 max_protocol_exposure: 70, // Can concentrate more
                 max_token_exposure: 80,
@@ -525,7 +560,7 @@ impl AggressiveStrategy {
                 min_health_factor: 1.2, // Lower safety margin
                 allowed_protocols: vec![ProtocolId::AaveV3, ProtocolId::CompoundV3],
                 rebalance_interval_secs: 1800, // Every 30 minutes
-                gas_aware_rebalancing: false, // Chase yield regardless of gas
+                gas_aware_rebalancing: false,  // Chase yield regardless of gas
                 min_rebalance_amount: U256::from(50) * U256::from(1_000_000u64), // Lower threshold
             },
         }
@@ -561,7 +596,8 @@ impl YieldStrategy for AggressiveStrategy {
             }
 
             let apy = protocol.current_apy(token).await.unwrap_or(0.0);
-            let allocation = current_allocations.get(&protocol.protocol_id())
+            let allocation = current_allocations
+                .get(&protocol.protocol_id())
                 .copied()
                 .unwrap_or_default();
 
@@ -570,7 +606,8 @@ impl YieldStrategy for AggressiveStrategy {
             }
 
             if !allocation.is_zero() {
-                current_weighted_apy += apy * u128::try_from(allocation).unwrap_or(u128::MAX) as f64;
+                current_weighted_apy +=
+                    apy * u128::try_from(allocation).unwrap_or(u128::MAX) as f64;
                 total_allocation = total_allocation + allocation;
             }
         }
@@ -617,11 +654,7 @@ impl YieldStrategy for AggressiveStrategy {
         }
     }
 
-    async fn execute_rebalance(
-        &self,
-        service: &YieldService,
-        token: Address,
-    ) -> Result<Vec<B256>> {
+    async fn execute_rebalance(&self, service: &YieldService, token: Address) -> Result<Vec<B256>> {
         info!(
             strategy = %self.config.name,
             "Executing aggressive rebalance"
@@ -633,20 +666,19 @@ impl YieldStrategy for AggressiveStrategy {
         }
 
         let current_allocations = service.get_allocations().await?;
-        let targets = self.calculate_allocation(
-            service.registry(),
-            token,
-            total_balance,
-            &current_allocations
-        ).await?;
+        let targets = self
+            .calculate_allocation(
+                service.registry(),
+                token,
+                total_balance,
+                &current_allocations,
+            )
+            .await?;
 
         service.reallocate(token, targets).await
     }
 
-    async fn check_emergency_exit(
-        &self,
-        registry: &ProtocolRegistry,
-    ) -> Result<Vec<ProtocolId>> {
+    async fn check_emergency_exit(&self, registry: &ProtocolRegistry) -> Result<Vec<ProtocolId>> {
         let mut exit_protocols = Vec::new();
 
         for protocol in registry.all() {
@@ -676,7 +708,10 @@ impl StrategyManager {
     pub fn new() -> Self {
         let mut strategies: HashMap<StrategyId, Box<dyn YieldStrategy>> = HashMap::new();
 
-        strategies.insert(StrategyId::Conservative, Box::new(ConservativeStrategy::new()));
+        strategies.insert(
+            StrategyId::Conservative,
+            Box::new(ConservativeStrategy::new()),
+        );
         strategies.insert(StrategyId::Balanced, Box::new(BalancedStrategy::new()));
         strategies.insert(StrategyId::Aggressive, Box::new(AggressiveStrategy::new()));
 
@@ -733,7 +768,9 @@ impl StrategyManager {
             }
         };
 
-        let strategy = self.strategies.get(&active_id)
+        let strategy = self
+            .strategies
+            .get(&active_id)
             .ok_or_else(|| Error::NotFound("Strategy not found".to_string()))?;
 
         let last_rebalance = self.last_rebalance.read().await;
@@ -774,18 +811,23 @@ impl StrategyManager {
             }
         };
 
-        let strategy = self.strategies.get(&active_id)
+        let strategy = self
+            .strategies
+            .get(&active_id)
             .ok_or_else(|| Error::NotFound("Strategy not found".to_string()))?;
 
         // Check if rebalancing is needed
-        if !strategy.should_rebalance(registry, token, current_allocations).await? {
+        if !strategy
+            .should_rebalance(registry, token, current_allocations)
+            .await?
+        {
             return Ok(vec![]);
         }
 
         // Gas cost consideration
         if strategy.config().gas_aware_rebalancing {
             let estimated_gas = strategy.estimate_rebalance_gas(2); // Typical: withdraw + deposit
-            // In production, compare gas cost vs expected yield gain
+                                                                    // In production, compare gas cost vs expected yield gain
             info!(estimated_gas = %estimated_gas, "Gas-aware rebalancing check");
         }
 
@@ -813,7 +855,9 @@ impl StrategyManager {
             }
         };
 
-        let strategy = self.strategies.get(&active_id)
+        let strategy = self
+            .strategies
+            .get(&active_id)
             .ok_or_else(|| Error::NotFound("Strategy not found".to_string()))?;
 
         let exit_protocols = strategy.check_emergency_exit(registry).await?;
@@ -874,11 +918,23 @@ mod tests {
     async fn test_activate_strategy() {
         let manager = StrategyManager::new();
 
-        manager.activate_strategy(StrategyId::Conservative).await.unwrap();
-        assert_eq!(manager.active_strategy().await.unwrap(), Some(StrategyId::Conservative));
+        manager
+            .activate_strategy(StrategyId::Conservative)
+            .await
+            .unwrap();
+        assert_eq!(
+            manager.active_strategy().await.unwrap(),
+            Some(StrategyId::Conservative)
+        );
 
-        manager.activate_strategy(StrategyId::Aggressive).await.unwrap();
-        assert_eq!(manager.active_strategy().await.unwrap(), Some(StrategyId::Aggressive));
+        manager
+            .activate_strategy(StrategyId::Aggressive)
+            .await
+            .unwrap();
+        assert_eq!(
+            manager.active_strategy().await.unwrap(),
+            Some(StrategyId::Aggressive)
+        );
     }
 
     #[test]

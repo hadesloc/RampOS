@@ -32,6 +32,16 @@ export interface WidgetTheme {
   successColor?: string;
 }
 
+export interface WidgetThemeTokens {
+  accentColor?: string;
+  surfaceColor?: string;
+  contentColor?: string;
+  dangerColor?: string;
+  successColor?: string;
+  radiusMd?: string;
+  fontFamily?: string;
+}
+
 export const DEFAULT_THEME: WidgetTheme = {
   primaryColor: '#2563eb',
   backgroundColor: '#ffffff',
@@ -53,6 +63,24 @@ export interface CheckoutConfig {
   walletAddress?: string;
   theme?: WidgetTheme;
   environment?: 'sandbox' | 'production';
+}
+
+export interface RemoteWidgetConfig {
+  url: string;
+  headers?: Record<string, string>;
+  mode?: 'merge' | 'replace';
+}
+
+export interface HeadlessCheckoutOptions {
+  flowId?: string;
+  emitState?: boolean;
+  metadata?: Record<string, string>;
+}
+
+export interface HeadlessCheckoutConfig extends CheckoutConfig {
+  remoteConfig?: RemoteWidgetConfig;
+  themeTokens?: WidgetThemeTokens;
+  headless?: HeadlessCheckoutOptions;
 }
 
 export interface CheckoutResult {

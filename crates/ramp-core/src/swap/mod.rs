@@ -11,10 +11,10 @@ mod router;
 
 pub use oneinch::OneInchAggregator;
 pub use paraswap::ParaSwapAggregator;
-pub use router::{SwapRouter, RouteResult};
+pub use router::{RouteResult, SwapRouter};
 
-use async_trait::async_trait;
 use alloy::primitives::{Address, Bytes, U256};
+use async_trait::async_trait;
 use ramp_common::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -221,8 +221,12 @@ impl AggregatorRegistry {
     /// Create registry with default aggregators
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
-        registry.register(Arc::new(OneInchAggregator::new(AggregatorConfig::default())));
-        registry.register(Arc::new(ParaSwapAggregator::new(AggregatorConfig::default())));
+        registry.register(Arc::new(
+            OneInchAggregator::new(AggregatorConfig::default()),
+        ));
+        registry.register(Arc::new(ParaSwapAggregator::new(
+            AggregatorConfig::default(),
+        )));
         registry
     }
 
@@ -247,10 +251,7 @@ impl AggregatorRegistry {
 
     /// Get aggregator by name
     pub fn by_name(&self, name: &str) -> Option<Arc<dyn DexAggregator>> {
-        self.aggregators
-            .iter()
-            .find(|a| a.name() == name)
-            .cloned()
+        self.aggregators.iter().find(|a| a.name() == name).cloned()
     }
 }
 
@@ -324,8 +325,8 @@ impl SwapService {
 
         let from_divisor = Decimal::from_str(&10f64.powi(from_decimals as i32).to_string())
             .unwrap_or(Decimal::ONE);
-        let to_divisor = Decimal::from_str(&10f64.powi(to_decimals as i32).to_string())
-            .unwrap_or(Decimal::ONE);
+        let to_divisor =
+            Decimal::from_str(&10f64.powi(to_decimals as i32).to_string()).unwrap_or(Decimal::ONE);
 
         let from_normalized = from_dec / from_divisor;
         let to_normalized = to_dec / to_divisor;
@@ -359,7 +360,9 @@ mod tests {
     fn test_token_creation() {
         let usdt = Token::new(
             "USDT",
-            "0xdAC17F958D2ee523a2206206994597C13D831ec7".parse().unwrap(),
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+                .parse()
+                .unwrap(),
             6,
             1,
         );

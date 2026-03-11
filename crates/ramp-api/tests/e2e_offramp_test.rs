@@ -180,9 +180,7 @@ async fn build_test_app(pool: sqlx::PgPool) -> (axum::Router, String, String) {
         vnst_protocol: Arc::new(
             ramp_core::stablecoin::vnst_protocol::VnstProtocolService::new(
                 ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
-                Arc::new(
-                    ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new(),
-                ),
+                Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
             ),
         ),
         db_pool: Some(pool.clone()),
@@ -365,7 +363,9 @@ async fn test_admin_offramp_pending_approve_reject_flow() {
     let status = response.status();
     // Admin endpoints require admin key verification - accept auth responses
     assert!(
-        status == StatusCode::OK || status == StatusCode::FORBIDDEN || status == StatusCode::UNAUTHORIZED,
+        status == StatusCode::OK
+            || status == StatusCode::FORBIDDEN
+            || status == StatusCode::UNAUTHORIZED,
         "Admin list pending should return 200, 403, or 401, got {}",
         status
     );

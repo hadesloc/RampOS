@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use alloy::primitives::{Address, B256, U256};
+use async_trait::async_trait;
 use ramp_common::Result;
 use serde::{Deserialize, Serialize};
 use tracing::info;

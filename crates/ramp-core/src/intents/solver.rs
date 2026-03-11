@@ -61,11 +61,11 @@ impl LocalSolver {
     pub fn new() -> Self {
         let mut gas_prices = std::collections::HashMap::new();
         // Default gas price estimates (gwei)
-        gas_prices.insert(1, 30);       // Ethereum mainnet
-        gas_prices.insert(42161, 1);    // Arbitrum
-        gas_prices.insert(8453, 1);     // Base
-        gas_prices.insert(10, 1);       // Optimism
-        gas_prices.insert(137, 50);     // Polygon
+        gas_prices.insert(1, 30); // Ethereum mainnet
+        gas_prices.insert(42161, 1); // Arbitrum
+        gas_prices.insert(8453, 1); // Base
+        gas_prices.insert(10, 1); // Optimism
+        gas_prices.insert(137, 50); // Polygon
 
         Self {
             gas_prices,
@@ -115,7 +115,11 @@ impl LocalSolver {
             ExecutionStepKind::Bridge { .. } => 30,
             ExecutionStepKind::Transfer { .. } => 15,
             ExecutionStepKind::Stake { .. } => 15,
-            ExecutionStepKind::WaitForBridge { from_chain, to_chain, .. } => {
+            ExecutionStepKind::WaitForBridge {
+                from_chain,
+                to_chain,
+                ..
+            } => {
                 // L1 -> L2 is faster than L2 -> L1
                 if *from_chain == 1 {
                     600 // ~10 minutes for L1 -> L2
@@ -290,13 +294,11 @@ impl LocalSolver {
 
     fn build_direct_send_route(&self, spec: &IntentSpec) -> RouteOption {
         let recipient = spec.recipient.clone().unwrap_or_default();
-        let steps = vec![
-            ExecutionStepKind::Transfer {
-                token: spec.from_asset.symbol.clone(),
-                recipient,
-                chain_id: spec.from_asset.chain_id,
-            },
-        ];
+        let steps = vec![ExecutionStepKind::Transfer {
+            token: spec.from_asset.symbol.clone(),
+            recipient,
+            chain_id: spec.from_asset.chain_id,
+        }];
 
         self.evaluate_route("Direct send", steps, &spec.amount)
     }
@@ -424,7 +426,9 @@ impl LocalSolver {
     /// Select the best route from a list of options
     fn select_best_route(&self, routes: Vec<RouteOption>) -> Option<RouteOption> {
         routes.into_iter().max_by(|a, b| {
-            a.score.partial_cmp(&b.score).unwrap_or(std::cmp::Ordering::Equal)
+            a.score
+                .partial_cmp(&b.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
         })
     }
 
@@ -477,7 +481,8 @@ impl LocalSolver {
 impl IntentSolver for LocalSolver {
     async fn solve(&self, spec: &IntentSpec) -> Result<ExecutionPlan> {
         // Validate the spec first
-        spec.validate().map_err(|e| ramp_common::Error::Validation(e))?;
+        spec.validate()
+            .map_err(|e| ramp_common::Error::Validation(e))?;
 
         info!(
             intent_id = %spec.id,
@@ -526,7 +531,7 @@ impl IntentSolver for LocalSolver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::intents::spec::{IntentConstraints, AssetId};
+    use crate::intents::spec::{AssetId, IntentConstraints};
 
     #[tokio::test]
     async fn test_solve_same_chain_swap() {
@@ -639,8 +644,7 @@ mod tests {
     #[tokio::test]
     async fn test_solve_respects_gas_constraint() {
         let solver = LocalSolver::new();
-        let constraints = IntentConstraints::default()
-            .with_max_gas_usd(Decimal::new(1, 6)); // $0.000001 - impossibly low
+        let constraints = IntentConstraints::default().with_max_gas_usd(Decimal::new(1, 6)); // $0.000001 - impossibly low
 
         let spec = IntentSpec::new(
             IntentAction::Swap,

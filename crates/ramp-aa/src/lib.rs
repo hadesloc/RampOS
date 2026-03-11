@@ -20,12 +20,15 @@ pub use eip7702::{
     Eip7702Transaction, Eip7702TxBuilder, SessionDelegation, SignedAuthorization,
 };
 pub use gas::{GasEstimate, GasEstimator};
+pub use passkey::{
+    signer::{P256Signature, PasskeyPublicKey, WebAuthnAssertion},
+    PasskeySigner,
+};
 pub use paymaster::{
     CrossChainGasQuote, CrossChainPaymaster, CrossChainPaymasterConfig, GasQuote, GasToken,
     MultiTokenPaymaster, MultiTokenPaymasterConfig, Paymaster, PaymasterService, PriceOracle,
     SponsorshipPolicy, SupportedChain, TenantGasLimits,
 };
 pub use smart_account::SmartAccountService;
-pub use passkey::{PasskeySigner, signer::{P256Signature, WebAuthnAssertion, PasskeyPublicKey}};
 pub use types::*;
 pub use user_operation::UserOperation;

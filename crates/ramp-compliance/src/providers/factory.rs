@@ -5,7 +5,9 @@ use crate::config::providers::{
 use crate::kyc::{KycProvider, MockKycProvider, OnfidoKycProvider};
 use crate::kyt::{ChainalysisKytProvider, KytProvider, MockKytProvider};
 use crate::sanctions::{MockSanctionsProvider, OpenSanctionsProvider, SanctionsProvider};
-use crate::storage::{DocumentStorage, LocalFilesystemStorage, MockDocumentStorage, S3DocumentStorage, StorageError};
+use crate::storage::{
+    DocumentStorage, LocalFilesystemStorage, MockDocumentStorage, S3DocumentStorage, StorageError,
+};
 
 /// Error type for provider factory operations
 #[derive(Debug, thiserror::Error)]
@@ -18,12 +20,16 @@ pub enum ProviderFactoryError {
     Configuration(String),
 }
 
-pub fn create_kyc_provider(config: &KycProviderConfig) -> Result<Box<dyn KycProvider>, ProviderFactoryError> {
+pub fn create_kyc_provider(
+    config: &KycProviderConfig,
+) -> Result<Box<dyn KycProvider>, ProviderFactoryError> {
     // Auto-detect: if config says Mock but ONFIDO_API_KEY is set, use Onfido
     let effective_provider = match &config.provider {
         KycProviderType::Mock => {
             if std::env::var("ONFIDO_API_KEY").is_ok() {
-                tracing::info!("ONFIDO_API_KEY env var detected, auto-selecting Onfido KYC provider");
+                tracing::info!(
+                    "ONFIDO_API_KEY env var detected, auto-selecting Onfido KYC provider"
+                );
                 KycProviderType::Onfido
             } else {
                 tracing::warn!("Using mock KYC provider - set ONFIDO_API_KEY for real Onfido");
@@ -40,24 +46,37 @@ pub fn create_kyc_provider(config: &KycProviderConfig) -> Result<Box<dyn KycProv
                 .api_key
                 .clone()
                 .or_else(|| std::env::var("ONFIDO_API_KEY").ok())
-                .ok_or_else(|| ProviderFactoryError::Configuration("Onfido requires api_key (config or ONFIDO_API_KEY env var)".into()))?;
-            Ok(Box::new(OnfidoKycProvider::new(api_key, config.api_url.clone())))
+                .ok_or_else(|| {
+                    ProviderFactoryError::Configuration(
+                        "Onfido requires api_key (config or ONFIDO_API_KEY env var)".into(),
+                    )
+                })?;
+            Ok(Box::new(OnfidoKycProvider::new(
+                api_key,
+                config.api_url.clone(),
+            )))
         }
-        KycProviderType::Jumio => {
-            Err(ProviderFactoryError::NotImplemented("Jumio provider not yet implemented".into()))
-        }
+        KycProviderType::Jumio => Err(ProviderFactoryError::NotImplemented(
+            "Jumio provider not yet implemented".into(),
+        )),
     }
 }
 
-pub fn create_kyt_provider(config: &KytProviderConfig) -> Result<Box<dyn KytProvider>, ProviderFactoryError> {
+pub fn create_kyt_provider(
+    config: &KytProviderConfig,
+) -> Result<Box<dyn KytProvider>, ProviderFactoryError> {
     // Auto-detect: if config says Mock but CHAINALYSIS_API_KEY is set, use Chainalysis
     let effective_provider = match &config.provider {
         KytProviderType::Mock => {
             if std::env::var("CHAINALYSIS_API_KEY").is_ok() {
-                tracing::info!("CHAINALYSIS_API_KEY env var detected, auto-selecting Chainalysis KYT provider");
+                tracing::info!(
+                    "CHAINALYSIS_API_KEY env var detected, auto-selecting Chainalysis KYT provider"
+                );
                 KytProviderType::Chainalysis
             } else {
-                tracing::warn!("Using mock KYT provider - set CHAINALYSIS_API_KEY for real Chainalysis");
+                tracing::warn!(
+                    "Using mock KYT provider - set CHAINALYSIS_API_KEY for real Chainalysis"
+                );
                 KytProviderType::Mock
             }
         }
@@ -71,24 +90,38 @@ pub fn create_kyt_provider(config: &KytProviderConfig) -> Result<Box<dyn KytProv
                 .api_key
                 .clone()
                 .or_else(|| std::env::var("CHAINALYSIS_API_KEY").ok())
-                .ok_or_else(|| ProviderFactoryError::Configuration("Chainalysis requires api_key (config or CHAINALYSIS_API_KEY env var)".into()))?;
-            Ok(Box::new(ChainalysisKytProvider::new(api_key, config.api_url.clone())))
+                .ok_or_else(|| {
+                    ProviderFactoryError::Configuration(
+                        "Chainalysis requires api_key (config or CHAINALYSIS_API_KEY env var)"
+                            .into(),
+                    )
+                })?;
+            Ok(Box::new(ChainalysisKytProvider::new(
+                api_key,
+                config.api_url.clone(),
+            )))
         }
-        KytProviderType::Elliptic => {
-            Err(ProviderFactoryError::NotImplemented("Elliptic provider not yet implemented".into()))
-        }
+        KytProviderType::Elliptic => Err(ProviderFactoryError::NotImplemented(
+            "Elliptic provider not yet implemented".into(),
+        )),
     }
 }
 
-pub fn create_sanctions_provider(config: &SanctionsProviderConfig) -> Result<Box<dyn SanctionsProvider>, ProviderFactoryError> {
+pub fn create_sanctions_provider(
+    config: &SanctionsProviderConfig,
+) -> Result<Box<dyn SanctionsProvider>, ProviderFactoryError> {
     // Auto-detect: if config says Mock but SANCTIONS_API_KEY is set, use OpenSanctions
     let effective_provider = match &config.provider {
         SanctionsProviderType::Mock => {
             if std::env::var("SANCTIONS_API_KEY").is_ok() {
-                tracing::info!("SANCTIONS_API_KEY env var detected, auto-selecting OpenSanctions provider");
+                tracing::info!(
+                    "SANCTIONS_API_KEY env var detected, auto-selecting OpenSanctions provider"
+                );
                 SanctionsProviderType::OpenSanctions
             } else {
-                tracing::warn!("Using mock sanctions provider - set SANCTIONS_API_KEY for real OpenSanctions");
+                tracing::warn!(
+                    "Using mock sanctions provider - set SANCTIONS_API_KEY for real OpenSanctions"
+                );
                 SanctionsProviderType::Mock
             }
         }
@@ -102,7 +135,12 @@ pub fn create_sanctions_provider(config: &SanctionsProviderConfig) -> Result<Box
                 .api_key
                 .clone()
                 .or_else(|| std::env::var("SANCTIONS_API_KEY").ok())
-                .ok_or_else(|| ProviderFactoryError::Configuration("OpenSanctions requires api_key (config or SANCTIONS_API_KEY env var)".into()))?;
+                .ok_or_else(|| {
+                    ProviderFactoryError::Configuration(
+                        "OpenSanctions requires api_key (config or SANCTIONS_API_KEY env var)"
+                            .into(),
+                    )
+                })?;
             Ok(Box::new(OpenSanctionsProvider::new(
                 api_key,
                 config.api_url.clone(),
@@ -111,12 +149,15 @@ pub fn create_sanctions_provider(config: &SanctionsProviderConfig) -> Result<Box
     }
 }
 
-pub fn create_document_storage(config: &DocumentStorageConfig) -> Result<Box<dyn DocumentStorage>, ProviderFactoryError> {
+pub fn create_document_storage(
+    config: &DocumentStorageConfig,
+) -> Result<Box<dyn DocumentStorage>, ProviderFactoryError> {
     // Auto-detect: if config says Mock but AWS_S3_BUCKET is set, use S3 (async required)
     // or if DOCUMENT_STORAGE_DIR is set, use local filesystem
     let effective_provider = match &config.provider {
         DocumentStorageType::Mock => {
-            if std::env::var("AWS_S3_BUCKET").is_ok() && std::env::var("AWS_ACCESS_KEY_ID").is_ok() {
+            if std::env::var("AWS_S3_BUCKET").is_ok() && std::env::var("AWS_ACCESS_KEY_ID").is_ok()
+            {
                 tracing::info!("AWS credentials detected, auto-selecting S3 storage (use create_document_storage_async)");
                 // S3 requires async initialization, fall through to error
                 DocumentStorageType::S3
@@ -137,11 +178,10 @@ pub fn create_document_storage(config: &DocumentStorageConfig) -> Result<Box<dyn
             let storage = LocalFilesystemStorage::from_env()?;
             Ok(Box::new(storage))
         }
-        DocumentStorageType::S3 => {
-            Err(ProviderFactoryError::NotImplemented(
-                "S3 provider initialization requires async context - use create_document_storage_async".into()
-            ))
-        }
+        DocumentStorageType::S3 => Err(ProviderFactoryError::NotImplemented(
+            "S3 provider initialization requires async context - use create_document_storage_async"
+                .into(),
+        )),
     }
 }
 
@@ -165,11 +205,14 @@ pub async fn create_document_storage_async(
     // Auto-detect the best available storage
     let effective_provider = match &config.provider {
         DocumentStorageType::Mock => {
-            if std::env::var("AWS_S3_BUCKET").is_ok() && std::env::var("AWS_ACCESS_KEY_ID").is_ok() {
+            if std::env::var("AWS_S3_BUCKET").is_ok() && std::env::var("AWS_ACCESS_KEY_ID").is_ok()
+            {
                 tracing::info!("AWS credentials detected, auto-selecting S3 document storage");
                 DocumentStorageType::S3
             } else if std::env::var("DOCUMENT_STORAGE_DIR").is_ok() {
-                tracing::info!("DOCUMENT_STORAGE_DIR detected, auto-selecting local filesystem storage");
+                tracing::info!(
+                    "DOCUMENT_STORAGE_DIR detected, auto-selecting local filesystem storage"
+                );
                 DocumentStorageType::Local
             } else {
                 tracing::warn!("Using mock document storage - set AWS_S3_BUCKET for S3 or DOCUMENT_STORAGE_DIR for local");
@@ -187,11 +230,13 @@ pub async fn create_document_storage_async(
         }
         DocumentStorageType::S3 => {
             // Bucket from config, env var, or error
-            let bucket = config.bucket.clone()
+            let bucket = config
+                .bucket
+                .clone()
                 .or_else(|| std::env::var("AWS_S3_BUCKET").ok())
                 .ok_or_else(|| {
                     ProviderFactoryError::Configuration(
-                        "S3 requires bucket name (config.bucket or AWS_S3_BUCKET env var)".into()
+                        "S3 requires bucket name (config.bucket or AWS_S3_BUCKET env var)".into(),
                     )
                 })?;
             let storage = S3DocumentStorage::from_env(bucket).await?;
@@ -331,7 +376,13 @@ mod tests {
             endpoint: None,
         };
         // Set a temp dir for local storage
-        std::env::set_var("DOCUMENT_STORAGE_DIR", std::env::temp_dir().join("rampos-test-docs").to_string_lossy().as_ref());
+        std::env::set_var(
+            "DOCUMENT_STORAGE_DIR",
+            std::env::temp_dir()
+                .join("rampos-test-docs")
+                .to_string_lossy()
+                .as_ref(),
+        );
         let result = create_document_storage(&config);
         std::env::remove_var("DOCUMENT_STORAGE_DIR");
         assert!(result.is_ok());
@@ -354,7 +405,13 @@ mod tests {
     fn test_create_document_storage_auto_detect_local() {
         std::env::remove_var("AWS_S3_BUCKET");
         std::env::remove_var("AWS_ACCESS_KEY_ID");
-        std::env::set_var("DOCUMENT_STORAGE_DIR", std::env::temp_dir().join("rampos-test-docs-auto").to_string_lossy().as_ref());
+        std::env::set_var(
+            "DOCUMENT_STORAGE_DIR",
+            std::env::temp_dir()
+                .join("rampos-test-docs-auto")
+                .to_string_lossy()
+                .as_ref(),
+        );
         let config = DocumentStorageConfig::default(); // Mock provider
         let result = create_document_storage(&config);
         std::env::remove_var("DOCUMENT_STORAGE_DIR");

@@ -143,29 +143,32 @@ pub async fn tiered_rate_limit_middleware(
 
                 response.headers_mut().insert(
                     "Retry-After",
-                    res.reset_after_seconds.to_string().parse().unwrap_or(
-                        axum::http::HeaderValue::from_static("60")
-                    ),
+                    res.reset_after_seconds
+                        .to_string()
+                        .parse()
+                        .unwrap_or(axum::http::HeaderValue::from_static("60")),
                 );
 
                 // Add rate limit headers
                 response.headers_mut().insert(
                     "X-RateLimit-Limit",
-                    config.max_requests.to_string().parse().unwrap_or(
-                         axum::http::HeaderValue::from_static("0")
-                    )
+                    config
+                        .max_requests
+                        .to_string()
+                        .parse()
+                        .unwrap_or(axum::http::HeaderValue::from_static("0")),
                 );
-                 response.headers_mut().insert(
+                response.headers_mut().insert(
                     "X-RateLimit-Remaining",
-                    "0".parse().unwrap_or(
-                         axum::http::HeaderValue::from_static("0")
-                    )
+                    "0".parse()
+                        .unwrap_or(axum::http::HeaderValue::from_static("0")),
                 );
                 response.headers_mut().insert(
                     "X-RateLimit-Reset",
-                    res.reset_after_seconds.to_string().parse().unwrap_or(
-                         axum::http::HeaderValue::from_static("0")
-                    )
+                    res.reset_after_seconds
+                        .to_string()
+                        .parse()
+                        .unwrap_or(axum::http::HeaderValue::from_static("0")),
                 );
 
                 return Ok(response);
@@ -177,21 +180,25 @@ pub async fn tiered_rate_limit_middleware(
             // Add headers to successful response too
             response.headers_mut().insert(
                 "X-RateLimit-Limit",
-                config.max_requests.to_string().parse().unwrap_or(
-                    axum::http::HeaderValue::from_static("0")
-                )
+                config
+                    .max_requests
+                    .to_string()
+                    .parse()
+                    .unwrap_or(axum::http::HeaderValue::from_static("0")),
             );
             response.headers_mut().insert(
                 "X-RateLimit-Remaining",
-                res.remaining.to_string().parse().unwrap_or(
-                    axum::http::HeaderValue::from_static("0")
-                )
+                res.remaining
+                    .to_string()
+                    .parse()
+                    .unwrap_or(axum::http::HeaderValue::from_static("0")),
             );
             response.headers_mut().insert(
                 "X-RateLimit-Reset",
-                res.reset_after_seconds.to_string().parse().unwrap_or(
-                    axum::http::HeaderValue::from_static("0")
-                )
+                res.reset_after_seconds
+                    .to_string()
+                    .parse()
+                    .unwrap_or(axum::http::HeaderValue::from_static("0")),
             );
 
             Ok(response)

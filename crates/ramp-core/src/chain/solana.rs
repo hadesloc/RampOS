@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use super::{
-    Balance, Chain, ChainError, ChainId, ChainType, FeeEstimate, FeeOption, Result,
-    TokenBalance, Transaction, TxHash, TxState, TxStatus, UnifiedAddress,
+    Balance, Chain, ChainError, ChainId, ChainType, FeeEstimate, FeeOption, Result, TokenBalance,
+    Transaction, TxHash, TxState, TxStatus, UnifiedAddress,
 };
 
 const DEFAULT_RPC_URL: &str = "https://api.mainnet-beta.solana.com";
@@ -155,14 +155,13 @@ pub struct SolanaChain {
 impl SolanaChain {
     /// Create a new Solana chain instance
     pub fn new(config: SolanaChainConfig) -> Result<Self> {
-        let rpc_url = std::env::var("SOLANA_RPC_URL")
-            .unwrap_or_else(|_| {
-                if config.rpc_url.is_empty() {
-                    DEFAULT_RPC_URL.to_string()
-                } else {
-                    config.rpc_url.clone()
-                }
-            });
+        let rpc_url = std::env::var("SOLANA_RPC_URL").unwrap_or_else(|_| {
+            if config.rpc_url.is_empty() {
+                DEFAULT_RPC_URL.to_string()
+            } else {
+                config.rpc_url.clone()
+            }
+        });
 
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(RPC_TIMEOUT_SECS))
@@ -197,9 +196,8 @@ impl SolanaChain {
         }
 
         // Validate that it decodes to 32 bytes
-        let decoded = bs58_decode(address).map_err(|_| {
-            ChainError::InvalidAddress("Address is not valid base58".to_string())
-        })?;
+        let decoded = bs58_decode(address)
+            .map_err(|_| ChainError::InvalidAddress("Address is not valid base58".to_string()))?;
         if decoded.len() != 32 {
             return Err(ChainError::InvalidAddress(format!(
                 "Solana address must decode to 32 bytes, got {}",
@@ -402,11 +400,9 @@ impl Chain for SolanaChain {
                             contract_address: info.mint.clone(),
                         })
                     }
-                    TokenAccountParsed::Raw(_) => {
-                        Err(ChainError::RpcError(
-                            "Unexpected raw encoding in token account response".to_string(),
-                        ))
-                    }
+                    TokenAccountParsed::Raw(_) => Err(ChainError::RpcError(
+                        "Unexpected raw encoding in token account response".to_string(),
+                    )),
                 }
             }
             Err(e) => {
@@ -586,10 +582,7 @@ impl Chain for SolanaChain {
     }
 
     async fn get_block_number(&self) -> Result<u64> {
-        match self
-            .rpc_call::<u64>("getSlot", serde_json::json!([]))
-            .await
-        {
+        match self.rpc_call::<u64>("getSlot", serde_json::json!([])).await {
             Ok(slot) => Ok(slot),
             Err(e) => {
                 tracing::warn!("Solana RPC getSlot failed: {}", e);
@@ -620,9 +613,8 @@ mod tests {
     #[test]
     fn test_address_validation() {
         // Valid Solana address (example)
-        let valid = SolanaChain::validate_solana_address(
-            "7cVfgArCheMR6Cs4t6vz5rfnqd56vZq4ndaBrY5xkxXy",
-        );
+        let valid =
+            SolanaChain::validate_solana_address("7cVfgArCheMR6Cs4t6vz5rfnqd56vZq4ndaBrY5xkxXy");
         assert!(valid.is_ok());
 
         // Too short
@@ -637,9 +629,10 @@ mod tests {
 
     #[test]
     fn test_explorer_urls() {
-        let mainnet =
-            SolanaChain::new(SolanaChainConfig::mainnet("https://api.mainnet-beta.solana.com"))
-                .unwrap();
+        let mainnet = SolanaChain::new(SolanaChainConfig::mainnet(
+            "https://api.mainnet-beta.solana.com",
+        ))
+        .unwrap();
         let hash = TxHash("test_hash".to_string());
         assert!(!mainnet.tx_url(&hash).contains("cluster=devnet"));
 
@@ -670,9 +663,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_estimate_fee() {
-        let chain =
-            SolanaChain::new(SolanaChainConfig::mainnet("https://api.mainnet-beta.solana.com"))
-                .unwrap();
+        let chain = SolanaChain::new(SolanaChainConfig::mainnet(
+            "https://api.mainnet-beta.solana.com",
+        ))
+        .unwrap();
         let tx = Transaction {
             from: "7cVfgArCheMR6Cs4t6vz5rfnqd56vZq4ndaBrY5xkxXy".to_string(),
             to: "11111111111111111111111111111111".to_string(),

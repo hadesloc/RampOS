@@ -80,19 +80,16 @@ impl EscrowAddressService {
     }
 
     /// Get or create a deposit address for a user on a specific chain
-    pub fn get_or_create_address(
-        &self,
-        user_id: &str,
-        chain: ChainId,
-    ) -> Result<EscrowAddress> {
+    pub fn get_or_create_address(&self, user_id: &str, chain: ChainId) -> Result<EscrowAddress> {
         let chain_key = format!("{:?}", chain);
         let key = (user_id.to_string(), chain_key.clone());
 
         // Check if address already exists
         {
-            let addresses = self.addresses.lock().map_err(|_| {
-                Error::Internal("Failed to acquire addresses lock".to_string())
-            })?;
+            let addresses = self
+                .addresses
+                .lock()
+                .map_err(|_| Error::Internal("Failed to acquire addresses lock".to_string()))?;
             if let Some(addr) = addresses.get(&key) {
                 debug!(user_id = %user_id, chain = %chain_key, "Returning existing escrow address");
                 return Ok(addr.clone());
@@ -104,9 +101,10 @@ impl EscrowAddressService {
 
         // Store it
         {
-            let mut addresses = self.addresses.lock().map_err(|_| {
-                Error::Internal("Failed to acquire addresses lock".to_string())
-            })?;
+            let mut addresses = self
+                .addresses
+                .lock()
+                .map_err(|_| Error::Internal("Failed to acquire addresses lock".to_string()))?;
             addresses.insert(key, address.clone());
         }
 
@@ -162,9 +160,10 @@ impl EscrowAddressService {
 
     /// Derive a new address using simulated BIP-44 path
     fn derive_address(&self, user_id: &str, chain: ChainId) -> Result<EscrowAddress> {
-        let mut index = self.address_index.lock().map_err(|_| {
-            Error::Internal("Failed to acquire address_index lock".to_string())
-        })?;
+        let mut index = self
+            .address_index
+            .lock()
+            .map_err(|_| Error::Internal("Failed to acquire address_index lock".to_string()))?;
 
         let coin_type = match chain {
             ChainId::Ethereum | ChainId::Arbitrum | ChainId::Optimism | ChainId::Base => 60,
@@ -179,12 +178,7 @@ impl EscrowAddressService {
         // Simulated address generation (deterministic based on user_id and index)
         let address = if chain == ChainId::Solana {
             // Solana addresses are base58, simulate one
-            format!(
-                "{}{}{}",
-                &user_id[..user_id.len().min(8)],
-                "Sol",
-                *index
-            )
+            format!("{}{}{}", &user_id[..user_id.len().min(8)], "Sol", *index)
         } else {
             // EVM address: 0x + 40 hex chars
             let hash_input = format!("{}:{:?}:{}", user_id, chain, *index);
@@ -303,9 +297,7 @@ mod tests {
             .get_or_create_address("user1", ChainId::Ethereum)
             .unwrap();
 
-        let monitor = service
-            .monitor_deposit(&addr.address, dec!(1.5))
-            .unwrap();
+        let monitor = service.monitor_deposit(&addr.address, dec!(1.5)).unwrap();
 
         assert_eq!(monitor.status, DepositStatus::Pending);
         assert_eq!(monitor.expected_amount, dec!(1.5));

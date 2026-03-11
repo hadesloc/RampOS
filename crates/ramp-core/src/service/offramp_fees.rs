@@ -63,23 +63,23 @@ impl OffRampFeeCalculator {
             tiers: vec![
                 FeeTier {
                     from_vnd: Decimal::ZERO,
-                    to_vnd: Some(Decimal::new(10_000_000, 0)),     // < 10M VND
-                    rate: Decimal::new(2, 2),                       // 2%
+                    to_vnd: Some(Decimal::new(10_000_000, 0)), // < 10M VND
+                    rate: Decimal::new(2, 2),                  // 2%
                 },
                 FeeTier {
                     from_vnd: Decimal::new(10_000_000, 0),
-                    to_vnd: Some(Decimal::new(100_000_000, 0)),    // 10M - 100M VND
-                    rate: Decimal::new(1, 2),                       // 1%
+                    to_vnd: Some(Decimal::new(100_000_000, 0)), // 10M - 100M VND
+                    rate: Decimal::new(1, 2),                   // 1%
                 },
                 FeeTier {
                     from_vnd: Decimal::new(100_000_000, 0),
-                    to_vnd: Some(Decimal::new(1_000_000_000, 0)),  // 100M - 1B VND
-                    rate: Decimal::new(75, 4),                      // 0.75%
+                    to_vnd: Some(Decimal::new(1_000_000_000, 0)), // 100M - 1B VND
+                    rate: Decimal::new(75, 4),                    // 0.75%
                 },
                 FeeTier {
                     from_vnd: Decimal::new(1_000_000_000, 0),
-                    to_vnd: None,                                   // > 1B VND
-                    rate: Decimal::new(5, 3),                       // 0.5%
+                    to_vnd: None,             // > 1B VND
+                    rate: Decimal::new(5, 3), // 0.5%
                 },
             ],
         }
@@ -147,12 +147,12 @@ impl OffRampFeeCalculator {
     /// Get the network fee for a crypto asset (simulated gas cost in VND)
     fn get_network_fee(&self, asset: CryptoSymbol) -> Decimal {
         match asset {
-            CryptoSymbol::BTC => Decimal::new(250_000, 0),   // ~$10 USD in VND
-            CryptoSymbol::ETH => Decimal::new(125_000, 0),   // ~$5 USD in VND
-            CryptoSymbol::USDT => Decimal::new(75_000, 0),   // ~$3 USD (TRC20/ERC20)
-            CryptoSymbol::USDC => Decimal::new(75_000, 0),   // ~$3 USD
-            CryptoSymbol::BNB => Decimal::new(25_000, 0),    // ~$1 USD (BSC is cheap)
-            CryptoSymbol::SOL => Decimal::new(2_500, 0),     // ~$0.1 USD (Solana is very cheap)
+            CryptoSymbol::BTC => Decimal::new(250_000, 0), // ~$10 USD in VND
+            CryptoSymbol::ETH => Decimal::new(125_000, 0), // ~$5 USD in VND
+            CryptoSymbol::USDT => Decimal::new(75_000, 0), // ~$3 USD (TRC20/ERC20)
+            CryptoSymbol::USDC => Decimal::new(75_000, 0), // ~$3 USD
+            CryptoSymbol::BNB => Decimal::new(25_000, 0),  // ~$1 USD (BSC is cheap)
+            CryptoSymbol::SOL => Decimal::new(2_500, 0),   // ~$0.1 USD (Solana is very cheap)
             CryptoSymbol::Other => Decimal::new(125_000, 0), // Default
         }
     }
@@ -160,8 +160,8 @@ impl OffRampFeeCalculator {
     /// Calculate tiered platform fee
     fn calculate_platform_fee(&self, amount_vnd: Decimal) -> (Decimal, Decimal) {
         for tier in &self.tiers {
-            let in_range = amount_vnd >= tier.from_vnd
-                && tier.to_vnd.map_or(true, |to| amount_vnd < to);
+            let in_range =
+                amount_vnd >= tier.from_vnd && tier.to_vnd.map_or(true, |to| amount_vnd < to);
             if in_range {
                 return (amount_vnd * tier.rate, tier.rate);
             }
@@ -180,7 +180,7 @@ impl OffRampFeeCalculator {
         let spread_rate = match asset {
             CryptoSymbol::USDT | CryptoSymbol::USDC => Decimal::new(1, 3), // 0.1% for stablecoins
             CryptoSymbol::BTC | CryptoSymbol::ETH => Decimal::new(2, 3),   // 0.2% for major
-            _ => Decimal::new(3, 3),                                        // 0.3% for altcoins
+            _ => Decimal::new(3, 3),                                       // 0.3% for altcoins
         };
 
         (amount_vnd * spread_rate, spread_rate)
@@ -189,7 +189,7 @@ impl OffRampFeeCalculator {
     /// Get bank transfer fee
     fn get_bank_fee(&self, bank_type: &str) -> Decimal {
         match bank_type {
-            "domestic" | "napas247" => Decimal::ZERO,         // Free domestic
+            "domestic" | "napas247" => Decimal::ZERO, // Free domestic
             "swift" | "international" => Decimal::new(3300, 0), // 3,300 VND
             _ => Decimal::ZERO,
         }

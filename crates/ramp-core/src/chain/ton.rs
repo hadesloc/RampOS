@@ -13,8 +13,8 @@ use std::time::Duration;
 use tracing::{debug, warn};
 
 use super::{
-    Balance, Chain, ChainError, ChainId, ChainType, FeeEstimate, FeeOption, Result,
-    TokenBalance, Transaction, TxHash, TxState, TxStatus, UnifiedAddress,
+    Balance, Chain, ChainError, ChainId, ChainType, FeeEstimate, FeeOption, Result, TokenBalance,
+    Transaction, TxHash, TxState, TxStatus, UnifiedAddress,
 };
 
 /// TON Center API response wrapper
@@ -154,9 +154,10 @@ impl TonChain {
 
         debug!("TON API GET: {} params={:?}", endpoint, params);
 
-        let resp = req.send().await.map_err(|e| {
-            ChainError::RpcError(format!("TON API request failed: {}", e))
-        })?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| ChainError::RpcError(format!("TON API request failed: {}", e)))?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -174,7 +175,9 @@ impl TonChain {
         if !api_resp.ok {
             return Err(ChainError::RpcError(format!(
                 "TON API error: {}",
-                api_resp.error.unwrap_or_else(|| "unknown error".to_string())
+                api_resp
+                    .error
+                    .unwrap_or_else(|| "unknown error".to_string())
             )));
         }
 
@@ -199,9 +202,10 @@ impl TonChain {
 
         debug!("TON API POST: {} body={}", endpoint, body);
 
-        let resp = req.send().await.map_err(|e| {
-            ChainError::RpcError(format!("TON API request failed: {}", e))
-        })?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| ChainError::RpcError(format!("TON API request failed: {}", e)))?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -219,7 +223,9 @@ impl TonChain {
         if !api_resp.ok {
             return Err(ChainError::RpcError(format!(
                 "TON API error: {}",
-                api_resp.error.unwrap_or_else(|| "unknown error".to_string())
+                api_resp
+                    .error
+                    .unwrap_or_else(|| "unknown error".to_string())
             )));
         }
 
@@ -273,9 +279,9 @@ impl TonChain {
         // E.g., EQDtFpEwcFAEcRe5mLVh2N6C0x-_hJEM7W61_JLnSF74p4q2
         if address.len() == 48 {
             // Check for valid base64url characters
-            let is_valid = address.chars().all(|c| {
-                c.is_ascii_alphanumeric() || c == '-' || c == '_'
-            });
+            let is_valid = address
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
 
             if !is_valid {
                 return Err(ChainError::InvalidAddress(
@@ -344,7 +350,6 @@ impl TonChain {
             }
         }
     }
-
 }
 
 #[async_trait]
@@ -443,7 +448,10 @@ impl Chain for TonChain {
             "stack": [["tvm.Slice", address]]
         });
 
-        match self.api_post::<RunMethodResult>("runGetMethod", &body).await {
+        match self
+            .api_post::<RunMethodResult>("runGetMethod", &body)
+            .await
+        {
             Ok(result) => {
                 let exit_code = result.exit_code.unwrap_or(-1);
                 if exit_code != 0 {
@@ -493,10 +501,7 @@ impl Chain for TonChain {
             )
         })?;
 
-        let boc_base64 = base64::Engine::encode(
-            &base64::engine::general_purpose::STANDARD,
-            &boc,
-        );
+        let boc_base64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &boc);
 
         let body = serde_json::json!({ "boc": boc_base64 });
 
@@ -555,10 +560,7 @@ impl Chain for TonChain {
         }
 
         match self
-            .api_get::<Vec<TonTransaction>>(
-                "getTransactions",
-                &[("hash", hash), ("limit", "1")],
-            )
+            .api_get::<Vec<TonTransaction>>("getTransactions", &[("hash", hash), ("limit", "1")])
             .await
         {
             Ok(txs) => {
@@ -656,10 +658,8 @@ impl Chain for TonChain {
 
             // Build a simple BOC for fee estimation if we have transaction data
             if let Some(ref data) = tx.data {
-                let boc_base64 = base64::Engine::encode(
-                    &base64::engine::general_purpose::STANDARD,
-                    data,
-                );
+                let boc_base64 =
+                    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data);
 
                 let body = serde_json::json!({
                     "address": tx.from,
@@ -667,7 +667,10 @@ impl Chain for TonChain {
                     "ignore_chksig": true
                 });
 
-                if let Ok(result) = self.api_post::<EstimateFeeResult>("estimateFee", &body).await {
+                if let Ok(result) = self
+                    .api_post::<EstimateFeeResult>("estimateFee", &body)
+                    .await
+                {
                     if let Some(fees) = result.source_fees {
                         let gas_fee = fees.gas_fee.unwrap_or(0);
                         let fwd_fee = fees.fwd_fee.unwrap_or(0);
@@ -757,10 +760,7 @@ impl Chain for TonChain {
             .await
         {
             Ok(info) => {
-                let seqno = info
-                    .last
-                    .and_then(|b| b.seqno)
-                    .unwrap_or(0);
+                let seqno = info.last.and_then(|b| b.seqno).unwrap_or(0);
                 Ok(seqno)
             }
             Err(e) => {
@@ -830,9 +830,8 @@ mod tests {
     #[test]
     fn test_user_friendly_address_validation() {
         // Valid user-friendly address (48 chars)
-        let valid = TonChain::validate_ton_address(
-            "EQDtFpEwcFAEcRe5mLVh2N6C0x-_hJEM7W61_JLnSF74p4q2",
-        );
+        let valid =
+            TonChain::validate_ton_address("EQDtFpEwcFAEcRe5mLVh2N6C0x-_hJEM7W61_JLnSF74p4q2");
         assert!(valid.is_ok());
 
         // Too short
@@ -875,10 +874,8 @@ mod tests {
         env::remove_var("TON_API_KEY");
         let chain = TonChain::new(TonChainConfig::mainnet("https://toncenter.com/api/v2")).unwrap();
         let tx = Transaction {
-            from: "0:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8"
-                .to_string(),
-            to: "0:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8"
-                .to_string(),
+            from: "0:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8".to_string(),
+            to: "0:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8".to_string(),
             value: "1000000000".to_string(),
             data: None,
             gas_limit: None,
@@ -902,7 +899,12 @@ mod tests {
     }
 
     /// Helper: build a user-friendly address from workchain + hash + flags for testing
-    fn build_user_friendly(workchain: i8, hash: &[u8; 32], bounceable: bool, testnet: bool) -> String {
+    fn build_user_friendly(
+        workchain: i8,
+        hash: &[u8; 32],
+        bounceable: bool,
+        testnet: bool,
+    ) -> String {
         use base64::Engine;
         let mut data = [0u8; 36];
         // TON flag bytes: bounceable=0x11, non-bounceable=0x51, testnet adds 0x80
@@ -923,10 +925,9 @@ mod tests {
     fn test_to_raw_address_from_bounceable() {
         let chain = TonChain::new(TonChainConfig::mainnet("https://api.example.com")).unwrap();
         let hash: [u8; 32] = [
-            0x83, 0xdf, 0xd5, 0x52, 0xe6, 0x37, 0x29, 0xb4,
-            0x72, 0xfc, 0xbc, 0xc8, 0xc4, 0x5e, 0xbc, 0xc6,
-            0x69, 0x17, 0x02, 0x55, 0x8b, 0x68, 0xec, 0x75,
-            0x27, 0xe1, 0xba, 0x40, 0x3a, 0x0f, 0x31, 0xa8,
+            0x83, 0xdf, 0xd5, 0x52, 0xe6, 0x37, 0x29, 0xb4, 0x72, 0xfc, 0xbc, 0xc8, 0xc4, 0x5e,
+            0xbc, 0xc6, 0x69, 0x17, 0x02, 0x55, 0x8b, 0x68, 0xec, 0x75, 0x27, 0xe1, 0xba, 0x40,
+            0x3a, 0x0f, 0x31, 0xa8,
         ];
         let addr = build_user_friendly(0, &hash, true, false);
         assert_eq!(addr.len(), 48);
@@ -941,10 +942,9 @@ mod tests {
     fn test_to_raw_address_from_non_bounceable() {
         let chain = TonChain::new(TonChainConfig::mainnet("https://api.example.com")).unwrap();
         let hash: [u8; 32] = [
-            0x83, 0xdf, 0xd5, 0x52, 0xe6, 0x37, 0x29, 0xb4,
-            0x72, 0xfc, 0xbc, 0xc8, 0xc4, 0x5e, 0xbc, 0xc6,
-            0x69, 0x17, 0x02, 0x55, 0x8b, 0x68, 0xec, 0x75,
-            0x27, 0xe1, 0xba, 0x40, 0x3a, 0x0f, 0x31, 0xa8,
+            0x83, 0xdf, 0xd5, 0x52, 0xe6, 0x37, 0x29, 0xb4, 0x72, 0xfc, 0xbc, 0xc8, 0xc4, 0x5e,
+            0xbc, 0xc6, 0x69, 0x17, 0x02, 0x55, 0x8b, 0x68, 0xec, 0x75, 0x27, 0xe1, 0xba, 0x40,
+            0x3a, 0x0f, 0x31, 0xa8,
         ];
         let addr = build_user_friendly(0, &hash, false, false);
         assert_eq!(addr.len(), 48);

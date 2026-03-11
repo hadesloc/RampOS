@@ -94,14 +94,9 @@ pub async fn list_entries(
             || params.from.is_some()
             || params.to.is_some()
         {
-            let (entries, total) = query_entries_filtered(
-                pool,
-                &tenant_ctx.tenant_id.0,
-                &params,
-                limit,
-                offset,
-            )
-            .await?;
+            let (entries, total) =
+                query_entries_filtered(pool, &tenant_ctx.tenant_id.0, &params, limit, offset)
+                    .await?;
 
             return Ok(Json(LedgerEntriesResponse {
                 data: entries,
@@ -143,18 +138,10 @@ pub async fn list_balances(
 
     // If we have a db_pool and filters, use direct SQL queries
     if let Some(pool) = &state.db_pool {
-        if params.user_id.is_some()
-            || params.account_type.is_some()
-            || params.currency.is_some()
-        {
-            let (balances, total) = query_balances_filtered(
-                pool,
-                &tenant_ctx.tenant_id.0,
-                &params,
-                limit,
-                offset,
-            )
-            .await?;
+        if params.user_id.is_some() || params.account_type.is_some() || params.currency.is_some() {
+            let (balances, total) =
+                query_balances_filtered(pool, &tenant_ctx.tenant_id.0, &params, limit, offset)
+                    .await?;
 
             return Ok(Json(LedgerBalancesResponse {
                 data: balances,
@@ -225,7 +212,9 @@ async fn query_entries_filtered(
     let count_sql = format!("SELECT COUNT(*) FROM ledger_entries WHERE {}", where_sql);
     let data_sql = format!(
         "SELECT * FROM ledger_entries WHERE {} ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
-        where_sql, param_idx, param_idx + 1
+        where_sql,
+        param_idx,
+        param_idx + 1
     );
 
     // Build count query
@@ -309,10 +298,7 @@ async fn query_balances_filtered(
     }
 
     let where_sql = where_clauses.join(" AND ");
-    let count_sql = format!(
-        "SELECT COUNT(*) FROM account_balances WHERE {}",
-        where_sql
-    );
+    let count_sql = format!("SELECT COUNT(*) FROM account_balances WHERE {}", where_sql);
     let data_sql = format!(
         "SELECT account_type, currency, balance FROM account_balances WHERE {} ORDER BY balance DESC LIMIT ${} OFFSET ${}",
         where_sql, param_idx, param_idx + 1

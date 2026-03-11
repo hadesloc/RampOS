@@ -325,6 +325,54 @@ impl ComplianceAuditService {
         .await
     }
 
+    pub async fn log_passport_consent_granted(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &str,
+        package_id: &str,
+        target_tenant_id: &str,
+        context: AuditContext,
+    ) -> Result<ComplianceAuditEntry> {
+        self.log_compliance_event(
+            tenant_id,
+            ComplianceEventType::PassportConsentGranted,
+            serde_json::json!({
+                "user_id": user_id,
+                "package_id": package_id,
+                "target_tenant_id": target_tenant_id,
+                "granted_at": Utc::now().to_rfc3339()
+            }),
+            Some("passport_package"),
+            Some(package_id),
+            context,
+        )
+        .await
+    }
+
+    pub async fn log_passport_consent_revoked(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &str,
+        package_id: &str,
+        target_tenant_id: &str,
+        context: AuditContext,
+    ) -> Result<ComplianceAuditEntry> {
+        self.log_compliance_event(
+            tenant_id,
+            ComplianceEventType::PassportConsentRevoked,
+            serde_json::json!({
+                "user_id": user_id,
+                "package_id": package_id,
+                "target_tenant_id": target_tenant_id,
+                "revoked_at": Utc::now().to_rfc3339()
+            }),
+            Some("passport_package"),
+            Some(package_id),
+            context,
+        )
+        .await
+    }
+
     /// Log sanctions check result
     pub async fn log_sanctions_check(
         &self,
@@ -375,6 +423,158 @@ impl ComplianceAuditService {
         .await
     }
 
+    /// Log a completed rescreening run.
+    pub async fn log_rescreening_run_completed(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &str,
+        trigger_kind: &str,
+        outcome: &str,
+        context: AuditContext,
+    ) -> Result<ComplianceAuditEntry> {
+        self.log_compliance_event(
+            tenant_id,
+            ComplianceEventType::RescreeningRunCompleted,
+            serde_json::json!({
+                "user_id": user_id,
+                "trigger_kind": trigger_kind,
+                "outcome": outcome,
+                "completed_at": Utc::now().to_rfc3339()
+            }),
+            Some("user"),
+            Some(user_id),
+            context,
+        )
+        .await
+    }
+
+    /// Log a queued rescreening alert.
+    pub async fn log_rescreening_alert_queued(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &str,
+        priority: &str,
+        alert_codes: &[String],
+        context: AuditContext,
+    ) -> Result<ComplianceAuditEntry> {
+        self.log_compliance_event(
+            tenant_id,
+            ComplianceEventType::RescreeningAlertQueued,
+            serde_json::json!({
+                "user_id": user_id,
+                "priority": priority,
+                "alert_codes": alert_codes,
+                "queued_at": Utc::now().to_rfc3339()
+            }),
+            Some("user"),
+            Some(user_id),
+            context,
+        )
+        .await
+    }
+
+    /// Log an applied rescreening restriction.
+    pub async fn log_rescreening_restriction_applied(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &str,
+        restriction_status: &str,
+        reason: &str,
+        context: AuditContext,
+    ) -> Result<ComplianceAuditEntry> {
+        self.log_compliance_event(
+            tenant_id,
+            ComplianceEventType::RescreeningRestrictionApplied,
+            serde_json::json!({
+                "user_id": user_id,
+                "restriction_status": restriction_status,
+                "reason": reason,
+                "applied_at": Utc::now().to_rfc3339()
+            }),
+            Some("user"),
+            Some(user_id),
+            context,
+        )
+        .await
+    }
+
+    /// Log Travel Rule policy evaluation.
+    pub async fn log_travel_rule_policy_evaluation(
+        &self,
+        tenant_id: &TenantId,
+        disclosure_id: &str,
+        policy_code: Option<&str>,
+        action: &str,
+        direction: &str,
+        context: AuditContext,
+    ) -> Result<ComplianceAuditEntry> {
+        self.log_compliance_event(
+            tenant_id,
+            ComplianceEventType::TravelRulePolicyEvaluated,
+            serde_json::json!({
+                "disclosure_id": disclosure_id,
+                "policy_code": policy_code,
+                "action": action,
+                "direction": direction,
+                "evaluated_at": Utc::now().to_rfc3339()
+            }),
+            Some("travel_rule_disclosure"),
+            Some(disclosure_id),
+            context,
+        )
+        .await
+    }
+
+    /// Log Travel Rule disclosure state updates.
+    pub async fn log_travel_rule_disclosure_update(
+        &self,
+        tenant_id: &TenantId,
+        disclosure_id: &str,
+        stage: &str,
+        transport_profile: Option<&str>,
+        context: AuditContext,
+    ) -> Result<ComplianceAuditEntry> {
+        self.log_compliance_event(
+            tenant_id,
+            ComplianceEventType::TravelRuleDisclosureUpdated,
+            serde_json::json!({
+                "disclosure_id": disclosure_id,
+                "stage": stage,
+                "transport_profile": transport_profile,
+                "updated_at": Utc::now().to_rfc3339()
+            }),
+            Some("travel_rule_disclosure"),
+            Some(disclosure_id),
+            context,
+        )
+        .await
+    }
+
+    /// Log Travel Rule exception queueing.
+    pub async fn log_travel_rule_exception_queued(
+        &self,
+        tenant_id: &TenantId,
+        exception_id: &str,
+        disclosure_id: &str,
+        reason_code: &str,
+        context: AuditContext,
+    ) -> Result<ComplianceAuditEntry> {
+        self.log_compliance_event(
+            tenant_id,
+            ComplianceEventType::TravelRuleExceptionQueued,
+            serde_json::json!({
+                "exception_id": exception_id,
+                "disclosure_id": disclosure_id,
+                "reason_code": reason_code,
+                "queued_at": Utc::now().to_rfc3339()
+            }),
+            Some("travel_rule_exception"),
+            Some(exception_id),
+            context,
+        )
+        .await
+    }
+
     /// Verify the hash chain integrity
     pub async fn verify_chain(&self, tenant_id: &TenantId) -> Result<ChainVerificationResult> {
         info!(tenant = %tenant_id.0, "Verifying audit chain integrity");
@@ -417,7 +617,10 @@ impl ComplianceAuditService {
         let verification = self.repo.verify_chain(tenant_id).await?;
 
         // Get entries
-        let entries = self.repo.export_audit_log(tenant_id, from_date, to_date).await?;
+        let entries = self
+            .repo
+            .export_audit_log(tenant_id, from_date, to_date)
+            .await?;
 
         Ok(AuditLogExport {
             tenant_id: tenant_id.0.clone(),
@@ -471,11 +674,86 @@ impl ComplianceAuditService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use std::sync::{Arc, Mutex};
+
+    struct MockComplianceAuditRepository {
+        requests: Mutex<Vec<CreateComplianceAuditRequest>>,
+    }
+
+    #[async_trait]
+    impl ComplianceAuditRepository for MockComplianceAuditRepository {
+        async fn log_event(
+            &self,
+            tenant_id: &TenantId,
+            request: CreateComplianceAuditRequest,
+        ) -> Result<ComplianceAuditEntry> {
+            self.requests.lock().unwrap().push(request.clone());
+            Ok(ComplianceAuditEntry {
+                id: uuid::Uuid::new_v4(),
+                tenant_id: tenant_id.0.clone(),
+                event_type: request.event_type,
+                actor_id: request.actor_id,
+                actor_type: request.actor_type,
+                action_details: request.action_details,
+                resource_type: request.resource_type,
+                resource_id: request.resource_id,
+                sequence_number: 1,
+                previous_hash: None,
+                current_hash: "hash".to_string(),
+                ip_address: request.ip_address.map(|ip| ip.to_string()),
+                user_agent: request.user_agent,
+                request_id: request.request_id,
+                created_at: Utc::now(),
+            })
+        }
+
+        async fn get_entries(
+            &self,
+            _tenant_id: &TenantId,
+            _filter: AuditQueryFilter,
+        ) -> Result<Vec<ComplianceAuditEntry>> {
+            Ok(vec![])
+        }
+
+        async fn count_entries(
+            &self,
+            _tenant_id: &TenantId,
+            _filter: AuditQueryFilter,
+        ) -> Result<i64> {
+            Ok(0)
+        }
+
+        async fn verify_chain(&self, _tenant_id: &TenantId) -> Result<ChainVerificationResult> {
+            Ok(ChainVerificationResult {
+                is_valid: true,
+                total_entries: 0,
+                verified_entries: 0,
+                first_invalid_sequence: None,
+                error_message: None,
+            })
+        }
+
+        async fn export_audit_log(
+            &self,
+            _tenant_id: &TenantId,
+            _from_date: Option<DateTime<Utc>>,
+            _to_date: Option<DateTime<Utc>>,
+        ) -> Result<Vec<ComplianceAuditEntry>> {
+            Ok(vec![])
+        }
+
+        async fn get_latest_entry(
+            &self,
+            _tenant_id: &TenantId,
+        ) -> Result<Option<ComplianceAuditEntry>> {
+            Ok(None)
+        }
+    }
 
     #[test]
     fn test_audit_context_builder() {
-        let ctx = AuditContext::admin("admin123")
-            .with_request_id("req_abc");
+        let ctx = AuditContext::admin("admin123").with_request_id("req_abc");
 
         assert_eq!(ctx.actor_id, Some("admin123".to_string()));
         assert_eq!(ctx.actor_type, ActorType::Admin);
@@ -514,5 +792,61 @@ mod tests {
         assert!(csv.contains("kyc_tier_change"));
         assert!(csv.contains("admin1"));
         assert!(csv.contains("user123"));
+    }
+
+    #[tokio::test]
+    async fn test_travel_rule_helpers_emit_expected_event_types() {
+        let repo = Arc::new(MockComplianceAuditRepository {
+            requests: Mutex::new(vec![]),
+        });
+        let service = ComplianceAuditService::new(repo.clone());
+        let tenant_id = TenantId::new("tenant_travel_rule_audit");
+
+        service
+            .log_travel_rule_policy_evaluation(
+                &tenant_id,
+                "trd_001",
+                Some("fatf-default"),
+                "DISCLOSE_BEFORE_SETTLEMENT",
+                "OUTBOUND",
+                AuditContext::system(),
+            )
+            .await
+            .unwrap();
+        service
+            .log_travel_rule_disclosure_update(
+                &tenant_id,
+                "trd_001",
+                "SENT",
+                Some("TRISA"),
+                AuditContext::system(),
+            )
+            .await
+            .unwrap();
+        service
+            .log_travel_rule_exception_queued(
+                &tenant_id,
+                "tre_001",
+                "trd_001",
+                "COUNTERPARTY_UNAVAILABLE",
+                AuditContext::system(),
+            )
+            .await
+            .unwrap();
+
+        let requests = repo.requests.lock().unwrap();
+        assert_eq!(requests.len(), 3);
+        assert_eq!(
+            requests[0].event_type,
+            ComplianceEventType::TravelRulePolicyEvaluated
+        );
+        assert_eq!(
+            requests[1].event_type,
+            ComplianceEventType::TravelRuleDisclosureUpdated
+        );
+        assert_eq!(
+            requests[2].event_type,
+            ComplianceEventType::TravelRuleExceptionQueued
+        );
     }
 }

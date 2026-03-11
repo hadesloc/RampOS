@@ -146,7 +146,9 @@ pub async fn create_rfq(
         .map_err(|_| ApiError::Validation("crypto_amount must be a valid number".to_string()))?;
 
     if crypto_amount <= Decimal::ZERO {
-        return Err(ApiError::Validation("crypto_amount must be positive".to_string()));
+        return Err(ApiError::Validation(
+            "crypto_amount must be positive".to_string(),
+        ));
     }
 
     let vnd_amount = req

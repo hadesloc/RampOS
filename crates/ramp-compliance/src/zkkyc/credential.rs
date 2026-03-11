@@ -86,11 +86,7 @@ impl ZkCredentialIssuer {
     }
 
     /// Issue a new credential for a user with the given commitment hash.
-    pub fn issue_credential(
-        &self,
-        user_id: &str,
-        commitment_hash: &str,
-    ) -> ZkCredential {
+    pub fn issue_credential(&self, user_id: &str, commitment_hash: &str) -> ZkCredential {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
         let expires_at = now + self.validity_duration;
@@ -219,8 +215,8 @@ impl ZkCredentialIssuer {
         issued_at: DateTime<Utc>,
         expires_at: DateTime<Utc>,
     ) -> String {
-        let mut mac = HmacSha256::new_from_slice(&self.signing_key)
-            .expect("HMAC accepts any key length");
+        let mut mac =
+            HmacSha256::new_from_slice(&self.signing_key).expect("HMAC accepts any key length");
 
         // Domain separator (simulated EIP-712)
         mac.update(b"EIP712:RampOS-ZK-KYC:v1:");
@@ -421,7 +417,10 @@ mod tests {
 
         // Issue
         let cred = issuer.issue_credential("user-13", &commitment);
-        assert_eq!(issuer.credential_status(&cred.id), Some(CredentialStatus::Active));
+        assert_eq!(
+            issuer.credential_status(&cred.id),
+            Some(CredentialStatus::Active)
+        );
         assert!(issuer.verify_credential(&cred));
 
         // Verify user has it
@@ -430,7 +429,10 @@ mod tests {
 
         // Revoke
         assert!(issuer.revoke_credential(&cred.id));
-        assert_eq!(issuer.credential_status(&cred.id), Some(CredentialStatus::Revoked));
+        assert_eq!(
+            issuer.credential_status(&cred.id),
+            Some(CredentialStatus::Revoked)
+        );
         assert!(!issuer.verify_credential(&cred));
     }
 }

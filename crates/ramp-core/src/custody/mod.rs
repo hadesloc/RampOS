@@ -13,7 +13,5 @@ pub mod mpc_signing;
 pub mod policy;
 
 pub use mpc_key::{KeyShare, MpcKeyGenResult, MpcKeyService};
-pub use mpc_signing::{
-    MpcSigningService, SigningRequest, SigningSession, SigningSessionStatus,
-};
+pub use mpc_signing::{MpcSigningService, SigningRequest, SigningSession, SigningSessionStatus};
 pub use policy::{CustodyPolicy, PolicyDecision, PolicyEngine, TimeRestriction};

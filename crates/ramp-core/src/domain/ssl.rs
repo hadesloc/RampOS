@@ -104,7 +104,11 @@ pub trait SslProvider: Send + Sync {
     async fn get_challenges(&self, domain: &str) -> Result<Vec<AcmeChallenge>>;
 
     /// Complete ACME challenge validation
-    async fn complete_challenge(&self, domain: &str, challenge_type: AcmeChallengeType) -> Result<()>;
+    async fn complete_challenge(
+        &self,
+        domain: &str,
+        challenge_type: AcmeChallengeType,
+    ) -> Result<()>;
 }
 
 /// Let's Encrypt SSL provider using real ACME protocol (RFC 8555)
@@ -186,17 +190,17 @@ impl LetsEncryptProvider {
         // Check if we have stored credentials
         let stored = self.account_credentials.read().await;
         if let Some(ref creds_json) = *stored {
-            let credentials: instant_acme::AccountCredentials =
-                serde_json::from_str(creds_json).map_err(|e| Error::ExternalService {
+            let credentials: instant_acme::AccountCredentials = serde_json::from_str(creds_json)
+                .map_err(|e| Error::ExternalService {
                     service: "ACME".to_string(),
                     message: format!("Failed to deserialize account credentials: {}", e),
                 })?;
-            let account = Account::from_credentials(credentials)
-                .await
-                .map_err(|e| Error::ExternalService {
+            let account = Account::from_credentials(credentials).await.map_err(|e| {
+                Error::ExternalService {
                     service: "ACME".to_string(),
                     message: format!("Failed to restore ACME account: {}", e),
-                })?;
+                }
+            })?;
             return Ok(account);
         }
         drop(stored);
@@ -242,7 +246,9 @@ impl LetsEncryptProvider {
         // Create order
         let identifiers = vec![Identifier::Dns(domain.to_string())];
         let mut order = account
-            .new_order(&NewOrder { identifiers: &identifiers })
+            .new_order(&NewOrder {
+                identifiers: &identifiers,
+            })
             .await
             .map_err(|e| Error::ExternalService {
                 service: "ACME".to_string(),
@@ -253,12 +259,13 @@ impl LetsEncryptProvider {
         info!(domain = %domain, status = ?state.status, "ACME order created");
 
         // Process authorizations
-        let authorizations = order.authorizations().await.map_err(|e| {
-            Error::ExternalService {
+        let authorizations = order
+            .authorizations()
+            .await
+            .map_err(|e| Error::ExternalService {
                 service: "ACME".to_string(),
                 message: format!("Failed to get authorizations: {}", e),
-            }
-        })?;
+            })?;
 
         let mut dns_challenges_to_store = Vec::new();
 
@@ -278,8 +285,7 @@ impl LetsEncryptProvider {
                     let domain_name = match &authz.identifier {
                         Identifier::Dns(name) => name.clone(),
                     };
-                    let dns_record_name =
-                        format!("_acme-challenge.{}", domain_name);
+                    let dns_record_name = format!("_acme-challenge.{}", domain_name);
                     let key_auth = order.key_authorization(challenge);
                     let dns_value = key_auth.dns_value();
 
@@ -412,12 +418,12 @@ impl LetsEncryptProvider {
         })?;
         params.distinguished_name = DistinguishedName::new();
 
-        let csr = params.serialize_request(&key_pair).map_err(|e| {
-            Error::ExternalService {
+        let csr = params
+            .serialize_request(&key_pair)
+            .map_err(|e| Error::ExternalService {
                 service: "ACME".to_string(),
                 message: format!("Failed to generate CSR: {}", e),
-            }
-        })?;
+            })?;
 
         let csr_der = csr.der();
 
@@ -524,8 +530,7 @@ impl LetsEncryptProvider {
             domain
         );
         let mock_key_pem =
-            "-----BEGIN PRIVATE KEY-----\nMOCK_PRIVATE_KEY\n-----END PRIVATE KEY-----"
-                .to_string();
+            "-----BEGIN PRIVATE KEY-----\nMOCK_PRIVATE_KEY\n-----END PRIVATE KEY-----".to_string();
         let mock_chain_pem =
             "-----BEGIN CERTIFICATE-----\nMOCK_CHAIN\n-----END CERTIFICATE-----".to_string();
 
@@ -732,7 +737,11 @@ impl SslProvider for MockSslProvider {
         }])
     }
 
-    async fn complete_challenge(&self, _domain: &str, _challenge_type: AcmeChallengeType) -> Result<()> {
+    async fn complete_challenge(
+        &self,
+        _domain: &str,
+        _challenge_type: AcmeChallengeType,
+    ) -> Result<()> {
         Ok(())
     }
 }
@@ -842,7 +851,10 @@ impl<P: SslProvider + 'static> CertificateRenewalManager<P> {
 
     /// Check for and renew expiring certificates. Returns the list of renewed certificate IDs.
     pub async fn process_renewals(&self) -> Result<Vec<String>> {
-        let expiring = self.store.list_expiring(self.renewal_threshold_days).await?;
+        let expiring = self
+            .store
+            .list_expiring(self.renewal_threshold_days)
+            .await?;
 
         if expiring.is_empty() {
             debug!("No certificates need renewal");
@@ -919,7 +931,10 @@ impl<P: SslProvider + 'static> CertificateRenewalManager<P> {
             match self.process_renewals().await {
                 Ok(renewed) => {
                     if !renewed.is_empty() {
-                        info!(renewed = renewed.len(), "Renewed certificates in this cycle");
+                        info!(
+                            renewed = renewed.len(),
+                            "Renewed certificates in this cycle"
+                        );
                     }
                 }
                 Err(e) => {
@@ -953,7 +968,10 @@ mod tests {
     #[tokio::test]
     async fn test_mock_ssl_provision() {
         let provider = MockSslProvider::new();
-        let cert = provider.provision("example.com", "test@example.com").await.unwrap();
+        let cert = provider
+            .provision("example.com", "test@example.com")
+            .await
+            .unwrap();
 
         assert_eq!(cert.domain, "example.com");
         assert!(cert.certificate_id.starts_with("mock_"));
@@ -963,7 +981,10 @@ mod tests {
     #[tokio::test]
     async fn test_mock_ssl_revoke() {
         let provider = MockSslProvider::new();
-        let cert = provider.provision("example.com", "test@example.com").await.unwrap();
+        let cert = provider
+            .provision("example.com", "test@example.com")
+            .await
+            .unwrap();
         let result = provider.revoke(&cert.certificate_id).await;
         assert!(result.is_ok());
     }
@@ -980,7 +1001,10 @@ mod tests {
         let provider = LetsEncryptProvider::staging();
         assert_eq!(provider.name(), "Let's Encrypt (Staging)");
 
-        let cert = provider.provision("test.example.com", "test@example.com").await.unwrap();
+        let cert = provider
+            .provision("test.example.com", "test@example.com")
+            .await
+            .unwrap();
         assert!(cert.issuer.contains("STAGING"));
     }
 

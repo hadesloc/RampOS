@@ -114,8 +114,9 @@ fn convert_dto_to_user_op(dto: &crate::dto::UserOperationDto) -> Result<UserOper
         let bytes = if trimmed.is_empty() {
             vec![]
         } else {
-            hex::decode(trimmed)
-                .map_err(|_| ApiError::BadRequest("Invalid hex field in userOperation".to_string()))?
+            hex::decode(trimmed).map_err(|_| {
+                ApiError::BadRequest("Invalid hex field in userOperation".to_string())
+            })?
         };
         Ok(alloy::primitives::Bytes::from(bytes))
     };

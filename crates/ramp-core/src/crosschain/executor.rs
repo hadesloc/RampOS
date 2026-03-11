@@ -7,9 +7,9 @@ use super::{
     IntentStatus, IntentType, StepStatus, StepType,
 };
 use crate::bridge::{BridgeRegistry, ChainId, TxHash};
+use alloy::primitives::{B256, U256};
 use async_trait::async_trait;
 use chrono::Utc;
-use alloy::primitives::{U256, B256};
 use ramp_common::{Error, Result};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -80,57 +80,100 @@ impl IntentExecutor {
     }
 
     /// Build execution plan for an intent
-    fn build_execution_plan(&self, intent: &CrossChainIntent) -> Vec<(StepType, ChainId, serde_json::Value)> {
+    fn build_execution_plan(
+        &self,
+        intent: &CrossChainIntent,
+    ) -> Vec<(StepType, ChainId, serde_json::Value)> {
         match intent.intent_type {
             IntentType::Bridge => {
                 vec![
-                    (StepType::Approve, intent.source_chain, serde_json::json!({
-                        "token": intent.token.symbol(),
-                        "amount": intent.amount.to_string(),
-                        "spender": "bridge_router"
-                    })),
-                    (StepType::Bridge, intent.source_chain, serde_json::json!({
-                        "dest_chain": intent.dest_chain,
-                        "recipient": format!("{:?}", intent.recipient),
-                        "amount": intent.amount.to_string()
-                    })),
-                    (StepType::Release, intent.dest_chain, serde_json::json!({
-                        "recipient": format!("{:?}", intent.recipient),
-                        "amount": intent.amount.to_string()
-                    })),
+                    (
+                        StepType::Approve,
+                        intent.source_chain,
+                        serde_json::json!({
+                            "token": intent.token.symbol(),
+                            "amount": intent.amount.to_string(),
+                            "spender": "bridge_router"
+                        }),
+                    ),
+                    (
+                        StepType::Bridge,
+                        intent.source_chain,
+                        serde_json::json!({
+                            "dest_chain": intent.dest_chain,
+                            "recipient": format!("{:?}", intent.recipient),
+                            "amount": intent.amount.to_string()
+                        }),
+                    ),
+                    (
+                        StepType::Release,
+                        intent.dest_chain,
+                        serde_json::json!({
+                            "recipient": format!("{:?}", intent.recipient),
+                            "amount": intent.amount.to_string()
+                        }),
+                    ),
                 ]
             }
             IntentType::BridgeAndSwap => {
                 vec![
-                    (StepType::Approve, intent.source_chain, serde_json::json!({})),
+                    (
+                        StepType::Approve,
+                        intent.source_chain,
+                        serde_json::json!({}),
+                    ),
                     (StepType::Bridge, intent.source_chain, serde_json::json!({})),
                     (StepType::Release, intent.dest_chain, serde_json::json!({})),
-                    (StepType::Swap, intent.dest_chain, serde_json::json!({
-                        "output_token": intent.metadata.get("output_token")
-                    })),
+                    (
+                        StepType::Swap,
+                        intent.dest_chain,
+                        serde_json::json!({
+                            "output_token": intent.metadata.get("output_token")
+                        }),
+                    ),
                 ]
             }
             IntentType::BridgeAndDeposit => {
                 vec![
-                    (StepType::Approve, intent.source_chain, serde_json::json!({})),
+                    (
+                        StepType::Approve,
+                        intent.source_chain,
+                        serde_json::json!({}),
+                    ),
                     (StepType::Bridge, intent.source_chain, serde_json::json!({})),
                     (StepType::Release, intent.dest_chain, serde_json::json!({})),
-                    (StepType::Approve, intent.dest_chain, serde_json::json!({
-                        "spender": "yield_protocol"
-                    })),
-                    (StepType::Deposit, intent.dest_chain, serde_json::json!({
-                        "protocol": intent.metadata.get("protocol")
-                    })),
+                    (
+                        StepType::Approve,
+                        intent.dest_chain,
+                        serde_json::json!({
+                            "spender": "yield_protocol"
+                        }),
+                    ),
+                    (
+                        StepType::Deposit,
+                        intent.dest_chain,
+                        serde_json::json!({
+                            "protocol": intent.metadata.get("protocol")
+                        }),
+                    ),
                 ]
             }
             IntentType::AtomicSwap => {
                 vec![
-                    (StepType::Lock, intent.source_chain, serde_json::json!({
-                        "hash_lock": true
-                    })),
-                    (StepType::Release, intent.dest_chain, serde_json::json!({
-                        "reveal_secret": true
-                    })),
+                    (
+                        StepType::Lock,
+                        intent.source_chain,
+                        serde_json::json!({
+                            "hash_lock": true
+                        }),
+                    ),
+                    (
+                        StepType::Release,
+                        intent.dest_chain,
+                        serde_json::json!({
+                            "reveal_secret": true
+                        }),
+                    ),
                 ]
             }
             IntentType::BatchOperation => {
@@ -159,7 +202,11 @@ impl IntentExecutor {
     }
 
     /// Execute a single step
-    async fn execute_step(&self, step: &mut ExecutionStep, intent: &CrossChainIntent) -> Result<()> {
+    async fn execute_step(
+        &self,
+        step: &mut ExecutionStep,
+        intent: &CrossChainIntent,
+    ) -> Result<()> {
         step.status = StepStatus::Submitted;
         step.started_at = Some(Utc::now());
 
@@ -291,17 +338,25 @@ impl IntentExecutor {
             match step.step_type {
                 StepType::Lock => {
                     // Unlock tokens
-                    execution.add_step(StepType::Refund, step.chain_id, serde_json::json!({
-                        "original_step": step.index,
-                        "action": "unlock"
-                    }));
+                    execution.add_step(
+                        StepType::Refund,
+                        step.chain_id,
+                        serde_json::json!({
+                            "original_step": step.index,
+                            "action": "unlock"
+                        }),
+                    );
                 }
                 StepType::Approve => {
                     // Revoke approval
-                    execution.add_step(StepType::Approve, step.chain_id, serde_json::json!({
-                        "amount": "0",
-                        "revoke": true
-                    }));
+                    execution.add_step(
+                        StepType::Approve,
+                        step.chain_id,
+                        serde_json::json!({
+                            "amount": "0",
+                            "revoke": true
+                        }),
+                    );
                 }
                 _ => {
                     // Other steps may not need explicit rollback
@@ -310,7 +365,11 @@ impl IntentExecutor {
         }
 
         // Execute rollback steps
-        for step in execution.steps.iter_mut().filter(|s| s.status == StepStatus::Pending) {
+        for step in execution
+            .steps
+            .iter_mut()
+            .filter(|s| s.status == StepStatus::Pending)
+        {
             if let Err(e) = self.execute_step(step, &execution.intent).await {
                 warn!(
                     intent_id = %execution.intent.id,
@@ -338,7 +397,9 @@ impl CrossChainExecutor for IntentExecutor {
         // Build execution plan
         let plan = self.build_execution_plan(&intent);
         if plan.is_empty() {
-            return Err(Error::Validation("No execution steps for intent".to_string()));
+            return Err(Error::Validation(
+                "No execution steps for intent".to_string(),
+            ));
         }
 
         let mut execution = IntentExecution::new(intent.clone());
@@ -483,7 +544,9 @@ impl CrossChainExecutor for IntentExecutor {
             .ok_or_else(|| Error::NotFound(format!("Intent {} not found", intent_id)))?;
 
         if execution.status.is_final() {
-            return Err(Error::Validation("Cannot rollback final intent".to_string()));
+            return Err(Error::Validation(
+                "Cannot rollback final intent".to_string(),
+            ));
         }
 
         self.execute_rollback(execution).await
@@ -617,7 +680,8 @@ mod tests {
 
         let intent = CrossChainIntent::new(
             IntentType::Bridge,
-            1, 42161,
+            1,
+            42161,
             BridgeToken::USDC,
             U256::from(1_000_000u64),
             Address::ZERO,
@@ -643,7 +707,8 @@ mod tests {
 
         let intent = CrossChainIntent::new(
             IntentType::BridgeAndSwap,
-            1, 10,
+            1,
+            10,
             BridgeToken::USDC,
             U256::from(500_000u64),
             Address::ZERO,
@@ -668,7 +733,8 @@ mod tests {
 
         let intent = CrossChainIntent::new(
             IntentType::BridgeAndDeposit,
-            1, 42161,
+            1,
+            42161,
             BridgeToken::USDC,
             U256::from(1_000_000u64),
             Address::ZERO,
@@ -695,7 +761,8 @@ mod tests {
 
         let intent = CrossChainIntent::new(
             IntentType::AtomicSwap,
-            1, 137,
+            1,
+            137,
             BridgeToken::USDC,
             U256::from(1_000_000_000_000_000_000u64),
             Address::ZERO,
@@ -707,7 +774,7 @@ mod tests {
         assert_eq!(plan[0].0, StepType::Lock);
         assert_eq!(plan[1].0, StepType::Release);
 
-        assert_eq!(plan[0].1, 1);   // lock on source
+        assert_eq!(plan[0].1, 1); // lock on source
         assert_eq!(plan[1].1, 137); // release on dest
     }
 
@@ -718,7 +785,8 @@ mod tests {
 
         let intent = CrossChainIntent::new(
             IntentType::BatchOperation,
-            1, 42161,
+            1,
+            42161,
             BridgeToken::USDC,
             U256::from(100u64),
             Address::ZERO,
@@ -736,17 +804,21 @@ mod tests {
 
         let mut intent = CrossChainIntent::new(
             IntentType::BatchOperation,
-            1, 42161,
+            1,
+            42161,
             BridgeToken::USDC,
             U256::from(100u64),
             Address::ZERO,
             Address::ZERO,
         );
-        intent.metadata.insert("steps".to_string(), serde_json::json!([
-            { "type": "approve", "chain": 1 },
-            { "type": "bridge", "chain": 1 },
-            { "type": "swap", "chain": 42161 }
-        ]));
+        intent.metadata.insert(
+            "steps".to_string(),
+            serde_json::json!([
+                { "type": "approve", "chain": 1 },
+                { "type": "bridge", "chain": 1 },
+                { "type": "swap", "chain": 42161 }
+            ]),
+        );
 
         let plan = executor.build_execution_plan(&intent);
         assert_eq!(plan.len(), 3);
@@ -764,7 +836,8 @@ mod tests {
 
         let intent = CrossChainIntent::new(
             IntentType::Bridge,
-            1, 42161,
+            1,
+            42161,
             BridgeToken::USDC,
             U256::from(1_000_000u64),
             Address::ZERO,
@@ -774,7 +847,7 @@ mod tests {
         let estimate = executor.estimate_gas(&intent).await.unwrap();
         // Bridge plan: Approve(50k) + Bridge(200k) on source, Release(100k) on dest
         assert_eq!(estimate.source_gas, U256::from(250_000u64)); // 50k + 200k
-        assert_eq!(estimate.dest_gas, U256::from(100_000u64));   // 100k
+        assert_eq!(estimate.dest_gas, U256::from(100_000u64)); // 100k
         assert!(estimate.total_cost_usd > Decimal::ZERO);
     }
 
@@ -785,7 +858,8 @@ mod tests {
 
         let intent = CrossChainIntent::new(
             IntentType::AtomicSwap,
-            1, 137,
+            1,
+            137,
             BridgeToken::USDC,
             U256::from(1_000_000u64),
             Address::ZERO,
@@ -843,7 +917,8 @@ mod tests {
         // Should still build plans correctly
         let intent = CrossChainIntent::new(
             IntentType::Bridge,
-            1, 10,
+            1,
+            10,
             BridgeToken::USDC,
             U256::from(1_000u64),
             Address::ZERO,

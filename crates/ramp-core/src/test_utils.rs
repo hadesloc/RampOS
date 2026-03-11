@@ -1,15 +1,201 @@
 use crate::repository::{
     intent::{IntentRepository, IntentRow},
     ledger::{BalanceRow, LedgerEntryRow, LedgerRepository},
+    offramp::OfframpIntentRow,
+    rfq::RfqRequestRow,
     tenant::{TenantRepository, TenantRow},
     user::{UserRepository, UserRow},
 };
 use async_trait::async_trait;
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{DateTime, Datelike, TimeZone, Utc};
 use ramp_common::{ledger::*, types::*, Result};
 use rust_decimal::Decimal;
 use std::sync::{Arc, Mutex};
 use subtle::ConstantTimeEq;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SandboxFailureTriggerCode {
+    BankTimeout,
+    ComplianceReview,
+    LpNoFill,
+    SettlementDelay,
+}
+
+impl SandboxFailureTriggerCode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SandboxFailureTriggerCode::BankTimeout => "BANK_TIMEOUT",
+            SandboxFailureTriggerCode::ComplianceReview => "COMPLIANCE_REVIEW",
+            SandboxFailureTriggerCode::LpNoFill => "LP_NO_FILL",
+            SandboxFailureTriggerCode::SettlementDelay => "SETTLEMENT_DELAY",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SandboxFailureTrigger {
+    pub code: SandboxFailureTriggerCode,
+    pub applies_to: &'static str,
+    pub description: &'static str,
+}
+
+#[derive(Debug, Clone)]
+pub struct SandboxPayinFixture {
+    pub intent: IntentRow,
+    pub failure_trigger_codes: Vec<SandboxFailureTriggerCode>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SandboxOfframpFixture {
+    pub intent: OfframpIntentRow,
+    pub failure_trigger_codes: Vec<SandboxFailureTriggerCode>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SandboxRfqFixture {
+    pub request: RfqRequestRow,
+    pub failure_trigger_codes: Vec<SandboxFailureTriggerCode>,
+}
+
+pub fn sandbox_failure_trigger_catalog() -> Vec<SandboxFailureTrigger> {
+    vec![
+        SandboxFailureTrigger {
+            code: SandboxFailureTriggerCode::BankTimeout,
+            applies_to: "PAYIN",
+            description: "Simulate delayed bank confirmation during pay-in settlement.",
+        },
+        SandboxFailureTrigger {
+            code: SandboxFailureTriggerCode::ComplianceReview,
+            applies_to: "PAYIN",
+            description: "Route a seeded pay-in through manual compliance review.",
+        },
+        SandboxFailureTrigger {
+            code: SandboxFailureTriggerCode::LpNoFill,
+            applies_to: "RFQ",
+            description: "Simulate an RFQ that receives no acceptable liquidity-provider bids.",
+        },
+        SandboxFailureTrigger {
+            code: SandboxFailureTriggerCode::SettlementDelay,
+            applies_to: "OFFRAMP",
+            description: "Hold settlement progression after a quote is locked.",
+        },
+    ]
+}
+
+pub fn sandbox_payin_fixture(tenant_id: &TenantId, user_id: &UserId) -> SandboxPayinFixture {
+    let timestamp = sandbox_fixed_timestamp();
+
+    SandboxPayinFixture {
+        intent: IntentRow {
+            id: "sandbox_payin_baseline".to_string(),
+            tenant_id: tenant_id.0.clone(),
+            user_id: user_id.0.clone(),
+            intent_type: "PAYIN_VND".to_string(),
+            state: "FUNDS_PENDING".to_string(),
+            state_history: serde_json::json!([
+                {"state": "CREATED", "at": timestamp.to_rfc3339()},
+                {"state": "FUNDS_PENDING", "at": timestamp.to_rfc3339()},
+            ]),
+            amount: Decimal::from(125_000),
+            currency: "VND".to_string(),
+            actual_amount: None,
+            rails_provider: Some("VCB".to_string()),
+            reference_code: Some("SBX-PAYIN-001".to_string()),
+            bank_tx_id: None,
+            chain_id: None,
+            tx_hash: None,
+            from_address: None,
+            to_address: None,
+            metadata: serde_json::json!({
+                "fixture_code": "PAYIN_BASELINE",
+                "supports_replay": true
+            }),
+            idempotency_key: Some("sandbox_payin_baseline".to_string()),
+            created_at: timestamp,
+            updated_at: timestamp,
+            expires_at: Some(timestamp + chrono::Duration::minutes(30)),
+            completed_at: None,
+        },
+        failure_trigger_codes: vec![
+            SandboxFailureTriggerCode::BankTimeout,
+            SandboxFailureTriggerCode::ComplianceReview,
+        ],
+    }
+}
+
+pub fn sandbox_offramp_fixture(tenant_id: &TenantId, user_id: &UserId) -> SandboxOfframpFixture {
+    let timestamp = sandbox_fixed_timestamp();
+
+    SandboxOfframpFixture {
+        intent: OfframpIntentRow {
+            id: "sandbox_offramp_baseline".to_string(),
+            tenant_id: tenant_id.0.clone(),
+            user_id: user_id.0.clone(),
+            crypto_asset: "USDT".to_string(),
+            crypto_amount: Decimal::new(250, 0),
+            exchange_rate: Decimal::from(25_400),
+            locked_rate_id: Some("rate_sandbox_001".to_string()),
+            fees: serde_json::json!({"platform_fee_vnd": 2500}),
+            net_vnd_amount: Decimal::from(6_347_500),
+            gross_vnd_amount: Decimal::from(6_350_000),
+            bank_account: serde_json::json!({
+                "bank_code": "VCB",
+                "account_number": "0123456789"
+            }),
+            deposit_address: Some("0xsandboxdeposit0001".to_string()),
+            tx_hash: None,
+            bank_reference: Some("SBX-OFFRAMP-001".to_string()),
+            state: "QUOTE_LOCKED".to_string(),
+            state_history: serde_json::json!([
+                {"state": "CREATED", "at": timestamp.to_rfc3339()},
+                {"state": "QUOTE_LOCKED", "at": timestamp.to_rfc3339()},
+            ]),
+            created_at: timestamp,
+            updated_at: timestamp,
+            quote_expires_at: timestamp + chrono::Duration::minutes(15),
+        },
+        failure_trigger_codes: vec![
+            SandboxFailureTriggerCode::SettlementDelay,
+            SandboxFailureTriggerCode::LpNoFill,
+        ],
+    }
+}
+
+pub fn sandbox_rfq_fixture(
+    tenant_id: &TenantId,
+    user_id: &UserId,
+    offramp_id: &str,
+) -> SandboxRfqFixture {
+    let timestamp = sandbox_fixed_timestamp();
+
+    SandboxRfqFixture {
+        request: RfqRequestRow {
+            id: "sandbox_rfq_baseline".to_string(),
+            tenant_id: tenant_id.0.clone(),
+            user_id: user_id.0.clone(),
+            direction: "OFFRAMP".to_string(),
+            offramp_id: Some(offramp_id.to_string()),
+            crypto_asset: "USDT".to_string(),
+            crypto_amount: Decimal::new(250, 0),
+            vnd_amount: None,
+            state: "OPEN".to_string(),
+            winning_bid_id: None,
+            winning_lp_id: None,
+            final_rate: None,
+            expires_at: timestamp + chrono::Duration::minutes(10),
+            created_at: timestamp,
+            updated_at: timestamp,
+        },
+        failure_trigger_codes: vec![
+            SandboxFailureTriggerCode::LpNoFill,
+            SandboxFailureTriggerCode::SettlementDelay,
+        ],
+    }
+}
+
+fn sandbox_fixed_timestamp() -> DateTime<Utc> {
+    Utc.with_ymd_and_hms(2026, 3, 8, 9, 0, 0).single().unwrap()
+}
 
 #[derive(Clone)]
 pub struct MockIntentRepository {
@@ -631,6 +817,42 @@ impl UserRepository for MockUserRepository {
         Ok(())
     }
 
+    async fn list_due_for_rescreening(
+        &self,
+        tenant_id: &TenantId,
+        due_before: DateTime<Utc>,
+        limit: i64,
+    ) -> Result<Vec<UserRow>> {
+        let users = self.users.lock().unwrap();
+        let mut due: Vec<UserRow> = users
+            .iter()
+            .filter(|user| user.tenant_id == tenant_id.0)
+            .filter(|user| user.status == "ACTIVE")
+            .filter(|user| {
+                let next_run_at = user
+                    .risk_flags
+                    .get("rescreening")
+                    .and_then(|value| value.get("nextRunAt"))
+                    .and_then(|value| value.as_str())
+                    .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+                    .map(|value| value.with_timezone(&Utc))
+                    .unwrap_or_else(|| {
+                        user.kyc_verified_at.unwrap_or(user.created_at)
+                            + chrono::Duration::days(180)
+                    });
+                next_run_at <= due_before
+            })
+            .cloned()
+            .collect();
+        due.sort_by(|left, right| {
+            left.updated_at
+                .cmp(&right.updated_at)
+                .then_with(|| left.id.cmp(&right.id))
+        });
+        due.truncate(limit.max(0) as usize);
+        Ok(due)
+    }
+
     async fn update_kyc_tier(
         &self,
         _tenant_id: &TenantId,
@@ -666,6 +888,20 @@ impl UserRepository for MockUserRepository {
         let mut users = self.users.lock().unwrap();
         if let Some(user) = users.iter_mut().find(|u| u.id == user_id.0) {
             user.status = status.to_string();
+        }
+        Ok(())
+    }
+
+    async fn update_risk_flags(
+        &self,
+        _tenant_id: &TenantId,
+        user_id: &UserId,
+        risk_flags: serde_json::Value,
+    ) -> Result<()> {
+        let mut users = self.users.lock().unwrap();
+        if let Some(user) = users.iter_mut().find(|u| u.id == user_id.0) {
+            user.risk_flags = risk_flags;
+            user.updated_at = Utc::now();
         }
         Ok(())
     }
@@ -988,9 +1224,7 @@ impl WebhookRepository for MockWebhookRepository {
         let events = self.events.lock().unwrap();
         Ok(events
             .iter()
-            .filter(|e| {
-                e.tenant_id == tenant_id.0 && e.intent_id.as_ref() == Some(&intent_id.0)
-            })
+            .filter(|e| e.tenant_id == tenant_id.0 && e.intent_id.as_ref() == Some(&intent_id.0))
             .cloned()
             .collect())
     }

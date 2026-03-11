@@ -84,8 +84,11 @@ pub struct CreateLicenseSubmissionRequest {
 #[async_trait]
 pub trait LicensingRepository: Send + Sync {
     /// List all license requirements
-    async fn list_requirements(&self, limit: i64, offset: i64)
-        -> Result<Vec<LicenseRequirementRow>>;
+    async fn list_requirements(
+        &self,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<LicenseRequirementRow>>;
 
     /// Get a specific requirement by ID
     async fn get_requirement(

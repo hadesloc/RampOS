@@ -9,11 +9,11 @@ pub mod types;
 #[cfg(test)]
 mod tests;
 
-pub use generator::{ReportGenerator, ReportType};
 pub use ctr::{
     CtrFilingStatus, CtrRecord, CtrService, GenerateCtrReportRequest, GeneratedCtrReport,
     CTR_THRESHOLD_VND,
 };
+pub use generator::{ReportGenerator, ReportType};
 pub use templates::{AmlReport, DailyReport, KycReport, SarReport};
 pub use types::{
     AmlReport as AmlReportType,

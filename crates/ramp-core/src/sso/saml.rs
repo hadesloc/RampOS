@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::{
-    RampRole, RoleMapping, SsoAuthRequest, SsoAuthResponse, SsoCallback, SsoProtocol,
-    SsoProvider, SsoProviderType, SsoUser,
+    RampRole, RoleMapping, SsoAuthRequest, SsoAuthResponse, SsoCallback, SsoProtocol, SsoProvider,
+    SsoProviderType, SsoUser,
 };
 
 /// SAML configuration
@@ -38,11 +38,7 @@ pub struct SamlConfig {
 }
 
 impl SamlConfig {
-    pub fn okta(
-        sp_entity_id: String,
-        idp_metadata_url: &str,
-        idp_cert: String,
-    ) -> Self {
+    pub fn okta(sp_entity_id: String, idp_metadata_url: &str, idp_cert: String) -> Self {
         // In a real impl, we would fetch metadata from the URL
         Self {
             sp_entity_id,
@@ -94,8 +90,9 @@ impl SamlProvider {
     fn parse_saml_response(&self, saml_response: &str) -> Result<ParsedSamlResponse> {
         let decoded = {
             use base64::{engine::general_purpose::STANDARD, Engine};
-            STANDARD.decode(saml_response)
-                .map_err(|e| ramp_common::Error::Authentication(format!("Invalid base64 SAML response: {}", e)))?
+            STANDARD.decode(saml_response).map_err(|e| {
+                ramp_common::Error::Authentication(format!("Invalid base64 SAML response: {}", e))
+            })?
         };
         let xml = String::from_utf8_lossy(&decoded).to_string();
 
@@ -103,15 +100,16 @@ impl SamlProvider {
         xmldsig::verify_saml_signature(&xml, &self.config.idp_certificate)?;
 
         // Signature verified -- safe to extract claims
-        let email = extract_tag_value(&xml, "NameID")
-            .ok_or_else(|| ramp_common::Error::Authentication("Missing NameID in SAML response".into()))?;
+        let email = extract_tag_value(&xml, "NameID").ok_or_else(|| {
+            ramp_common::Error::Authentication("Missing NameID in SAML response".into())
+        })?;
 
         // Extract attributes
         let attributes = extract_saml_attributes(&xml);
 
         // Extract issuer from the response itself
-        let issuer = extract_tag_value(&xml, "Issuer")
-            .unwrap_or_else(|| self.config.idp_entity_id.clone());
+        let issuer =
+            extract_tag_value(&xml, "Issuer").unwrap_or_else(|| self.config.idp_entity_id.clone());
 
         Ok(ParsedSamlResponse {
             name_id: email,
@@ -280,8 +278,8 @@ fn extract_attribute_values(block: &str) -> Vec<String> {
 /// 5. Verify the digest of the referenced element matches `<ds:DigestValue>`
 mod xmldsig {
     use ring::signature;
-    use sha2::{Digest, Sha256};
     use sha1::Sha1;
+    use sha2::{Digest, Sha256};
 
     /// Verify the XML digital signature in a SAML Response.
     ///
@@ -293,32 +291,32 @@ mod xmldsig {
     /// 5. Verifies the RSA signature over the canonicalized SignedInfo
     pub fn verify_saml_signature(xml: &str, idp_cert_pem: &str) -> ramp_common::Result<()> {
         // Step 1: Extract Signature element
-        let sig_block = extract_signature_block(xml)
-            .ok_or_else(|| ramp_common::Error::Authentication(
-                "SAML response missing ds:Signature element".into()
-            ))?;
+        let sig_block = extract_signature_block(xml).ok_or_else(|| {
+            ramp_common::Error::Authentication("SAML response missing ds:Signature element".into())
+        })?;
 
         // Step 2: Extract sub-elements
-        let signed_info_raw = extract_element(&sig_block, "SignedInfo")
-            .ok_or_else(|| ramp_common::Error::Authentication(
-                "SAML Signature missing SignedInfo element".into()
-            ))?;
+        let signed_info_raw = extract_element(&sig_block, "SignedInfo").ok_or_else(|| {
+            ramp_common::Error::Authentication("SAML Signature missing SignedInfo element".into())
+        })?;
 
-        let signature_value_b64 = extract_element_text(&sig_block, "SignatureValue")
-            .ok_or_else(|| ramp_common::Error::Authentication(
-                "SAML Signature missing SignatureValue".into()
-            ))?;
+        let signature_value_b64 =
+            extract_element_text(&sig_block, "SignatureValue").ok_or_else(|| {
+                ramp_common::Error::Authentication("SAML Signature missing SignatureValue".into())
+            })?;
 
-        let sig_method_uri = extract_attribute_from_element(&signed_info_raw, "SignatureMethod", "Algorithm")
-            .unwrap_or_default();
+        let sig_method_uri =
+            extract_attribute_from_element(&signed_info_raw, "SignatureMethod", "Algorithm")
+                .unwrap_or_default();
 
-        let digest_method_uri = extract_attribute_from_element(&signed_info_raw, "DigestMethod", "Algorithm")
-            .unwrap_or_default();
+        let digest_method_uri =
+            extract_attribute_from_element(&signed_info_raw, "DigestMethod", "Algorithm")
+                .unwrap_or_default();
 
-        let digest_value_b64 = extract_element_text(&signed_info_raw, "DigestValue")
-            .ok_or_else(|| ramp_common::Error::Authentication(
-                "SAML SignedInfo missing DigestValue".into()
-            ))?;
+        let digest_value_b64 =
+            extract_element_text(&signed_info_raw, "DigestValue").ok_or_else(|| {
+                ramp_common::Error::Authentication("SAML SignedInfo missing DigestValue".into())
+            })?;
 
         // Step 3: Determine which certificate to use for verification.
         // Prefer the configured IdP certificate. If the response includes an embedded
@@ -336,7 +334,7 @@ mod xmldsig {
                      Rejecting to prevent certificate substitution attack."
                 );
                 return Err(ramp_common::Error::Authentication(
-                    "Embedded X509Certificate does not match configured IdP certificate".into()
+                    "Embedded X509Certificate does not match configured IdP certificate".into(),
                 ));
             }
         }
@@ -352,14 +350,17 @@ mod xmldsig {
             remove_signature_element(xml)
         } else if let Some(id) = reference_uri.strip_prefix('#') {
             // Signing a specific element by ID
-            extract_element_by_id(xml, id)
-                .ok_or_else(|| ramp_common::Error::Authentication(
-                    format!("Referenced element with ID '{}' not found in SAML response", id)
-                ))?
+            extract_element_by_id(xml, id).ok_or_else(|| {
+                ramp_common::Error::Authentication(format!(
+                    "Referenced element with ID '{}' not found in SAML response",
+                    id
+                ))
+            })?
         } else {
-            return Err(ramp_common::Error::Authentication(
-                format!("Unsupported Reference URI: {}", reference_uri)
-            ));
+            return Err(ramp_common::Error::Authentication(format!(
+                "Unsupported Reference URI: {}",
+                reference_uri
+            )));
         };
 
         // The referenced content must have its Signature child removed before digest computation,
@@ -382,16 +383,17 @@ mod xmldsig {
             hasher.update(canonicalized_content.as_bytes());
             hasher.finalize().to_vec()
         } else {
-            return Err(ramp_common::Error::Authentication(
-                format!("Unsupported digest algorithm: {}", digest_method_uri)
-            ));
+            return Err(ramp_common::Error::Authentication(format!(
+                "Unsupported digest algorithm: {}",
+                digest_method_uri
+            )));
         };
 
         let expected_digest = decode_base64_multiline(&digest_value_b64)?;
 
         if computed_digest != expected_digest {
             return Err(ramp_common::Error::Authentication(
-                "SAML signature digest verification failed: content has been tampered with".into()
+                "SAML signature digest verification failed: content has been tampered with".into(),
             ));
         }
 
@@ -414,21 +416,22 @@ mod xmldsig {
                 // Default to RSA-SHA256
                 &signature::RSA_PKCS1_2048_8192_SHA256
             } else {
-                return Err(ramp_common::Error::Authentication(
-                    format!("Unsupported signature algorithm: {}", sig_method_uri)
-                ));
+                return Err(ramp_common::Error::Authentication(format!(
+                    "Unsupported signature algorithm: {}",
+                    sig_method_uri
+                )));
             };
 
-        let public_key = ring::signature::UnparsedPublicKey::new(
-            verification_algorithm,
-            &public_key_der,
-        );
+        let public_key =
+            ring::signature::UnparsedPublicKey::new(verification_algorithm, &public_key_der);
 
         public_key
             .verify(canonicalized_signed_info.as_bytes(), &signature_bytes)
-            .map_err(|_| ramp_common::Error::Authentication(
-                "SAML XML digital signature verification failed: signature is invalid".into()
-            ))?;
+            .map_err(|_| {
+                ramp_common::Error::Authentication(
+                    "SAML XML digital signature verification failed: signature is invalid".into(),
+                )
+            })?;
 
         tracing::info!("SAML XML signature verified successfully");
         Ok(())
@@ -436,16 +439,8 @@ mod xmldsig {
 
     /// Extract the `<ds:Signature>` or `<Signature>` block from XML.
     pub(super) fn extract_signature_block(xml: &str) -> Option<String> {
-        let start_patterns = [
-            "<ds:Signature",
-            "<Signature",
-            "<dsig:Signature",
-        ];
-        let end_patterns = [
-            "</ds:Signature>",
-            "</Signature>",
-            "</dsig:Signature>",
-        ];
+        let start_patterns = ["<ds:Signature", "<Signature", "<dsig:Signature"];
+        let end_patterns = ["</ds:Signature>", "</Signature>", "</dsig:Signature>"];
 
         for (start_pat, end_pat) in start_patterns.iter().zip(end_patterns.iter()) {
             if let Some(start) = xml.find(start_pat) {
@@ -481,7 +476,9 @@ mod xmldsig {
         let content_start = gt + 1;
         // Find the opening '<' of the closing tag
         let lt = element[content_start..].find('<')?;
-        let text = element[content_start..content_start + lt].trim().to_string();
+        let text = element[content_start..content_start + lt]
+            .trim()
+            .to_string();
         if text.is_empty() {
             None
         } else {
@@ -490,7 +487,11 @@ mod xmldsig {
     }
 
     /// Extract an XML attribute value from a specific child element.
-    fn extract_attribute_from_element(xml: &str, element_local_name: &str, attr_name: &str) -> Option<String> {
+    fn extract_attribute_from_element(
+        xml: &str,
+        element_local_name: &str,
+        attr_name: &str,
+    ) -> Option<String> {
         let prefixes = ["ds:", "dsig:", ""];
         for prefix in &prefixes {
             let open = format!("<{}{}", prefix, element_local_name);
@@ -551,7 +552,9 @@ mod xmldsig {
                 // Find the closing tag
                 let close_tag = format!("</{}>", tag_name);
                 if let Some(close_pos) = xml[tag_start..].find(&close_tag) {
-                    return Some(xml[tag_start..tag_start + close_pos + close_tag.len()].to_string());
+                    return Some(
+                        xml[tag_start..tag_start + close_pos + close_tag.len()].to_string(),
+                    );
                 }
             }
         }
@@ -629,8 +632,8 @@ mod xmldsig {
 
         // If SignedInfo doesn't already have the ds namespace declaration,
         // add it (it may be inherited from the parent Signature element)
-        let needs_ds_ns = (result.contains("<ds:") || result.contains("</ds:"))
-            && !result.contains("xmlns:ds=");
+        let needs_ds_ns =
+            (result.contains("<ds:") || result.contains("</ds:")) && !result.contains("xmlns:ds=");
 
         if needs_ds_ns {
             // Insert the ds namespace declaration into the SignedInfo opening tag
@@ -664,10 +667,12 @@ mod xmldsig {
             return decode_base64_multiline(trimmed);
         }
 
-        let parsed = pem::parse(trimmed)
-            .map_err(|e| ramp_common::Error::Authentication(
-                format!("Failed to parse IdP certificate PEM: {}", e)
-            ))?;
+        let parsed = pem::parse(trimmed).map_err(|e| {
+            ramp_common::Error::Authentication(format!(
+                "Failed to parse IdP certificate PEM: {}",
+                e
+            ))
+        })?;
 
         Ok(parsed.contents().to_vec())
     }
@@ -676,10 +681,9 @@ mod xmldsig {
     pub(super) fn decode_base64_multiline(b64: &str) -> ramp_common::Result<Vec<u8>> {
         use base64::{engine::general_purpose::STANDARD, Engine};
         let cleaned: String = b64.chars().filter(|c| !c.is_whitespace()).collect();
-        STANDARD.decode(&cleaned)
-            .map_err(|e| ramp_common::Error::Authentication(
-                format!("Failed to decode base64 data: {}", e)
-            ))
+        STANDARD.decode(&cleaned).map_err(|e| {
+            ramp_common::Error::Authentication(format!("Failed to decode base64 data: {}", e))
+        })
     }
 
     /// Extract the RSA public key (in DER SubjectPublicKeyInfo format) from a
@@ -704,16 +708,18 @@ mod xmldsig {
     /// ```
     fn extract_public_key_from_cert_der(cert_der: &[u8]) -> ramp_common::Result<Vec<u8>> {
         // Parse the outer SEQUENCE (Certificate)
-        let (tbs_cert_bytes, _) = parse_asn1_sequence(cert_der)
-            .ok_or_else(|| ramp_common::Error::Authentication(
-                "Invalid X.509 certificate: not a valid ASN.1 SEQUENCE".into()
-            ))?;
+        let (tbs_cert_bytes, _) = parse_asn1_sequence(cert_der).ok_or_else(|| {
+            ramp_common::Error::Authentication(
+                "Invalid X.509 certificate: not a valid ASN.1 SEQUENCE".into(),
+            )
+        })?;
 
         // Parse tbsCertificate SEQUENCE
-        let (tbs_inner, _) = parse_asn1_sequence(tbs_cert_bytes)
-            .ok_or_else(|| ramp_common::Error::Authentication(
-                "Invalid X.509 certificate: cannot parse tbsCertificate".into()
-            ))?;
+        let (tbs_inner, _) = parse_asn1_sequence(tbs_cert_bytes).ok_or_else(|| {
+            ramp_common::Error::Authentication(
+                "Invalid X.509 certificate: cannot parse tbsCertificate".into(),
+            )
+        })?;
 
         // Navigate through tbsCertificate fields to find subjectPublicKeyInfo
         // Fields: version [0], serialNumber, signature, issuer, validity, subject, subjectPublicKeyInfo
@@ -723,10 +729,9 @@ mod xmldsig {
         // Check for explicit version tag [0]
         if pos < tbs_inner.len() && tbs_inner[pos] == 0xA0 {
             // Version is present (explicit context tag [0])
-            let (_, consumed) = parse_asn1_tlv(&tbs_inner[pos..])
-                .ok_or_else(|| ramp_common::Error::Authentication(
-                    "Invalid X.509: cannot parse version".into()
-                ))?;
+            let (_, consumed) = parse_asn1_tlv(&tbs_inner[pos..]).ok_or_else(|| {
+                ramp_common::Error::Authentication("Invalid X.509: cannot parse version".into())
+            })?;
             pos += consumed;
             // version consumed, don't increment field_index since
             // we separately handle it
@@ -736,23 +741,26 @@ mod xmldsig {
         while pos < tbs_inner.len() && field_index < 6 {
             if field_index == 5 {
                 // This should be the subjectPublicKeyInfo SEQUENCE
-                let (_, total_len) = parse_asn1_tlv(&tbs_inner[pos..])
-                    .ok_or_else(|| ramp_common::Error::Authentication(
-                        "Invalid X.509: cannot parse subjectPublicKeyInfo".into()
-                    ))?;
+                let (_, total_len) = parse_asn1_tlv(&tbs_inner[pos..]).ok_or_else(|| {
+                    ramp_common::Error::Authentication(
+                        "Invalid X.509: cannot parse subjectPublicKeyInfo".into(),
+                    )
+                })?;
                 return Ok(tbs_inner[pos..pos + total_len].to_vec());
             }
 
-            let (_, consumed) = parse_asn1_tlv(&tbs_inner[pos..])
-                .ok_or_else(|| ramp_common::Error::Authentication(
-                    format!("Invalid X.509: cannot parse field at index {}", field_index)
-                ))?;
+            let (_, consumed) = parse_asn1_tlv(&tbs_inner[pos..]).ok_or_else(|| {
+                ramp_common::Error::Authentication(format!(
+                    "Invalid X.509: cannot parse field at index {}",
+                    field_index
+                ))
+            })?;
             pos += consumed;
             field_index += 1;
         }
 
         Err(ramp_common::Error::Authentication(
-            "Invalid X.509 certificate: subjectPublicKeyInfo not found".into()
+            "Invalid X.509 certificate: subjectPublicKeyInfo not found".into(),
         ))
     }
 
@@ -785,7 +793,10 @@ mod xmldsig {
             return None;
         }
 
-        Some((&data[1 + header_len..1 + header_len + content_len], total_len))
+        Some((
+            &data[1 + header_len..1 + header_len + content_len],
+            total_len,
+        ))
     }
 
     /// Parse ASN.1 length encoding. Returns (length_value, bytes_consumed).
@@ -845,7 +856,8 @@ impl SsoProvider for SamlProvider {
         }; // Simplified for POST
 
         // Construct redirect URL
-        let url = format!("{}?SAMLRequest={}&RelayState={}",
+        let url = format!(
+            "{}?SAMLRequest={}&RelayState={}",
             self.config.idp_sso_url,
             urlencoding::encode(&encoded),
             urlencoding::encode(&request.state)
@@ -878,7 +890,8 @@ impl SsoProvider for SamlProvider {
 
         let email = parsed.name_id;
         let groups = parsed.attributes.get("groups").cloned().unwrap_or_default();
-        let roles = crate::sso::SsoService::map_roles(&groups, &self.role_mappings, &self.default_role);
+        let roles =
+            crate::sso::SsoService::map_roles(&groups, &self.role_mappings, &self.default_role);
 
         let now = Utc::now();
 
@@ -938,8 +951,14 @@ mod tests {
     fn test_extract_saml_attributes() {
         let xml = r#"<saml:Attribute Name="email"><saml:AttributeValue>user@example.com</saml:AttributeValue></saml:Attribute><saml:Attribute Name="groups"><saml:AttributeValue>Admins</saml:AttributeValue><saml:AttributeValue>Finance</saml:AttributeValue></saml:Attribute>"#;
         let attrs = extract_saml_attributes(xml);
-        assert_eq!(attrs.get("email"), Some(&vec!["user@example.com".to_string()]));
-        assert_eq!(attrs.get("groups"), Some(&vec!["Admins".to_string(), "Finance".to_string()]));
+        assert_eq!(
+            attrs.get("email"),
+            Some(&vec!["user@example.com".to_string()])
+        );
+        assert_eq!(
+            attrs.get("groups"),
+            Some(&vec!["Admins".to_string(), "Finance".to_string()])
+        );
     }
 
     #[test]
@@ -961,7 +980,8 @@ mod tests {
 
     #[test]
     fn test_remove_signature_element() {
-        let xml = r#"<Response><ds:Signature>sig</ds:Signature><Assertion>data</Assertion></Response>"#;
+        let xml =
+            r#"<Response><ds:Signature>sig</ds:Signature><Assertion>data</Assertion></Response>"#;
         let result = xmldsig::remove_signature_element(xml);
         assert_eq!(result, "<Response><Assertion>data</Assertion></Response>");
     }
@@ -1025,12 +1045,8 @@ mod tests {
             "https://idp.test.com/metadata",
             "CERT".to_string(),
         );
-        let provider = SamlProvider::new(
-            SsoProviderType::Okta,
-            config,
-            vec![],
-            RampRole::Viewer,
-        ).unwrap();
+        let provider =
+            SamlProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer).unwrap();
         assert_eq!(provider.provider_type(), SsoProviderType::Okta);
         assert_eq!(provider.protocol(), SsoProtocol::Saml);
     }
@@ -1042,12 +1058,8 @@ mod tests {
             "https://idp.example.com/metadata",
             "CERT".to_string(),
         );
-        let provider = SamlProvider::new(
-            SsoProviderType::Okta,
-            config,
-            vec![],
-            RampRole::Viewer,
-        ).unwrap();
+        let provider =
+            SamlProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer).unwrap();
 
         let request = SsoAuthRequest {
             tenant_id: ramp_common::types::TenantId::new("t1"),
@@ -1060,13 +1072,16 @@ mod tests {
         assert_eq!(response.state, "relay_state_123");
         assert!(response.auth_url.contains("SAMLRequest="));
         assert!(response.auth_url.contains("RelayState="));
-        assert!(response.auth_url.starts_with("https://idp.example.com/sso?"));
+        assert!(response
+            .auth_url
+            .starts_with("https://idp.example.com/sso?"));
     }
 
     #[tokio::test]
     async fn test_saml_validate_session_returns_none() {
         let config = SamlConfig::okta("sp".into(), "https://idp/m", "C".into());
-        let provider = SamlProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer).unwrap();
+        let provider =
+            SamlProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer).unwrap();
         let result = provider.validate_session("token").await.unwrap();
         assert!(result.is_none());
     }
@@ -1074,7 +1089,8 @@ mod tests {
     #[tokio::test]
     async fn test_saml_logout_returns_none() {
         let config = SamlConfig::okta("sp".into(), "https://idp/m", "C".into());
-        let provider = SamlProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer).unwrap();
+        let provider =
+            SamlProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer).unwrap();
         let user = SsoUser {
             idp_user_id: "u1".to_string(),
             email: "u@test.com".to_string(),
@@ -1111,14 +1127,23 @@ mod tests {
     #[test]
     fn test_extract_xml_attribute_double_quotes() {
         let tag = r#"<Attribute Name="email" NameFormat="urn:oasis">"#;
-        assert_eq!(extract_xml_attribute(tag, "Name"), Some("email".to_string()));
-        assert_eq!(extract_xml_attribute(tag, "NameFormat"), Some("urn:oasis".to_string()));
+        assert_eq!(
+            extract_xml_attribute(tag, "Name"),
+            Some("email".to_string())
+        );
+        assert_eq!(
+            extract_xml_attribute(tag, "NameFormat"),
+            Some("urn:oasis".to_string())
+        );
     }
 
     #[test]
     fn test_extract_xml_attribute_single_quotes() {
         let tag = "<Attribute Name='groups'>";
-        assert_eq!(extract_xml_attribute(tag, "Name"), Some("groups".to_string()));
+        assert_eq!(
+            extract_xml_attribute(tag, "Name"),
+            Some("groups".to_string())
+        );
     }
 
     #[test]
@@ -1136,7 +1161,8 @@ mod tests {
 
     #[test]
     fn test_extract_attribute_values_no_namespace() {
-        let block = r#"<Attribute Name="role"><AttributeValue>Manager</AttributeValue></Attribute>"#;
+        let block =
+            r#"<Attribute Name="role"><AttributeValue>Manager</AttributeValue></Attribute>"#;
         let values = extract_attribute_values(block);
         assert_eq!(values, vec!["Manager".to_string()]);
     }
@@ -1307,11 +1333,13 @@ mod tests {
     #[tokio::test]
     async fn test_saml_authenticate_missing_response() {
         let config = SamlConfig::okta("sp".into(), "https://idp/m", "C".into());
-        let provider = SamlProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer).unwrap();
+        let provider =
+            SamlProvider::new(SsoProviderType::Okta, config, vec![], RampRole::Viewer).unwrap();
 
         let callback = SsoCallback {
             code: None,
             state: "state".to_string(),
+            redirect_uri: None,
             error: None,
             error_description: None,
             saml_response: None,

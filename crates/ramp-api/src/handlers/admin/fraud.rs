@@ -16,11 +16,7 @@ use tracing::info;
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
 use crate::router::AppState;
-use ramp_compliance::{
-    case::AmlCase,
-    case::NoteType,
-    types::CaseStatus,
-};
+use ramp_compliance::{case::AmlCase, case::NoteType, types::CaseStatus};
 // ============================================================================
 // DTOs
 // ============================================================================
@@ -132,7 +128,10 @@ fn extract_score(detection_data: &serde_json::Value) -> u8 {
 fn map_decision(case: &AmlCase) -> String {
     if matches!(case.status, CaseStatus::Closed | CaseStatus::Reported) {
         "Block".to_string()
-    } else if matches!(case.status, CaseStatus::Review | CaseStatus::Open | CaseStatus::Hold) {
+    } else if matches!(
+        case.status,
+        CaseStatus::Review | CaseStatus::Open | CaseStatus::Hold
+    ) {
         "Review".to_string()
     } else {
         "Allow".to_string()
@@ -180,8 +179,10 @@ fn map_risk_factors(detection_data: &serde_json::Value) -> Vec<RiskFactorRespons
 
 fn map_fraud_score_response(case: AmlCase) -> FraudScoreResponse {
     let decision = map_decision(&case);
-    let reviewed = matches!(case.status, CaseStatus::Released | CaseStatus::Closed | CaseStatus::Reported)
-        || case.resolution.is_some();
+    let reviewed = matches!(
+        case.status,
+        CaseStatus::Released | CaseStatus::Closed | CaseStatus::Reported
+    ) || case.resolution.is_some();
 
     FraudScoreResponse {
         id: case.id,
@@ -219,9 +220,9 @@ pub async fn list_fraud_scores(
 ) -> Result<Json<ListFraudScoresResponse>, ApiError> {
     super::tier::check_admin_key(&headers)?;
 
-    let tenant_ctx = tenant_ctx
-        .map(|Extension(ctx)| ctx)
-        .ok_or_else(|| ApiError::Internal("Tenant context unavailable for fraud endpoints".to_string()))?;
+    let tenant_ctx = tenant_ctx.map(|Extension(ctx)| ctx).ok_or_else(|| {
+        ApiError::Internal("Tenant context unavailable for fraud endpoints".to_string())
+    })?;
 
     info!(
         tenant = %tenant_ctx.tenant_id.0,
@@ -234,24 +235,14 @@ pub async fn list_fraud_scores(
     // Query sufficient window then apply fraud-specific mapping/filtering at API layer.
     let mut cases = app_state
         .case_manager
-        .list_cases(
-            &tenant_ctx.tenant_id,
-            None,
-            None,
-            None,
-            None,
-            1000,
-            0,
-        )
+        .list_cases(&tenant_ctx.tenant_id, None, None, None, None, 1000, 0)
         .await
         .map_err(ApiError::from)?;
 
     cases.retain(is_fraud_case);
 
-    let mut scores: Vec<FraudScoreResponse> = cases
-        .into_iter()
-        .map(map_fraud_score_response)
-        .collect();
+    let mut scores: Vec<FraudScoreResponse> =
+        cases.into_iter().map(map_fraud_score_response).collect();
 
     if let Some(ref decision) = query.decision {
         let decision_upper = decision.to_uppercase();
@@ -291,9 +282,9 @@ pub async fn get_fraud_score(
 ) -> Result<Json<FraudScoreResponse>, ApiError> {
     super::tier::check_admin_key(&headers)?;
 
-    let tenant_ctx = tenant_ctx
-        .map(|Extension(ctx)| ctx)
-        .ok_or_else(|| ApiError::Internal("Tenant context unavailable for fraud endpoints".to_string()))?;
+    let tenant_ctx = tenant_ctx.map(|Extension(ctx)| ctx).ok_or_else(|| {
+        ApiError::Internal("Tenant context unavailable for fraud endpoints".to_string())
+    })?;
 
     info!(
         tenant = %tenant_ctx.tenant_id.0,
@@ -321,9 +312,9 @@ pub async fn submit_fraud_review(
 ) -> Result<Json<FraudReviewResponse>, ApiError> {
     let auth = super::tier::check_admin_key_operator(&headers)?;
 
-    let tenant_ctx = tenant_ctx
-        .map(|Extension(ctx)| ctx)
-        .ok_or_else(|| ApiError::Internal("Tenant context unavailable for fraud endpoints".to_string()))?;
+    let tenant_ctx = tenant_ctx.map(|Extension(ctx)| ctx).ok_or_else(|| {
+        ApiError::Internal("Tenant context unavailable for fraud endpoints".to_string())
+    })?;
 
     info!(
         tenant = %tenant_ctx.tenant_id.0,
@@ -389,9 +380,7 @@ pub async fn submit_fraud_review(
             auth.user_id.clone(),
             format!(
                 "Fraud review decision: {} by {}. Note: {}",
-                decision_upper,
-                request.reviewer,
-                request.note
+                decision_upper, request.reviewer, request.note
             ),
             NoteType::Decision,
             true,
@@ -436,7 +425,11 @@ mod tests {
         let json = serde_json::to_string(&resp).expect("serialization failed");
         assert!(json.contains("\"score\":75"));
         assert!(json.contains("\"decision\":\"Review\""));
-        assert!(json.contains("\"velocityExceeded") == false || json.contains("\"velocity1hExceeded\"") || json.contains("\"ruleName\":\"velocity_1h_exceeded\""));
+        assert!(
+            json.contains("\"velocityExceeded") == false
+                || json.contains("\"velocity1hExceeded\"")
+                || json.contains("\"ruleName\":\"velocity_1h_exceeded\"")
+        );
         // None fields should be skipped
         assert!(!json.contains("\"reviewedBy\""));
         assert!(!json.contains("\"reviewNote\""));
@@ -509,16 +502,26 @@ mod tests {
 
     #[test]
     fn test_parse_review_target_status() {
-        assert_eq!(parse_review_target_status("ALLOW"), Some(CaseStatus::Released));
-        assert_eq!(parse_review_target_status("REVIEW"), Some(CaseStatus::Review));
-        assert_eq!(parse_review_target_status("BLOCK"), Some(CaseStatus::Closed));
+        assert_eq!(
+            parse_review_target_status("ALLOW"),
+            Some(CaseStatus::Released)
+        );
+        assert_eq!(
+            parse_review_target_status("REVIEW"),
+            Some(CaseStatus::Review)
+        );
+        assert_eq!(
+            parse_review_target_status("BLOCK"),
+            Some(CaseStatus::Closed)
+        );
         assert_eq!(parse_review_target_status("INVALID"), None);
     }
 
     #[test]
     fn test_fraud_score_query_deserialization() {
         let json = r#"{"limit": 10, "offset": 5, "decision": "Block", "minScore": 50}"#;
-        let query: ListFraudScoresQuery = serde_json::from_str(json).expect("deserialization failed");
+        let query: ListFraudScoresQuery =
+            serde_json::from_str(json).expect("deserialization failed");
         assert_eq!(query.limit, 10);
         assert_eq!(query.offset, 5);
         assert_eq!(query.decision, Some("Block".to_string()));

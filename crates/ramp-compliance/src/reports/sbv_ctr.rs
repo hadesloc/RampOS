@@ -257,50 +257,125 @@ impl SbvCtrReport {
         // Header section
         xml.push_str("  <HEADER>\n");
         xml.push_str(&format!("    <REPORT_ID>{}</REPORT_ID>\n", self.report_id));
-        xml.push_str(&format!("    <REPORT_DATE>{}</REPORT_DATE>\n", self.report_date.format("%Y-%m-%d")));
-        xml.push_str(&format!("    <PERIOD_START>{}</PERIOD_START>\n", self.period_start.format("%Y-%m-%d")));
-        xml.push_str(&format!("    <PERIOD_END>{}</PERIOD_END>\n", self.period_end.format("%Y-%m-%d")));
-        xml.push_str(&format!("    <SCHEMA_VERSION>{}</SCHEMA_VERSION>\n", self.schema_version));
+        xml.push_str(&format!(
+            "    <REPORT_DATE>{}</REPORT_DATE>\n",
+            self.report_date.format("%Y-%m-%d")
+        ));
+        xml.push_str(&format!(
+            "    <PERIOD_START>{}</PERIOD_START>\n",
+            self.period_start.format("%Y-%m-%d")
+        ));
+        xml.push_str(&format!(
+            "    <PERIOD_END>{}</PERIOD_END>\n",
+            self.period_end.format("%Y-%m-%d")
+        ));
+        xml.push_str(&format!(
+            "    <SCHEMA_VERSION>{}</SCHEMA_VERSION>\n",
+            self.schema_version
+        ));
         xml.push_str("  </HEADER>\n");
 
         // Filing institution
         xml.push_str("  <FILING_INSTITUTION>\n");
-        xml.push_str(&format!("    <NAME>{}</NAME>\n", escape_xml(&self.filing_institution.name)));
-        xml.push_str(&format!("    <TAX_ID>{}</TAX_ID>\n", self.filing_institution.tax_id));
-        xml.push_str(&format!("    <BUSINESS_REG_NO>{}</BUSINESS_REG_NO>\n", self.filing_institution.business_registration_number));
-        xml.push_str(&format!("    <SBV_LICENSE_NO>{}</SBV_LICENSE_NO>\n", self.filing_institution.sbv_license_number));
-        xml.push_str(&format!("    <ADDRESS>{}</ADDRESS>\n", escape_xml(&self.filing_institution.address)));
-        xml.push_str(&format!("    <PROVINCE_CODE>{}</PROVINCE_CODE>\n", self.filing_institution.province_code));
-        xml.push_str(&format!("    <PHONE>{}</PHONE>\n", self.filing_institution.phone));
-        xml.push_str(&format!("    <EMAIL>{}</EMAIL>\n", self.filing_institution.email));
+        xml.push_str(&format!(
+            "    <NAME>{}</NAME>\n",
+            escape_xml(&self.filing_institution.name)
+        ));
+        xml.push_str(&format!(
+            "    <TAX_ID>{}</TAX_ID>\n",
+            self.filing_institution.tax_id
+        ));
+        xml.push_str(&format!(
+            "    <BUSINESS_REG_NO>{}</BUSINESS_REG_NO>\n",
+            self.filing_institution.business_registration_number
+        ));
+        xml.push_str(&format!(
+            "    <SBV_LICENSE_NO>{}</SBV_LICENSE_NO>\n",
+            self.filing_institution.sbv_license_number
+        ));
+        xml.push_str(&format!(
+            "    <ADDRESS>{}</ADDRESS>\n",
+            escape_xml(&self.filing_institution.address)
+        ));
+        xml.push_str(&format!(
+            "    <PROVINCE_CODE>{}</PROVINCE_CODE>\n",
+            self.filing_institution.province_code
+        ));
+        xml.push_str(&format!(
+            "    <PHONE>{}</PHONE>\n",
+            self.filing_institution.phone
+        ));
+        xml.push_str(&format!(
+            "    <EMAIL>{}</EMAIL>\n",
+            self.filing_institution.email
+        ));
         xml.push_str("  </FILING_INSTITUTION>\n");
 
         // Summary
         xml.push_str("  <SUMMARY>\n");
-        xml.push_str(&format!("    <TRANSACTION_COUNT>{}</TRANSACTION_COUNT>\n", self.transaction_count));
-        xml.push_str(&format!("    <TOTAL_AMOUNT_VND>{}</TOTAL_AMOUNT_VND>\n", self.total_amount_vnd));
+        xml.push_str(&format!(
+            "    <TRANSACTION_COUNT>{}</TRANSACTION_COUNT>\n",
+            self.transaction_count
+        ));
+        xml.push_str(&format!(
+            "    <TOTAL_AMOUNT_VND>{}</TOTAL_AMOUNT_VND>\n",
+            self.total_amount_vnd
+        ));
         xml.push_str("  </SUMMARY>\n");
 
         // Transactions
         xml.push_str("  <TRANSACTIONS>\n");
         for tx in &self.transactions {
             xml.push_str("    <TRANSACTION>\n");
-            xml.push_str(&format!("      <TRANSACTION_ID>{}</TRANSACTION_ID>\n", tx.transaction_id));
-            xml.push_str(&format!("      <REFERENCE_NO>{}</REFERENCE_NO>\n", tx.reference_number));
-            xml.push_str(&format!("      <DATE>{}</DATE>\n", tx.transaction_date.format("%Y-%m-%d")));
+            xml.push_str(&format!(
+                "      <TRANSACTION_ID>{}</TRANSACTION_ID>\n",
+                tx.transaction_id
+            ));
+            xml.push_str(&format!(
+                "      <REFERENCE_NO>{}</REFERENCE_NO>\n",
+                tx.reference_number
+            ));
+            xml.push_str(&format!(
+                "      <DATE>{}</DATE>\n",
+                tx.transaction_date.format("%Y-%m-%d")
+            ));
             xml.push_str(&format!("      <TIME>{}</TIME>\n", tx.transaction_time));
-            xml.push_str(&format!("      <AMOUNT_VND>{}</AMOUNT_VND>\n", tx.amount_vnd));
-            xml.push_str(&format!("      <TYPE_CODE>{}</TYPE_CODE>\n", tx.transaction_type.to_sbv_code()));
-            xml.push_str(&format!("      <PURPOSE>{}</PURPOSE>\n", escape_xml(&tx.purpose)));
+            xml.push_str(&format!(
+                "      <AMOUNT_VND>{}</AMOUNT_VND>\n",
+                tx.amount_vnd
+            ));
+            xml.push_str(&format!(
+                "      <TYPE_CODE>{}</TYPE_CODE>\n",
+                tx.transaction_type.to_sbv_code()
+            ));
+            xml.push_str(&format!(
+                "      <PURPOSE>{}</PURPOSE>\n",
+                escape_xml(&tx.purpose)
+            ));
             xml.push_str(&format!("      <CHANNEL>{}</CHANNEL>\n", tx.channel));
 
             // Customer info
             xml.push_str("      <CUSTOMER>\n");
-            xml.push_str(&format!("        <FULL_NAME>{}</FULL_NAME>\n", escape_xml(&tx.customer.full_name)));
-            xml.push_str(&format!("        <ID_NUMBER>{}</ID_NUMBER>\n", tx.customer.id_number));
-            xml.push_str(&format!("        <ID_TYPE>{}</ID_TYPE>\n", tx.customer.id_type.to_sbv_code()));
-            xml.push_str(&format!("        <NATIONALITY>{}</NATIONALITY>\n", tx.customer.nationality));
-            xml.push_str(&format!("        <ADDRESS>{}</ADDRESS>\n", escape_xml(&tx.customer.permanent_address)));
+            xml.push_str(&format!(
+                "        <FULL_NAME>{}</FULL_NAME>\n",
+                escape_xml(&tx.customer.full_name)
+            ));
+            xml.push_str(&format!(
+                "        <ID_NUMBER>{}</ID_NUMBER>\n",
+                tx.customer.id_number
+            ));
+            xml.push_str(&format!(
+                "        <ID_TYPE>{}</ID_TYPE>\n",
+                tx.customer.id_type.to_sbv_code()
+            ));
+            xml.push_str(&format!(
+                "        <NATIONALITY>{}</NATIONALITY>\n",
+                tx.customer.nationality
+            ));
+            xml.push_str(&format!(
+                "        <ADDRESS>{}</ADDRESS>\n",
+                escape_xml(&tx.customer.permanent_address)
+            ));
             if let Some(ref phone) = tx.customer.phone {
                 xml.push_str(&format!("        <PHONE>{}</PHONE>\n", phone));
             }
@@ -309,18 +384,36 @@ impl SbvCtrReport {
             // Source account
             if let Some(ref src) = tx.source_account {
                 xml.push_str("      <SOURCE_ACCOUNT>\n");
-                xml.push_str(&format!("        <ACCOUNT_NO>{}</ACCOUNT_NO>\n", src.account_number));
-                xml.push_str(&format!("        <BANK_CODE>{}</BANK_CODE>\n", src.bank_code));
-                xml.push_str(&format!("        <BANK_NAME>{}</BANK_NAME>\n", escape_xml(&src.bank_name)));
+                xml.push_str(&format!(
+                    "        <ACCOUNT_NO>{}</ACCOUNT_NO>\n",
+                    src.account_number
+                ));
+                xml.push_str(&format!(
+                    "        <BANK_CODE>{}</BANK_CODE>\n",
+                    src.bank_code
+                ));
+                xml.push_str(&format!(
+                    "        <BANK_NAME>{}</BANK_NAME>\n",
+                    escape_xml(&src.bank_name)
+                ));
                 xml.push_str("      </SOURCE_ACCOUNT>\n");
             }
 
             // Destination account
             if let Some(ref dst) = tx.destination_account {
                 xml.push_str("      <DESTINATION_ACCOUNT>\n");
-                xml.push_str(&format!("        <ACCOUNT_NO>{}</ACCOUNT_NO>\n", dst.account_number));
-                xml.push_str(&format!("        <BANK_CODE>{}</BANK_CODE>\n", dst.bank_code));
-                xml.push_str(&format!("        <BANK_NAME>{}</BANK_NAME>\n", escape_xml(&dst.bank_name)));
+                xml.push_str(&format!(
+                    "        <ACCOUNT_NO>{}</ACCOUNT_NO>\n",
+                    dst.account_number
+                ));
+                xml.push_str(&format!(
+                    "        <BANK_CODE>{}</BANK_CODE>\n",
+                    dst.bank_code
+                ));
+                xml.push_str(&format!(
+                    "        <BANK_NAME>{}</BANK_NAME>\n",
+                    escape_xml(&dst.bank_name)
+                ));
                 xml.push_str("      </DESTINATION_ACCOUNT>\n");
             }
 
@@ -425,12 +518,7 @@ mod tests {
         let institution = sample_institution();
         let now = Utc::now();
 
-        let report = SbvCtrReport::new(
-            tenant_id.clone(),
-            institution,
-            now,
-            now,
-        );
+        let report = SbvCtrReport::new(tenant_id.clone(), institution, now, now);
 
         assert!(report.report_id.starts_with("SBV-CTR-"));
         assert_eq!(report.transaction_count, 0);

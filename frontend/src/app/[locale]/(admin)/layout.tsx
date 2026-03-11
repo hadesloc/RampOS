@@ -13,19 +13,22 @@ export const metadata: Metadata = {
 
 export default async function AdminLayout({
   children,
+  params,
 }: {
   children: React.ReactNode;
+  params: Promise<{ locale: string }>;
 }) {
-  // Auth temporarily disabled for development
-  // const adminKey = process.env.RAMPOS_ADMIN_KEY;
-  // if (!adminKey) {
-  //   return <div className="p-6">Admin key not configured.</div>;
-  // }
-  // const cookieStore = await cookies();
-  // const token = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
-  // if (!isAdminSessionTokenValid(token, adminKey)) {
-  //   redirect("/admin-login");
-  // }
+  const { locale } = await params;
+  const adminKey = process.env.RAMPOS_ADMIN_KEY;
+  if (!adminKey) {
+    return <div className="p-6">Admin key not configured.</div>;
+  }
+
+  const cookieStore = await cookies();
+  const token = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
+  if (!isAdminSessionTokenValid(token, adminKey)) {
+    redirect(`/${locale}/admin-login`);
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

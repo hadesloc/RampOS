@@ -29,6 +29,15 @@ pub enum ComplianceEventType {
     LicenseStatusChange,
     SanctionsCheck,
     PepCheck,
+    RescreeningRunCompleted,
+    RescreeningAlertQueued,
+    RescreeningRestrictionApplied,
+    TravelRulePolicyEvaluated,
+    TravelRuleDisclosureUpdated,
+    TravelRuleExceptionQueued,
+    PassportConsentGranted,
+    PassportConsentRevoked,
+    PassportPackageShared,
 }
 
 impl ComplianceEventType {
@@ -47,6 +56,15 @@ impl ComplianceEventType {
             Self::LicenseStatusChange => "license_status_change",
             Self::SanctionsCheck => "sanctions_check",
             Self::PepCheck => "pep_check",
+            Self::RescreeningRunCompleted => "rescreening_run_completed",
+            Self::RescreeningAlertQueued => "rescreening_alert_queued",
+            Self::RescreeningRestrictionApplied => "rescreening_restriction_applied",
+            Self::TravelRulePolicyEvaluated => "travel_rule_policy_evaluated",
+            Self::TravelRuleDisclosureUpdated => "travel_rule_disclosure_updated",
+            Self::TravelRuleExceptionQueued => "travel_rule_exception_queued",
+            Self::PassportConsentGranted => "passport_consent_granted",
+            Self::PassportConsentRevoked => "passport_consent_revoked",
+            Self::PassportPackageShared => "passport_package_shared",
         }
     }
 
@@ -65,6 +83,15 @@ impl ComplianceEventType {
             "license_status_change" => Some(Self::LicenseStatusChange),
             "sanctions_check" => Some(Self::SanctionsCheck),
             "pep_check" => Some(Self::PepCheck),
+            "rescreening_run_completed" => Some(Self::RescreeningRunCompleted),
+            "rescreening_alert_queued" => Some(Self::RescreeningAlertQueued),
+            "rescreening_restriction_applied" => Some(Self::RescreeningRestrictionApplied),
+            "travel_rule_policy_evaluated" => Some(Self::TravelRulePolicyEvaluated),
+            "travel_rule_disclosure_updated" => Some(Self::TravelRuleDisclosureUpdated),
+            "travel_rule_exception_queued" => Some(Self::TravelRuleExceptionQueued),
+            "passport_consent_granted" => Some(Self::PassportConsentGranted),
+            "passport_consent_revoked" => Some(Self::PassportConsentRevoked),
+            "passport_package_shared" => Some(Self::PassportPackageShared),
             _ => None,
         }
     }
@@ -219,11 +246,7 @@ pub trait ComplianceAuditRepository: Send + Sync {
     ) -> Result<Vec<ComplianceAuditEntry>>;
 
     /// Count audit entries matching filters
-    async fn count_entries(
-        &self,
-        tenant_id: &TenantId,
-        filter: AuditQueryFilter,
-    ) -> Result<i64>;
+    async fn count_entries(&self, tenant_id: &TenantId, filter: AuditQueryFilter) -> Result<i64>;
 
     /// Verify the hash chain integrity
     async fn verify_chain(&self, tenant_id: &TenantId) -> Result<ChainVerificationResult>;
@@ -372,7 +395,10 @@ impl ComplianceAuditRepository for PgComplianceAuditRepository {
 
         if filter.event_type.is_some() {
             param_count += 1;
-            query.push_str(&format!(" AND event_type = ${}::compliance_event_type", param_count));
+            query.push_str(&format!(
+                " AND event_type = ${}::compliance_event_type",
+                param_count
+            ));
         }
 
         if filter.actor_id.is_some() {
@@ -401,7 +427,11 @@ impl ComplianceAuditRepository for PgComplianceAuditRepository {
         }
 
         query.push_str(" ORDER BY sequence_number DESC");
-        query.push_str(&format!(" LIMIT ${} OFFSET ${}", param_count + 1, param_count + 2));
+        query.push_str(&format!(
+            " LIMIT ${} OFFSET ${}",
+            param_count + 1,
+            param_count + 2
+        ));
 
         let mut q = sqlx::query_as::<_, ComplianceAuditRow>(&query).bind(&tenant_id.0);
 
@@ -434,20 +464,18 @@ impl ComplianceAuditRepository for PgComplianceAuditRepository {
         Ok(rows.into_iter().map(|r| r.into()).collect())
     }
 
-    async fn count_entries(
-        &self,
-        tenant_id: &TenantId,
-        filter: AuditQueryFilter,
-    ) -> Result<i64> {
-        let mut query = String::from(
-            "SELECT COUNT(*) FROM compliance_audit_log WHERE tenant_id = $1",
-        );
+    async fn count_entries(&self, tenant_id: &TenantId, filter: AuditQueryFilter) -> Result<i64> {
+        let mut query =
+            String::from("SELECT COUNT(*) FROM compliance_audit_log WHERE tenant_id = $1");
 
         let mut param_count = 1;
 
         if filter.event_type.is_some() {
             param_count += 1;
-            query.push_str(&format!(" AND event_type = ${}::compliance_event_type", param_count));
+            query.push_str(&format!(
+                " AND event_type = ${}::compliance_event_type",
+                param_count
+            ));
         }
 
         if filter.actor_id.is_some() {
@@ -642,10 +670,29 @@ mod tests {
 
     #[test]
     fn test_event_type_conversion() {
-        assert_eq!(ComplianceEventType::KycTierChange.as_str(), "kyc_tier_change");
+        assert_eq!(
+            ComplianceEventType::KycTierChange.as_str(),
+            "kyc_tier_change"
+        );
         assert_eq!(
             ComplianceEventType::from_str("kyc_tier_change"),
             Some(ComplianceEventType::KycTierChange)
+        );
+        assert_eq!(
+            ComplianceEventType::TravelRuleDisclosureUpdated.as_str(),
+            "travel_rule_disclosure_updated"
+        );
+        assert_eq!(
+            ComplianceEventType::RescreeningAlertQueued.as_str(),
+            "rescreening_alert_queued"
+        );
+        assert_eq!(
+            ComplianceEventType::from_str("travel_rule_exception_queued"),
+            Some(ComplianceEventType::TravelRuleExceptionQueued)
+        );
+        assert_eq!(
+            ComplianceEventType::from_str("rescreening_restriction_applied"),
+            Some(ComplianceEventType::RescreeningRestrictionApplied)
         );
     }
 

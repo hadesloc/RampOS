@@ -68,9 +68,18 @@ impl FraudAnalytics {
             .into_iter()
             .map(|(date, txns)| {
                 let total = txns.len() as u64;
-                let blocked = txns.iter().filter(|t| t.decision == FraudDecision::Block).count() as u64;
-                let review = txns.iter().filter(|t| t.decision == FraudDecision::Review).count() as u64;
-                let allowed = txns.iter().filter(|t| t.decision == FraudDecision::Allow).count() as u64;
+                let blocked = txns
+                    .iter()
+                    .filter(|t| t.decision == FraudDecision::Block)
+                    .count() as u64;
+                let review = txns
+                    .iter()
+                    .filter(|t| t.decision == FraudDecision::Review)
+                    .count() as u64;
+                let allowed = txns
+                    .iter()
+                    .filter(|t| t.decision == FraudDecision::Allow)
+                    .count() as u64;
 
                 DailyFraudRate {
                     date,
@@ -78,8 +87,16 @@ impl FraudAnalytics {
                     blocked_count: blocked,
                     review_count: review,
                     allowed_count: allowed,
-                    block_rate: if total > 0 { blocked as f64 / total as f64 } else { 0.0 },
-                    review_rate: if total > 0 { review as f64 / total as f64 } else { 0.0 },
+                    block_rate: if total > 0 {
+                        blocked as f64 / total as f64
+                    } else {
+                        0.0
+                    },
+                    review_rate: if total > 0 {
+                        review as f64 / total as f64
+                    } else {
+                        0.0
+                    },
                 }
             })
             .collect();
@@ -89,7 +106,10 @@ impl FraudAnalytics {
     }
 
     /// Get top N risk factors by trigger count
-    pub fn top_risk_factors(transactions: &[ScoredTransaction], top_n: usize) -> Vec<TopRiskFactor> {
+    pub fn top_risk_factors(
+        transactions: &[ScoredTransaction],
+        top_n: usize,
+    ) -> Vec<TopRiskFactor> {
         let mut factor_stats: HashMap<String, (u64, f64)> = HashMap::new();
 
         for txn in transactions {
@@ -214,8 +234,20 @@ mod tests {
 
         let txns = vec![
             make_txn("t1", d1, 10, FraudDecision::Allow, vec![]),
-            make_txn("t2", d1, 50, FraudDecision::Review, vec![("velocity_1h_exceeded", 15)]),
-            make_txn("t3", d1, 90, FraudDecision::Block, vec![("high_value_transaction", 25)]),
+            make_txn(
+                "t2",
+                d1,
+                50,
+                FraudDecision::Review,
+                vec![("velocity_1h_exceeded", 15)],
+            ),
+            make_txn(
+                "t3",
+                d1,
+                90,
+                FraudDecision::Block,
+                vec![("high_value_transaction", 25)],
+            ),
             make_txn("t4", d2, 5, FraudDecision::Allow, vec![]),
             make_txn("t5", d2, 8, FraudDecision::Allow, vec![]),
         ];
@@ -240,17 +272,27 @@ mod tests {
     fn test_top_risk_factors() {
         let d = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
         let txns = vec![
-            make_txn("t1", d, 50, FraudDecision::Review, vec![
-                ("velocity_1h_exceeded", 15),
-                ("new_account", 12),
-            ]),
-            make_txn("t2", d, 40, FraudDecision::Review, vec![
-                ("velocity_1h_exceeded", 15),
-                ("unusual_hour", 8),
-            ]),
-            make_txn("t3", d, 35, FraudDecision::Review, vec![
-                ("velocity_1h_exceeded", 15),
-            ]),
+            make_txn(
+                "t1",
+                d,
+                50,
+                FraudDecision::Review,
+                vec![("velocity_1h_exceeded", 15), ("new_account", 12)],
+            ),
+            make_txn(
+                "t2",
+                d,
+                40,
+                FraudDecision::Review,
+                vec![("velocity_1h_exceeded", 15), ("unusual_hour", 8)],
+            ),
+            make_txn(
+                "t3",
+                d,
+                35,
+                FraudDecision::Review,
+                vec![("velocity_1h_exceeded", 15)],
+            ),
         ];
 
         let top = FraudAnalytics::top_risk_factors(&txns, 2);

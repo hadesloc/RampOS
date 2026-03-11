@@ -176,10 +176,13 @@ async fn setup_portal_test_app() -> PortalTestApp {
         ledger_service,
         onboarding_service,
         user_service,
-        webhook_service: Arc::new(ramp_core::service::webhook::WebhookService::new(
-            Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
-            tenant_repo.clone(),
-        ).unwrap()),
+        webhook_service: Arc::new(
+            ramp_core::service::webhook::WebhookService::new(
+                Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
+                tenant_repo.clone(),
+            )
+            .unwrap(),
+        ),
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
         report_generator,
@@ -197,10 +200,12 @@ async fn setup_portal_test_app() -> PortalTestApp {
             ramp_core::billing::BillingConfig::default(),
             Arc::new(ramp_core::billing::mock::MockBillingDataProvider::new()),
         )),
-        vnst_protocol: Arc::new(ramp_core::stablecoin::vnst_protocol::VnstProtocolService::new(
-            ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
-            Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
-        )),
+        vnst_protocol: Arc::new(
+            ramp_core::stablecoin::vnst_protocol::VnstProtocolService::new(
+                ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
+                Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
+            ),
+        ),
         db_pool: None,
         ctr_service: None,
         ws_state: None,
@@ -555,7 +560,13 @@ async fn test_hmac_tampered_body_rejected() {
     let original_body_str = serde_json::to_string(&original_body).unwrap();
 
     // Sign with original body
-    let signature = compute_hmac_signature("POST", path, &timestamp, &original_body_str, &app.api_secret);
+    let signature = compute_hmac_signature(
+        "POST",
+        path,
+        &timestamp,
+        &original_body_str,
+        &app.api_secret,
+    );
 
     // But send modified body (tampered amount)
     let tampered_body = serde_json::json!({
@@ -599,7 +610,8 @@ async fn test_hmac_expired_timestamp_rejected() {
     });
     let body_str = serde_json::to_string(&body).unwrap();
 
-    let signature = compute_hmac_signature("POST", path, &expired_timestamp, &body_str, &app.api_secret);
+    let signature =
+        compute_hmac_signature("POST", path, &expired_timestamp, &body_str, &app.api_secret);
 
     let request = Request::builder()
         .uri(path)
@@ -685,7 +697,10 @@ async fn test_logout_clears_auth_cookie() {
     let request = Request::builder()
         .uri("/v1/auth/logout")
         .method("POST")
-        .header("Cookie", "auth_token=some-token; refresh_token=some-refresh")
+        .header(
+            "Cookie",
+            "auth_token=some-token; refresh_token=some-refresh",
+        )
         .body(Body::empty())
         .unwrap();
 
@@ -852,7 +867,9 @@ async fn test_portal_intents_requires_auth() {
         .uri("/v1/portal/intents/deposit")
         .method("POST")
         .header("Content-Type", "application/json")
-        .body(Body::from(r#"{"method":"bank_transfer","amount":"100000","currency":"VND"}"#))
+        .body(Body::from(
+            r#"{"method":"bank_transfer","amount":"100000","currency":"VND"}"#,
+        ))
         .unwrap();
 
     let response = app.router.oneshot(request).await.unwrap();

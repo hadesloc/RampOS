@@ -27,7 +27,7 @@ pub mod types;
 mod tests;
 
 use async_graphql::http::GraphiQLSource;
-use async_graphql::Schema;
+use async_graphql::{Context, Result as GqlResult, Schema};
 use axum::{
     extract::{Request, State},
     middleware,
@@ -47,6 +47,23 @@ use subscription::{create_intent_event_channel, SubscriptionRoot};
 
 /// The complete GraphQL schema type
 pub type RampOsSchema = Schema<QueryRoot, MutationRoot, SubscriptionRoot>;
+
+pub(crate) fn require_scoped_tenant(
+    ctx: &Context<'_>,
+    requested_tenant_id: &str,
+) -> GqlResult<ramp_common::types::TenantId> {
+    if let Some(tenant_ctx) = ctx.data_opt::<TenantContext>() {
+        if tenant_ctx.tenant_id.0 != requested_tenant_id {
+            return Err(async_graphql::Error::new(
+                "tenantId does not match the authenticated tenant",
+            ));
+        }
+
+        return Ok(tenant_ctx.tenant_id.clone());
+    }
+
+    Ok(ramp_common::types::TenantId::new(requested_tenant_id))
+}
 
 /// Build the GraphQL schema with all resolvers and context data from AppState.
 pub fn build_schema(state: &AppState) -> RampOsSchema {
@@ -74,18 +91,20 @@ async fn graphql_handler(
     let body_bytes = match axum::body::to_bytes(req.into_body(), usize::MAX).await {
         Ok(bytes) => bytes,
         Err(_) => {
-            let resp = async_graphql::Response::from_errors(vec![
-                async_graphql::ServerError::new("Failed to read request body", None),
-            ]);
+            let resp = async_graphql::Response::from_errors(vec![async_graphql::ServerError::new(
+                "Failed to read request body",
+                None,
+            )]);
             return Json(resp);
         }
     };
     let gql_request: async_graphql::Request = match serde_json::from_slice(&body_bytes) {
         Ok(r) => r,
         Err(_) => {
-            let resp = async_graphql::Response::from_errors(vec![
-                async_graphql::ServerError::new("Invalid GraphQL request JSON", None),
-            ]);
+            let resp = async_graphql::Response::from_errors(vec![async_graphql::ServerError::new(
+                "Invalid GraphQL request JSON",
+                None,
+            )]);
             return Json(resp);
         }
     };
@@ -137,10 +156,7 @@ pub fn graphql_router_with_auth(
     // POST routes require authentication
     let post_routes = Router::new()
         .route("/", axum::routing::post(graphql_handler))
-        .layer(middleware::from_fn_with_state(
-            tenant_repo,
-            auth_middleware,
-        ))
+        .layer(middleware::from_fn_with_state(tenant_repo, auth_middleware))
         .with_state(schema);
 
     // GET routes (playground) do not require authentication

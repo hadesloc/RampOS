@@ -194,12 +194,7 @@ pub struct IntentSpec {
 }
 
 impl IntentSpec {
-    pub fn new(
-        action: IntentAction,
-        from_asset: AssetId,
-        to_asset: AssetId,
-        amount: &str,
-    ) -> Self {
+    pub fn new(action: IntentAction, from_asset: AssetId, to_asset: AssetId, amount: &str) -> Self {
         Self {
             id: format!("intent_{}", Uuid::now_v7()),
             action,
@@ -316,22 +311,52 @@ pub enum ExecutionStepKind {
 impl fmt::Display for ExecutionStepKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Approve { token, chain_id, .. } => {
+            Self::Approve {
+                token, chain_id, ..
+            } => {
                 write!(f, "Approve {} on chain {}", token, chain_id)
             }
-            Self::Swap { from_token, to_token, chain_id, .. } => {
-                write!(f, "Swap {} -> {} on chain {}", from_token, to_token, chain_id)
+            Self::Swap {
+                from_token,
+                to_token,
+                chain_id,
+                ..
+            } => {
+                write!(
+                    f,
+                    "Swap {} -> {} on chain {}",
+                    from_token, to_token, chain_id
+                )
             }
-            Self::Bridge { token, from_chain, to_chain, .. } => {
-                write!(f, "Bridge {} from chain {} to chain {}", token, from_chain, to_chain)
+            Self::Bridge {
+                token,
+                from_chain,
+                to_chain,
+                ..
+            } => {
+                write!(
+                    f,
+                    "Bridge {} from chain {} to chain {}",
+                    token, from_chain, to_chain
+                )
             }
-            Self::Transfer { token, chain_id, .. } => {
+            Self::Transfer {
+                token, chain_id, ..
+            } => {
                 write!(f, "Transfer {} on chain {}", token, chain_id)
             }
-            Self::Stake { token, protocol, chain_id } => {
+            Self::Stake {
+                token,
+                protocol,
+                chain_id,
+            } => {
                 write!(f, "Stake {} in {} on chain {}", token, protocol, chain_id)
             }
-            Self::WaitForBridge { from_chain, to_chain, .. } => {
+            Self::WaitForBridge {
+                from_chain,
+                to_chain,
+                ..
+            } => {
                 write!(f, "Wait for bridge {} -> {}", from_chain, to_chain)
             }
         }
@@ -505,12 +530,7 @@ mod tests {
 
     #[test]
     fn test_intent_spec_validation_zero_amount() {
-        let spec = IntentSpec::new(
-            IntentAction::Swap,
-            AssetId::usdc(1),
-            AssetId::usdt(1),
-            "0",
-        );
+        let spec = IntentSpec::new(IntentAction::Swap, AssetId::usdc(1), AssetId::usdt(1), "0");
 
         assert!(spec.validate().is_err());
     }
@@ -554,24 +574,24 @@ mod tests {
 
     #[test]
     fn test_intent_constraints_expired() {
-        let constraints = IntentConstraints::default()
-            .with_deadline(Utc::now() - Duration::hours(1));
+        let constraints =
+            IntentConstraints::default().with_deadline(Utc::now() - Duration::hours(1));
 
         assert!(constraints.is_expired());
     }
 
     #[test]
     fn test_intent_constraints_not_expired() {
-        let constraints = IntentConstraints::default()
-            .with_deadline(Utc::now() + Duration::hours(1));
+        let constraints =
+            IntentConstraints::default().with_deadline(Utc::now() + Duration::hours(1));
 
         assert!(!constraints.is_expired());
     }
 
     #[test]
     fn test_intent_spec_expired() {
-        let constraints = IntentConstraints::default()
-            .with_deadline(Utc::now() - Duration::hours(1));
+        let constraints =
+            IntentConstraints::default().with_deadline(Utc::now() - Duration::hours(1));
 
         let spec = IntentSpec::new(
             IntentAction::Swap,
@@ -633,8 +653,7 @@ mod tests {
             expires_at: Utc::now() + Duration::hours(1),
         };
 
-        let constraints = IntentConstraints::default()
-            .with_max_gas_usd(Decimal::new(10, 0)); // max $10
+        let constraints = IntentConstraints::default().with_max_gas_usd(Decimal::new(10, 0)); // max $10
 
         assert!(plan.satisfies_constraints(&constraints).is_ok());
     }
@@ -652,8 +671,7 @@ mod tests {
             expires_at: Utc::now() + Duration::hours(1),
         };
 
-        let constraints = IntentConstraints::default()
-            .with_max_gas_usd(Decimal::new(10, 0)); // max $10
+        let constraints = IntentConstraints::default().with_max_gas_usd(Decimal::new(10, 0)); // max $10
 
         assert!(plan.satisfies_constraints(&constraints).is_err());
     }

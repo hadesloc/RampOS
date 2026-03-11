@@ -55,9 +55,10 @@ impl SanctionsProvider for MockSanctionsProvider {
         _dob: Option<&str>,
         _country: Option<&str>,
     ) -> anyhow::Result<SanctionsResult> {
-        let names = self.blocked_names.lock().map_err(|e| {
-            anyhow::anyhow!("Blocked names lock poisoned: {}", e)
-        })?;
+        let names = self
+            .blocked_names
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Blocked names lock poisoned: {}", e))?;
         let normalized_name = name.to_lowercase();
 
         if let Some(score) = names.get(&normalized_name) {
@@ -100,9 +101,10 @@ impl SanctionsProvider for MockSanctionsProvider {
         name: &str,
         _country: Option<&str>,
     ) -> anyhow::Result<SanctionsResult> {
-        let entities = self.blocked_entities.lock().map_err(|e| {
-            anyhow::anyhow!("Blocked entities lock poisoned: {}", e)
-        })?;
+        let entities = self
+            .blocked_entities
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Blocked entities lock poisoned: {}", e))?;
         let normalized_name = name.to_lowercase();
 
         if let Some(score) = entities.get(&normalized_name) {

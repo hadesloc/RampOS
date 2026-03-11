@@ -185,11 +185,7 @@ fn build_version_error(status: StatusCode, code: &str, message: &str) -> Respons
 mod tests {
     use super::*;
     use axum::{
-        body::Body,
-        http::Request as HttpRequest,
-        middleware::from_fn,
-        routing::get,
-        Router,
+        body::Body, http::Request as HttpRequest, middleware::from_fn, routing::get, Router,
     };
     use tower::ServiceExt;
 
@@ -244,9 +240,7 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(resp.into_body(), 4096)
-            .await
-            .unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error"]["code"], "INVALID_VERSION_FORMAT");
     }
@@ -263,9 +257,7 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(resp.into_body(), 4096)
-            .await
-            .unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error"]["code"], "VERSION_TOO_OLD");
     }
@@ -282,9 +274,7 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(resp.into_body(), 4096)
-            .await
-            .unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error"]["code"], "VERSION_UNKNOWN");
     }
@@ -365,9 +355,7 @@ mod tests {
             .unwrap();
 
         let resp = app.oneshot(req).await.unwrap();
-        let body = axum::body::to_bytes(resp.into_body(), 4096)
-            .await
-            .unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         // Error response should include version guidance

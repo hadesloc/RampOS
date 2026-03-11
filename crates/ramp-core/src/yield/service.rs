@@ -6,18 +6,25 @@
 //! - Yield reporting and analytics
 //! - Safety controls and emergency withdrawal
 
-use chrono::{DateTime, Utc};
 use alloy::primitives::{Address, B256, U256};
+use chrono::{DateTime, Utc};
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
 use super::{
-    ProtocolId, ProtocolRegistry, YieldAllocationConfig, YieldOperation,
-    YieldPosition, YieldPositionReport, YieldReport, YieldTransaction,
-    YieldTxStatus,
+    ProtocolId, ProtocolRegistry, YieldAllocationConfig, YieldOperation, YieldPosition,
+    YieldPositionReport, YieldReport, YieldTransaction, YieldTxStatus,
 };
+
+#[derive(Debug, Clone)]
+pub struct TreasuryYieldAllocationSummary {
+    pub protocol: ProtocolId,
+    pub principal: U256,
+    pub current_value: U256,
+    pub accrued_yield: U256,
+}
 
 /// Yield service for managing stablecoin yield across protocols
 pub struct YieldService {
@@ -27,6 +34,10 @@ pub struct YieldService {
     transactions: RwLock<Vec<YieldTransaction>>,
     // Track total allocation per protocol
     allocations: RwLock<HashMap<ProtocolId, U256>>,
+}
+
+pub fn recommended_treasury_buffer_percent(config: &YieldAllocationConfig) -> u8 {
+    100u8.saturating_sub(config.max_allocation_percent)
 }
 
 impl YieldService {
@@ -45,10 +56,37 @@ impl YieldService {
         &self.registry
     }
 
+    pub fn allocation_config(&self) -> &YieldAllocationConfig {
+        &self.config
+    }
+
     /// Get current allocations per protocol
     pub async fn get_allocations(&self) -> Result<HashMap<ProtocolId, U256>> {
         let allocations = self.allocations.read().await;
         Ok(allocations.clone())
+    }
+
+    /// Summarize positions by protocol for bounded treasury reporting.
+    pub fn summarize_positions_for_treasury(
+        positions: &[YieldPosition],
+    ) -> Vec<TreasuryYieldAllocationSummary> {
+        let mut grouped: HashMap<ProtocolId, TreasuryYieldAllocationSummary> = HashMap::new();
+
+        for position in positions {
+            let entry = grouped.entry(position.protocol).or_insert(TreasuryYieldAllocationSummary {
+                protocol: position.protocol,
+                principal: U256::ZERO,
+                current_value: U256::ZERO,
+                accrued_yield: U256::ZERO,
+            });
+            entry.principal += position.principal;
+            entry.current_value += position.current_value;
+            entry.accrued_yield += position.accrued_yield;
+        }
+
+        let mut values = grouped.into_values().collect::<Vec<_>>();
+        values.sort_by(|left, right| right.current_value.cmp(&left.current_value));
+        values
     }
 
     /// Deposit tokens to the best yield protocol
@@ -58,11 +96,10 @@ impl YieldService {
         amount: U256,
     ) -> Result<(ProtocolId, B256)> {
         // Find best protocol by APY
-        let best_protocol = self
-            .registry
-            .best_for_token(token)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("No protocol supports token {:?}", token)))?;
+        let best_protocol =
+            self.registry.best_for_token(token).await?.ok_or_else(|| {
+                Error::NotFound(format!("No protocol supports token {:?}", token))
+            })?;
 
         let protocol_id = best_protocol.protocol_id();
 
@@ -87,7 +124,8 @@ impl YieldService {
         self.add_position(protocol_id, token, amount, apy).await?;
 
         // Record transaction
-        self.record_transaction(tx_hash, protocol_id, token, YieldOperation::Deposit, amount).await?;
+        self.record_transaction(tx_hash, protocol_id, token, YieldOperation::Deposit, amount)
+            .await?;
 
         // Update allocation
         self.update_allocation(protocol_id, amount, true).await?;
@@ -126,7 +164,8 @@ impl YieldService {
         let tx_hash = protocol.deposit(token, amount).await?;
 
         self.add_position(protocol_id, token, amount, apy).await?;
-        self.record_transaction(tx_hash, protocol_id, token, YieldOperation::Deposit, amount).await?;
+        self.record_transaction(tx_hash, protocol_id, token, YieldOperation::Deposit, amount)
+            .await?;
         self.update_allocation(protocol_id, amount, true).await?;
 
         Ok(tx_hash)
@@ -148,8 +187,7 @@ impl YieldService {
         if balance < amount {
             return Err(Error::Business(format!(
                 "Insufficient balance: {} < {}",
-                balance,
-                amount
+                balance, amount
             )));
         }
 
@@ -162,7 +200,14 @@ impl YieldService {
 
         let tx_hash = protocol.withdraw(token, amount).await?;
 
-        self.record_transaction(tx_hash, protocol_id, token, YieldOperation::Withdraw, amount).await?;
+        self.record_transaction(
+            tx_hash,
+            protocol_id,
+            token,
+            YieldOperation::Withdraw,
+            amount,
+        )
+        .await?;
         self.update_allocation(protocol_id, amount, false).await?;
 
         Ok(tx_hash)
@@ -199,7 +244,8 @@ impl YieldService {
             token,
             YieldOperation::EmergencyWithdraw,
             balance,
-        ).await?;
+        )
+        .await?;
         self.update_allocation(protocol_id, balance, false).await?;
 
         Ok(tx_hash)
@@ -253,7 +299,9 @@ impl YieldService {
             );
 
             // Withdraw from lower APY protocol
-            let withdraw_tx = self.withdraw_from_protocol(*protocol_id, token, *balance).await?;
+            let withdraw_tx = self
+                .withdraw_from_protocol(*protocol_id, token, *balance)
+                .await?;
             transactions.push(withdraw_tx);
 
             // Deposit to best protocol
@@ -301,7 +349,9 @@ impl YieldService {
                     "Reallocating: Withdrawing excess"
                 );
 
-                let tx = self.withdraw_from_protocol(*pid, token, withdraw_amount).await?;
+                let tx = self
+                    .withdraw_from_protocol(*pid, token, withdraw_amount)
+                    .await?;
                 tx_hashes.push(tx);
             }
         }
@@ -319,7 +369,9 @@ impl YieldService {
                     "Reallocating: Depositing shortfall"
                 );
 
-                let tx = self.deposit_to_protocol(*pid, token, deposit_amount).await?;
+                let tx = self
+                    .deposit_to_protocol(*pid, token, deposit_amount)
+                    .await?;
                 tx_hashes.push(tx);
             }
         }
@@ -374,10 +426,7 @@ impl YieldService {
 
                 // Get all tokens and emergency withdraw
                 for token in self.get_protocol_tokens(protocol.protocol_id()) {
-                    match self
-                        .emergency_withdraw(protocol.protocol_id(), token)
-                        .await
-                    {
+                    match self.emergency_withdraw(protocol.protocol_id(), token).await {
                         Ok(tx) => emergency_txs.push(tx),
                         Err(e) => {
                             tracing::error!(
@@ -555,7 +604,12 @@ impl YieldService {
         Ok(())
     }
 
-    async fn update_allocation(&self, protocol: ProtocolId, amount: U256, is_deposit: bool) -> Result<()> {
+    async fn update_allocation(
+        &self,
+        protocol: ProtocolId,
+        amount: U256,
+        is_deposit: bool,
+    ) -> Result<()> {
         let mut allocations = self.allocations.write().await;
         let current = allocations.entry(protocol).or_insert(U256::ZERO);
 

@@ -342,26 +342,62 @@ impl SbvSarReport {
         xml.push_str("  <HEADER>\n");
         xml.push_str(&format!("    <REPORT_ID>{}</REPORT_ID>\n", self.report_id));
         xml.push_str(&format!("    <CASE_ID>{}</CASE_ID>\n", self.case_id));
-        xml.push_str(&format!("    <REPORT_DATE>{}</REPORT_DATE>\n", self.report_date.format("%Y-%m-%d")));
-        xml.push_str(&format!("    <SCHEMA_VERSION>{}</SCHEMA_VERSION>\n", self.schema_version));
+        xml.push_str(&format!(
+            "    <REPORT_DATE>{}</REPORT_DATE>\n",
+            self.report_date.format("%Y-%m-%d")
+        ));
+        xml.push_str(&format!(
+            "    <SCHEMA_VERSION>{}</SCHEMA_VERSION>\n",
+            self.schema_version
+        ));
         xml.push_str("  </HEADER>\n");
 
         // Filing institution
         xml.push_str("  <FILING_INSTITUTION>\n");
-        xml.push_str(&format!("    <NAME>{}</NAME>\n", escape_xml(&self.filing_institution_name)));
-        xml.push_str(&format!("    <LICENSE_NO>{}</LICENSE_NO>\n", self.filing_institution_license));
-        xml.push_str(&format!("    <COMPLIANCE_OFFICER>{}</COMPLIANCE_OFFICER>\n", escape_xml(&self.compliance_officer)));
+        xml.push_str(&format!(
+            "    <NAME>{}</NAME>\n",
+            escape_xml(&self.filing_institution_name)
+        ));
+        xml.push_str(&format!(
+            "    <LICENSE_NO>{}</LICENSE_NO>\n",
+            self.filing_institution_license
+        ));
+        xml.push_str(&format!(
+            "    <COMPLIANCE_OFFICER>{}</COMPLIANCE_OFFICER>\n",
+            escape_xml(&self.compliance_officer)
+        ));
         xml.push_str("  </FILING_INSTITUTION>\n");
 
         // Activity classification
         xml.push_str("  <ACTIVITY_CLASSIFICATION>\n");
-        xml.push_str(&format!("    <TYPE_CODE>{}</TYPE_CODE>\n", self.activity_type.to_sbv_code()));
-        xml.push_str(&format!("    <TYPE_DESC>{}</TYPE_DESC>\n", escape_xml(self.activity_type.description())));
-        xml.push_str(&format!("    <RISK_LEVEL>{}</RISK_LEVEL>\n", self.risk_level.to_sbv_code()));
-        xml.push_str(&format!("    <DETECTION_DATE>{}</DETECTION_DATE>\n", self.detection_date.format("%Y-%m-%d")));
-        xml.push_str(&format!("    <PERIOD_START>{}</PERIOD_START>\n", self.activity_period_start.format("%Y-%m-%d")));
-        xml.push_str(&format!("    <PERIOD_END>{}</PERIOD_END>\n", self.activity_period_end.format("%Y-%m-%d")));
-        xml.push_str(&format!("    <TOTAL_AMOUNT_VND>{}</TOTAL_AMOUNT_VND>\n", self.total_amount_involved_vnd));
+        xml.push_str(&format!(
+            "    <TYPE_CODE>{}</TYPE_CODE>\n",
+            self.activity_type.to_sbv_code()
+        ));
+        xml.push_str(&format!(
+            "    <TYPE_DESC>{}</TYPE_DESC>\n",
+            escape_xml(self.activity_type.description())
+        ));
+        xml.push_str(&format!(
+            "    <RISK_LEVEL>{}</RISK_LEVEL>\n",
+            self.risk_level.to_sbv_code()
+        ));
+        xml.push_str(&format!(
+            "    <DETECTION_DATE>{}</DETECTION_DATE>\n",
+            self.detection_date.format("%Y-%m-%d")
+        ));
+        xml.push_str(&format!(
+            "    <PERIOD_START>{}</PERIOD_START>\n",
+            self.activity_period_start.format("%Y-%m-%d")
+        ));
+        xml.push_str(&format!(
+            "    <PERIOD_END>{}</PERIOD_END>\n",
+            self.activity_period_end.format("%Y-%m-%d")
+        ));
+        xml.push_str(&format!(
+            "    <TOTAL_AMOUNT_VND>{}</TOTAL_AMOUNT_VND>\n",
+            self.total_amount_involved_vnd
+        ));
         xml.push_str("  </ACTIVITY_CLASSIFICATION>\n");
 
         // Subjects
@@ -369,11 +405,23 @@ impl SbvSarReport {
         for subject in &self.subjects {
             xml.push_str("    <SUBJECT>\n");
             xml.push_str(&format!("      <TYPE>{:?}</TYPE>\n", subject.subject_type));
-            xml.push_str(&format!("      <FULL_NAME>{}</FULL_NAME>\n", escape_xml(&subject.full_name)));
-            xml.push_str(&format!("      <ID_NUMBER>{}</ID_NUMBER>\n", subject.id_number));
+            xml.push_str(&format!(
+                "      <FULL_NAME>{}</FULL_NAME>\n",
+                escape_xml(&subject.full_name)
+            ));
+            xml.push_str(&format!(
+                "      <ID_NUMBER>{}</ID_NUMBER>\n",
+                subject.id_number
+            ));
             xml.push_str(&format!("      <ID_TYPE>{}</ID_TYPE>\n", subject.id_type));
-            xml.push_str(&format!("      <NATIONALITY>{}</NATIONALITY>\n", subject.nationality));
-            xml.push_str(&format!("      <ADDRESS>{}</ADDRESS>\n", escape_xml(&subject.address)));
+            xml.push_str(&format!(
+                "      <NATIONALITY>{}</NATIONALITY>\n",
+                subject.nationality
+            ));
+            xml.push_str(&format!(
+                "      <ADDRESS>{}</ADDRESS>\n",
+                escape_xml(&subject.address)
+            ));
             if let Some(ref phone) = subject.phone {
                 xml.push_str(&format!("      <PHONE>{}</PHONE>\n", phone));
             }
@@ -398,9 +446,18 @@ impl SbvSarReport {
         for indicator in &self.risk_indicators {
             xml.push_str("    <INDICATOR>\n");
             xml.push_str(&format!("      <CODE>{}</CODE>\n", indicator.code));
-            xml.push_str(&format!("      <DESCRIPTION>{}</DESCRIPTION>\n", escape_xml(&indicator.description)));
-            xml.push_str(&format!("      <SEVERITY>{}</SEVERITY>\n", indicator.severity.to_sbv_code()));
-            xml.push_str(&format!("      <DETECTED_AT>{}</DETECTED_AT>\n", indicator.detected_at.format("%Y-%m-%dT%H:%M:%S")));
+            xml.push_str(&format!(
+                "      <DESCRIPTION>{}</DESCRIPTION>\n",
+                escape_xml(&indicator.description)
+            ));
+            xml.push_str(&format!(
+                "      <SEVERITY>{}</SEVERITY>\n",
+                indicator.severity.to_sbv_code()
+            ));
+            xml.push_str(&format!(
+                "      <DETECTED_AT>{}</DETECTED_AT>\n",
+                indicator.detected_at.format("%Y-%m-%dT%H:%M:%S")
+            ));
             xml.push_str("    </INDICATOR>\n");
         }
         xml.push_str("  </RISK_INDICATORS>\n");
@@ -409,13 +466,34 @@ impl SbvSarReport {
         xml.push_str("  <TRANSACTION_PATTERNS>\n");
         for pattern in &self.transaction_patterns {
             xml.push_str("    <PATTERN>\n");
-            xml.push_str(&format!("      <TYPE>{}</TYPE>\n", escape_xml(&pattern.pattern_type)));
-            xml.push_str(&format!("      <DESCRIPTION>{}</DESCRIPTION>\n", escape_xml(&pattern.description)));
-            xml.push_str(&format!("      <PERIOD_START>{}</PERIOD_START>\n", pattern.period_start.format("%Y-%m-%d")));
-            xml.push_str(&format!("      <PERIOD_END>{}</PERIOD_END>\n", pattern.period_end.format("%Y-%m-%d")));
-            xml.push_str(&format!("      <TRANSACTION_COUNT>{}</TRANSACTION_COUNT>\n", pattern.transaction_count));
-            xml.push_str(&format!("      <TOTAL_AMOUNT_VND>{}</TOTAL_AMOUNT_VND>\n", pattern.total_amount_vnd));
-            xml.push_str(&format!("      <AVERAGE_AMOUNT_VND>{}</AVERAGE_AMOUNT_VND>\n", pattern.average_amount_vnd));
+            xml.push_str(&format!(
+                "      <TYPE>{}</TYPE>\n",
+                escape_xml(&pattern.pattern_type)
+            ));
+            xml.push_str(&format!(
+                "      <DESCRIPTION>{}</DESCRIPTION>\n",
+                escape_xml(&pattern.description)
+            ));
+            xml.push_str(&format!(
+                "      <PERIOD_START>{}</PERIOD_START>\n",
+                pattern.period_start.format("%Y-%m-%d")
+            ));
+            xml.push_str(&format!(
+                "      <PERIOD_END>{}</PERIOD_END>\n",
+                pattern.period_end.format("%Y-%m-%d")
+            ));
+            xml.push_str(&format!(
+                "      <TRANSACTION_COUNT>{}</TRANSACTION_COUNT>\n",
+                pattern.transaction_count
+            ));
+            xml.push_str(&format!(
+                "      <TOTAL_AMOUNT_VND>{}</TOTAL_AMOUNT_VND>\n",
+                pattern.total_amount_vnd
+            ));
+            xml.push_str(&format!(
+                "      <AVERAGE_AMOUNT_VND>{}</AVERAGE_AMOUNT_VND>\n",
+                pattern.average_amount_vnd
+            ));
             xml.push_str("    </PATTERN>\n");
         }
         xml.push_str("  </TRANSACTION_PATTERNS>\n");
@@ -431,7 +509,10 @@ impl SbvSarReport {
         if !self.evidence_references.is_empty() {
             xml.push_str("  <EVIDENCE_REFERENCES>\n");
             for evidence in &self.evidence_references {
-                xml.push_str(&format!("    <REFERENCE>{}</REFERENCE>\n", escape_xml(evidence)));
+                xml.push_str(&format!(
+                    "    <REFERENCE>{}</REFERENCE>\n",
+                    escape_xml(evidence)
+                ));
             }
             xml.push_str("  </EVIDENCE_REFERENCES>\n");
         }
@@ -446,8 +527,7 @@ impl Report for SbvSarReport {
     fn title(&self) -> String {
         format!(
             "SBV Suspicious Activity Report - {} (Case: {})",
-            self.report_id,
-            self.case_id
+            self.report_id, self.case_id
         )
     }
 
@@ -675,12 +755,18 @@ mod tests {
     fn test_suspicious_activity_type_codes() {
         assert_eq!(SuspiciousActivityType::Structuring.to_sbv_code(), "STR");
         assert_eq!(SuspiciousActivityType::MoneyLaundering.to_sbv_code(), "AML");
-        assert_eq!(SuspiciousActivityType::TerroristFinancing.to_sbv_code(), "TFN");
+        assert_eq!(
+            SuspiciousActivityType::TerroristFinancing.to_sbv_code(),
+            "TFN"
+        );
     }
 
     #[test]
     fn test_recommended_action_codes() {
         assert_eq!(RecommendedAction::FreezeAccount.to_sbv_code(), "FA");
-        assert_eq!(RecommendedAction::ReportToLawEnforcement.to_sbv_code(), "RLE");
+        assert_eq!(
+            RecommendedAction::ReportToLawEnforcement.to_sbv_code(),
+            "RLE"
+        );
     }
 }

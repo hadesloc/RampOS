@@ -3,7 +3,7 @@
 //! Implements the authorization tuple format for EIP-7702:
 //! authorization = rlp([chain_id, address, nonce, y_parity, r, s])
 
-use alloy::primitives::{Address, U256, keccak256};
+use alloy::primitives::{keccak256, Address, U256};
 use serde::{Deserialize, Serialize};
 
 use super::{Eip7702Error, Result};
@@ -191,7 +191,11 @@ impl SignedAuthorization {
 
         let rlp = Rlp::new(data);
 
-        if rlp.item_count().map_err(|e| Eip7702Error::EncodingError(e.to_string()))? != 6 {
+        if rlp
+            .item_count()
+            .map_err(|e| Eip7702Error::EncodingError(e.to_string()))?
+            != 6
+        {
             return Err(Eip7702Error::EncodingError(
                 "Invalid authorization RLP: expected 6 items".to_string(),
             ));
@@ -304,7 +308,10 @@ impl AuthorizationList {
 
 /// Trim leading zeros from a byte slice
 fn trim_leading_zeros(bytes: &[u8]) -> &[u8] {
-    let first_nonzero = bytes.iter().position(|&b| b != 0).unwrap_or(bytes.len() - 1);
+    let first_nonzero = bytes
+        .iter()
+        .position(|&b| b != 0)
+        .unwrap_or(bytes.len() - 1);
     &bytes[first_nonzero..]
 }
 

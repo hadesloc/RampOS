@@ -3,16 +3,14 @@
 //! Integration with 1inch API for optimal swap routing across multiple DEXes.
 //! Supports Ethereum, Polygon, BSC, Arbitrum, Optimism, and more.
 
-use async_trait::async_trait;
 use alloy::primitives::{Address, Bytes, U256};
-use ramp_common::{Error, Result};
+use async_trait::async_trait;
 use ramp_common::resilience::ResilientClient;
+use ramp_common::{Error, Result};
 use serde::Deserialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::{
-    AggregatorConfig, DexAggregator, SwapQuote, SwapRoute, SwapTxData, Token,
-};
+use super::{AggregatorConfig, DexAggregator, SwapQuote, SwapRoute, SwapTxData, Token};
 
 /// 1inch API response structures
 #[derive(Debug, Deserialize)]
@@ -153,7 +151,7 @@ impl OneInchAggregator {
             to_amount_min: min_output,
             estimated_gas: U256::from(150_000),
             gas_price: U256::from(30_000_000_000u64), // 30 gwei
-            price_impact_bps: 30, // 0.3%
+            price_impact_bps: 30,                     // 0.3%
             slippage_bps,
             route: vec![SwapRoute {
                 protocol: "Uniswap V3".to_string(),
@@ -231,7 +229,10 @@ impl DexAggregator for OneInchAggregator {
             .as_secs();
 
         // Check for API key from config or environment variable
-        let api_key = self.config.api_key.clone()
+        let api_key = self
+            .config
+            .api_key
+            .clone()
             .or_else(|| std::env::var("ONEINCH_API_KEY").ok());
 
         // Only allow mock fallback in non-production mode.
@@ -245,7 +246,9 @@ impl DexAggregator for OneInchAggregator {
                     });
                 }
 
-                tracing::warn!("ONEINCH_API_KEY not set, returning mock quote in non-production mode");
+                tracing::warn!(
+                    "ONEINCH_API_KEY not set, returning mock quote in non-production mode"
+                );
                 return self.mock_quote(from, to, amount, slippage_bps, chain_id, now);
             }
         };
@@ -285,12 +288,11 @@ impl DexAggregator for OneInchAggregator {
                         });
                     }
 
-                    let quote_resp: OneInchQuoteResponse = response.json().await.map_err(|e| {
-                        Error::ExternalService {
+                    let quote_resp: OneInchQuoteResponse =
+                        response.json().await.map_err(|e| Error::ExternalService {
                             service: "1inch".to_string(),
                             message: format!("Failed to parse quote response: {}", e),
-                        }
-                    })?;
+                        })?;
 
                     Ok(quote_resp)
                 }
@@ -306,7 +308,8 @@ impl DexAggregator for OneInchAggregator {
         let min_output = to_amount - slippage_amount;
 
         // Build route from protocols
-        let route: Vec<SwapRoute> = quote_resp.protocols
+        let route: Vec<SwapRoute> = quote_resp
+            .protocols
             .iter()
             .flat_map(|routes| routes.iter().flat_map(|hops| hops.iter()))
             .map(|proto| SwapRoute {
@@ -367,7 +370,10 @@ impl DexAggregator for OneInchAggregator {
         tracing::debug!(url = %url, "Building 1inch swap tx");
 
         // Check for API key from config or environment variable
-        let api_key = self.config.api_key.clone()
+        let api_key = self
+            .config
+            .api_key
+            .clone()
             .or_else(|| std::env::var("ONEINCH_API_KEY").ok());
 
         // Only allow mock fallback in non-production mode.
@@ -381,7 +387,9 @@ impl DexAggregator for OneInchAggregator {
                     });
                 }
 
-                tracing::warn!("ONEINCH_API_KEY not set, returning mock swap tx in non-production mode");
+                tracing::warn!(
+                    "ONEINCH_API_KEY not set, returning mock swap tx in non-production mode"
+                );
                 return Ok(SwapTxData {
                     to: quote.swap_contract,
                     data: quote.swap_data.clone(),
@@ -430,12 +438,11 @@ impl DexAggregator for OneInchAggregator {
                         });
                     }
 
-                    let swap_resp: OneInchSwapResponse = response.json().await.map_err(|e| {
-                        Error::ExternalService {
+                    let swap_resp: OneInchSwapResponse =
+                        response.json().await.map_err(|e| Error::ExternalService {
                             service: "1inch".to_string(),
                             message: format!("Failed to parse swap response: {}", e),
-                        }
-                    })?;
+                        })?;
 
                     Ok(swap_resp)
                 }
@@ -452,9 +459,8 @@ impl DexAggregator for OneInchAggregator {
         })?;
 
         let tx_data = Bytes::from(
-            hex::decode(swap_resp.tx.data.trim_start_matches("0x")).map_err(|e| {
-                Error::Validation(format!("Invalid tx data hex: {}", e))
-            })?,
+            hex::decode(swap_resp.tx.data.trim_start_matches("0x"))
+                .map_err(|e| Error::Validation(format!("Invalid tx data hex: {}", e)))?,
         );
 
         let value = Self::parse_amount(&swap_resp.tx.value)?;
@@ -475,7 +481,9 @@ mod tests {
     fn usdt_token() -> Token {
         Token::new(
             "USDT",
-            "0xdAC17F958D2ee523a2206206994597C13D831ec7".parse().unwrap(),
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+                .parse()
+                .unwrap(),
             6,
             1,
         )
@@ -484,7 +492,9 @@ mod tests {
     fn usdc_token() -> Token {
         Token::new(
             "USDC",
-            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse().unwrap(),
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+                .parse()
+                .unwrap(),
             6,
             1,
         )

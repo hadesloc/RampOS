@@ -11,8 +11,10 @@ export class RampOSEventEmitter {
   private listeners: Map<WidgetEventType, Set<EventHandler>> = new Map();
   private targetOrigin: string;
 
-  private constructor(targetOrigin = '*') {
-    this.targetOrigin = targetOrigin;
+  private constructor(targetOrigin?: string) {
+    const safeDefaultOrigin =
+      typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+    this.targetOrigin = targetOrigin ?? safeDefaultOrigin;
   }
 
   static getInstance(targetOrigin?: string): RampOSEventEmitter {

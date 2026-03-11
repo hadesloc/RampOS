@@ -185,10 +185,13 @@ async fn test_e2e_payin_flow_via_api() {
         ledger_service,
         onboarding_service,
         user_service,
-        webhook_service: Arc::new(ramp_core::service::webhook::WebhookService::new(
-            Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
-            tenant_repo.clone(),
-        ).unwrap()),
+        webhook_service: Arc::new(
+            ramp_core::service::webhook::WebhookService::new(
+                Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
+                tenant_repo.clone(),
+            )
+            .unwrap(),
+        ),
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
         report_generator,
@@ -211,10 +214,12 @@ async fn test_e2e_payin_flow_via_api() {
             ramp_core::billing::BillingConfig::default(),
             Arc::new(ramp_core::billing::mock::MockBillingDataProvider::new()),
         )),
-        vnst_protocol: Arc::new(ramp_core::stablecoin::vnst_protocol::VnstProtocolService::new(
-            ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
-            Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
-        )),
+        vnst_protocol: Arc::new(
+            ramp_core::stablecoin::vnst_protocol::VnstProtocolService::new(
+                ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
+                Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
+            ),
+        ),
         db_pool: None,
         ctr_service: None,
         ws_state: None,
@@ -346,10 +351,10 @@ async fn test_e2e_payin_flow_via_api() {
 
     assert!(vnd_balance.is_some(), "Should have VND balance");
     let _balance_amount = vnd_balance.unwrap()["balance"].as_str().unwrap(); // API returns Decimal as string usually
-                                                                            // Or it might be number. Let's check implementation.
-                                                                            // LedgerService returns BalanceRow, axum json serialization defaults to number for Decimal unless configured otherwise?
-                                                                            // Rust Decimal usually serializes to String by default in some configs, or Number in others.
-                                                                            // Let's assume it could be either and handle it.
+                                                                             // Or it might be number. Let's check implementation.
+                                                                             // LedgerService returns BalanceRow, axum json serialization defaults to number for Decimal unless configured otherwise?
+                                                                             // Rust Decimal usually serializes to String by default in some configs, or Number in others.
+                                                                             // Let's assume it could be either and handle it.
 
     let balance_decimal: Decimal = if let Some(n) = vnd_balance.unwrap()["balance"].as_f64() {
         Decimal::try_from(n).unwrap_or(Decimal::ZERO) // Simplified

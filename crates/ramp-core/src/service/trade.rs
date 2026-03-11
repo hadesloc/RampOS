@@ -194,7 +194,10 @@ impl TradeService {
                 .await
                 .map_err(|e| Error::Database(e.to_string()))?;
 
-                db_tx.commit().await.map_err(|e| Error::Database(e.to_string()))?;
+                db_tx
+                    .commit()
+                    .await
+                    .map_err(|e| Error::Database(e.to_string()))?;
 
                 self.event_publisher
                     .publish_risk_review_required(&intent_id, &req.tenant_id)
@@ -269,14 +272,21 @@ impl TradeService {
             .await
             .map_err(|e| Error::Database(e.to_string()))?;
 
-            db_tx.commit().await.map_err(|e| Error::Database(e.to_string()))?;
+            db_tx
+                .commit()
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
         } else {
             // Non-atomic fallback (tests / mock repos)
             self.intent_repo.create(&intent_row).await?;
 
             if !compliance_ok {
                 self.intent_repo
-                    .update_state(&req.tenant_id, &intent_id, &TradeState::ComplianceHold.to_string())
+                    .update_state(
+                        &req.tenant_id,
+                        &intent_id,
+                        &TradeState::ComplianceHold.to_string(),
+                    )
                     .await?;
 
                 self.event_publisher
@@ -290,7 +300,11 @@ impl TradeService {
             }
 
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, &TradeState::PostTradeChecked.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &intent_id,
+                    &TradeState::PostTradeChecked.to_string(),
+                )
                 .await?;
 
             let crypto_currency = self.parse_crypto_currency(&req.symbol);
@@ -310,17 +324,29 @@ impl TradeService {
             self.ledger_repo.record_transaction(ledger_tx).await?;
 
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, &TradeState::SettledLedger.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &intent_id,
+                    &TradeState::SettledLedger.to_string(),
+                )
                 .await?;
 
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, &TradeState::Completed.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &intent_id,
+                    &TradeState::Completed.to_string(),
+                )
                 .await?;
         }
 
         // Publish event
         self.event_publisher
-            .publish_intent_status_changed(&intent_id, &req.tenant_id, &TradeState::Completed.to_string())
+            .publish_intent_status_changed(
+                &intent_id,
+                &req.tenant_id,
+                &TradeState::Completed.to_string(),
+            )
             .await?;
 
         info!(

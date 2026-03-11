@@ -27,8 +27,11 @@ use ramp_core::domain::{
     LetsEncryptProvider, RegisterDomainRequest, SslCertificate, SslCertificateInfo,
 };
 
-type DefaultDomainService =
-    DomainService<InMemoryDomainStore, ramp_core::domain::dns::SystemDnsProvider, LetsEncryptProvider>;
+type DefaultDomainService = DomainService<
+    InMemoryDomainStore,
+    ramp_core::domain::dns::SystemDnsProvider,
+    LetsEncryptProvider,
+>;
 
 static DOMAIN_SERVICE: Lazy<Arc<DefaultDomainService>> = Lazy::new(|| {
     let config = DomainServiceConfig {
@@ -81,7 +84,10 @@ fn map_custom_domain(domain: CustomDomain) -> DomainResponse {
         status: domain_status_to_string(domain.status),
         dns_verification_token: domain.dns_verification_token,
         dns_verification_record: domain.dns_verification_record,
-        ssl_certificate: domain.ssl_certificate.as_ref().map(map_ssl_certificate_info),
+        ssl_certificate: domain
+            .ssl_certificate
+            .as_ref()
+            .map(map_ssl_certificate_info),
         health_check_path: domain.health_check_path,
         is_primary: domain.is_primary,
         custom_headers: domain.custom_headers,
@@ -90,7 +96,10 @@ fn map_custom_domain(domain: CustomDomain) -> DomainResponse {
     }
 }
 
-fn map_ssl_provisioning_response(domain_id: String, cert: SslCertificate) -> SslProvisioningResponse {
+fn map_ssl_provisioning_response(
+    domain_id: String,
+    cert: SslCertificate,
+) -> SslProvisioningResponse {
     SslProvisioningResponse {
         domain_id,
         status: "active".to_string(),
@@ -284,7 +293,10 @@ pub async fn get_domain(
         .ok_or_else(|| ApiError::NotFound(format!("Domain {} not found", domain_id)))?;
 
     if domain.tenant_id != tenant_ctx.tenant_id.0 {
-        return Err(ApiError::NotFound(format!("Domain {} not found", domain_id)));
+        return Err(ApiError::NotFound(format!(
+            "Domain {} not found",
+            domain_id
+        )));
     }
 
     Ok(Json(map_custom_domain(domain)))
@@ -327,7 +339,10 @@ pub async fn delete_domain(
         .ok_or_else(|| ApiError::NotFound(format!("Domain {} not found", domain_id)))?;
 
     if existing.tenant_id != tenant_ctx.tenant_id.0 {
-        return Err(ApiError::NotFound(format!("Domain {} not found", domain_id)));
+        return Err(ApiError::NotFound(format!(
+            "Domain {} not found",
+            domain_id
+        )));
     }
 
     domain_service()
@@ -379,7 +394,10 @@ pub async fn verify_dns(
         .ok_or_else(|| ApiError::NotFound(format!("Domain {} not found", domain_id.clone())))?;
 
     if existing.tenant_id != tenant_ctx.tenant_id.0 {
-        return Err(ApiError::NotFound(format!("Domain {} not found", domain_id)));
+        return Err(ApiError::NotFound(format!(
+            "Domain {} not found",
+            domain_id
+        )));
     }
 
     let verification = domain_service()
@@ -454,7 +472,10 @@ pub async fn provision_ssl(
         .ok_or_else(|| ApiError::NotFound(format!("Domain {} not found", domain_id.clone())))?;
 
     if existing.tenant_id != tenant_ctx.tenant_id.0 {
-        return Err(ApiError::NotFound(format!("Domain {} not found", domain_id)));
+        return Err(ApiError::NotFound(format!(
+            "Domain {} not found",
+            domain_id
+        )));
     }
 
     let cert = domain_service()

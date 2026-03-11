@@ -283,9 +283,11 @@ pub async fn rate_limit_middleware(
 
             response.headers_mut().insert(
                 "Retry-After",
-                result.reset_after_seconds.to_string().parse().unwrap_or(
-                    axum::http::HeaderValue::from_static("60")
-                ),
+                result
+                    .reset_after_seconds
+                    .to_string()
+                    .parse()
+                    .unwrap_or(axum::http::HeaderValue::from_static("60")),
             );
             return Ok(response);
         }
@@ -337,25 +339,31 @@ pub async fn rate_limit_middleware(
 
         response.headers_mut().insert(
             "Retry-After",
-            result.reset_after_seconds.to_string().parse().unwrap_or(
-                axum::http::HeaderValue::from_static("60")
-            ),
+            result
+                .reset_after_seconds
+                .to_string()
+                .parse()
+                .unwrap_or(axum::http::HeaderValue::from_static("60")),
         );
-        response
-            .headers_mut()
-            .insert("X-RateLimit-Limit", limit.to_string().parse().unwrap_or(
-                axum::http::HeaderValue::from_static("0")
-            ));
-        response
-            .headers_mut()
-            .insert("X-RateLimit-Remaining", "0".parse().unwrap_or(
-                axum::http::HeaderValue::from_static("0")
-            ));
+        response.headers_mut().insert(
+            "X-RateLimit-Limit",
+            limit
+                .to_string()
+                .parse()
+                .unwrap_or(axum::http::HeaderValue::from_static("0")),
+        );
+        response.headers_mut().insert(
+            "X-RateLimit-Remaining",
+            "0".parse()
+                .unwrap_or(axum::http::HeaderValue::from_static("0")),
+        );
         response.headers_mut().insert(
             "X-RateLimit-Reset",
-            result.reset_after_seconds.to_string().parse().unwrap_or(
-                axum::http::HeaderValue::from_static("0")
-            ),
+            result
+                .reset_after_seconds
+                .to_string()
+                .parse()
+                .unwrap_or(axum::http::HeaderValue::from_static("0")),
         );
         return Ok(response);
     }
@@ -406,22 +414,28 @@ pub async fn rate_limit_middleware(
     let mut response = next.run(req).await;
 
     // Add rate limit headers (using tenant result)
-    response
-        .headers_mut()
-        .insert("X-RateLimit-Limit", limit.to_string().parse().unwrap_or(
-            axum::http::HeaderValue::from_static("0")
-        ));
+    response.headers_mut().insert(
+        "X-RateLimit-Limit",
+        limit
+            .to_string()
+            .parse()
+            .unwrap_or(axum::http::HeaderValue::from_static("0")),
+    );
     response.headers_mut().insert(
         "X-RateLimit-Remaining",
-        result.remaining.to_string().parse().unwrap_or(
-            axum::http::HeaderValue::from_static("0")
-        ),
+        result
+            .remaining
+            .to_string()
+            .parse()
+            .unwrap_or(axum::http::HeaderValue::from_static("0")),
     );
     response.headers_mut().insert(
         "X-RateLimit-Reset",
-        result.reset_after_seconds.to_string().parse().unwrap_or(
-            axum::http::HeaderValue::from_static("0")
-        ),
+        result
+            .reset_after_seconds
+            .to_string()
+            .parse()
+            .unwrap_or(axum::http::HeaderValue::from_static("0")),
     );
 
     Ok(response)
@@ -552,14 +566,23 @@ mod tests {
         let store = MemoryRateLimitStore::new();
         // Route group "api" has limit 2
         for _ in 0..2 {
-            let r = store.check("tenant1:api", 2, 60, "ramp:test").await.unwrap();
+            let r = store
+                .check("tenant1:api", 2, 60, "ramp:test")
+                .await
+                .unwrap();
             assert!(r.allowed);
         }
-        let r = store.check("tenant1:api", 2, 60, "ramp:test").await.unwrap();
+        let r = store
+            .check("tenant1:api", 2, 60, "ramp:test")
+            .await
+            .unwrap();
         assert!(!r.allowed, "api route group should be exhausted");
 
         // Route group "admin" has limit 5, should still work
-        let r = store.check("tenant1:admin", 5, 60, "ramp:test").await.unwrap();
+        let r = store
+            .check("tenant1:admin", 5, 60, "ramp:test")
+            .await
+            .unwrap();
         assert!(r.allowed);
         assert_eq!(r.remaining, 4);
     }
@@ -592,7 +615,10 @@ mod tests {
 
         // The store itself enforces per-key limits
         // Simulate checking with the endpoint-specific limit
-        let r = limiter.check("tenant1:/v1/aa/user-operations", 5).await.unwrap();
+        let r = limiter
+            .check("tenant1:/v1/aa/user-operations", 5)
+            .await
+            .unwrap();
         assert!(r.allowed);
         assert_eq!(r.remaining, 4);
     }
@@ -602,9 +628,17 @@ mod tests {
         let store = MemoryRateLimitStore::new();
         let limit = 10u64;
         for i in 0..limit {
-            let r = store.check("decrement_key", limit, 60, "ramp:test").await.unwrap();
+            let r = store
+                .check("decrement_key", limit, 60, "ramp:test")
+                .await
+                .unwrap();
             assert!(r.allowed);
-            assert_eq!(r.remaining, limit - i - 1, "remaining should decrement at step {}", i);
+            assert_eq!(
+                r.remaining,
+                limit - i - 1,
+                "remaining should decrement at step {}",
+                i
+            );
         }
     }
 
@@ -615,16 +649,28 @@ mod tests {
         let store = MemoryRateLimitStore::new();
         let limit = 1u64;
         // Use up the single allowed request
-        let r = store.check("resp_key", limit, 60, "ramp:test").await.unwrap();
+        let r = store
+            .check("resp_key", limit, 60, "ramp:test")
+            .await
+            .unwrap();
         assert!(r.allowed);
         assert_eq!(r.remaining, 0);
 
         // Next request is denied - verify response fields
-        let denied = store.check("resp_key", limit, 60, "ramp:test").await.unwrap();
+        let denied = store
+            .check("resp_key", limit, 60, "ramp:test")
+            .await
+            .unwrap();
         assert!(!denied.allowed);
         assert_eq!(denied.remaining, 0, "X-RateLimit-Remaining should be 0");
-        assert!(denied.reset_after_seconds > 0, "Retry-After / X-RateLimit-Reset should be > 0");
-        assert!(denied.reset_after_seconds <= 60, "reset should not exceed window");
+        assert!(
+            denied.reset_after_seconds > 0,
+            "Retry-After / X-RateLimit-Reset should be > 0"
+        );
+        assert!(
+            denied.reset_after_seconds <= 60,
+            "reset should not exceed window"
+        );
     }
 
     #[tokio::test]
@@ -659,23 +705,35 @@ mod tests {
 
         // Default tenant gets tenant_max_requests = 100
         let default_limit = 100u64;
-        let r = limiter.check("default_tenant", default_limit).await.unwrap();
+        let r = limiter
+            .check("default_tenant", default_limit)
+            .await
+            .unwrap();
         assert!(r.allowed);
         assert_eq!(r.remaining, 99);
 
         // Premium tenant gets DB-override limit of 500 (from tenant_rate_limits table)
         let db_override_limit = 500u64;
-        let r = limiter.check("premium_tenant", db_override_limit).await.unwrap();
+        let r = limiter
+            .check("premium_tenant", db_override_limit)
+            .await
+            .unwrap();
         assert!(r.allowed);
         assert_eq!(r.remaining, 499);
 
         // Restricted tenant gets DB-override limit of 10
         let restricted_limit = 10u64;
         for _ in 0..restricted_limit {
-            let r = limiter.check("restricted_tenant", restricted_limit).await.unwrap();
+            let r = limiter
+                .check("restricted_tenant", restricted_limit)
+                .await
+                .unwrap();
             assert!(r.allowed);
         }
-        let r = limiter.check("restricted_tenant", restricted_limit).await.unwrap();
+        let r = limiter
+            .check("restricted_tenant", restricted_limit)
+            .await
+            .unwrap();
         assert!(!r.allowed, "restricted tenant should be rate limited at 10");
     }
 }

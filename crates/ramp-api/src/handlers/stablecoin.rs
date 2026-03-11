@@ -5,12 +5,12 @@
 //! - Reserve information
 //! - Peg status
 
+use alloy::primitives::{Address, U256};
 use axum::{
     extract::{Extension, State},
     http::HeaderMap,
     Json,
 };
-use alloy::primitives::{Address, U256};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::json;

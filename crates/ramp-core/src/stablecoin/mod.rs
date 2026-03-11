@@ -21,8 +21,8 @@ pub use vnst_protocol::{
 
 pub use vnst_protocol::MockVnstProtocolDataProvider;
 
-use async_trait::async_trait;
 use alloy::primitives::{Address, U256};
+use async_trait::async_trait;
 use ramp_common::{types::TenantId, Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -92,12 +92,7 @@ pub trait Stablecoin: Send + Sync {
     ) -> Result<TxHash>;
 
     /// Check allowance for a spender
-    async fn allowance(
-        &self,
-        chain_id: u64,
-        owner: Address,
-        spender: Address,
-    ) -> Result<U256>;
+    async fn allowance(&self, chain_id: u64, owner: Address, spender: Address) -> Result<U256>;
 
     /// Approve spender to use tokens
     async fn approve(
@@ -133,7 +128,7 @@ impl Default for TenantTokenConfig {
             min_withdraw: U256::from(1_000_000u64),
             max_withdraw: None,
             deposit_fee_bps: 0,
-            withdraw_fee_bps: 10, // 0.1%
+            withdraw_fee_bps: 10,                    // 0.1%
             allowed_chains: vec![1, 137, 56, 42161], // ETH, Polygon, BSC, Arbitrum
         }
     }
@@ -212,10 +207,7 @@ impl StablecoinRegistry {
         self.tokens
             .values()
             .filter(|e| {
-                e.global_enabled
-                    && e.tenant_configs
-                        .get(tenant_id)
-                        .map_or(true, |c| c.enabled)
+                e.global_enabled && e.tenant_configs.get(tenant_id).map_or(true, |c| c.enabled)
             })
             .map(|e| e.token.clone())
             .collect()
@@ -272,10 +264,7 @@ impl StablecoinRegistry {
 
     /// Get contract address for a token on a chain
     pub fn get_contract_address(&self, symbol: &str, chain_id: u64) -> Option<Address> {
-        self.tokens
-            .get(symbol)?
-            .token
-            .contract_address(chain_id)
+        self.tokens.get(symbol)?.token.contract_address(chain_id)
     }
 
     /// Validate deposit for a tenant
@@ -292,7 +281,10 @@ impl StablecoinRegistry {
             .ok_or_else(|| Error::Validation(format!("Token {} not found", symbol)))?;
 
         if !entry.global_enabled {
-            return Err(Error::Validation(format!("Token {} is globally disabled", symbol)));
+            return Err(Error::Validation(format!(
+                "Token {} is globally disabled",
+                symbol
+            )));
         }
 
         if !entry.token.is_supported_on_chain(chain_id) {
@@ -351,7 +343,10 @@ impl StablecoinRegistry {
             .ok_or_else(|| Error::Validation(format!("Token {} not found", symbol)))?;
 
         if !entry.global_enabled {
-            return Err(Error::Validation(format!("Token {} is globally disabled", symbol)));
+            return Err(Error::Validation(format!(
+                "Token {} is globally disabled",
+                symbol
+            )));
         }
 
         if !entry.token.is_supported_on_chain(chain_id) {

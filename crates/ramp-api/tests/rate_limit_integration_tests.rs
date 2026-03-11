@@ -4,14 +4,7 @@
 //! on an actual Axum router, checking HTTP response headers, status codes,
 //! per-tenant isolation, endpoint-specific limits, and window resets.
 
-use axum::{
-    body::Body,
-    extract::Request,
-    http::StatusCode,
-    middleware,
-    routing::get,
-    Router,
-};
+use axum::{body::Body, extract::Request, http::StatusCode, middleware, routing::get, Router};
 use ramp_api::middleware::{
     rate_limit::{rate_limit_middleware, RateLimitConfig, RateLimiter},
     tenant::{TenantContext, TenantTier},
@@ -60,13 +53,15 @@ fn build_test_app_with_tenant(
             limiter.clone(),
             rate_limit_middleware,
         ))
-        .layer(middleware::from_fn(move |mut req: Request, next: middleware::Next| {
-            let ctx = tenant_ctx.clone();
-            async move {
-                req.extensions_mut().insert(ctx);
-                Ok::<_, StatusCode>(next.run(req).await)
-            }
-        }))
+        .layer(middleware::from_fn(
+            move |mut req: Request, next: middleware::Next| {
+                let ctx = tenant_ctx.clone();
+                async move {
+                    req.extensions_mut().insert(ctx);
+                    Ok::<_, StatusCode>(next.run(req).await)
+                }
+            },
+        ))
 }
 
 // =============================================================================
@@ -269,7 +264,7 @@ async fn test_rate_limit_per_tenant_isolation() {
 async fn test_rate_limit_different_route_groups() {
     let mut endpoint_limits = HashMap::new();
     endpoint_limits.insert("/test".to_string(), 2u64); // /test has limit of 2
-    // /other has no endpoint limit (uses tenant limit)
+                                                       // /other has no endpoint limit (uses tenant limit)
 
     let config = RateLimitConfig {
         global_max_requests: 1000,
@@ -648,13 +643,15 @@ fn build_tiered_app_with_tenant(
             tiered_state.clone(),
             tiered_rate_limit_middleware,
         ))
-        .layer(middleware::from_fn(move |mut req: Request, next: middleware::Next| {
-            let ctx = tenant_ctx.clone();
-            async move {
-                req.extensions_mut().insert(ctx);
-                Ok::<_, StatusCode>(next.run(req).await)
-            }
-        }))
+        .layer(middleware::from_fn(
+            move |mut req: Request, next: middleware::Next| {
+                let ctx = tenant_ctx.clone();
+                async move {
+                    req.extensions_mut().insert(ctx);
+                    Ok::<_, StatusCode>(next.run(req).await)
+                }
+            },
+        ))
 }
 
 #[tokio::test]
@@ -804,13 +801,15 @@ async fn test_tiered_rate_limit_429_with_headers() {
             tiered_state.clone(),
             tiered_rate_limit_middleware,
         ))
-        .layer(middleware::from_fn(move |mut req: Request, next: middleware::Next| {
-            let ctx = tenant_ctx.clone();
-            async move {
-                req.extensions_mut().insert(ctx);
-                Ok::<_, StatusCode>(next.run(req).await)
-            }
-        }));
+        .layer(middleware::from_fn(
+            move |mut req: Request, next: middleware::Next| {
+                let ctx = tenant_ctx.clone();
+                async move {
+                    req.extensions_mut().insert(ctx);
+                    Ok::<_, StatusCode>(next.run(req).await)
+                }
+            },
+        ));
 
     // Exhaust global limit (2 requests)
     for _ in 0..2 {
@@ -962,12 +961,19 @@ async fn test_429_response_contains_all_required_headers() {
         .get("X-RateLimit-Limit")
         .expect("429 must have X-RateLimit-Limit");
     let rl_limit_val: u64 = rl_limit.to_str().unwrap().parse().unwrap();
-    assert_eq!(rl_limit_val, limit, "X-RateLimit-Limit should match configured limit");
+    assert_eq!(
+        rl_limit_val, limit,
+        "X-RateLimit-Limit should match configured limit"
+    );
 
     let rl_remaining = headers
         .get("X-RateLimit-Remaining")
         .expect("429 must have X-RateLimit-Remaining");
-    assert_eq!(rl_remaining.to_str().unwrap(), "0", "X-RateLimit-Remaining must be 0 on 429");
+    assert_eq!(
+        rl_remaining.to_str().unwrap(),
+        "0",
+        "X-RateLimit-Remaining must be 0 on 429"
+    );
 
     let rl_reset = headers
         .get("X-RateLimit-Reset")
@@ -1196,8 +1202,7 @@ async fn test_tiered_vip_higher_capacity_than_standard() {
         key_prefix: "test:tiered_cap_std".to_string(),
         endpoint_limits: HashMap::new(),
     };
-    let app_std =
-        build_tiered_app_with_tenant(config_std, "tenant_regular", TenantTier::Standard);
+    let app_std = build_tiered_app_with_tenant(config_std, "tenant_regular", TenantTier::Standard);
 
     // VIP tenant: limit 5000 (tenant_vip_1 special override)
     let config_vip = RateLimitConfig {
@@ -1207,8 +1212,7 @@ async fn test_tiered_vip_higher_capacity_than_standard() {
         key_prefix: "test:tiered_cap_vip".to_string(),
         endpoint_limits: HashMap::new(),
     };
-    let app_vip =
-        build_tiered_app_with_tenant(config_vip, "tenant_vip_1", TenantTier::Enterprise);
+    let app_vip = build_tiered_app_with_tenant(config_vip, "tenant_vip_1", TenantTier::Enterprise);
 
     // Check Standard tenant's limit header
     let request = Request::builder()

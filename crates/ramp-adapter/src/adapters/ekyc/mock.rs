@@ -5,17 +5,17 @@
 
 use async_trait::async_trait;
 use chrono::Utc;
-use rand::Rng;
 use ramp_common::Result;
+use rand::Rng;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
 use super::{
-    AddressVerification, AddressVerificationRequest, EkycProvider, EkycProviderConfig,
-    FaceMatch, FaceMatchConfidence, FaceMatchRequest, IdDocumentType, IdVerification,
-    IdVerificationRequest, LivenessCheckType, LivenessRequest, LivenessResult, SpoofingType,
+    AddressVerification, AddressVerificationRequest, EkycProvider, EkycProviderConfig, FaceMatch,
+    FaceMatchConfidence, FaceMatchRequest, IdDocumentType, IdVerification, IdVerificationRequest,
+    LivenessCheckType, LivenessRequest, LivenessResult, SpoofingType,
 };
 
 /// Mock eKYC behavior configuration
@@ -124,10 +124,16 @@ impl MockEkycProvider {
                 data.insert("gender".to_string(), "Nam".to_string());
                 data.insert("nationality".to_string(), "Việt Nam".to_string());
                 data.insert("place_of_origin".to_string(), "Hà Nội".to_string());
-                data.insert("place_of_residence".to_string(), "123 Đường ABC, Quận Hoàn Kiếm, Hà Nội".to_string());
+                data.insert(
+                    "place_of_residence".to_string(),
+                    "123 Đường ABC, Quận Hoàn Kiếm, Hà Nội".to_string(),
+                );
                 data.insert("expiry_date".to_string(), "01/01/2035".to_string());
                 data.insert("issue_date".to_string(), "01/01/2020".to_string());
-                data.insert("issuing_authority".to_string(), "Cục Cảnh sát ĐKQL cư trú và DLQG về dân cư".to_string());
+                data.insert(
+                    "issuing_authority".to_string(),
+                    "Cục Cảnh sát ĐKQL cư trú và DLQG về dân cư".to_string(),
+                );
             }
             IdDocumentType::Passport => {
                 data.insert("full_name".to_string(), "NGUYEN VAN A".to_string());
@@ -137,7 +143,10 @@ impl MockEkycProvider {
                 data.insert("nationality".to_string(), "VNM".to_string());
                 data.insert("expiry_date".to_string(), "01/01/2030".to_string());
                 data.insert("issue_date".to_string(), "01/01/2020".to_string());
-                data.insert("issuing_authority".to_string(), "Immigration Department".to_string());
+                data.insert(
+                    "issuing_authority".to_string(),
+                    "Immigration Department".to_string(),
+                );
             }
             IdDocumentType::DriverLicense => {
                 data.insert("full_name".to_string(), "NGUYEN VAN A".to_string());
@@ -154,7 +163,11 @@ impl MockEkycProvider {
 
     /// Get stored ID verification result
     pub async fn get_id_verification(&self, verification_id: &str) -> Option<IdVerification> {
-        self.id_verifications.read().await.get(verification_id).cloned()
+        self.id_verifications
+            .read()
+            .await
+            .get(verification_id)
+            .cloned()
     }
 
     /// Get stored face match result
@@ -169,7 +182,10 @@ impl MockEkycProvider {
 
     /// Set custom ID verification result (for testing)
     pub async fn set_id_verification(&self, verification_id: String, result: IdVerification) {
-        self.id_verifications.write().await.insert(verification_id, result);
+        self.id_verifications
+            .write()
+            .await
+            .insert(verification_id, result);
     }
 
     /// Set custom face match result (for testing)
@@ -179,7 +195,10 @@ impl MockEkycProvider {
 
     /// Set custom liveness result (for testing)
     pub async fn set_liveness_result(&self, liveness_id: String, result: LivenessResult) {
-        self.liveness_results.write().await.insert(liveness_id, result);
+        self.liveness_results
+            .write()
+            .await
+            .insert(liveness_id, result);
     }
 }
 
@@ -223,7 +242,8 @@ impl EkycProvider for MockEkycProvider {
         } else if self.behavior.approved_ids.contains(&id_number) {
             (true, None)
         } else {
-            let success = rand::thread_rng().gen::<f64>() < self.behavior.id_verification_success_rate;
+            let success =
+                rand::thread_rng().gen::<f64>() < self.behavior.id_verification_success_rate;
             if success {
                 (true, None)
             } else {
@@ -234,7 +254,14 @@ impl EkycProvider for MockEkycProvider {
         let confidence_score = if success { 0.95 } else { 0.3 };
         let mut field_confidences = HashMap::new();
         for key in ocr_data.keys() {
-            field_confidences.insert(key.clone(), if success { 0.90 + rand::thread_rng().gen::<f64>() * 0.1 } else { 0.5 });
+            field_confidences.insert(
+                key.clone(),
+                if success {
+                    0.90 + rand::thread_rng().gen::<f64>() * 0.1
+                } else {
+                    0.5
+                },
+            );
         }
 
         let result = IdVerification {
@@ -262,7 +289,10 @@ impl EkycProvider for MockEkycProvider {
         };
 
         // Store for later retrieval
-        self.id_verifications.write().await.insert(verification_id.clone(), result.clone());
+        self.id_verifications
+            .write()
+            .await
+            .insert(verification_id.clone(), result.clone());
 
         info!(
             verification_id = %verification_id,
@@ -303,7 +333,11 @@ impl EkycProvider for MockEkycProvider {
             is_match,
             similarity_score,
             confidence,
-            error_message: if is_match { None } else { Some("Face similarity below threshold".to_string()) },
+            error_message: if is_match {
+                None
+            } else {
+                Some("Face similarity below threshold".to_string())
+            },
             raw_response: Some(serde_json::json!({
                 "mock": true,
                 "similarity": similarity_score,
@@ -312,7 +346,10 @@ impl EkycProvider for MockEkycProvider {
         };
 
         // Store for later retrieval
-        self.face_matches.write().await.insert(match_id.clone(), result.clone());
+        self.face_matches
+            .write()
+            .await
+            .insert(match_id.clone(), result.clone());
 
         info!(
             match_id = %match_id,
@@ -384,7 +421,10 @@ impl EkycProvider for MockEkycProvider {
         };
 
         // Store for later retrieval
-        self.liveness_results.write().await.insert(liveness_id.clone(), result.clone());
+        self.liveness_results
+            .write()
+            .await
+            .insert(liveness_id.clone(), result.clone());
 
         info!(
             liveness_id = %liveness_id,
@@ -396,7 +436,10 @@ impl EkycProvider for MockEkycProvider {
         Ok(result)
     }
 
-    async fn verify_address(&self, request: AddressVerificationRequest) -> Result<super::AddressVerification> {
+    async fn verify_address(
+        &self,
+        request: AddressVerificationRequest,
+    ) -> Result<super::AddressVerification> {
         self.maybe_delay().await;
 
         if self.should_fail() {
@@ -430,7 +473,11 @@ impl EkycProvider for MockEkycProvider {
             district_code: request.district.as_ref().map(|_| "001".to_string()),
             ward_code: request.ward.as_ref().map(|_| "00001".to_string()),
             confidence_score,
-            error_message: if is_valid { None } else { Some("Invalid address format".to_string()) },
+            error_message: if is_valid {
+                None
+            } else {
+                Some("Invalid address format".to_string())
+            },
             raw_response: Some(serde_json::json!({
                 "mock": true,
                 "original_address": request.address,

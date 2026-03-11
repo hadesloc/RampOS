@@ -72,10 +72,7 @@ impl VersionTransformer for V20260201ToV20260301 {
 
             // Add default currency if not present
             if !obj.contains_key("currency") {
-                obj.insert(
-                    "currency".to_string(),
-                    Value::String("VND".to_string()),
-                );
+                obj.insert("currency".to_string(), Value::String("VND".to_string()));
             }
         }
         Ok(payload)
@@ -291,14 +288,10 @@ mod tests {
         let v = ApiVersion::parse("2026-03-01").unwrap();
 
         let input = json!({ "foo": "bar" });
-        let output = registry
-            .upgrade_request(&v, &v, input.clone())
-            .unwrap();
+        let output = registry.upgrade_request(&v, &v, input.clone()).unwrap();
         assert_eq!(output, input);
 
-        let output = registry
-            .downgrade_response(&v, &v, input.clone())
-            .unwrap();
+        let output = registry.downgrade_response(&v, &v, input.clone()).unwrap();
         assert_eq!(output, input);
     }
 
@@ -310,9 +303,7 @@ mod tests {
 
         let input = json!({ "foo": "bar" });
         // Client is newer than target - no transform needed
-        let output = registry
-            .upgrade_request(&v2, &v1, input.clone())
-            .unwrap();
+        let output = registry.upgrade_request(&v2, &v1, input.clone()).unwrap();
         assert_eq!(output, input);
     }
 

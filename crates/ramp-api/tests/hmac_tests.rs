@@ -6,9 +6,9 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use http_body_util::BodyExt;
 use chrono::Utc;
 use hmac::{Hmac, Mac};
+use http_body_util::BodyExt;
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{
@@ -129,10 +129,13 @@ async fn setup_app_with_hmac() -> TestAppWithHmac {
         ledger_service,
         onboarding_service,
         user_service,
-        webhook_service: Arc::new(ramp_core::service::webhook::WebhookService::new(
-            Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
-            tenant_repo.clone(),
-        ).unwrap()),
+        webhook_service: Arc::new(
+            ramp_core::service::webhook::WebhookService::new(
+                Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
+                tenant_repo.clone(),
+            )
+            .unwrap(),
+        ),
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
         report_generator,

@@ -82,7 +82,9 @@ impl OnfidoKycProvider {
         let file_part = reqwest::multipart::Part::bytes(file_data.to_vec())
             .file_name(filename.to_string())
             .mime_str("application/octet-stream")
-            .map_err(|e| ramp_common::Error::Internal(format!("Failed to create multipart part: {}", e)))?;
+            .map_err(|e| {
+                ramp_common::Error::Internal(format!("Failed to create multipart part: {}", e))
+            })?;
 
         let form = reqwest::multipart::Form::new()
             .text("applicant_id", applicant_id.to_string())
@@ -96,7 +98,9 @@ impl OnfidoKycProvider {
             .multipart(form)
             .send()
             .await
-            .map_err(|e| ramp_common::Error::Internal(format!("Onfido upload document failed: {}", e)))?;
+            .map_err(|e| {
+                ramp_common::Error::Internal(format!("Onfido upload document failed: {}", e))
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -112,19 +116,15 @@ impl OnfidoKycProvider {
             id: String,
         }
 
-        let doc: DocumentResponse = response
-            .json()
-            .await
-            .map_err(|e| ramp_common::Error::Internal(format!("Failed to parse Onfido document response: {}", e)))?;
+        let doc: DocumentResponse = response.json().await.map_err(|e| {
+            ramp_common::Error::Internal(format!("Failed to parse Onfido document response: {}", e))
+        })?;
 
         Ok(doc.id)
     }
 
     /// Create an applicant in Onfido
-    async fn create_applicant(
-        &self,
-        request: &KycVerificationRequest,
-    ) -> Result<String> {
+    async fn create_applicant(&self, request: &KycVerificationRequest) -> Result<String> {
         let parts: Vec<&str> = request.full_name.splitn(2, ' ').collect();
         let first_name = parts.first().unwrap_or(&"").to_string();
         let last_name = if parts.len() > 1 {
@@ -201,7 +201,10 @@ impl OnfidoKycProvider {
     async fn create_check(&self, applicant_id: &str, tier: KycTier) -> Result<CheckResponse> {
         let report_names = match tier {
             KycTier::Tier0 => vec!["document".to_string()],
-            KycTier::Tier1 => vec!["document".to_string(), "facial_similarity_photo".to_string()],
+            KycTier::Tier1 => vec![
+                "document".to_string(),
+                "facial_similarity_photo".to_string(),
+            ],
             KycTier::Tier2 | KycTier::Tier3 => vec![
                 "document".to_string(),
                 "facial_similarity_photo".to_string(),
@@ -287,10 +290,7 @@ impl OnfidoKycProvider {
                         .send()
                         .await
                         .map_err(|e| {
-                            ramp_common::Error::Internal(format!(
-                                "Onfido get check failed: {}",
-                                e
-                            ))
+                            ramp_common::Error::Internal(format!("Onfido get check failed: {}", e))
                         })?;
 
                     if !response.status().is_success() {
@@ -326,13 +326,22 @@ impl OnfidoKycProvider {
         match check.status.as_str() {
             "complete" => match check.result.as_deref() {
                 Some("clear") => (KycStatus::Approved, None),
-                Some("consider") => (KycStatus::Pending, Some("Manual review required".to_string())),
-                Some(other) => (KycStatus::Rejected, Some(format!("Check result: {}", other))),
+                Some("consider") => (
+                    KycStatus::Pending,
+                    Some("Manual review required".to_string()),
+                ),
+                Some(other) => (
+                    KycStatus::Rejected,
+                    Some(format!("Check result: {}", other)),
+                ),
                 None => (KycStatus::Rejected, Some("No result returned".to_string())),
             },
             "in_progress" | "awaiting_applicant" => (KycStatus::InProgress, None),
             "withdrawn" => (KycStatus::Rejected, Some("Check was withdrawn".to_string())),
-            other => (KycStatus::Pending, Some(format!("Unknown status: {}", other))),
+            other => (
+                KycStatus::Pending,
+                Some(format!("Unknown status: {}", other)),
+            ),
         }
     }
 }
@@ -447,7 +456,10 @@ mod tests {
             .await;
 
         let provider = OnfidoKycProvider::new("test-key".to_string(), Some(mock_server.uri()));
-        let result = provider.verify(&test_request()).await.expect("verify failed");
+        let result = provider
+            .verify(&test_request())
+            .await
+            .expect("verify failed");
 
         assert_eq!(result.status, KycStatus::Approved);
         assert_eq!(result.verified_tier, Some(KycTier::Tier1));
@@ -478,7 +490,10 @@ mod tests {
             .await;
 
         let provider = OnfidoKycProvider::new("test-key".to_string(), Some(mock_server.uri()));
-        let result = provider.verify(&test_request()).await.expect("verify failed");
+        let result = provider
+            .verify(&test_request())
+            .await
+            .expect("verify failed");
 
         assert_eq!(result.status, KycStatus::Rejected);
         assert!(result.rejection_reason.is_some());
@@ -508,7 +523,10 @@ mod tests {
             .await;
 
         let provider = OnfidoKycProvider::new("test-key".to_string(), Some(mock_server.uri()));
-        let result = provider.verify(&test_request()).await.expect("verify failed");
+        let result = provider
+            .verify(&test_request())
+            .await
+            .expect("verify failed");
 
         assert_eq!(result.status, KycStatus::InProgress);
         assert!(result.verified_tier.is_none());
@@ -560,15 +578,19 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/documents"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"id": "doc-001"})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": "doc-001"})),
             )
             .mount(&mock_server)
             .await;
 
         let provider = OnfidoKycProvider::new("test-key".to_string(), Some(mock_server.uri()));
         let result = provider
-            .upload_document("applicant-123", "passport", b"fake-pdf-data", "passport.pdf")
+            .upload_document(
+                "applicant-123",
+                "passport",
+                b"fake-pdf-data",
+                "passport.pdf",
+            )
             .await
             .expect("upload_document failed");
 
@@ -599,10 +621,16 @@ mod tests {
             .await;
 
         let provider = OnfidoKycProvider::new("test-key".to_string(), Some(mock_server.uri()));
-        let result = provider.verify(&test_request()).await.expect("verify failed");
+        let result = provider
+            .verify(&test_request())
+            .await
+            .expect("verify failed");
 
         assert_eq!(result.status, KycStatus::Pending);
-        assert_eq!(result.rejection_reason, Some("Manual review required".to_string()));
+        assert_eq!(
+            result.rejection_reason,
+            Some("Manual review required".to_string())
+        );
         assert!(result.verified_tier.is_none());
     }
 

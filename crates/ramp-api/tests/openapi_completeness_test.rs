@@ -8,7 +8,9 @@ use utoipa::OpenApi;
 
 fn get_spec() -> serde_json::Value {
     let doc = ApiDoc::openapi();
-    let json_str = doc.to_json().expect("OpenAPI spec should serialize to JSON");
+    let json_str = doc
+        .to_json()
+        .expect("OpenAPI spec should serialize to JSON");
     serde_json::from_str(&json_str).expect("OpenAPI JSON should parse as serde_json::Value")
 }
 
@@ -34,7 +36,11 @@ fn spec_has_info_fields() {
     let info = spec.get("info").expect("Spec must have 'info' section");
 
     let title = info.get("title").and_then(|v| v.as_str());
-    assert_eq!(title, Some("RampOS API"), "info.title should be 'RampOS API'");
+    assert_eq!(
+        title,
+        Some("RampOS API"),
+        "info.title should be 'RampOS API'"
+    );
 
     let version = info.get("version").and_then(|v| v.as_str());
     assert_eq!(version, Some("1.0.0"), "info.version should be '1.0.0'");
@@ -90,9 +96,7 @@ fn spec_has_servers_defined() {
 #[test]
 fn spec_has_security_schemes() {
     let spec = get_spec();
-    let components = spec
-        .get("components")
-        .expect("Spec must have 'components'");
+    let components = spec.get("components").expect("Spec must have 'components'");
     let security_schemes = components
         .get("securitySchemes")
         .expect("components must have 'securitySchemes'");
@@ -173,9 +177,7 @@ fn spec_has_reasonable_path_count() {
 #[test]
 fn spec_has_component_schemas() {
     let spec = get_spec();
-    let components = spec
-        .get("components")
-        .expect("Spec must have 'components'");
+    let components = spec.get("components").expect("Spec must have 'components'");
     let schemas = components
         .get("schemas")
         .and_then(|v| v.as_object())
@@ -286,9 +288,7 @@ fn spec_documents_error_response_schemas() {
 #[test]
 fn spec_endpoints_have_response_schemas() {
     let spec = get_spec();
-    let paths = spec["paths"]
-        .as_object()
-        .expect("Spec must have 'paths'");
+    let paths = spec["paths"].as_object().expect("Spec must have 'paths'");
 
     let http_methods = ["get", "post", "put", "patch", "delete"];
 
@@ -363,7 +363,10 @@ fn spec_tags_have_descriptions() {
         .expect("Spec must have 'tags' array");
 
     for tag in tags {
-        let name = tag.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let name = tag
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
         let description = tag.get("description").and_then(|v| v.as_str());
         assert!(
             description.is_some() && !description.unwrap().is_empty(),
@@ -435,7 +438,10 @@ fn spec_servers_have_descriptions() {
         .expect("Spec must have 'servers' array");
 
     for server in servers {
-        let url = server.get("url").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let url = server
+            .get("url")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
         let description = server.get("description").and_then(|v| v.as_str());
         assert!(
             description.is_some() && !description.unwrap().is_empty(),
@@ -471,9 +477,7 @@ fn spec_has_production_server() {
 #[test]
 fn spec_all_operations_have_tags() {
     let spec = get_spec();
-    let paths = spec["paths"]
-        .as_object()
-        .expect("Spec must have 'paths'");
+    let paths = spec["paths"].as_object().expect("Spec must have 'paths'");
 
     let http_methods = ["get", "post", "put", "patch", "delete"];
 
@@ -496,9 +500,7 @@ fn spec_all_operations_have_tags() {
 #[test]
 fn spec_post_operations_have_request_body() {
     let spec = get_spec();
-    let paths = spec["paths"]
-        .as_object()
-        .expect("Spec must have 'paths'");
+    let paths = spec["paths"].as_object().expect("Spec must have 'paths'");
 
     // Action endpoints that trigger operations without a request body
     let action_endpoints: Vec<&str> = vec![
@@ -525,9 +527,7 @@ fn spec_post_operations_have_request_body() {
 #[test]
 fn spec_operation_ids_are_unique() {
     let spec = get_spec();
-    let paths = spec["paths"]
-        .as_object()
-        .expect("Spec must have 'paths'");
+    let paths = spec["paths"].as_object().expect("Spec must have 'paths'");
 
     let http_methods = ["get", "post", "put", "patch", "delete"];
     let mut seen_ids: Vec<String> = Vec::new();
@@ -669,9 +669,7 @@ fn spec_schema_properties_have_types() {
 #[test]
 fn spec_success_responses_have_content_type() {
     let spec = get_spec();
-    let paths = spec["paths"]
-        .as_object()
-        .expect("Spec must have 'paths'");
+    let paths = spec["paths"].as_object().expect("Spec must have 'paths'");
 
     let http_methods = ["get", "post", "put", "patch", "delete"];
 
@@ -728,4 +726,105 @@ fn spec_openapi_version_is_3x() {
         "OpenAPI version should be 3.0.x or 3.1.x, got: {}",
         version
     );
+}
+
+#[test]
+fn spec_includes_reconciliation_admin_paths() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("spec.paths must be an object");
+
+    for path in [
+        "/v1/admin/reconciliation/workbench",
+        "/v1/admin/reconciliation/export",
+        "/v1/admin/reconciliation/evidence/{id}",
+        "/v1/admin/reconciliation/evidence/{id}/export",
+    ] {
+        assert!(
+            paths.contains_key(path),
+            "OpenAPI spec should include reconciliation admin path {}",
+            path
+        );
+    }
+}
+
+#[test]
+fn spec_includes_treasury_admin_paths() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("spec.paths must be an object");
+
+    for path in ["/v1/admin/treasury/workbench", "/v1/admin/treasury/export"] {
+        assert!(
+            paths.contains_key(path),
+            "OpenAPI spec should include treasury admin path {}",
+            path
+        );
+    }
+}
+
+#[test]
+fn spec_includes_settlement_admin_paths() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("spec.paths must be an object");
+
+    for path in ["/v1/admin/settlement/workbench", "/v1/admin/settlement/export"] {
+        assert!(
+            paths.contains_key(path),
+            "OpenAPI spec should include settlement admin path {}",
+            path
+        );
+    }
+}
+
+#[test]
+fn spec_includes_passport_admin_paths() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("spec.paths must be an object");
+
+    for path in ["/v1/admin/passport/queue", "/v1/admin/passport/packages/{id}"] {
+        assert!(
+            paths.contains_key(path),
+            "OpenAPI spec should include passport admin path {}",
+            path
+        );
+    }
+}
+
+#[test]
+fn spec_includes_kyb_admin_paths() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("spec.paths must be an object");
+
+    for path in ["/v1/admin/kyb/reviews", "/v1/admin/kyb/graph/{id}"] {
+        assert!(
+            paths.contains_key(path),
+            "OpenAPI spec should include kyb admin path {}",
+            path
+        );
+    }
+}
+
+#[test]
+fn spec_includes_config_bundle_admin_paths() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("spec.paths must be an object");
+
+    for path in ["/v1/admin/config-bundles/export", "/v1/admin/extensions"] {
+        assert!(
+            paths.contains_key(path),
+            "OpenAPI spec should include config bundle admin path {}",
+            path
+        );
+    }
 }

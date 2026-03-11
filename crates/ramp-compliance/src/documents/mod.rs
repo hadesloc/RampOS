@@ -46,7 +46,9 @@ impl ComplianceDocumentGenerator {
         let tenant_info = self.get_tenant_info(&tenant_id_str).await?;
 
         // Get transaction summary
-        let transaction_summary = self.generate_transaction_summary(&tenant_id, start, end).await?;
+        let transaction_summary = self
+            .generate_transaction_summary(&tenant_id, start, end)
+            .await?;
 
         // Get KYC statistics
         let kyc_stats = self.generate_kyc_statistics(&tenant_id, start, end).await?;
@@ -55,7 +57,9 @@ impl ComplianceDocumentGenerator {
         let aml_metrics = self.generate_aml_metrics(&tenant_id, start, end).await?;
 
         // Get SAR/CTR submission history
-        let regulatory_submissions = self.get_regulatory_submissions(&tenant_id, start, end).await?;
+        let regulatory_submissions = self
+            .get_regulatory_submissions(&tenant_id, start, end)
+            .await?;
 
         let report = ComplianceReport {
             id: Uuid::new_v4().to_string(),
@@ -376,7 +380,9 @@ impl ComplianceDocumentGenerator {
 
         let mut alerts_by_rule = HashMap::new();
         for row in rule_rows {
-            let rule: String = row.try_get("rule_name").unwrap_or_else(|_| "unknown".to_string());
+            let rule: String = row
+                .try_get("rule_name")
+                .unwrap_or_else(|_| "unknown".to_string());
             let count: i64 = row.try_get("count")?;
             alerts_by_rule.insert(rule, count as u32);
         }

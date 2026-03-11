@@ -20,9 +20,7 @@ use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
 use ramp_common::licensing::{LicenseRequirementId, LicenseStatus};
 use ramp_common::types::TenantId;
-use ramp_core::repository::licensing::{
-    CreateLicenseSubmissionRequest, LicensingRepository,
-};
+use ramp_core::repository::licensing::{CreateLicenseSubmissionRequest, LicensingRepository};
 
 // ============================================================================
 // Request/Response DTOs
@@ -42,6 +40,20 @@ fn default_limit() -> i64 {
 }
 
 const MAX_LIMIT: i64 = 100;
+
+fn ensure_tenant_matches_scope(
+    tenant_ctx: &TenantContext,
+    requested_tenant_id: &str,
+) -> Result<TenantId, ApiError> {
+    if tenant_ctx.tenant_id.0 != requested_tenant_id {
+        return Err(ApiError::NotFound(format!(
+            "Tenant {} not found",
+            requested_tenant_id
+        )));
+    }
+
+    Ok(TenantId::new(requested_tenant_id.to_string()))
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -185,8 +197,8 @@ pub async fn list_requirements(
     let data = requirements
         .into_iter()
         .map(|req| {
-            let required_docs: Vec<String> = serde_json::from_value(req.required_documents.clone())
-                .unwrap_or_default();
+            let required_docs: Vec<String> =
+                serde_json::from_value(req.required_documents.clone()).unwrap_or_default();
             LicenseRequirementResponse {
                 id: req.id,
                 name: req.name,
@@ -214,13 +226,14 @@ pub async fn list_requirements(
 /// GET /v1/admin/licensing/status/:tenant_id - Get tenant's license status
 pub async fn get_tenant_status(
     headers: HeaderMap,
+    Extension(tenant_ctx): Extension<TenantContext>,
     State(licensing_repo): State<Arc<dyn LicensingRepository>>,
     Path(tenant_id): Path<String>,
 ) -> Result<Json<TenantLicenseOverviewResponse>, ApiError> {
     super::tier::check_admin_key(&headers)?;
     info!(tenant_id = %tenant_id, "Fetching tenant license status");
 
-    let tenant_id = TenantId::new(tenant_id.clone());
+    let tenant_id = ensure_tenant_matches_scope(&tenant_ctx, &tenant_id)?;
 
     // Get all requirements
     let requirements = licensing_repo
@@ -244,39 +257,46 @@ pub async fn get_tenant_status(
         .map(|req| {
             let status = statuses.iter().find(|s| s.requirement_id == req.id);
 
-            let (status_str, license_number, issue_date, expiry_date, last_submission_id, notes, updated_at) =
-                if let Some(s) = status {
-                    let parsed_status = LicenseStatus::from_str(&s.status)
-                        .unwrap_or(LicenseStatus::Pending);
+            let (
+                status_str,
+                license_number,
+                issue_date,
+                expiry_date,
+                last_submission_id,
+                notes,
+                updated_at,
+            ) = if let Some(s) = status {
+                let parsed_status =
+                    LicenseStatus::from_str(&s.status).unwrap_or(LicenseStatus::Pending);
 
-                    match parsed_status {
-                        LicenseStatus::Approved => approved_count += 1,
-                        LicenseStatus::Expired => expired_count += 1,
-                        LicenseStatus::Pending => pending_count += 1,
-                        _ => {}
-                    }
+                match parsed_status {
+                    LicenseStatus::Approved => approved_count += 1,
+                    LicenseStatus::Expired => expired_count += 1,
+                    LicenseStatus::Pending => pending_count += 1,
+                    _ => {}
+                }
 
-                    (
-                        s.status.clone(),
-                        s.license_number.clone(),
-                        s.issue_date.map(|d| d.to_rfc3339()),
-                        s.expiry_date.map(|d| d.to_rfc3339()),
-                        s.last_submission_id.clone(),
-                        s.notes.clone(),
-                        s.updated_at.to_rfc3339(),
-                    )
-                } else {
-                    pending_count += 1;
-                    (
-                        "PENDING".to_string(),
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        req.created_at.to_rfc3339(),
-                    )
-                };
+                (
+                    s.status.clone(),
+                    s.license_number.clone(),
+                    s.issue_date.map(|d| d.to_rfc3339()),
+                    s.expiry_date.map(|d| d.to_rfc3339()),
+                    s.last_submission_id.clone(),
+                    s.notes.clone(),
+                    s.updated_at.to_rfc3339(),
+                )
+            } else {
+                pending_count += 1;
+                (
+                    "PENDING".to_string(),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    req.created_at.to_rfc3339(),
+                )
+            };
 
             TenantLicenseStatusResponse {
                 requirement_id: req.id.clone(),
@@ -310,7 +330,7 @@ pub async fn submit_license(
     State(licensing_repo): State<Arc<dyn LicensingRepository>>,
     Json(request): Json<SubmitLicenseRequest>,
 ) -> Result<Json<SubmissionResponse>, ApiError> {
-    super::tier::check_admin_key(&headers)?;
+    super::tier::check_admin_key_operator(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         requirement_id = %request.requirement_id,
@@ -339,8 +359,8 @@ pub async fn submit_license(
     }
 
     // Prepare documents JSON
-    let documents_json = serde_json::to_value(&request.documents)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let documents_json =
+        serde_json::to_value(&request.documents).map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // Create submission
     let submission = licensing_repo
@@ -428,6 +448,7 @@ pub async fn get_deadlines(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::middleware::tenant::{TenantContext, TenantTier};
 
     #[test]
     fn test_deadline_query_defaults() {
@@ -443,5 +464,21 @@ mod tests {
         };
         assert_eq!(query.limit, 20);
         assert_eq!(query.offset, 0);
+    }
+
+    #[test]
+    fn test_tenant_scope_guard_rejects_cross_tenant_status_reads() {
+        let tenant_ctx = TenantContext {
+            tenant_id: TenantId::new("tenant_alpha"),
+            name: "Tenant Alpha".to_string(),
+            tier: TenantTier::Standard,
+        };
+
+        let err = ensure_tenant_matches_scope(&tenant_ctx, "tenant_beta").unwrap_err();
+
+        match err {
+            ApiError::NotFound(message) => assert!(message.contains("tenant_beta")),
+            other => panic!("expected not found error, got {other:?}"),
+        }
     }
 }

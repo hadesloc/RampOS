@@ -16,6 +16,7 @@ pub mod error_sanitizer;
 pub mod versioning;
 
 pub use auth::*;
+pub use error_sanitizer::*;
 pub use idempotency::*;
 pub use portal_auth::*;
 pub use rate_limit::*;
@@ -23,4 +24,3 @@ pub use request_id::*;
 pub use tenant::*;
 pub use tiered_rate_limit::*;
 pub use versioning::*;
-pub use error_sanitizer::*;

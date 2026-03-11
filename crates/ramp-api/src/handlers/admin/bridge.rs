@@ -7,12 +7,12 @@
 //! - GET /v1/admin/bridge/transfer/:txHash - Get transfer status
 //! - GET /v1/admin/bridge/tokens - List supported tokens per chain
 
+use alloy::primitives::{Address, U256};
 use axum::{
     extract::{Extension, Path, Query, State},
     http::HeaderMap,
     Json,
 };
-use alloy::primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
@@ -275,7 +275,9 @@ pub async fn get_quote(
         })?;
 
     // Parse amount
-    let amount = request.amount.parse::<U256>()
+    let amount = request
+        .amount
+        .parse::<U256>()
         .map_err(|_| ApiError::BadRequest("Invalid amount".to_string()))?;
 
     // Parse recipient
@@ -349,7 +351,9 @@ pub async fn initiate_transfer(
         })?;
 
     // Parse amount
-    let amount = request.amount.parse::<U256>()
+    let amount = request
+        .amount
+        .parse::<U256>()
         .map_err(|_| ApiError::BadRequest("Invalid amount".to_string()))?;
 
     // Parse recipient

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import time
 
 import pytest
 
@@ -152,6 +153,44 @@ def test_verify_auto_hmac() -> None:
 
     verifier = WebhookVerifier()
     assert verifier.verify_auto(payload, f"sha256={digest}", secret) is True
+
+
+def test_verify_timestamped_v1_header_for_current_envelope() -> None:
+    secret = "whsec_test123"
+    payload = (
+        '{"id":"evt_abc123","type":"intent.status.changed",'
+        '"created_at":"2026-03-09T01:00:00Z",'
+        '"data":{"intentId":"intent_123","newStatus":"FUNDS_CONFIRMED"}}'
+    )
+    timestamp = str(int(time.time()))
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        f"{timestamp}.{payload}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    signature = f"t={timestamp},v1={digest}"
+
+    verifier = WebhookVerifier()
+    assert verifier.verify_timestamped_v1(payload, signature, secret) is True
+
+
+def test_verify_auto_dispatches_timestamped_v1_header() -> None:
+    secret = "whsec_test123"
+    payload = (
+        '{"id":"evt_risk123","type":"risk.review.required",'
+        '"created_at":"2026-03-09T01:00:00Z",'
+        '"data":{"intentId":"intent_456"}}'
+    )
+    timestamp = str(int(time.time()))
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        f"{timestamp}.{payload}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    signature = f"t={timestamp},v1={digest}"
+
+    verifier = WebhookVerifier()
+    assert verifier.verify_auto(payload, signature, secret) is True
 
 
 def test_verify_auto_ed25519() -> None:

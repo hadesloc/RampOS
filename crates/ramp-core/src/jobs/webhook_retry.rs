@@ -57,7 +57,10 @@ impl WebhookRetryWorker {
             match self.process_pending().await {
                 Ok(count) => {
                     if count > 0 {
-                        info!(processed = count, "Webhook retry worker processed deliveries");
+                        info!(
+                            processed = count,
+                            "Webhook retry worker processed deliveries"
+                        );
                     }
                 }
                 Err(e) => {

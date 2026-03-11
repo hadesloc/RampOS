@@ -116,10 +116,7 @@ impl WebhookRepository for InMemoryWebhookRepo {
         let mut pending: Vec<WebhookEventRow> = events
             .values()
             .filter(|e| {
-                e.status == "PENDING"
-                    && e.next_attempt_at
-                        .map(|t| t <= now)
-                        .unwrap_or(true)
+                e.status == "PENDING" && e.next_attempt_at.map(|t| t <= now).unwrap_or(true)
             })
             .cloned()
             .collect();
@@ -175,10 +172,7 @@ impl WebhookRepository for InMemoryWebhookRepo {
         let events = self.events.lock().unwrap();
         let filtered: Vec<WebhookEventRow> = events
             .values()
-            .filter(|e| {
-                e.tenant_id == tenant_id.0
-                    && e.intent_id.as_deref() == Some(&intent_id.0)
-            })
+            .filter(|e| e.tenant_id == tenant_id.0 && e.intent_id.as_deref() == Some(&intent_id.0))
             .cloned()
             .collect();
         Ok(filtered)
@@ -390,7 +384,10 @@ async fn test_webhook_event_type_filtering() {
                 .queue_event(
                     &tenant_id,
                     event_type.clone(),
-                    Some(&IntentId::new(&format!("intent_filter_{}_{}", event_type, i))),
+                    Some(&IntentId::new(&format!(
+                        "intent_filter_{}_{}",
+                        event_type, i
+                    ))),
                     json!({"type": event_type.to_string(), "index": i}),
                 )
                 .await
@@ -684,11 +681,12 @@ async fn test_webhook_payload_schema_versioning() {
     let ts = Utc::now().timestamp();
     for delivery in [&delivery_v1, &delivery_v2] {
         let bytes = serde_json::to_vec(delivery).unwrap();
-        let sig =
-            ramp_common::crypto::generate_webhook_signature(secret, ts, &bytes).unwrap();
-        let verified =
-            ramp_common::crypto::verify_webhook_signature(secret, &sig, &bytes, 300);
-        assert!(verified.is_ok(), "Both v1 and v2 payloads should sign/verify");
+        let sig = ramp_common::crypto::generate_webhook_signature(secret, ts, &bytes).unwrap();
+        let verified = ramp_common::crypto::verify_webhook_signature(secret, &sig, &bytes, 300);
+        assert!(
+            verified.is_ok(),
+            "Both v1 and v2 payloads should sign/verify"
+        );
     }
 }
 
@@ -725,13 +723,29 @@ async fn test_webhook_health_status_tracking() {
     repo.simulate_retry(&event_ids[3].0, "HTTP 503", 2);
     // Permanently fail event 4
     for attempt in 0..=10 {
-        repo.simulate_retry(&event_ids[4].0, &format!("HTTP 500 attempt {}", attempt), attempt);
+        repo.simulate_retry(
+            &event_ids[4].0,
+            &format!("HTTP 500 attempt {}", attempt),
+            attempt,
+        );
     }
 
     // Health metrics
-    assert_eq!(repo.count_by_status("DELIVERED"), 3, "3 should be delivered");
-    assert_eq!(repo.count_by_status("PENDING"), 1, "1 should be retrying (still PENDING)");
-    assert_eq!(repo.count_by_status("FAILED"), 1, "1 should be permanently failed");
+    assert_eq!(
+        repo.count_by_status("DELIVERED"),
+        3,
+        "3 should be delivered"
+    );
+    assert_eq!(
+        repo.count_by_status("PENDING"),
+        1,
+        "1 should be retrying (still PENDING)"
+    );
+    assert_eq!(
+        repo.count_by_status("FAILED"),
+        1,
+        "1 should be permanently failed"
+    );
 
     // Verify delivered events have response_status set
     let delivered_event = repo.get_event_by_id(&event_ids[0].0).unwrap();
@@ -815,7 +829,10 @@ async fn test_webhook_tenant_scoped_isolation() {
     assert!(cross.is_none(), "Tenant X must not access Tenant Z events");
 
     let cross_y = service.get_event(&tenant_y, &z_event.0).await.unwrap();
-    assert!(cross_y.is_none(), "Tenant Y must not access Tenant Z events");
+    assert!(
+        cross_y.is_none(),
+        "Tenant Y must not access Tenant Z events"
+    );
 
     // Only tenant Z can access its own event
     let own = service.get_event(&tenant_z, &z_event.0).await.unwrap();
@@ -874,8 +891,14 @@ async fn test_webhook_retry_configuration() {
     service.retry_event(&tenant_id, &event_id.0).await.unwrap();
     let reset = repo.get_event_by_id(&event_id.0).unwrap();
     assert_eq!(reset.status, "PENDING");
-    assert!(reset.last_error.is_none(), "Error should be cleared on retry reset");
-    assert!(reset.next_attempt_at.is_some(), "Should have immediate next_attempt_at");
+    assert!(
+        reset.last_error.is_none(),
+        "Error should be cleared on retry reset"
+    );
+    assert!(
+        reset.next_attempt_at.is_some(),
+        "Should have immediate next_attempt_at"
+    );
 }
 
 // ============================================================================
@@ -907,8 +930,7 @@ async fn test_webhook_event_deduplication_across_endpoints() {
     }
 
     // All event IDs must be unique (no deduplication at ID level)
-    let unique: std::collections::HashSet<String> =
-        event_ids.iter().map(|e| e.0.clone()).collect();
+    let unique: std::collections::HashSet<String> = event_ids.iter().map(|e| e.0.clone()).collect();
     assert_eq!(unique.len(), 5, "All event IDs must be unique");
 
     // All events retrievable by intent
@@ -916,7 +938,11 @@ async fn test_webhook_event_deduplication_across_endpoints() {
         .get_events_by_intent(&tenant_id, &intent_id)
         .await
         .unwrap();
-    assert_eq!(by_intent.len(), 5, "All 5 events for same intent should exist");
+    assert_eq!(
+        by_intent.len(),
+        5,
+        "All 5 events for same intent should exist"
+    );
 
     // Each event independently queryable
     for eid in &event_ids {
@@ -995,24 +1021,22 @@ fn test_webhook_signature_verification_roundtrip_config() {
     );
 
     // Verify signature from decrypted key against original key
-    let verified = ramp_common::crypto::verify_webhook_signature(
-        secret,
-        &sig_decrypted,
-        &payload_bytes,
-        300,
+    let verified =
+        ramp_common::crypto::verify_webhook_signature(secret, &sig_decrypted, &payload_bytes, 300);
+    assert!(
+        verified.is_ok(),
+        "Decrypted key signature must verify against original"
     );
-    assert!(verified.is_ok(), "Decrypted key signature must verify against original");
     assert_eq!(verified.unwrap(), timestamp);
 
     // Tampered payload fails
     let tampered = serde_json::to_vec(&json!({"tampered": true})).unwrap();
-    let tamper_verify = ramp_common::crypto::verify_webhook_signature(
-        secret,
-        &sig_original,
-        &tampered,
-        300,
+    let tamper_verify =
+        ramp_common::crypto::verify_webhook_signature(secret, &sig_original, &tampered, 300);
+    assert!(
+        tamper_verify.is_err(),
+        "Tampered payload must fail verification"
     );
-    assert!(tamper_verify.is_err(), "Tampered payload must fail verification");
 }
 
 // ============================================================================
@@ -1072,10 +1096,7 @@ async fn test_webhook_disabled_skipped_during_delivery() {
 
     // Disabled (FAILED) events are still queryable
     for disabled_id in [&event_ids[0], &event_ids[2]] {
-        let found = service
-            .get_event(&tenant_id, &disabled_id.0)
-            .await
-            .unwrap();
+        let found = service.get_event(&tenant_id, &disabled_id.0).await.unwrap();
         assert!(found.is_some(), "Disabled event should still be queryable");
         assert_eq!(found.unwrap().status, "FAILED");
     }
@@ -1128,7 +1149,11 @@ async fn test_webhook_event_pagination() {
         .chain(page3.iter())
         .map(|e| e.id.clone())
         .collect();
-    assert_eq!(all_ids.len(), 25, "All 25 events should be unique across pages");
+    assert_eq!(
+        all_ids.len(),
+        25,
+        "All 25 events should be unique across pages"
+    );
 }
 
 // ============================================================================
@@ -1192,10 +1217,7 @@ async fn test_webhook_event_state_machine() {
     assert_eq!(s4.status, "FAILED");
 
     // State transition: FAILED -> PENDING (manual retry reset)
-    service
-        .retry_event(&tenant_id, &event_id2.0)
-        .await
-        .unwrap();
+    service.retry_event(&tenant_id, &event_id2.0).await.unwrap();
     let s5 = repo.get_event_by_id(&event_id2.0).unwrap();
     assert_eq!(s5.status, "PENDING");
     assert!(s5.last_error.is_none());

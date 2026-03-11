@@ -24,6 +24,7 @@ pub struct DlqStats {
 pub struct DlqFilter {
     pub tenant_id: Option<String>,
     pub event_id: Option<String>,
+    pub event_type: Option<String>,
     pub endpoint_url: Option<String>,
     pub created_after: Option<DateTime<Utc>>,
     pub created_before: Option<DateTime<Utc>>,
@@ -50,16 +51,15 @@ impl WebhookDlqService {
     ) -> Result<bool> {
         // Use schedule_retry with a high attempt count to force DLQ
         // This leverages the existing logic in WebhookDeliveryService
-        self.delivery_service.schedule_retry(
-            delivery_id,
-            failure_reason,
-            None,
-            Some(event_payload),
-        )
+        self.delivery_service
+            .schedule_retry(delivery_id, failure_reason, None, Some(event_payload))
     }
 
     /// Replay a single DLQ entry - creates a new delivery attempt
-    pub fn replay_from_dlq(&self, dlq_entry_id: &str) -> Result<super::webhook_delivery::WebhookDelivery> {
+    pub fn replay_from_dlq(
+        &self,
+        dlq_entry_id: &str,
+    ) -> Result<super::webhook_delivery::WebhookDelivery> {
         let delivery = self.delivery_service.replay_from_dlq(dlq_entry_id)?;
 
         info!(
@@ -80,9 +80,56 @@ impl WebhookDlqService {
         self.delivery_service.get_dlq_entries(tenant_id, limit)
     }
 
+    pub fn list_dlq_entries_filtered(
+        &self,
+        filter: &DlqFilter,
+        limit: usize,
+    ) -> Result<Vec<WebhookDeadLetter>> {
+        let tenant_id = filter.tenant_id.as_deref().unwrap_or("");
+        let entries = self
+            .delivery_service
+            .get_dlq_entries(tenant_id, usize::MAX)?;
+
+        let filtered = entries
+            .into_iter()
+            .filter(|entry| {
+                filter
+                    .tenant_id
+                    .as_ref()
+                    .is_none_or(|tenant_id| &entry.tenant_id == tenant_id)
+                    && filter
+                        .event_id
+                        .as_ref()
+                        .is_none_or(|event_id| &entry.event_id == event_id)
+                    && filter
+                        .endpoint_url
+                        .as_ref()
+                        .is_none_or(|endpoint_url| &entry.endpoint_url == endpoint_url)
+                    && filter
+                        .created_after
+                        .is_none_or(|after| entry.created_at >= after)
+                    && filter
+                        .created_before
+                        .is_none_or(|before| entry.created_at <= before)
+                    && filter.event_type.as_ref().is_none_or(|event_type| {
+                        entry
+                            .event_payload
+                            .get("type")
+                            .and_then(|value| value.as_str())
+                            == Some(event_type.as_str())
+                    })
+            })
+            .take(limit)
+            .collect();
+
+        Ok(filtered)
+    }
+
     /// Get DLQ statistics for a tenant
     pub fn get_dlq_stats(&self, tenant_id: &str) -> Result<DlqStats> {
-        let entries = self.delivery_service.get_dlq_entries(tenant_id, usize::MAX)?;
+        let entries = self
+            .delivery_service
+            .get_dlq_entries(tenant_id, usize::MAX)?;
 
         let oldest = entries.iter().map(|e| e.created_at).min();
         let newest = entries.iter().map(|e| e.created_at).max();
@@ -109,5 +156,25 @@ impl WebhookDlqService {
     /// Count DLQ entries for a tenant
     pub fn count_dlq_entries(&self, tenant_id: &str) -> Result<usize> {
         self.delivery_service.count_dlq_entries(tenant_id)
+    }
+
+    pub fn replay_event_from_dlq(
+        &self,
+        tenant_id: &str,
+        event_id: &str,
+    ) -> Result<Vec<super::webhook_delivery::WebhookDelivery>> {
+        let entries = self.list_dlq_entries_filtered(
+            &DlqFilter {
+                tenant_id: Some(tenant_id.to_string()),
+                event_id: Some(event_id.to_string()),
+                ..Default::default()
+            },
+            usize::MAX,
+        )?;
+
+        entries
+            .into_iter()
+            .map(|entry| self.replay_from_dlq(&entry.id))
+            .collect()
     }
 }

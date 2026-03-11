@@ -89,7 +89,11 @@ impl<C: ComplianceRepository, E: EventPublisher> ComplianceAlertScheduler<C, E> 
             let days_remaining = (report.due_date - now).num_days() as i32;
 
             // Send notifications at 14, 7, 3, and 1 day marks
-            if days_remaining == 14 || days_remaining == 7 || days_remaining == 3 || days_remaining == 1 {
+            if days_remaining == 14
+                || days_remaining == 7
+                || days_remaining == 3
+                || days_remaining == 1
+            {
                 let event = RegulatoryEvent::SbvSubmissionDue {
                     report_type: report.report_type.clone(),
                     due_date: report.due_date,
@@ -183,8 +187,7 @@ mod tests {
             breach_percentage: 95.0,
         });
 
-        let scheduler =
-            ComplianceAlertScheduler::new(compliance_repo, event_publisher.clone());
+        let scheduler = ComplianceAlertScheduler::new(compliance_repo, event_publisher.clone());
         let count = scheduler.check_compliance_thresholds().await.unwrap();
 
         assert_eq!(count, 1);
@@ -209,8 +212,7 @@ mod tests {
             status: "PENDING".to_string(),
         });
 
-        let scheduler =
-            ComplianceAlertScheduler::new(compliance_repo, event_publisher.clone());
+        let scheduler = ComplianceAlertScheduler::new(compliance_repo, event_publisher.clone());
         let count = scheduler.check_sbv_deadlines().await.unwrap();
 
         assert_eq!(count, 1);

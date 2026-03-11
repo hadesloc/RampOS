@@ -353,13 +353,14 @@ impl CtrService {
             .map(CtrRecord::from)
             .collect();
 
-            let total: (i64,) = sqlx::query_as(
-                "SELECT COUNT(*) FROM ctr_records WHERE tenant_id = $1",
-            )
-            .bind(tenant_id)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| ramp_common::Error::Database(format!("CTR count failed: {}", e)))?;
+            let total: (i64,) =
+                sqlx::query_as("SELECT COUNT(*) FROM ctr_records WHERE tenant_id = $1")
+                    .bind(tenant_id)
+                    .fetch_one(&self.pool)
+                    .await
+                    .map_err(|e| {
+                        ramp_common::Error::Database(format!("CTR count failed: {}", e))
+                    })?;
 
             (rows, total.0)
         };
@@ -501,7 +502,10 @@ impl CtrService {
         // Detect risk indicators
         let risk_indicators = self.detect_risk_indicators(&records);
 
-        let report_id = format!("CTR-RPT-{}", uuid::Uuid::new_v4().to_string()[..8].to_uppercase());
+        let report_id = format!(
+            "CTR-RPT-{}",
+            uuid::Uuid::new_v4().to_string()[..8].to_uppercase()
+        );
 
         info!(
             report_id = %report_id,
@@ -539,7 +543,10 @@ impl CtrService {
         let mut by_user: std::collections::HashMap<&str, Vec<&CtrRecord>> =
             std::collections::HashMap::new();
         for record in records {
-            by_user.entry(record.user_id.as_str()).or_default().push(record);
+            by_user
+                .entry(record.user_id.as_str())
+                .or_default()
+                .push(record);
         }
 
         let high_value_threshold = self.threshold_vnd * Decimal::from(5);
@@ -674,9 +681,18 @@ mod tests {
         assert_eq!(CtrFilingStatus::Filed.as_str(), "FILED");
         assert_eq!(CtrFilingStatus::Acknowledged.as_str(), "ACKNOWLEDGED");
 
-        assert_eq!(CtrFilingStatus::from_str("PENDING"), Some(CtrFilingStatus::Pending));
-        assert_eq!(CtrFilingStatus::from_str("FILED"), Some(CtrFilingStatus::Filed));
-        assert_eq!(CtrFilingStatus::from_str("ACKNOWLEDGED"), Some(CtrFilingStatus::Acknowledged));
+        assert_eq!(
+            CtrFilingStatus::from_str("PENDING"),
+            Some(CtrFilingStatus::Pending)
+        );
+        assert_eq!(
+            CtrFilingStatus::from_str("FILED"),
+            Some(CtrFilingStatus::Filed)
+        );
+        assert_eq!(
+            CtrFilingStatus::from_str("ACKNOWLEDGED"),
+            Some(CtrFilingStatus::Acknowledged)
+        );
         assert_eq!(CtrFilingStatus::from_str("INVALID"), None);
     }
 

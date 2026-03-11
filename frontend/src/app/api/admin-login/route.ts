@@ -17,13 +17,10 @@ export async function POST(req: Request) {
 
   const cookieStore = await cookies();
 
-  // Skip CSRF check in development mode - cookie timing issue
-  if (process.env.NODE_ENV === "production") {
-    const csrfCookie = cookieStore.get("rampos_csrf")?.value;
-    const csrfHeader = req.headers.get("x-csrf-token");
-    if (!csrfCookie || !csrfHeader || !constantTimeEqual(csrfCookie, csrfHeader)) {
-      return NextResponse.json({ message: "CSRF check failed" }, { status: 403 });
-    }
+  const csrfCookie = cookieStore.get("rampos_csrf")?.value;
+  const csrfHeader = req.headers.get("x-csrf-token");
+  if (!csrfCookie || !csrfHeader || !constantTimeEqual(csrfCookie, csrfHeader)) {
+    return NextResponse.json({ message: "CSRF check failed" }, { status: 403 });
   }
 
   const body = await req.json().catch(() => ({}));

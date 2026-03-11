@@ -282,6 +282,8 @@ pub struct SsoCallback {
     pub saml_response: Option<String>,
     /// State parameter
     pub state: String,
+    /// Redirect URI bound to this callback flow, when available.
+    pub redirect_uri: Option<String>,
     /// Error (if any)
     pub error: Option<String>,
     /// Error description
@@ -343,7 +345,8 @@ impl SsoService {
                         config.default_role.clone(),
                     )
                     .await?;
-                    self.oidc_providers.insert(tenant_key.clone(), Arc::new(provider));
+                    self.oidc_providers
+                        .insert(tenant_key.clone(), Arc::new(provider));
                 }
             }
             SsoProtocol::Saml => {
@@ -354,7 +357,8 @@ impl SsoService {
                         config.role_mappings.clone(),
                         config.default_role.clone(),
                     )?;
-                    self.saml_providers.insert(tenant_key.clone(), Arc::new(provider));
+                    self.saml_providers
+                        .insert(tenant_key.clone(), Arc::new(provider));
                 }
             }
         }
@@ -407,7 +411,11 @@ impl SsoService {
     }
 
     /// Map IdP groups to RampOS roles
-    pub fn map_roles(groups: &[String], mappings: &[RoleMapping], default: &RampRole) -> Vec<RampRole> {
+    pub fn map_roles(
+        groups: &[String],
+        mappings: &[RoleMapping],
+        default: &RampRole,
+    ) -> Vec<RampRole> {
         let mut roles: Vec<RampRole> = Vec::new();
         let mut matched_groups: HashMap<String, u32> = HashMap::new();
 
@@ -417,7 +425,9 @@ impl SsoService {
 
         for group in groups {
             for mapping in &sorted_mappings {
-                if group == &mapping.idp_group || group.to_lowercase() == mapping.idp_group.to_lowercase() {
+                if group == &mapping.idp_group
+                    || group.to_lowercase() == mapping.idp_group.to_lowercase()
+                {
                     let group_key = group.to_lowercase();
 
                     // Only add the highest priority mapping per group
@@ -575,13 +585,11 @@ mod tests {
 
     #[test]
     fn test_role_mapping_case_insensitive() {
-        let mappings = vec![
-            RoleMapping {
-                idp_group: "admins".to_string(),
-                ramp_role: RampRole::TenantAdmin,
-                priority: 1,
-            },
-        ];
+        let mappings = vec![RoleMapping {
+            idp_group: "admins".to_string(),
+            ramp_role: RampRole::TenantAdmin,
+            priority: 1,
+        }];
 
         let groups = vec!["Admins".to_string()];
         let roles = SsoService::map_roles(&groups, &mappings, &RampRole::Viewer);
@@ -594,7 +602,10 @@ mod tests {
     fn test_role_from_str_all_variants() {
         assert_eq!(RampRole::from_str("superadmin"), RampRole::SuperAdmin);
         assert_eq!(RampRole::from_str("tenantadmin"), RampRole::TenantAdmin);
-        assert_eq!(RampRole::from_str("compliance"), RampRole::ComplianceOfficer);
+        assert_eq!(
+            RampRole::from_str("compliance"),
+            RampRole::ComplianceOfficer
+        );
         assert_eq!(RampRole::from_str("finance"), RampRole::FinanceManager);
         assert_eq!(RampRole::from_str("support"), RampRole::SupportAgent);
         assert_eq!(RampRole::from_str("readonly"), RampRole::Viewer);
@@ -608,14 +619,20 @@ mod tests {
         assert_eq!(RampRole::FinanceManager.as_str(), "finance_manager");
         assert_eq!(RampRole::SupportAgent.as_str(), "support_agent");
         assert_eq!(RampRole::Viewer.as_str(), "viewer");
-        assert_eq!(RampRole::Custom("custom_role".to_string()).as_str(), "custom_role");
+        assert_eq!(
+            RampRole::Custom("custom_role".to_string()).as_str(),
+            "custom_role"
+        );
     }
 
     #[test]
     fn test_sso_provider_type_as_str() {
         assert_eq!(SsoProviderType::Okta.as_str(), "okta");
         assert_eq!(SsoProviderType::AzureAd.as_str(), "azure_ad");
-        assert_eq!(SsoProviderType::GoogleWorkspace.as_str(), "google_workspace");
+        assert_eq!(
+            SsoProviderType::GoogleWorkspace.as_str(),
+            "google_workspace"
+        );
         assert_eq!(SsoProviderType::Auth0.as_str(), "auth0");
         assert_eq!(SsoProviderType::GenericOidc.as_str(), "generic_oidc");
         assert_eq!(SsoProviderType::GenericSaml.as_str(), "generic_saml");
@@ -670,13 +687,11 @@ mod tests {
             SsoProviderType::Okta,
             OidcConfig::okta("cid".into(), b"sec".to_vec(), "dev.okta.com"),
         )
-        .with_role_mappings(vec![
-            RoleMapping {
-                idp_group: "Admins".to_string(),
-                ramp_role: RampRole::TenantAdmin,
-                priority: 1,
-            },
-        ])
+        .with_role_mappings(vec![RoleMapping {
+            idp_group: "Admins".to_string(),
+            ramp_role: RampRole::TenantAdmin,
+            priority: 1,
+        }])
         .with_default_role(RampRole::SupportAgent);
 
         assert_eq!(config.role_mappings.len(), 1);
@@ -690,20 +705,23 @@ mod tests {
 
         // Manually insert a config (bypassing register which needs async OIDC provider init)
         let now = Utc::now();
-        service.configs.insert("t1".to_string(), SsoConfig {
-            tenant_id: tenant_id.clone(),
-            provider_type: SsoProviderType::GenericOidc,
-            protocol: SsoProtocol::Oidc,
-            oidc_config: None,
-            saml_config: None,
-            role_mappings: vec![],
-            default_role: RampRole::Viewer,
-            enabled: true,
-            allow_password_bypass: false,
-            jit_provisioning: true,
-            created_at: now,
-            updated_at: now,
-        });
+        service.configs.insert(
+            "t1".to_string(),
+            SsoConfig {
+                tenant_id: tenant_id.clone(),
+                provider_type: SsoProviderType::GenericOidc,
+                protocol: SsoProtocol::Oidc,
+                oidc_config: None,
+                saml_config: None,
+                role_mappings: vec![],
+                default_role: RampRole::Viewer,
+                enabled: true,
+                allow_password_bypass: false,
+                jit_provisioning: true,
+                created_at: now,
+                updated_at: now,
+            },
+        );
 
         assert!(service.is_enabled(&tenant_id));
         service.disable(&tenant_id);
@@ -716,6 +734,7 @@ mod tests {
             code: Some("auth_code_123".to_string()),
             saml_response: None,
             state: "state_xyz".to_string(),
+            redirect_uri: Some("https://app.example.com/callback".to_string()),
             error: None,
             error_description: None,
         };
@@ -737,13 +756,11 @@ mod tests {
 
     #[test]
     fn test_role_mapping_empty_groups() {
-        let mappings = vec![
-            RoleMapping {
-                idp_group: "Admins".to_string(),
-                ramp_role: RampRole::TenantAdmin,
-                priority: 1,
-            },
-        ];
+        let mappings = vec![RoleMapping {
+            idp_group: "Admins".to_string(),
+            ramp_role: RampRole::TenantAdmin,
+            priority: 1,
+        }];
 
         let groups: Vec<String> = vec![];
         let roles = SsoService::map_roles(&groups, &mappings, &RampRole::Viewer);

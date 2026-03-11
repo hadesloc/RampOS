@@ -6,9 +6,9 @@
 //! This module makes real HTTP calls to the Across API for fee quotes
 //! and falls back to hardcoded estimates when the API is unreachable.
 
+use alloy::primitives::{Address, U256};
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
-use alloy::primitives::{Address, U256};
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use tracing;
@@ -147,10 +147,7 @@ impl AcrossBridge {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            return Err(format!(
-                "Across API returned HTTP {}: {}",
-                status, body
-            ));
+            return Err(format!("Across API returned HTTP {}: {}", status, body));
         }
 
         resp.json::<AcrossSuggestedFeesResponse>()
@@ -200,9 +197,9 @@ impl AcrossBridge {
         amount: U256,
     ) -> U256 {
         let fee_bps = match (from_chain, to_chain) {
-            (1, _) => 10,  // 0.1% from Ethereum
-            (_, 1) => 15,  // 0.15% to Ethereum
-            _ => 5,        // 0.05% between L2s
+            (1, _) => 10, // 0.1% from Ethereum
+            (_, 1) => 15, // 0.15% to Ethereum
+            _ => 5,       // 0.05% between L2s
         };
 
         amount * U256::from(fee_bps) / U256::from(10000)
@@ -217,11 +214,11 @@ impl AcrossBridge {
     /// Estimate gas cost using hardcoded fallback values (in 6-decimal USD).
     fn estimate_gas_fallback(&self, from_chain: ChainId, _to_chain: ChainId) -> U256 {
         match from_chain {
-            1 => U256::from(3_000_000u64),     // $3 on Ethereum
-            42161 => U256::from(80_000u64),    // $0.08 on Arbitrum
-            8453 => U256::from(40_000u64),     // $0.04 on Base
-            10 => U256::from(80_000u64),       // $0.08 on Optimism
-            137 => U256::from(5_000u64),       // $0.005 on Polygon
+            1 => U256::from(3_000_000u64),  // $3 on Ethereum
+            42161 => U256::from(80_000u64), // $0.08 on Arbitrum
+            8453 => U256::from(40_000u64),  // $0.04 on Base
+            10 => U256::from(80_000u64),    // $0.08 on Optimism
+            137 => U256::from(5_000u64),    // $0.005 on Polygon
             _ => U256::from(300_000u64),
         }
     }
@@ -331,85 +328,113 @@ impl CrossChainBridge for AcrossBridge {
             .ok_or_else(|| Error::Validation("Destination token not found".to_string()))?;
 
         // Try to fetch real fees from the Across API, fall back to hardcoded values
-        let (bridge_fee, gas_fee, quote_timestamp, fill_deadline, exclusivity_deadline, exclusive_relayer, spoke_pool_override, estimated_fill_time) =
-            match self.fetch_suggested_fees(token_address, from_chain, to_chain, amount).await {
-                Ok(api_resp) => {
-                    tracing::info!(
-                        "Across API returned fees for {} -> {} (token {:?}, amount {})",
-                        from_chain,
-                        to_chain,
-                        token_address,
-                        amount,
-                    );
+        let (
+            bridge_fee,
+            gas_fee,
+            quote_timestamp,
+            fill_deadline,
+            exclusivity_deadline,
+            exclusive_relayer,
+            spoke_pool_override,
+            estimated_fill_time,
+        ) = match self
+            .fetch_suggested_fees(token_address, from_chain, to_chain, amount)
+            .await
+        {
+            Ok(api_resp) => {
+                tracing::info!(
+                    "Across API returned fees for {} -> {} (token {:?}, amount {})",
+                    from_chain,
+                    to_chain,
+                    token_address,
+                    amount,
+                );
 
-                    if api_resp.is_amount_too_low {
-                        return Err(Error::Validation(
-                            "Amount too low according to Across API".to_string(),
-                        ));
-                    }
-
-                    // Parse total relay fee from the API response
-                    let total_fee_str = &api_resp.total_relay_fee.total;
-                    let bridge_fee = total_fee_str.parse::<U256>().unwrap_or_else(|_| {
-                        tracing::warn!(
-                            "Failed to parse Across totalRelayFee '{}', using fallback",
-                            total_fee_str
-                        );
-                        let relayer = self.calculate_relayer_fee_fallback(from_chain, to_chain, amount);
-                        let lp = self.calculate_lp_fee_fallback(amount);
-                        relayer + lp
-                    });
-
-                    // Gas fee from relay gas fee component
-                    let gas_fee_str = &api_resp.relay_gas_fee.total;
-                    let gas_fee = gas_fee_str.parse::<U256>().unwrap_or_else(|_| {
-                        self.estimate_gas_fallback(from_chain, to_chain)
-                    });
-
-                    let ts = if api_resp.timestamp > 0 {
-                        api_resp.timestamp
-                    } else {
-                        Utc::now().timestamp() as u64
-                    };
-
-                    let fill_dl = (Utc::now() + Duration::hours(4)).timestamp() as u64;
-                    let excl_dl = api_resp.exclusivity_deadline;
-                    let excl_relayer = api_resp
-                        .exclusive_relayer
-                        .as_deref()
-                        .and_then(|s| s.parse::<Address>().ok())
-                        .unwrap_or(Address::ZERO);
-
-                    let eft = if api_resp.estimated_fill_time_secs > 0 {
-                        api_resp.estimated_fill_time_secs
-                    } else {
-                        self.estimated_time(from_chain, to_chain)
-                    };
-
-                    (bridge_fee, gas_fee, ts, fill_dl, excl_dl, excl_relayer, api_resp.spoke_pool_address, eft)
+                if api_resp.is_amount_too_low {
+                    return Err(Error::Validation(
+                        "Amount too low according to Across API".to_string(),
+                    ));
                 }
-                Err(api_err) => {
+
+                // Parse total relay fee from the API response
+                let total_fee_str = &api_resp.total_relay_fee.total;
+                let bridge_fee = total_fee_str.parse::<U256>().unwrap_or_else(|_| {
                     tracing::warn!(
-                        "Across API call failed, using fallback fees: {}",
-                        api_err
+                        "Failed to parse Across totalRelayFee '{}', using fallback",
+                        total_fee_str
                     );
+                    let relayer = self.calculate_relayer_fee_fallback(from_chain, to_chain, amount);
+                    let lp = self.calculate_lp_fee_fallback(amount);
+                    relayer + lp
+                });
 
-                    let relayer_fee = self.calculate_relayer_fee_fallback(from_chain, to_chain, amount);
-                    let lp_fee = self.calculate_lp_fee_fallback(amount);
-                    let bridge_fee = relayer_fee + lp_fee;
-                    let gas_fee = self.estimate_gas_fallback(from_chain, to_chain);
-                    let ts = Utc::now().timestamp() as u64;
-                    let fill_dl = (Utc::now() + Duration::hours(4)).timestamp() as u64;
+                // Gas fee from relay gas fee component
+                let gas_fee_str = &api_resp.relay_gas_fee.total;
+                let gas_fee = gas_fee_str
+                    .parse::<U256>()
+                    .unwrap_or_else(|_| self.estimate_gas_fallback(from_chain, to_chain));
 
-                    (bridge_fee, gas_fee, ts, fill_dl, 0u64, Address::ZERO, None, self.estimated_time(from_chain, to_chain))
-                }
-            };
+                let ts = if api_resp.timestamp > 0 {
+                    api_resp.timestamp
+                } else {
+                    Utc::now().timestamp() as u64
+                };
+
+                let fill_dl = (Utc::now() + Duration::hours(4)).timestamp() as u64;
+                let excl_dl = api_resp.exclusivity_deadline;
+                let excl_relayer = api_resp
+                    .exclusive_relayer
+                    .as_deref()
+                    .and_then(|s| s.parse::<Address>().ok())
+                    .unwrap_or(Address::ZERO);
+
+                let eft = if api_resp.estimated_fill_time_secs > 0 {
+                    api_resp.estimated_fill_time_secs
+                } else {
+                    self.estimated_time(from_chain, to_chain)
+                };
+
+                (
+                    bridge_fee,
+                    gas_fee,
+                    ts,
+                    fill_dl,
+                    excl_dl,
+                    excl_relayer,
+                    api_resp.spoke_pool_address,
+                    eft,
+                )
+            }
+            Err(api_err) => {
+                tracing::warn!("Across API call failed, using fallback fees: {}", api_err);
+
+                let relayer_fee = self.calculate_relayer_fee_fallback(from_chain, to_chain, amount);
+                let lp_fee = self.calculate_lp_fee_fallback(amount);
+                let bridge_fee = relayer_fee + lp_fee;
+                let gas_fee = self.estimate_gas_fallback(from_chain, to_chain);
+                let ts = Utc::now().timestamp() as u64;
+                let fill_dl = (Utc::now() + Duration::hours(4)).timestamp() as u64;
+
+                (
+                    bridge_fee,
+                    gas_fee,
+                    ts,
+                    fill_dl,
+                    0u64,
+                    Address::ZERO,
+                    None,
+                    self.estimated_time(from_chain, to_chain),
+                )
+            }
+        };
 
         // Calculate output amount
         let amount_out = if amount > bridge_fee {
             amount - bridge_fee
         } else {
-            return Err(Error::Validation("Amount too low to cover fees".to_string()));
+            return Err(Error::Validation(
+                "Amount too low to cover fees".to_string(),
+            ));
         };
 
         // Resolve spoke pool address (prefer API override, then config)
@@ -486,10 +511,7 @@ impl CrossChainBridge for AcrossBridge {
         // Since on-chain submission requires a wallet/signer (which is
         // handled at a higher layer), we return a placeholder hash here.
         // The execution_data.depositTx field contains everything needed.
-        let mock_tx_hash = format!(
-            "0x{:064x}",
-            Uuid::new_v4().as_u128()
-        );
+        let mock_tx_hash = format!("0x{:064x}", Uuid::new_v4().as_u128());
 
         tracing::info!(
             "Across bridge execution prepared for {} -> {} (amount: {})",
@@ -498,7 +520,9 @@ impl CrossChainBridge for AcrossBridge {
             quote.amount,
         );
 
-        Ok(mock_tx_hash.parse().map_err(|_| Error::Internal("Failed to create tx hash".to_string()))?)
+        Ok(mock_tx_hash
+            .parse()
+            .map_err(|_| Error::Internal("Failed to create tx hash".to_string()))?)
     }
 
     async fn status(&self, tx_hash: TxHash) -> Result<BridgeStatus> {
@@ -534,9 +558,9 @@ impl CrossChainBridge for AcrossBridge {
         // Across is typically faster than Stargate due to relayer network
         // Most transfers complete in under 2 minutes
         match (from_chain, to_chain) {
-            (1, _) => 120,     // 2 minutes from Ethereum (needs block confirmations)
-            (_, 1) => 90,      // 1.5 minutes to Ethereum
-            _ => 30,           // 30 seconds between L2s
+            (1, _) => 120, // 2 minutes from Ethereum (needs block confirmations)
+            (_, 1) => 90,  // 1.5 minutes to Ethereum
+            _ => 30,       // 30 seconds between L2s
         }
     }
 }

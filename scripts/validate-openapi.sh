@@ -1,11 +1,29 @@
 #!/bin/bash
-# validate-openapi.sh - Validate OpenAPI spec and check SDK drift
-# Exits non-zero if SDK code is stale relative to OpenAPI spec
+# validate-openapi.sh - Validate OpenAPI spec and check SDK/CLI drift
+# Exits non-zero if contract-facing surfaces are stale
 set -e
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SPEC_HASH_FILE="$PROJECT_ROOT/.openapi-spec-hash"
 FAILED=0
+
+hash_contract_surface() {
+    (
+        cd "$PROJECT_ROOT"
+        git ls-files \
+            crates/ramp-api/src/openapi.rs \
+            'crates/ramp-api/src/dto/**' \
+            'crates/ramp-api/src/handlers/**' \
+            scripts/validate-openapi.sh \
+            .github/workflows/sdk-generate.yml \
+            .github/workflows/sdk-ci.yml \
+        | sort \
+        | while read -r file; do
+            [ -f "$file" ] && sha256sum "$file"
+        done \
+        | sha256sum | cut -d' ' -f1
+    )
+}
 
 echo "=================================================="
 echo "    RampOS SDK Drift Detection"
@@ -16,7 +34,7 @@ echo "=================================================="
 
 # --- 1. Validate OpenAPI Spec ---
 echo ""
-echo "=== [1/4] Validating OpenAPI Spec ==="
+echo "=== [1/5] Validating OpenAPI Spec ==="
 
 # Check if we can generate the spec via cargo
 if command -v cargo &> /dev/null; then
@@ -25,43 +43,92 @@ if command -v cargo &> /dev/null; then
     if cargo test -p ramp-api test_openapi_spec_valid --no-fail-fast 2>&1; then
         echo "OpenAPI spec validation: PASSED"
     else
-        echo "WARNING: OpenAPI spec test failed (may need database). Continuing..."
+        echo "ERROR: OpenAPI spec test failed"
+        FAILED=1
     fi
 else
     echo "WARNING: cargo not found. Skipping OpenAPI spec validation."
 fi
 
-# --- 2. Check spec hash for drift detection ---
+# --- 2. Check contract surface hash for drift detection ---
 echo ""
-echo "=== [2/4] Checking Spec Hash ==="
+echo "=== [2/5] Checking Contract Surface Hash ==="
 
 if [ -f "$PROJECT_ROOT/crates/ramp-api/src/openapi.rs" ]; then
-    CURRENT_HASH=$(sha256sum "$PROJECT_ROOT/crates/ramp-api/src/openapi.rs" 2>/dev/null | cut -d' ' -f1 || shasum -a 256 "$PROJECT_ROOT/crates/ramp-api/src/openapi.rs" 2>/dev/null | cut -d' ' -f1)
+    CURRENT_HASH=$(hash_contract_surface)
 
     if [ -f "$SPEC_HASH_FILE" ]; then
         SAVED_HASH=$(cat "$SPEC_HASH_FILE")
         if [ "$CURRENT_HASH" != "$SAVED_HASH" ]; then
-            echo "DRIFT DETECTED: OpenAPI spec has changed since last SDK generation."
+            echo "DRIFT DETECTED: Contract surface has changed since last SDK generation."
             echo "  Saved hash:   $SAVED_HASH"
             echo "  Current hash: $CURRENT_HASH"
-            echo "  Action: Re-run SDK generation or update the hash file."
+            echo "  Action: Re-run SDK generation / verification or update the hash file."
             echo ""
             echo "  To update: echo '$CURRENT_HASH' > $SPEC_HASH_FILE"
+            FAILED=1
         else
-            echo "Spec hash matches. No drift detected."
+            echo "Contract surface hash matches. No drift detected."
         fi
     else
-        echo "No saved spec hash found. Creating baseline..."
-        echo "$CURRENT_HASH" > "$SPEC_HASH_FILE"
-        echo "Baseline hash saved: $CURRENT_HASH"
+        echo "ERROR: No saved contract surface hash found."
+        echo "  Refusing to auto-create a baseline during validation."
+        echo "  Review the current contract surface, then create the baseline explicitly:"
+        echo "  echo '$CURRENT_HASH' > $SPEC_HASH_FILE"
+        FAILED=1
     fi
 else
     echo "WARNING: openapi.rs not found at expected path."
 fi
 
-# --- 3. Python SDK Tests ---
+# --- 3. TypeScript SDK Tests ---
 echo ""
-echo "=== [3/4] Checking Python SDK ==="
+echo "=== [3/5] Checking TypeScript SDK ==="
+
+if [ -d "$PROJECT_ROOT/sdk" ]; then
+    cd "$PROJECT_ROOT/sdk"
+
+    if command -v npm &> /dev/null; then
+        echo "Using Node/npm:"
+        node --version 2>/dev/null || true
+        npm --version
+
+        echo "Installing TypeScript SDK dependencies..."
+        npm ci --silent
+
+        echo "Running TypeScript SDK lint..."
+        if npm run lint --silent; then
+            echo "TypeScript SDK lint: PASSED"
+        else
+            echo "ERROR: TypeScript SDK lint FAILED"
+            FAILED=1
+        fi
+
+        echo "Running TypeScript SDK tests..."
+        if npm test -- --runInBand 2>&1; then
+            echo "TypeScript SDK tests: PASSED"
+        else
+            echo "ERROR: TypeScript SDK tests FAILED"
+            FAILED=1
+        fi
+
+        echo "Running TypeScript SDK build..."
+        if npm run build --silent; then
+            echo "TypeScript SDK build: PASSED"
+        else
+            echo "ERROR: TypeScript SDK build FAILED"
+            FAILED=1
+        fi
+    else
+        echo "WARNING: npm not found. Skipping TypeScript SDK checks."
+    fi
+else
+    echo "WARNING: sdk/ directory not found."
+fi
+
+# --- 4. Python SDK Tests ---
+echo ""
+echo "=== [4/5] Checking Python SDK ==="
 
 if [ -d "$PROJECT_ROOT/sdk-python" ]; then
     cd "$PROJECT_ROOT/sdk-python"
@@ -92,9 +159,9 @@ else
     echo "WARNING: sdk-python/ directory not found."
 fi
 
-# --- 4. Go SDK Tests ---
+# --- 5. Go SDK Tests ---
 echo ""
-echo "=== [4/4] Checking Go SDK ==="
+echo "=== [5/5] Checking Go SDK ==="
 
 if [ -d "$PROJECT_ROOT/sdk-go" ]; then
     cd "$PROJECT_ROOT/sdk-go"
@@ -124,6 +191,21 @@ if [ -d "$PROJECT_ROOT/sdk-go" ]; then
     fi
 else
     echo "WARNING: sdk-go/ directory not found."
+fi
+
+# --- 5. CLI Smoke Tests ---
+echo ""
+echo "=== [5/5] Checking thin rampos-cli surface ==="
+
+if [ -f "$PROJECT_ROOT/scripts/test-rampos-cli.sh" ]; then
+    if bash "$PROJECT_ROOT/scripts/test-rampos-cli.sh" 2>&1; then
+        echo "rampos-cli smoke: PASSED"
+    else
+        echo "ERROR: rampos-cli smoke FAILED"
+        FAILED=1
+    fi
+else
+    echo "WARNING: scripts/test-rampos-cli.sh not found."
 fi
 
 # --- Summary ---

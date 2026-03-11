@@ -15,7 +15,8 @@ import (
 type WebhookEvent struct {
 	ID        string                 `json:"id"`
 	Type      string                 `json:"type"`
-	Timestamp time.Time              `json:"timestamp"`
+	CreatedAt time.Time              `json:"created_at"`
+	Timestamp time.Time              `json:"timestamp,omitempty"` // Legacy fallback.
 	Data      map[string]interface{} `json:"data"`
 }
 
@@ -57,6 +58,15 @@ func (v *WebhookVerifier) Verify(payload string, signature string) bool {
 
 // VerifyAndParse verifies the webhook signature and parses the event.
 func (v *WebhookVerifier) VerifyAndParse(payload []byte, signature string, timestamp string) (*WebhookEvent, error) {
+	if strings.HasPrefix(signature, "t=") {
+		headerTimestamp, headerSignature, err := parseTimestampedV1Header(signature)
+		if err != nil {
+			return nil, err
+		}
+		timestamp = headerTimestamp
+		signature = headerSignature
+	}
+
 	// Validate timestamp
 	ts, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil {
@@ -93,8 +103,36 @@ func (v *WebhookVerifier) VerifyAndParse(payload []byte, signature string, times
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return nil, fmt.Errorf("failed to parse webhook event: %w", err)
 	}
+	if event.CreatedAt.IsZero() {
+		event.CreatedAt = event.Timestamp
+	}
 
 	return &event, nil
+}
+
+func parseTimestampedV1Header(signatureHeader string) (string, string, error) {
+	parts := strings.Split(signatureHeader, ",")
+	var timestamp string
+	var signature string
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		switch {
+		case strings.HasPrefix(part, "t="):
+			timestamp = strings.TrimPrefix(part, "t=")
+		case strings.HasPrefix(part, "v1="):
+			signature = strings.TrimPrefix(part, "v1=")
+		}
+	}
+
+	if timestamp == "" {
+		return "", "", fmt.Errorf("missing timestamp in signature header")
+	}
+	if signature == "" {
+		return "", "", fmt.Errorf("missing v1 signature in signature header")
+	}
+
+	return timestamp, signature, nil
 }
 
 // computeSignature computes the expected HMAC-SHA256 signature (legacy format).
@@ -107,6 +145,10 @@ func (v *WebhookVerifier) computeSignature(payload []byte, timestamp string) str
 
 // WebhookEventTypes defines known webhook event types.
 const (
+	EventIntentStatusChanged  = "intent.status.changed"
+	EventRiskReviewRequired   = "risk.review.required"
+	EventKycFlagged           = "kyc.flagged"
+	EventReconBatchReady      = "recon.batch.ready"
 	EventIntentPayinCreated    = "intent.payin.created"
 	EventIntentPayinConfirmed  = "intent.payin.confirmed"
 	EventIntentPayinExpired    = "intent.payin.expired"

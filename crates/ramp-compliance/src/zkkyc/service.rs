@@ -145,11 +145,7 @@ impl ZkKycService {
     /// 1. The challenge is still valid (not expired)
     /// 2. The commitment hash is well-formed
     /// 3. The proof data contains a valid HMAC over (commitment || challenge)
-    pub fn verify_proof(
-        &self,
-        user_id: &str,
-        proof: &ZkKycProof,
-    ) -> VerificationResult {
+    pub fn verify_proof(&self, user_id: &str, proof: &ZkKycProof) -> VerificationResult {
         let now = Utc::now();
 
         // Check that we have a pending challenge for this user
@@ -183,9 +179,7 @@ impl ZkKycService {
         }
 
         // Validate commitment hash is a valid hex string of correct length (32 bytes = 64 hex chars)
-        if proof.commitment_hash.len() != 64
-            || hex::decode(&proof.commitment_hash).is_err()
-        {
+        if proof.commitment_hash.len() != 64 || hex::decode(&proof.commitment_hash).is_err() {
             return VerificationResult {
                 valid: false,
                 commitment_hash: proof.commitment_hash.clone(),
@@ -208,10 +202,7 @@ impl ZkKycService {
 
         // Simulated proof verification:
         // Verify HMAC(verification_key, commitment_hash || challenge) == proof_data
-        let expected_mac = self.compute_proof_mac(
-            &proof.commitment_hash,
-            &challenge.challenge,
-        );
+        let expected_mac = self.compute_proof_mac(&proof.commitment_hash, &challenge.challenge);
 
         if proof.proof_data != expected_mac {
             return VerificationResult {
@@ -245,12 +236,7 @@ impl ZkKycService {
     }
 
     /// Store a successful verification for a user.
-    pub fn store_verification(
-        &self,
-        user_id: &str,
-        commitment_hash: &str,
-        proven_tier: KycTier,
-    ) {
+    pub fn store_verification(&self, user_id: &str, commitment_hash: &str, proven_tier: KycTier) {
         let record = VerifiedUser {
             commitment_hash: commitment_hash.to_string(),
             verified_at: Utc::now(),
@@ -351,7 +337,11 @@ mod tests {
         };
 
         let result = svc.verify_proof("user-4", &proof);
-        assert!(result.valid, "Expected valid proof: {:?}", result.rejection_reason);
+        assert!(
+            result.valid,
+            "Expected valid proof: {:?}",
+            result.rejection_reason
+        );
         assert_eq!(result.commitment_hash, commitment_hash);
         assert_eq!(result.proven_tier, KycTier::Tier1);
         assert!(result.rejection_reason.is_none());
@@ -452,10 +442,7 @@ mod tests {
 
         let result = svc.verify_proof("user-8", &proof);
         assert!(!result.valid);
-        assert_eq!(
-            result.rejection_reason.as_deref(),
-            Some("Invalid proof")
-        );
+        assert_eq!(result.rejection_reason.as_deref(), Some("Invalid proof"));
     }
 
     #[test]

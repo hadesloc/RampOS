@@ -6,10 +6,10 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use chrono::Utc;
-use jsonwebtoken::{encode, EncodingKey, Header};
 use base64::Engine;
+use chrono::Utc;
 use hmac::Mac;
+use jsonwebtoken::{encode, EncodingKey, Header};
 use ramp_api::middleware::{PortalAuthConfig, PortalClaims};
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{
@@ -17,9 +17,9 @@ use ramp_compliance::{
 };
 use ramp_core::event::InMemoryEventPublisher;
 use ramp_core::repository::intent::IntentRow;
-use ramp_core::repository::IntentRepository;
 use ramp_core::repository::tenant::TenantRow;
 use ramp_core::repository::user::UserRow;
+use ramp_core::repository::IntentRepository;
 use ramp_core::service::{
     ledger::LedgerService, payin::PayinService, payout::PayoutService, trade::TradeService,
 };
@@ -118,7 +118,18 @@ async fn setup_portal_app() -> TestPortalApp {
         kyc_status: "VERIFIED".to_string(),
         kyc_verified_at: Some(Utc::now()),
         risk_score: None,
-        risk_flags: serde_json::json!({}),
+        risk_flags: serde_json::json!({
+            "passport": {
+                "packageId": "pkg_passport_001",
+                "sourceTenantId": "tenant_origin",
+                "status": "available",
+                "consentStatus": "granted",
+                "destinationTenantId": "tenant_partner",
+                "fieldsShared": ["identity", "sanctions"],
+                "expiresAt": "2026-04-01T00:00:00Z",
+                "reuseAllowed": true
+            }
+        }),
         daily_payin_limit_vnd: None,
         daily_payout_limit_vnd: None,
         created_at: Utc::now(),
@@ -167,10 +178,13 @@ async fn setup_portal_app() -> TestPortalApp {
         ledger_service,
         onboarding_service,
         user_service,
-        webhook_service: Arc::new(ramp_core::service::webhook::WebhookService::new(
-            Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
-            tenant_repo.clone(),
-        ).unwrap()),
+        webhook_service: Arc::new(
+            ramp_core::service::webhook::WebhookService::new(
+                Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
+                tenant_repo.clone(),
+            )
+            .unwrap(),
+        ),
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
         report_generator,
@@ -188,14 +202,17 @@ async fn setup_portal_app() -> TestPortalApp {
             ramp_core::billing::BillingConfig::default(),
             Arc::new(ramp_core::billing::mock::MockBillingDataProvider::new()),
         )),
-        vnst_protocol: Arc::new(ramp_core::stablecoin::vnst_protocol::VnstProtocolService::new(
-            ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
-            Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
-        )),
+        vnst_protocol: Arc::new(
+            ramp_core::stablecoin::vnst_protocol::VnstProtocolService::new(
+                ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
+                Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
+            ),
+        ),
         db_pool: None,
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
+        event_publisher,
     };
 
     let router = create_router(app_state);
@@ -235,6 +252,7 @@ async fn test_get_kyc_status() {
 
     assert!(body.get("status").is_some());
     assert!(body.get("tier").is_some());
+    assert_eq!(body["passportSummary"]["packageId"], "pkg_passport_001");
 }
 
 #[tokio::test]
@@ -366,7 +384,9 @@ async fn test_verify_zk_kyc_proof_success() {
         .method("POST")
         .header("Authorization", format!("Bearer {}", app.jwt_token))
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&challenge_payload).unwrap()))
+        .body(Body::from(
+            serde_json::to_string(&challenge_payload).unwrap(),
+        ))
         .unwrap();
 
     let challenge_resp = app.router.clone().oneshot(challenge_req).await.unwrap();
@@ -379,10 +399,8 @@ async fn test_verify_zk_kyc_proof_success() {
     let challenge = challenge_body["challenge"].as_str().unwrap().to_string();
 
     let commitment_hash = "ab".repeat(32);
-    let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(
-        b"rampos-zk-kyc-verification-key-dev",
-    )
-    .unwrap();
+    let mut mac =
+        hmac::Hmac::<sha2::Sha256>::new_from_slice(b"rampos-zk-kyc-verification-key-dev").unwrap();
     mac.update(commitment_hash.as_bytes());
     mac.update(challenge.as_bytes());
     let proof_bytes = mac.finalize().into_bytes();

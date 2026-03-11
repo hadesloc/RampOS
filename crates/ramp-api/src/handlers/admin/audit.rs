@@ -231,10 +231,7 @@ pub async fn export_audit_log(
 
             Ok((
                 [
-                    (
-                        axum::http::header::CONTENT_TYPE,
-                        "text/csv; charset=utf-8",
-                    ),
+                    (axum::http::header::CONTENT_TYPE, "text/csv; charset=utf-8"),
                     (
                         axum::http::header::CONTENT_DISPOSITION,
                         &format!("attachment; filename=\"{}\"", filename),

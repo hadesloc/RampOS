@@ -35,6 +35,19 @@ Webhooks are configured per tenant during onboarding:
 | `kyc.flagged` | KYC verification issue | Identity verification problem |
 | `recon.batch.ready` | Reconciliation ready | Daily batch completed |
 
+### Versioning Contract
+
+Current outbound webhook events are aligned to the `v1` event catalog:
+
+| Event Type | Version | Wrapper | Key Field Paths |
+|------------|---------|---------|-----------------|
+| `intent.status.changed` | `v1` | `webhook_event` | `data.intentId`, `data.newStatus` |
+| `risk.review.required` | `v1` | `webhook_event` | `data.intentId` |
+| `kyc.flagged` | `v1` | `webhook_event` | `data.userId`, `data.reason` |
+| `recon.batch.ready` | `v1` | `webhook_event` | `data.batchId`, `data.status` |
+
+Version `v1` currently has no active deprecations. If a field or event is deprecated later, RampOS will mark the replacement event or field path explicitly in the catalog before removing it.
+
 ### Event Payload Structure
 
 All webhook events follow this structure:
@@ -49,6 +62,8 @@ All webhook events follow this structure:
   }
 }
 ```
+
+The `id`, `type`, and `created_at` fields are envelope-level metadata. Event-specific fields live under `data` and should be parsed using the event-specific field paths documented above.
 
 ### intent.status.changed
 

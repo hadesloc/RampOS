@@ -4,6 +4,7 @@ use axum::{
     Router,
 };
 use chrono::Utc;
+use hmac::{Hmac, Mac};
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_common::{
@@ -28,7 +29,6 @@ use ramp_core::{
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde_json::json;
-use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 type HmacSha256 = Hmac<Sha256>;
 use sqlx::PgPool;
@@ -121,13 +121,7 @@ struct TestContext {
     user_id: String,
 }
 
-fn sign_request(
-    method: &str,
-    path: &str,
-    timestamp: &str,
-    body: &str,
-    secret: &str,
-) -> String {
+fn sign_request(method: &str, path: &str, timestamp: &str, body: &str, secret: &str) -> String {
     let message = format!("{}\n{}\n{}\n{}", method, path, timestamp, body);
     let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
     mac.update(message.as_bytes());
@@ -228,10 +222,13 @@ async fn setup_test_app() -> TestContext {
         ledger_service,
         onboarding_service,
         user_service,
-        webhook_service: Arc::new(ramp_core::service::webhook::WebhookService::new(
-            Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
-            tenant_repo.clone(),
-        ).unwrap()),
+        webhook_service: Arc::new(
+            ramp_core::service::webhook::WebhookService::new(
+                Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
+                tenant_repo.clone(),
+            )
+            .unwrap(),
+        ),
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
         report_generator,
@@ -341,8 +338,13 @@ async fn test_payin_e2e_flow() {
     let body_confirm = serde_json::to_string(&confirm_request).unwrap();
     let timestamp_confirm = Utc::now().timestamp().to_string();
     let path_confirm = "/v1/intents/payin/confirm";
-    let signature_confirm =
-        sign_request("POST", path_confirm, &timestamp_confirm, &body_confirm, &ctx.api_secret);
+    let signature_confirm = sign_request(
+        "POST",
+        path_confirm,
+        &timestamp_confirm,
+        &body_confirm,
+        &ctx.api_secret,
+    );
 
     let request_confirm = Request::builder()
         .uri(path_confirm)
@@ -509,8 +511,7 @@ async fn test_payout_e2e_flow() {
     let body_aml = serde_json::to_string(&aml_request).unwrap();
     let timestamp_aml = Utc::now().timestamp().to_string();
     let path_aml = "/v1/intents/payout";
-    let signature_aml =
-        sign_request("POST", path_aml, &timestamp_aml, &body_aml, &ctx.api_secret);
+    let signature_aml = sign_request("POST", path_aml, &timestamp_aml, &body_aml, &ctx.api_secret);
 
     let request_aml = Request::builder()
         .uri(path_aml)

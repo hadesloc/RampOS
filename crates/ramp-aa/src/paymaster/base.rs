@@ -1,8 +1,8 @@
+use alloy::primitives::{keccak256, Address, Bytes, U256};
 use async_trait::async_trait;
 use chrono::Utc;
-use alloy::primitives::{Address, Bytes, U256, keccak256};
-use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
 use k256::ecdsa::signature::hazmat::PrehashVerifier;
+use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use ramp_common::{types::TenantId, Result};
 use tracing::info;
@@ -105,11 +105,7 @@ impl PaymasterService {
     /// SECURITY: The recovery ID (v) is properly computed from the signature,
     /// ensuring the signature can be verified on-chain using ECDSA.recover().
     /// For Ethereum: v = 27 + recovery_id (where recovery_id is 0 or 1)
-    fn sign_paymaster_data(
-        &self,
-        valid_until: u64,
-        valid_after: u64,
-    ) -> Result<Vec<u8>> {
+    fn sign_paymaster_data(&self, valid_until: u64, valid_after: u64) -> Result<Vec<u8>> {
         // Construct the message to sign: validUntil || validAfter
         // Must match the message reconstructed in validate()
         let mut data = Vec::new();
@@ -298,8 +294,8 @@ impl Paymaster for PaymasterService {
     }
 
     async fn validate(&self, paymaster_data: &PaymasterData) -> Result<bool> {
-        use k256::ecdsa::Signature;
         use k256::ecdsa::signature::hazmat::PrehashVerifier;
+        use k256::ecdsa::Signature;
 
         let now = Utc::now().timestamp() as u64;
 
@@ -384,7 +380,10 @@ impl Paymaster for PaymasterService {
 
         // Verify signature using verify_prehash (matches sign_prehash_recoverable used in signing)
         let verifying_key = self.verifying_key();
-        if verifying_key.verify_prehash(eth_signed_hash.as_slice(), &signature).is_err() {
+        if verifying_key
+            .verify_prehash(eth_signed_hash.as_slice(), &signature)
+            .is_err()
+        {
             info!("Paymaster ECDSA signature verification failed");
             return Ok(false);
         }

@@ -57,6 +57,28 @@ impl CaseManager {
         detection_data: serde_json::Value,
     ) -> Result<String> {
         let case_id = format!("case_{}", Uuid::now_v7());
+        self.create_case_with_id(
+            case_id,
+            tenant_id,
+            user_id,
+            intent_id,
+            case_type,
+            severity,
+            detection_data,
+        )
+        .await
+    }
+
+    pub async fn create_case_with_id(
+        &self,
+        case_id: String,
+        tenant_id: &TenantId,
+        user_id: Option<&UserId>,
+        intent_id: Option<&IntentId>,
+        case_type: CaseType,
+        severity: CaseSeverity,
+        detection_data: serde_json::Value,
+    ) -> Result<String> {
         let now = Utc::now();
 
         let case = AmlCase {
@@ -173,18 +195,15 @@ impl CaseManager {
         analyst_id: &str,
         author_id: Option<String>,
     ) -> Result<()> {
-        self.store.assign_case(tenant_id, case_id, analyst_id).await?;
+        self.store
+            .assign_case(tenant_id, case_id, analyst_id)
+            .await?;
 
         info!(case_id = case_id, analyst_id = analyst_id, "Case assigned");
 
         // Auto-create note
         self.note_manager
-            .on_assignment_change(
-                tenant_id,
-                case_id,
-                Some(analyst_id.to_string()),
-                author_id,
-            )
+            .on_assignment_change(tenant_id, case_id, Some(analyst_id.to_string()), author_id)
             .await?;
 
         Ok(())

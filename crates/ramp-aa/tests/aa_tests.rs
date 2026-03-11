@@ -42,14 +42,18 @@ fn test_address_2() -> Address {
 
 fn test_signing_key() -> Vec<u8> {
     vec![
-        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
-        0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c,
-        0x1d, 0x1e, 0x1f, 0x20,
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,
+        0x1f, 0x20,
     ]
 }
 
 fn make_user_op() -> UserOperation {
-    UserOperation::new(test_address_1(), U256::from(1), Bytes::from(vec![0x01, 0x02, 0x03]))
+    UserOperation::new(
+        test_address_1(),
+        U256::from(1),
+        Bytes::from(vec![0x01, 0x02, 0x03]),
+    )
 }
 
 fn make_smart_account() -> smart_account::SmartAccount {
@@ -195,8 +199,16 @@ mod smart_account_tests {
         let account = make_smart_account();
 
         let calls = vec![
-            (Address::from([0x33u8; 20]), U256::from(100), Bytes::default()),
-            (Address::from([0x44u8; 20]), U256::from(200), Bytes::from(vec![0x01])),
+            (
+                Address::from([0x33u8; 20]),
+                U256::from(100),
+                Bytes::default(),
+            ),
+            (
+                Address::from([0x44u8; 20]),
+                U256::from(200),
+                Bytes::from(vec![0x01]),
+            ),
         ];
 
         let op = service
@@ -257,11 +269,8 @@ mod user_operation_tests {
 
     #[test]
     fn test_user_op_with_gas() {
-        let op = make_user_op().with_gas(
-            U256::from(200_000),
-            U256::from(300_000),
-            U256::from(50_000),
-        );
+        let op =
+            make_user_op().with_gas(U256::from(200_000), U256::from(300_000), U256::from(50_000));
 
         assert_eq!(op.call_gas_limit, U256::from(200_000));
         assert_eq!(op.verification_gas_limit, U256::from(300_000));
@@ -270,7 +279,8 @@ mod user_operation_tests {
 
     #[test]
     fn test_user_op_with_fees() {
-        let op = make_user_op().with_fees(U256::from(50_000_000_000u64), U256::from(2_000_000_000u64));
+        let op =
+            make_user_op().with_fees(U256::from(50_000_000_000u64), U256::from(2_000_000_000u64));
 
         assert_eq!(op.max_fee_per_gas, U256::from(50_000_000_000u64));
         assert_eq!(op.max_priority_fee_per_gas, U256::from(2_000_000_000u64));
@@ -386,7 +396,12 @@ mod gas_estimator_tests {
             Ok(U256::from(1_000_000_000u64)) // 1 gwei
         }
 
-        async fn estimate_gas(&self, _from: Address, _to: Address, _data: Bytes) -> ramp_common::Result<U256> {
+        async fn estimate_gas(
+            &self,
+            _from: Address,
+            _to: Address,
+            _data: Bytes,
+        ) -> ramp_common::Result<U256> {
             Ok(U256::from(21000u64))
         }
 
@@ -420,16 +435,9 @@ mod gas_estimator_tests {
     async fn test_estimate_call_gas_with_calldata() {
         let estimator = make_estimator();
 
-        let op_small = UserOperation::new(
-            test_address_1(),
-            U256::ZERO,
-            Bytes::from(vec![1u8; 10]),
-        );
-        let op_large = UserOperation::new(
-            test_address_1(),
-            U256::ZERO,
-            Bytes::from(vec![1u8; 1000]),
-        );
+        let op_small = UserOperation::new(test_address_1(), U256::ZERO, Bytes::from(vec![1u8; 10]));
+        let op_large =
+            UserOperation::new(test_address_1(), U256::ZERO, Bytes::from(vec![1u8; 1000]));
 
         let gas_small = estimator.estimate_call_gas(&op_small).await.unwrap();
         let gas_large = estimator.estimate_call_gas(&op_large).await.unwrap();
@@ -443,11 +451,7 @@ mod gas_estimator_tests {
     async fn test_estimate_call_gas_mock_returns_constant() {
         let estimator = make_estimator();
 
-        let op = UserOperation::new(
-            test_address_1(),
-            U256::ZERO,
-            Bytes::from(vec![0xff; 100]),
-        );
+        let op = UserOperation::new(test_address_1(), U256::ZERO, Bytes::from(vec![0xff; 100]));
 
         let gas = estimator.estimate_call_gas(&op).await.unwrap();
         // Mock returns 21000, + 10% buffer = 23100
@@ -545,12 +549,7 @@ mod policy_tests {
         };
 
         let result = engine
-            .validate_session_key(
-                &session,
-                test_address_2(),
-                [0x00; 4],
-                U256::ZERO,
-            )
+            .validate_session_key(&session, test_address_2(), [0x00; 4], U256::ZERO)
             .await
             .expect("should validate");
 
@@ -570,17 +569,15 @@ mod policy_tests {
         };
 
         let result = engine
-            .validate_session_key(
-                &session,
-                test_address_2(),
-                [0x00; 4],
-                U256::ZERO,
-            )
+            .validate_session_key(&session, test_address_2(), [0x00; 4], U256::ZERO)
             .await
             .expect("should validate");
 
         assert!(!result.violations.is_empty());
-        assert!(result.violations.iter().any(|v| v.contains("not yet valid")));
+        assert!(result
+            .violations
+            .iter()
+            .any(|v| v.contains("not yet valid")));
     }
 
     #[tokio::test]
@@ -610,7 +607,10 @@ mod policy_tests {
             .expect("should validate");
 
         assert!(!result.violations.is_empty());
-        assert!(result.violations.iter().any(|v| v.contains("No permission")));
+        assert!(result
+            .violations
+            .iter()
+            .any(|v| v.contains("No permission")));
     }
 
     #[tokio::test]
@@ -810,7 +810,10 @@ mod paymaster_tests {
         assert!(data.valid_until > data.valid_after);
 
         // Verify embedded address
-        assert_eq!(&data.paymaster_and_data[0..20], paymaster_address.as_slice());
+        assert_eq!(
+            &data.paymaster_and_data[0..20],
+            paymaster_address.as_slice()
+        );
 
         // Verify signature v value
         let v = data.paymaster_and_data[96];
@@ -843,8 +846,8 @@ mod paymaster_tests {
 mod multi_token_tests {
     use super::*;
     use ramp_aa::paymaster::{
-        GasToken, MockPriceOracle, MultiTokenPaymaster, MultiTokenPaymasterConfig,
-        PriceOracle, TenantGasLimits, TokenConfig,
+        GasToken, MockPriceOracle, MultiTokenPaymaster, MultiTokenPaymasterConfig, PriceOracle,
+        TenantGasLimits, TokenConfig,
     };
 
     fn test_config() -> MultiTokenPaymasterConfig {
@@ -1161,8 +1164,14 @@ mod cross_chain_tests {
 
     #[test]
     fn test_supported_chain_from_chain_id() {
-        assert_eq!(SupportedChain::from_chain_id(1), Some(SupportedChain::Ethereum));
-        assert_eq!(SupportedChain::from_chain_id(137), Some(SupportedChain::Polygon));
+        assert_eq!(
+            SupportedChain::from_chain_id(1),
+            Some(SupportedChain::Ethereum)
+        );
+        assert_eq!(
+            SupportedChain::from_chain_id(137),
+            Some(SupportedChain::Polygon)
+        );
         assert_eq!(SupportedChain::from_chain_id(999), None);
     }
 
@@ -1283,7 +1292,10 @@ mod cross_chain_tests {
             .unwrap();
         assert!(reserved);
 
-        provider.release_liquidity("test_reservation").await.unwrap();
+        provider
+            .release_liquidity("test_reservation")
+            .await
+            .unwrap();
         provider
             .confirm_usage("test_reservation", U256::from(500_000_000_000_000_000u64))
             .await
@@ -1300,8 +1312,8 @@ mod eip7702_tests {
     use ramp_aa::eip7702::{
         authorization::{Authorization, AuthorizationList, Signature, SignedAuthorization},
         delegation::{
-            Delegation, DelegationManager, DelegationRegistry, DelegationStatus,
-            SessionDelegation, SessionPermissions,
+            Delegation, DelegationManager, DelegationRegistry, DelegationStatus, SessionDelegation,
+            SessionPermissions,
         },
         Eip7702Config, Eip7702Error,
     };
@@ -1448,13 +1460,8 @@ mod eip7702_tests {
 
     #[test]
     fn test_session_delegation_creation() {
-        let session = SessionDelegation::new(
-            test_address_1(),
-            test_delegate(),
-            U256::from(1),
-            0,
-            3600,
-        );
+        let session =
+            SessionDelegation::new(test_address_1(), test_delegate(), U256::from(1), 0, 3600);
 
         assert!(!session.is_expired());
         assert!(session.remaining_seconds() > 0);
@@ -1567,7 +1574,10 @@ mod eip7702_tests {
         let manager = DelegationManager::new(config);
 
         let result = manager.create_session(test_address_1(), test_delegate(), 0, 7200, None);
-        assert!(matches!(result, Err(Eip7702Error::DurationExceedsMax(_, _))));
+        assert!(matches!(
+            result,
+            Err(Eip7702Error::DurationExceedsMax(_, _))
+        ));
     }
 
     #[test]

@@ -895,11 +895,13 @@ export const webhooksApi = {
     page?: number;
     per_page?: number;
     status?: string;
+    event_type?: string;
   }): Promise<PaginatedResponse<WebhookEvent>> => {
     const searchParams = new URLSearchParams();
     if (params?.page) searchParams.set('page', params.page.toString());
     if (params?.per_page) searchParams.set('per_page', params.per_page.toString());
     if (params?.status) searchParams.set('status', params.status);
+    if (params?.event_type) searchParams.set('event_type', params.event_type);
 
     const query = searchParams.toString();
     return apiRequest<PaginatedResponse<WebhookEvent>>(`/v1/admin/webhooks${query ? `?${query}` : ''}`);

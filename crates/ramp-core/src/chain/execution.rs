@@ -37,14 +37,19 @@ pub struct ExecutionStep {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ExecutionStatus {
     Pending,
-    InProgress { current_step: usize },
+    InProgress {
+        current_step: usize,
+    },
     Completed,
     PartiallyCompleted {
         completed_steps: usize,
         total_steps: usize,
     },
     RolledBack,
-    Failed { step: usize, error: String },
+    Failed {
+        step: usize,
+        error: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -319,10 +324,7 @@ mod tests {
 
     fn multi_step_route() -> ExecutionRoute {
         ExecutionRoute {
-            steps: vec![
-                make_swap_action(1000, 980),
-                make_bridge_action(980, 970),
-            ],
+            steps: vec![make_swap_action(1000, 980), make_bridge_action(980, 970)],
             total_input: 1000,
             total_output: 970,
             total_fee: 30,
@@ -368,7 +370,10 @@ mod tests {
         let route = multi_step_route();
         let result = engine.execute_with_failure(&route, 1); // Fail at step 1
 
-        assert!(matches!(result.status, ExecutionStatus::Failed { step: 1, .. }));
+        assert!(matches!(
+            result.status,
+            ExecutionStatus::Failed { step: 1, .. }
+        ));
         // Step 0 should be rolled back
         assert!(
             matches!(result.steps[0].status, StepStatus::RolledBack { .. }),
@@ -415,7 +420,10 @@ mod tests {
 
         let result = engine.execute_with_failure(&route, 2); // Fail at step 2
 
-        assert!(matches!(result.status, ExecutionStatus::Failed { step: 2, .. }));
+        assert!(matches!(
+            result.status,
+            ExecutionStatus::Failed { step: 2, .. }
+        ));
         // Steps 0 and 1 should be rolled back
         assert!(matches!(
             result.steps[0].status,

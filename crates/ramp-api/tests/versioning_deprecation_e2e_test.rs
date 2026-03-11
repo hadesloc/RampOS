@@ -25,9 +25,7 @@ use axum::{
 use ramp_api::middleware::versioning::{
     version_negotiation_middleware, TenantApiVersion, VersionContext, VersionSource,
 };
-use ramp_api::versioning::{
-    ApiVersion, TransformError, TransformerRegistry, VersionTransformer,
-};
+use ramp_api::versioning::{ApiVersion, TransformError, TransformerRegistry, VersionTransformer};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -75,15 +73,11 @@ async fn deprecation_aware_handler(req: Request) -> Response {
 
             // Add deprecation headers for older versions
             if is_deprecated {
-                resp.headers_mut().insert(
-                    "Deprecation",
-                    "true".parse().unwrap(),
-                );
+                resp.headers_mut()
+                    .insert("Deprecation", "true".parse().unwrap());
                 // Sunset header: indicate when this version will be removed
-                resp.headers_mut().insert(
-                    "Sunset",
-                    "2027-02-01T00:00:00Z".parse().unwrap(),
-                );
+                resp.headers_mut()
+                    .insert("Sunset", "2027-02-01T00:00:00Z".parse().unwrap());
                 resp.headers_mut().insert(
                     "X-RampOS-Deprecation-Warning",
                     format!(
@@ -132,15 +126,13 @@ fn build_tenant_app(pinned_version: &str) -> Router {
     Router::new()
         .route("/version", get(deprecation_aware_handler))
         .layer(middleware::from_fn(version_negotiation_middleware))
-        .layer(middleware::from_fn(
-            move |mut req: Request, next: Next| {
-                let version = pinned.clone();
-                async move {
-                    req.extensions_mut().insert(TenantApiVersion { version });
-                    Ok::<_, StatusCode>(next.run(req).await)
-                }
-            },
-        ))
+        .layer(middleware::from_fn(move |mut req: Request, next: Next| {
+            let version = pinned.clone();
+            async move {
+                req.extensions_mut().insert(TenantApiVersion { version });
+                Ok::<_, StatusCode>(next.run(req).await)
+            }
+        }))
 }
 
 /// Build an app with both response downgrade and deprecation headers.
@@ -173,10 +165,8 @@ fn build_full_deprecation_app() -> Router {
                             // Add deprecation headers
                             resp.headers_mut()
                                 .insert("Deprecation", "true".parse().unwrap());
-                            resp.headers_mut().insert(
-                                "Sunset",
-                                "2027-02-01T00:00:00Z".parse().unwrap(),
-                            );
+                            resp.headers_mut()
+                                .insert("Sunset", "2027-02-01T00:00:00Z".parse().unwrap());
                             return resp;
                         }
 
@@ -318,7 +308,8 @@ async fn test_tenant_pinned_to_deprecated_version() {
     assert_eq!(body["is_deprecated"], true);
 
     // Should still get deprecation headers
-    let deprecation = has_deprecation.expect("Tenant on deprecated version should see Deprecation header");
+    let deprecation =
+        has_deprecation.expect("Tenant on deprecated version should see Deprecation header");
     assert_eq!(deprecation, "true");
 }
 
@@ -458,7 +449,10 @@ async fn test_breaking_change_detection_via_transformer() {
     let downgraded = registry
         .downgrade_response(&v1, &v2, upgraded.clone())
         .unwrap();
-    assert_eq!(downgraded["amount"], 50000, "Downgrade should restore 'amount'");
+    assert_eq!(
+        downgraded["amount"], 50000,
+        "Downgrade should restore 'amount'"
+    );
     assert!(
         downgraded.get("amount_minor").is_none(),
         "Downgrade should remove 'amount_minor'"
@@ -482,7 +476,10 @@ async fn test_version_lifecycle_states() {
 
     // Active but Deprecated: is_compatible, is_known, < latest
     let deprecated = ApiVersion::parse("2026-02-01").unwrap();
-    assert!(deprecated.is_compatible(), "Deprecated should be compatible");
+    assert!(
+        deprecated.is_compatible(),
+        "Deprecated should be compatible"
+    );
     assert!(deprecated.is_known(), "Deprecated should be known");
     assert!(
         deprecated < latest,
@@ -642,10 +639,7 @@ async fn test_concurrent_deprecated_and_latest_requests() {
                 !has_deprecation,
                 "Latest version should NOT have Deprecation header"
             );
-            assert!(
-                !is_deprecated,
-                "Latest version body flag should be false"
-            );
+            assert!(!is_deprecated, "Latest version body flag should be false");
         }
     }
 }
@@ -689,9 +683,15 @@ async fn test_response_downgrade_with_deprecation_headers() {
 
     // Response should be downgraded
     let body: Value = resp.json().await.unwrap();
-    assert_eq!(body["amount"], 100000, "Should be downgraded: amount_minor -> amount");
+    assert_eq!(
+        body["amount"], 100000,
+        "Should be downgraded: amount_minor -> amount"
+    );
     assert!(body.get("amount_minor").is_none());
-    assert_eq!(body["status"], "pending", "Should be downgraded: awaiting_confirmation -> pending");
+    assert_eq!(
+        body["status"], "pending",
+        "Should be downgraded: awaiting_confirmation -> pending"
+    );
     assert!(body.get("api_version").is_none());
     assert!(body.get("currency").is_none());
     assert_eq!(body["id"], "intent_dep_test");
@@ -776,15 +776,13 @@ async fn test_tenant_incompatible_pinned_version_falls_to_default() {
     let app = Router::new()
         .route("/version", get(deprecation_aware_handler))
         .layer(middleware::from_fn(version_negotiation_middleware))
-        .layer(middleware::from_fn(
-            move |mut req: Request, next: Next| {
-                let version = past.clone();
-                async move {
-                    req.extensions_mut().insert(TenantApiVersion { version });
-                    Ok::<_, StatusCode>(next.run(req).await)
-                }
-            },
-        ));
+        .layer(middleware::from_fn(move |mut req: Request, next: Next| {
+            let version = past.clone();
+            async move {
+                req.extensions_mut().insert(TenantApiVersion { version });
+                Ok::<_, StatusCode>(next.run(req).await)
+            }
+        }));
 
     let base_url = start_server(app).await;
     let client = reqwest::Client::new();
@@ -939,7 +937,10 @@ async fn test_version_negotiation_idempotency() {
         assert_eq!(resp.status().as_u16(), 200);
 
         let has_deprecation = resp.headers().get("Deprecation").is_some();
-        assert!(has_deprecation, "Each request should consistently have deprecation header");
+        assert!(
+            has_deprecation,
+            "Each request should consistently have deprecation header"
+        );
 
         let body: Value = resp.json().await.unwrap();
         assert_eq!(body["amount"], 100000);

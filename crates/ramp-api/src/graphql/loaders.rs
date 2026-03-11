@@ -1,8 +1,8 @@
 //! DataLoader implementations to prevent N+1 query problems
 
 use async_graphql::dataloader::Loader;
-use ramp_core::repository::user::{UserRepository, UserRow};
 use ramp_common::types::{TenantId, UserId};
+use ramp_core::repository::user::{UserRepository, UserRow};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -35,7 +35,8 @@ impl Loader<UserByIdKey> for UserLoader {
     fn load(
         &self,
         keys: &[UserByIdKey],
-    ) -> impl std::future::Future<Output = Result<HashMap<UserByIdKey, Self::Value>, Self::Error>> + Send {
+    ) -> impl std::future::Future<Output = Result<HashMap<UserByIdKey, Self::Value>, Self::Error>> + Send
+    {
         let user_repo = self.user_repo.clone();
         let keys = keys.to_vec();
 

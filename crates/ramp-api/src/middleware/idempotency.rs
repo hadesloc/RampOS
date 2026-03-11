@@ -168,10 +168,14 @@ impl IdempotencyStore for MemoryIdempotencyStore {
             .unwrap_or(std::time::Duration::from_secs(0))
             .as_secs();
 
-        let mut responses = self.responses.lock().map_err(|e| {
-            warn!(error = ?e, "Idempotency in-memory responses mutex poisoned");
-            e.to_string()
-        }).ok()?;
+        let mut responses = self
+            .responses
+            .lock()
+            .map_err(|e| {
+                warn!(error = ?e, "Idempotency in-memory responses mutex poisoned");
+                e.to_string()
+            })
+            .ok()?;
         if let Some((response, expires_at)) = responses.get(&full_key) {
             if *expires_at > now {
                 return Some(response.clone());
@@ -386,9 +390,11 @@ pub async fn idempotency_middleware(
                 })),
             )
                 .into_response();
-            response.headers_mut().insert("Retry-After", "60".parse().unwrap_or(
-                axum::http::HeaderValue::from_static("60")
-            ));
+            response.headers_mut().insert(
+                "Retry-After",
+                "60".parse()
+                    .unwrap_or(axum::http::HeaderValue::from_static("60")),
+            );
             return Ok(response);
         }
     }
@@ -398,7 +404,7 @@ pub async fn idempotency_middleware(
 
     // Store the response
     let (parts, body) = response.into_parts();
-        let body_bytes = axum::body::to_bytes(body, 1024 * 1024)
+    let body_bytes = axum::body::to_bytes(body, 1024 * 1024)
         .await
         .unwrap_or_default();
     let body_string = String::from_utf8_lossy(&body_bytes).to_string();
@@ -427,9 +433,11 @@ pub async fn idempotency_middleware(
             })),
         )
             .into_response();
-        response.headers_mut().insert("Retry-After", "60".parse().unwrap_or(
-            axum::http::HeaderValue::from_static("60")
-        ));
+        response.headers_mut().insert(
+            "Retry-After",
+            "60".parse()
+                .unwrap_or(axum::http::HeaderValue::from_static("60")),
+        );
         return Ok(response);
     }
 

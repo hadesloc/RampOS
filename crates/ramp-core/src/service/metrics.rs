@@ -6,6 +6,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+use serde::{Deserialize, Serialize};
+
 /// Fraud-score severity bucket
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FraudBucket {
@@ -46,6 +48,15 @@ struct Inner {
     settlement_count: HashMap<String, u64>,
     webhook_delivery_count: HashMap<String, u64>,
     fraud_buckets: HashMap<FraudBucket, u64>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IncidentSignalSnapshot {
+    pub processing_settlements: u64,
+    pub failed_settlements: u64,
+    pub failed_webhooks: u64,
+    pub critical_fraud_signals: u64,
 }
 
 /// Thread-safe Prometheus metrics registry.
@@ -107,6 +118,37 @@ impl MetricsRegistry {
         let bucket = FraudBucket::from_score(score);
         let mut inner = self.inner.write().unwrap();
         *inner.fraud_buckets.entry(bucket).or_insert(0) += 1;
+    }
+
+    /// Snapshot the current incident-relevant signals for guarded recommendations.
+    pub fn incident_signal_snapshot(&self) -> IncidentSignalSnapshot {
+        let inner = self.inner.read().unwrap();
+        IncidentSignalSnapshot {
+            processing_settlements: inner
+                .settlement_count
+                .get("PROCESSING")
+                .or_else(|| inner.settlement_count.get("processing"))
+                .copied()
+                .unwrap_or(0),
+            failed_settlements: inner
+                .settlement_count
+                .get("FAILED")
+                .or_else(|| inner.settlement_count.get("failed"))
+                .copied()
+                .unwrap_or(0),
+            failed_webhooks: inner
+                .webhook_delivery_count
+                .get("FAILED")
+                .or_else(|| inner.webhook_delivery_count.get("failed"))
+                .or_else(|| inner.webhook_delivery_count.get("fail"))
+                .copied()
+                .unwrap_or(0),
+            critical_fraud_signals: inner
+                .fraud_buckets
+                .get(&FraudBucket::Critical)
+                .copied()
+                .unwrap_or(0),
+        }
     }
 
     /// Export all metrics in Prometheus text exposition format.
@@ -243,17 +285,33 @@ mod tests {
     #[test]
     fn test_fraud_score_bucketing() {
         let registry = MetricsRegistry::new();
-        registry.record_fraud_score(0.1);  // low
-        registry.record_fraud_score(0.2);  // low
-        registry.record_fraud_score(0.3);  // medium
-        registry.record_fraud_score(0.6);  // high
-        registry.record_fraud_score(0.9);  // critical
+        registry.record_fraud_score(0.1); // low
+        registry.record_fraud_score(0.2); // low
+        registry.record_fraud_score(0.3); // medium
+        registry.record_fraud_score(0.6); // high
+        registry.record_fraud_score(0.9); // critical
 
         let output = registry.export_metrics();
         assert!(output.contains("rampos_fraud_scores_total{bucket=\"low\"} 2"));
         assert!(output.contains("rampos_fraud_scores_total{bucket=\"medium\"} 1"));
         assert!(output.contains("rampos_fraud_scores_total{bucket=\"high\"} 1"));
         assert!(output.contains("rampos_fraud_scores_total{bucket=\"critical\"} 1"));
+    }
+
+    #[test]
+    fn test_incident_signal_snapshot_reports_current_state() {
+        let registry = MetricsRegistry::new();
+        registry.record_settlement("PROCESSING");
+        registry.record_settlement("FAILED");
+        registry.record_webhook("fail");
+        registry.record_fraud_score(0.95);
+
+        let snapshot = registry.incident_signal_snapshot();
+
+        assert_eq!(snapshot.processing_settlements, 1);
+        assert_eq!(snapshot.failed_settlements, 1);
+        assert_eq!(snapshot.failed_webhooks, 1);
+        assert_eq!(snapshot.critical_fraud_signals, 1);
     }
 
     #[test]

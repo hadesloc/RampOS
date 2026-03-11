@@ -188,9 +188,10 @@ impl KycProvider for MockKycProvider {
     }
 
     async fn check_status(&self, reference: &str) -> Result<KycVerificationResult> {
-        let verifications = self.verifications.lock().map_err(|e| {
-            Error::Internal(format!("Verifications lock poisoned: {}", e))
-        })?;
+        let verifications = self
+            .verifications
+            .lock()
+            .map_err(|e| Error::Internal(format!("Verifications lock poisoned: {}", e)))?;
 
         if let Some(record) = verifications.get(reference) {
             Ok(KycVerificationResult {
@@ -292,7 +293,10 @@ mod tests {
             documents: vec![],
         };
 
-        let result = provider.verify(&request).await.expect("Verification failed");
+        let result = provider
+            .verify(&request)
+            .await
+            .expect("Verification failed");
         assert_eq!(result.status, KycStatus::Approved);
         assert_eq!(result.verified_tier, Some(KycTier::Tier1));
     }
@@ -315,7 +319,10 @@ mod tests {
             documents: vec![],
         };
 
-        let result = provider.verify(&request).await.expect("Verification failed");
+        let result = provider
+            .verify(&request)
+            .await
+            .expect("Verification failed");
         assert_eq!(result.status, KycStatus::Rejected);
         assert!(result.rejection_reason.is_some());
     }

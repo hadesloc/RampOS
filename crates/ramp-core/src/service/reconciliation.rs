@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+use crate::service::incident_timeline::IncidentTimelineEntry;
+use crate::service::replay::ReplayTimelineEntry;
+
 /// Represents a discrepancy found during reconciliation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Discrepancy {
@@ -65,6 +68,79 @@ pub enum ReconciliationStatus {
     Clean,
     DiscrepanciesFound,
     CriticalIssues,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReconciliationOwnerLane {
+    SettlementOperations,
+    TreasuryOperations,
+    BankingPartner,
+    EngineeringReview,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReconciliationRootCause {
+    OffchainRecordingGap,
+    OnchainObservationGap,
+    AmountVariance,
+    StatusDrift,
+    SettlementProcessingDelay,
+    DuplicateSettlement,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReconciliationAgeBucket {
+    Fresh,
+    Aging,
+    Breached,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ReconciliationMatchConfidence {
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconciliationSuggestedMatch {
+    pub settlement_id: String,
+    pub bank_reference: Option<String>,
+    pub amount_delta: f64,
+    pub updated_at: DateTime<Utc>,
+    pub confidence: ReconciliationMatchConfidence,
+    pub rationale: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconciliationQueueItem {
+    pub discrepancy_id: String,
+    pub report_id: String,
+    pub owner_lane: ReconciliationOwnerLane,
+    pub root_cause: ReconciliationRootCause,
+    pub age_bucket: ReconciliationAgeBucket,
+    pub severity: Severity,
+    pub settlement_id: Option<String>,
+    pub on_chain_tx: Option<String>,
+    pub detected_at: DateTime<Utc>,
+    pub summary: String,
+    pub suggested_matches: Vec<ReconciliationSuggestedMatch>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconciliationEvidencePack {
+    pub queue_item: ReconciliationQueueItem,
+    pub settlement_ids: Vec<String>,
+    pub replay_entries: Vec<ReplayTimelineEntry>,
+    pub incident_entries: Vec<IncidentTimelineEntry>,
+    pub generated_at: DateTime<Utc>,
 }
 
 /// On-chain transaction record used for comparison
@@ -129,8 +205,10 @@ impl ReconciliationService {
         }
 
         // Index on-chain txs by hash
-        let on_chain_by_hash: HashMap<&str, &OnChainTransaction> =
-            on_chain_txs.iter().map(|tx| (tx.tx_hash.as_str(), tx)).collect();
+        let on_chain_by_hash: HashMap<&str, &OnChainTransaction> = on_chain_txs
+            .iter()
+            .map(|tx| (tx.tx_hash.as_str(), tx))
+            .collect();
 
         // Check for on-chain txs without matching settlement (MissingSettlement)
         for tx in on_chain_txs {
@@ -252,6 +330,170 @@ impl ReconciliationService {
         }
     }
 
+    /// Convert an existing reconciliation report into replay timeline entries.
+    pub fn replay_timeline_entries(
+        &self,
+        report: &ReconciliationReport,
+    ) -> Vec<ReplayTimelineEntry> {
+        ReplayTimelineEntry::from_reconciliation_report(report)
+    }
+
+    /// Convert an existing reconciliation report into incident timeline entries.
+    pub fn incident_timeline_entries(
+        &self,
+        report: &ReconciliationReport,
+    ) -> Vec<IncidentTimelineEntry> {
+        IncidentTimelineEntry::from_reconciliation_report(report)
+    }
+
+    /// Build a bounded operator queue from a reconciliation report without creating a second
+    /// accounting engine.
+    pub fn build_break_queue(
+        &self,
+        report: &ReconciliationReport,
+        settlements: &[SettlementRecord],
+    ) -> Vec<ReconciliationQueueItem> {
+        let mut queue: Vec<_> = report
+            .discrepancies
+            .iter()
+            .map(|discrepancy| {
+                let (owner_lane, root_cause) = self.classify_discrepancy(discrepancy);
+                ReconciliationQueueItem {
+                    discrepancy_id: discrepancy.id.clone(),
+                    report_id: report.id.clone(),
+                    owner_lane,
+                    root_cause,
+                    age_bucket: self.age_bucket_for_queue_item(discrepancy, settlements),
+                    severity: discrepancy.severity.clone(),
+                    settlement_id: discrepancy.settlement_id.clone(),
+                    on_chain_tx: discrepancy.on_chain_tx.clone(),
+                    detected_at: discrepancy.detected_at,
+                    summary: discrepancy.details.clone(),
+                    suggested_matches: self.suggest_matches(discrepancy, settlements),
+                }
+            })
+            .collect();
+
+        queue.sort_by(|left, right| {
+            right
+                .detected_at
+                .cmp(&left.detected_at)
+                .then_with(|| left.discrepancy_id.cmp(&right.discrepancy_id))
+        });
+        queue
+    }
+
+    /// Build an evidence pack for a discrepancy by linking existing reconciliation and settlement
+    /// records only.
+    pub fn build_evidence_pack(
+        &self,
+        report: &ReconciliationReport,
+        settlements: &[crate::service::settlement::Settlement],
+        discrepancy_id: &str,
+    ) -> Result<ReconciliationEvidencePack, String> {
+        let queue_item = self
+            .build_break_queue(
+                report,
+                &settlements
+                    .iter()
+                    .map(|settlement| SettlementRecord {
+                        id: settlement.id.clone(),
+                        tx_hash: None,
+                        amount: 0.0,
+                        currency: "UNKNOWN".to_string(),
+                        status: settlement.status.as_db_str().to_string(),
+                        created_at: settlement.created_at,
+                        updated_at: settlement.updated_at,
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .into_iter()
+            .find(|item| item.discrepancy_id == discrepancy_id)
+            .ok_or_else(|| format!("Reconciliation discrepancy '{}' not found", discrepancy_id))?;
+
+        let discrepancy = report
+            .discrepancies
+            .iter()
+            .find(|item| item.id == discrepancy_id)
+            .ok_or_else(|| format!("Reconciliation discrepancy '{}' not found", discrepancy_id))?;
+
+        let linked_settlements: Vec<_> = settlements
+            .iter()
+            .filter(|settlement| {
+                discrepancy.settlement_id.as_deref() == Some(settlement.id.as_str())
+                    || queue_item
+                        .suggested_matches
+                        .iter()
+                        .any(|candidate| candidate.settlement_id == settlement.id)
+            })
+            .cloned()
+            .collect();
+
+        let queue_item = if discrepancy.kind == DiscrepancyKind::MissingSettlement
+            && queue_item.suggested_matches.is_empty()
+        {
+            let mut suggested_matches: Vec<_> = settlements
+                .iter()
+                .filter(|settlement| discrepancy.settlement_id.as_deref() != Some(settlement.id.as_str()))
+                .map(|settlement| ReconciliationSuggestedMatch {
+                    settlement_id: settlement.id.clone(),
+                    bank_reference: settlement.bank_reference.clone(),
+                    amount_delta: 0.0,
+                    updated_at: settlement.updated_at,
+                    confidence: ReconciliationMatchConfidence::Low,
+                    rationale: "Limited settlement metadata prevented amount-based matching; include as a manual review candidate.".to_string(),
+                })
+                .collect();
+            suggested_matches.sort_by(|left, right| {
+                right
+                    .updated_at
+                    .cmp(&left.updated_at)
+                    .then_with(|| left.settlement_id.cmp(&right.settlement_id))
+            });
+            suggested_matches.truncate(3);
+
+            ReconciliationQueueItem {
+                suggested_matches,
+                ..queue_item
+            }
+        } else {
+            queue_item
+        };
+
+        let mut settlement_ids = Vec::new();
+        for settlement in &linked_settlements {
+            if !settlement_ids.contains(&settlement.id) {
+                settlement_ids.push(settlement.id.clone());
+            }
+        }
+
+        let mut replay_entries = self.replay_timeline_entries(report);
+        replay_entries.extend(
+            linked_settlements
+                .iter()
+                .cloned()
+                .map(ReplayTimelineEntry::from_settlement),
+        );
+        self.sort_replay_entries(&mut replay_entries);
+
+        let mut incident_entries = self.incident_timeline_entries(report);
+        incident_entries.extend(
+            linked_settlements
+                .iter()
+                .cloned()
+                .map(IncidentTimelineEntry::from_settlement),
+        );
+        self.sort_incident_entries(&mut incident_entries);
+
+        Ok(ReconciliationEvidencePack {
+            queue_item,
+            settlement_ids,
+            replay_entries,
+            incident_entries,
+            generated_at: Utc::now(),
+        })
+    }
+
     /// Check for amount mismatches between a matched settlement and on-chain tx.
     fn check_amount_mismatch(
         &self,
@@ -299,9 +541,11 @@ impl ReconciliationService {
         let mut results = Vec::new();
 
         for s in settlements {
-            if (s.status == "PENDING" || s.status == "PROCESSING") {
+            if s.status == "PENDING" || s.status == "PROCESSING" {
                 let elapsed = (now - s.created_at).num_seconds();
                 if elapsed > self.stuck_threshold_secs {
+                    let breach_detected_at =
+                        s.created_at + chrono::Duration::seconds(self.stuck_threshold_secs);
                     results.push(Discrepancy {
                         id: format!("disc_{}", Uuid::now_v7()),
                         kind: DiscrepancyKind::StuckTransaction,
@@ -310,7 +554,7 @@ impl ReconciliationService {
                         expected_amount: s.amount,
                         actual_amount: s.amount,
                         severity: Severity::High,
-                        detected_at: now,
+                        detected_at: breach_detected_at,
                         details: format!(
                             "Settlement {} has been in {} state for {} seconds (threshold: {})",
                             s.id, s.status, elapsed, self.stuck_threshold_secs
@@ -368,6 +612,146 @@ impl ReconciliationService {
             .iter()
             .filter(|d| d.severity == Severity::Critical)
             .collect()
+    }
+
+    fn classify_discrepancy(
+        &self,
+        discrepancy: &Discrepancy,
+    ) -> (ReconciliationOwnerLane, ReconciliationRootCause) {
+        match discrepancy.kind {
+            DiscrepancyKind::MissingSettlement => (
+                ReconciliationOwnerLane::SettlementOperations,
+                ReconciliationRootCause::OffchainRecordingGap,
+            ),
+            DiscrepancyKind::MissingOnChain => (
+                ReconciliationOwnerLane::TreasuryOperations,
+                ReconciliationRootCause::OnchainObservationGap,
+            ),
+            DiscrepancyKind::AmountMismatch => (
+                ReconciliationOwnerLane::TreasuryOperations,
+                ReconciliationRootCause::AmountVariance,
+            ),
+            DiscrepancyKind::StatusMismatch => (
+                ReconciliationOwnerLane::BankingPartner,
+                ReconciliationRootCause::StatusDrift,
+            ),
+            DiscrepancyKind::StuckTransaction => (
+                ReconciliationOwnerLane::SettlementOperations,
+                ReconciliationRootCause::SettlementProcessingDelay,
+            ),
+            DiscrepancyKind::DuplicateSettlement => (
+                ReconciliationOwnerLane::EngineeringReview,
+                ReconciliationRootCause::DuplicateSettlement,
+            ),
+        }
+    }
+
+    fn age_bucket_for_queue_item(
+        &self,
+        discrepancy: &Discrepancy,
+        settlements: &[SettlementRecord],
+    ) -> ReconciliationAgeBucket {
+        let anchor_time = if discrepancy.kind == DiscrepancyKind::StuckTransaction {
+            discrepancy
+                .settlement_id
+                .as_ref()
+                .and_then(|settlement_id| {
+                    settlements
+                        .iter()
+                        .find(|settlement| settlement.id == *settlement_id)
+                        .map(|settlement| settlement.created_at)
+                })
+                .unwrap_or(discrepancy.detected_at)
+        } else {
+            discrepancy.detected_at
+        };
+
+        let age_minutes = (Utc::now() - anchor_time).num_minutes();
+        if age_minutes < 15 {
+            ReconciliationAgeBucket::Fresh
+        } else if age_minutes < 60 {
+            ReconciliationAgeBucket::Aging
+        } else {
+            ReconciliationAgeBucket::Breached
+        }
+    }
+
+    fn suggest_matches(
+        &self,
+        discrepancy: &Discrepancy,
+        settlements: &[SettlementRecord],
+    ) -> Vec<ReconciliationSuggestedMatch> {
+        if discrepancy.kind != DiscrepancyKind::MissingSettlement {
+            return Vec::new();
+        }
+
+        let tolerance = discrepancy.expected_amount.abs().max(1.0) * 0.02;
+        let mut matches: Vec<_> = settlements
+            .iter()
+            .filter(|settlement| settlement.tx_hash.is_none())
+            .filter(|settlement| settlement.currency == "USDT" || settlement.currency == "VND")
+            .filter_map(|settlement| {
+                let amount_delta = (settlement.amount - discrepancy.expected_amount).abs();
+                if amount_delta > tolerance {
+                    return None;
+                }
+
+                let confidence = if amount_delta <= discrepancy.expected_amount.abs().max(1.0) * 0.001
+                    || amount_delta <= 0.01
+                {
+                    ReconciliationMatchConfidence::High
+                } else if amount_delta <= discrepancy.expected_amount.abs().max(1.0) * 0.005 {
+                    ReconciliationMatchConfidence::Medium
+                } else {
+                    ReconciliationMatchConfidence::Low
+                };
+
+                Some(ReconciliationSuggestedMatch {
+                    settlement_id: settlement.id.clone(),
+                    bank_reference: None,
+                    amount_delta,
+                    updated_at: settlement.updated_at,
+                    confidence,
+                    rationale: format!(
+                        "Pending settlement amount differs by {:.4} and has no linked tx hash",
+                        amount_delta
+                    ),
+                })
+            })
+            .collect();
+
+        matches.sort_by(|left, right| {
+            right
+                .confidence
+                .cmp(&left.confidence)
+                .then_with(|| left.amount_delta.total_cmp(&right.amount_delta))
+                .then_with(|| right.updated_at.cmp(&left.updated_at))
+                .then_with(|| left.settlement_id.cmp(&right.settlement_id))
+        });
+        matches.truncate(3);
+        matches
+    }
+
+    fn sort_replay_entries(&self, entries: &mut [ReplayTimelineEntry]) {
+        entries.sort_by(|left, right| {
+            left.occurred_at
+                .cmp(&right.occurred_at)
+                .then_with(|| left.reference_id.cmp(&right.reference_id))
+        });
+        for (index, entry) in entries.iter_mut().enumerate() {
+            entry.sequence = index + 1;
+        }
+    }
+
+    fn sort_incident_entries(&self, entries: &mut [IncidentTimelineEntry]) {
+        entries.sort_by(|left, right| {
+            left.occurred_at
+                .cmp(&right.occurred_at)
+                .then_with(|| left.source_reference_id.cmp(&right.source_reference_id))
+        });
+        for (index, entry) in entries.iter_mut().enumerate() {
+            entry.sequence = index + 1;
+        }
     }
 }
 
@@ -448,8 +832,11 @@ mod tests {
 
         let report = svc.reconcile(&txs, &settlements);
         assert_eq!(report.status, ReconciliationStatus::DiscrepanciesFound);
-        assert!(report.discrepancies.iter().any(|d| d.kind == DiscrepancyKind::MissingSettlement
-            && d.on_chain_tx.as_deref() == Some("0x222")));
+        assert!(report
+            .discrepancies
+            .iter()
+            .any(|d| d.kind == DiscrepancyKind::MissingSettlement
+                && d.on_chain_tx.as_deref() == Some("0x222")));
     }
 
     #[test]
@@ -462,8 +849,11 @@ mod tests {
         ];
 
         let report = svc.reconcile(&txs, &settlements);
-        assert!(report.discrepancies.iter().any(|d| d.kind == DiscrepancyKind::MissingOnChain
-            && d.settlement_id.as_deref() == Some("stl_2")));
+        assert!(report
+            .discrepancies
+            .iter()
+            .any(|d| d.kind == DiscrepancyKind::MissingOnChain
+                && d.settlement_id.as_deref() == Some("stl_2")));
     }
 
     #[test]
@@ -535,7 +925,11 @@ mod tests {
             .iter()
             .filter(|d| d.kind == DiscrepancyKind::DuplicateSettlement)
             .collect();
-        assert_eq!(dupes.len(), 2, "Both duplicate settlements should be flagged");
+        assert_eq!(
+            dupes.len(),
+            2,
+            "Both duplicate settlements should be flagged"
+        );
     }
 
     #[test]
@@ -563,9 +957,7 @@ mod tests {
         let report = svc.reconcile(&txs, &settlements);
         let alerts = svc.get_critical_alerts(&report);
         assert!(!alerts.is_empty());
-        assert!(alerts
-            .iter()
-            .all(|d| d.severity == Severity::Critical));
+        assert!(alerts.iter().all(|d| d.severity == Severity::Critical));
     }
 
     #[test]
@@ -646,6 +1038,177 @@ mod tests {
                 .any(|d| d.kind == DiscrepancyKind::MissingOnChain
                     && d.settlement_id.as_deref() == Some("stl_bad")),
             "COMPLETED settlement without tx_hash should be flagged"
+        );
+    }
+
+    #[test]
+    fn test_build_break_queue_adds_owner_sla_and_match_suggestion() {
+        let svc = ReconciliationService::new();
+        let detected_at = Utc::now() - Duration::minutes(45);
+        let report = ReconciliationReport {
+            id: "recon_queue_001".to_string(),
+            started_at: detected_at - Duration::minutes(5),
+            completed_at: detected_at + Duration::minutes(1),
+            total_settlements_checked: 1,
+            total_on_chain_txs_checked: 1,
+            discrepancies: vec![Discrepancy {
+                id: "disc_queue_001".to_string(),
+                kind: DiscrepancyKind::MissingSettlement,
+                settlement_id: None,
+                on_chain_tx: Some("0xqueue".to_string()),
+                expected_amount: 100.0,
+                actual_amount: 0.0,
+                severity: Severity::High,
+                detected_at,
+                details: "On-chain tx was not linked to an off-chain settlement".to_string(),
+            }],
+            total_discrepancies: 1,
+            critical_count: 0,
+            status: ReconciliationStatus::DiscrepanciesFound,
+        };
+        let settlements = vec![SettlementRecord {
+            id: "stl_candidate_001".to_string(),
+            tx_hash: None,
+            amount: 100.005,
+            currency: "USDT".to_string(),
+            status: "PROCESSING".to_string(),
+            created_at: detected_at - Duration::minutes(10),
+            updated_at: detected_at - Duration::minutes(2),
+        }];
+
+        let queue = svc.build_break_queue(&report, &settlements);
+
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue[0].owner_lane, ReconciliationOwnerLane::SettlementOperations);
+        assert_eq!(
+            queue[0].root_cause,
+            ReconciliationRootCause::OffchainRecordingGap
+        );
+        assert_eq!(queue[0].age_bucket, ReconciliationAgeBucket::Aging);
+        assert_eq!(queue[0].suggested_matches.len(), 1);
+        assert_eq!(queue[0].suggested_matches[0].settlement_id, "stl_candidate_001");
+        assert_eq!(
+            queue[0].suggested_matches[0].confidence,
+            ReconciliationMatchConfidence::High
+        );
+    }
+
+    #[test]
+    fn test_build_evidence_pack_links_reconciliation_and_settlement_entries() {
+        let svc = ReconciliationService::new();
+        let base_time = Utc::now() - Duration::minutes(5);
+        let linked_settlement = crate::service::settlement::Settlement {
+            id: "stl_evidence_001".to_string(),
+            offramp_intent_id: "ofr_evidence_001".to_string(),
+            status: crate::service::settlement::SettlementStatus::Failed,
+            bank_reference: Some("RAMP-EVIDENCE".to_string()),
+            error_message: Some("bank partner timeout".to_string()),
+            created_at: base_time,
+            updated_at: base_time + Duration::minutes(1),
+        };
+        let report = ReconciliationReport {
+            id: "recon_evidence_001".to_string(),
+            started_at: base_time + Duration::minutes(1),
+            completed_at: base_time + Duration::minutes(3),
+            total_settlements_checked: 1,
+            total_on_chain_txs_checked: 1,
+            discrepancies: vec![Discrepancy {
+                id: "disc_evidence_001".to_string(),
+                kind: DiscrepancyKind::StatusMismatch,
+                settlement_id: Some(linked_settlement.id.clone()),
+                on_chain_tx: Some("0xevidence".to_string()),
+                expected_amount: 250.0,
+                actual_amount: 250.0,
+                severity: Severity::Critical,
+                detected_at: base_time + Duration::minutes(2),
+                details: "Settlement is marked failed while confirmation remains pending"
+                    .to_string(),
+            }],
+            total_discrepancies: 1,
+            critical_count: 1,
+            status: ReconciliationStatus::CriticalIssues,
+        };
+
+        let evidence = svc
+            .build_evidence_pack(
+                &report,
+                std::slice::from_ref(&linked_settlement),
+                "disc_evidence_001",
+            )
+            .expect("evidence pack should be generated");
+
+        assert_eq!(evidence.queue_item.discrepancy_id, "disc_evidence_001");
+        assert_eq!(evidence.settlement_ids, vec!["stl_evidence_001".to_string()]);
+        assert!(evidence
+            .replay_entries
+            .iter()
+            .any(|entry| entry.reference_id == "stl_evidence_001"));
+        assert!(evidence
+            .replay_entries
+            .iter()
+            .any(|entry| entry.reference_id == "disc_evidence_001"));
+        assert!(evidence
+            .incident_entries
+            .iter()
+            .any(|entry| entry.source_reference_id == "stl_evidence_001"));
+        assert!(evidence
+            .incident_entries
+            .iter()
+            .any(|entry| entry.source_reference_id == "disc_evidence_001"));
+    }
+
+    #[test]
+    fn test_build_evidence_pack_for_missing_settlement_preserves_live_candidates() {
+        let svc = ReconciliationService::new();
+        let base_time = Utc::now() - Duration::minutes(6);
+        let candidate = crate::service::settlement::Settlement {
+            id: "stl_candidate_live_001".to_string(),
+            offramp_intent_id: "ofr_candidate_live_001".to_string(),
+            status: crate::service::settlement::SettlementStatus::Processing,
+            bank_reference: Some("RAMP-LIVE-CANDIDATE".to_string()),
+            error_message: None,
+            created_at: base_time,
+            updated_at: base_time + Duration::minutes(2),
+        };
+        let report = ReconciliationReport {
+            id: "recon_missing_evidence_001".to_string(),
+            started_at: base_time + Duration::minutes(1),
+            completed_at: base_time + Duration::minutes(3),
+            total_settlements_checked: 1,
+            total_on_chain_txs_checked: 1,
+            discrepancies: vec![Discrepancy {
+                id: "disc_missing_evidence_001".to_string(),
+                kind: DiscrepancyKind::MissingSettlement,
+                settlement_id: None,
+                on_chain_tx: Some("0xmissingevidence".to_string()),
+                expected_amount: 250.0,
+                actual_amount: 0.0,
+                severity: Severity::High,
+                detected_at: base_time + Duration::minutes(4),
+                details: "On-chain tx has no linked settlement record".to_string(),
+            }],
+            total_discrepancies: 1,
+            critical_count: 0,
+            status: ReconciliationStatus::DiscrepanciesFound,
+        };
+
+        let evidence = svc
+            .build_evidence_pack(&report, std::slice::from_ref(&candidate), "disc_missing_evidence_001")
+            .expect("evidence pack should be generated");
+
+        assert_eq!(evidence.queue_item.discrepancy_id, "disc_missing_evidence_001");
+        assert_eq!(evidence.queue_item.suggested_matches.len(), 1);
+        assert_eq!(
+            evidence.queue_item.suggested_matches[0].settlement_id,
+            "stl_candidate_live_001"
+        );
+        assert_eq!(
+            evidence.queue_item.suggested_matches[0].bank_reference.as_deref(),
+            Some("RAMP-LIVE-CANDIDATE")
+        );
+        assert_eq!(
+            evidence.settlement_ids,
+            vec!["stl_candidate_live_001".to_string()]
         );
     }
 }

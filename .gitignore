@@ -1,4 +1,7 @@
 /target
+/target_fix*/
+/target_graphql_red/
+/target_audit_fix_red/
 /out
 /cache
 **/node_modules/
@@ -68,6 +71,11 @@ __pycache__/
 # Agent metadata
 .claude/
 .gemini/
+.codex/
+
+# Local media scratch
+video-promo/
+video-promo.zip
 
 # SDK dependencies
 sdk/node_modules/

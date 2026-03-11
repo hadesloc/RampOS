@@ -10,8 +10,8 @@
 
 #[cfg(test)]
 mod tests {
+    use crate::service::escrow::{DepositStatus, EscrowAddressService};
     use crate::service::exchange_rate::ExchangeRateService;
-    use crate::service::escrow::{EscrowAddressService, DepositStatus};
     use crate::service::offramp::{OffRampService, OffRampState};
     use crate::service::offramp_fees::OffRampFeeCalculator;
     use ramp_common::types::{BankAccount, ChainId, CryptoSymbol};
@@ -26,10 +26,7 @@ mod tests {
     // ========================================================================
 
     fn create_test_service() -> OffRampService {
-        OffRampService::new(
-            ExchangeRateService::new(),
-            OffRampFeeCalculator::new(),
-        )
+        OffRampService::new(ExchangeRateService::new(), OffRampFeeCalculator::new())
     }
 
     fn test_bank_account() -> BankAccount {
@@ -136,12 +133,8 @@ mod tests {
     #[test]
     fn test_create_quote_negative_amount() {
         let service = create_test_service();
-        let result = service.create_quote(
-            "user1",
-            CryptoSymbol::USDT,
-            dec!(-100),
-            test_bank_account(),
-        );
+        let result =
+            service.create_quote("user1", CryptoSymbol::USDT, dec!(-100), test_bank_account());
         assert!(result.is_err());
     }
 
@@ -176,9 +169,7 @@ mod tests {
     #[test]
     fn test_rate_lock_expiry() {
         let rate_service = ExchangeRateService::new();
-        let locked = rate_service
-            .lock_rate(CryptoSymbol::BTC, "VND", 1)
-            .unwrap();
+        let locked = rate_service.lock_rate(CryptoSymbol::BTC, "VND", 1).unwrap();
 
         assert!(rate_service.is_rate_valid(&locked.id).unwrap());
 
@@ -279,10 +270,7 @@ mod tests {
 
         let fees = calc.calculate_fees(dec!(50_000_000), CryptoSymbol::ETH, "domestic");
         assert!(fees.net_amount_vnd > Decimal::ZERO);
-        assert_eq!(
-            fees.net_amount_vnd,
-            fees.gross_amount_vnd - fees.total_fee
-        );
+        assert_eq!(fees.net_amount_vnd, fees.gross_amount_vnd - fees.total_fee);
     }
 
     // ========================================================================
@@ -383,9 +371,7 @@ mod tests {
             .create_quote("user1", CryptoSymbol::USDT, dec!(100), test_bank_account())
             .unwrap();
         let intent = service.confirm_quote(&quote.quote_id).unwrap();
-        let intent = service
-            .confirm_crypto_received(&intent.id, "0xtx")
-            .unwrap();
+        let intent = service.confirm_crypto_received(&intent.id, "0xtx").unwrap();
 
         let result = service.cancel(&intent.id);
         assert!(result.is_err()); // Cannot cancel after crypto received
@@ -466,9 +452,7 @@ mod tests {
             .create_quote("user1", CryptoSymbol::USDT, dec!(100), test_bank_account())
             .unwrap();
         let intent = service.confirm_quote(&quote.quote_id).unwrap();
-        let intent = service
-            .confirm_crypto_received(&intent.id, "0xtx")
-            .unwrap();
+        let intent = service.confirm_crypto_received(&intent.id, "0xtx").unwrap();
 
         // Should have 3 state transitions: NONE->QUOTE, QUOTE->PENDING, PENDING->RECEIVED
         assert_eq!(intent.state_history.len(), 3);
@@ -517,8 +501,16 @@ mod tests {
             CryptoSymbol::SOL,
         ] {
             let rate = rate_service.get_rate(*asset, "VND").unwrap();
-            assert!(rate.rate > Decimal::ZERO, "Rate for {:?} should be positive", asset);
-            assert!(rate.buy_price > rate.sell_price, "Buy > sell for {:?}", asset);
+            assert!(
+                rate.rate > Decimal::ZERO,
+                "Rate for {:?} should be positive",
+                asset
+            );
+            assert!(
+                rate.buy_price > rate.sell_price,
+                "Buy > sell for {:?}",
+                asset
+            );
         }
     }
 
@@ -548,13 +540,27 @@ mod tests {
 
         // Create a quote for 100 USDT
         let quote = service
-            .create_quote("user_fee", CryptoSymbol::USDT, dec!(100), test_bank_account())
+            .create_quote(
+                "user_fee",
+                CryptoSymbol::USDT,
+                dec!(100),
+                test_bank_account(),
+            )
             .unwrap();
 
         // Verify fee breakdown is consistent
-        assert!(quote.fees.total_fee > Decimal::ZERO, "Total fee must be positive");
-        assert!(quote.fees.network_fee > Decimal::ZERO, "Network fee must be positive");
-        assert!(quote.fees.platform_fee > Decimal::ZERO, "Platform fee must be positive");
+        assert!(
+            quote.fees.total_fee > Decimal::ZERO,
+            "Total fee must be positive"
+        );
+        assert!(
+            quote.fees.network_fee > Decimal::ZERO,
+            "Network fee must be positive"
+        );
+        assert!(
+            quote.fees.platform_fee > Decimal::ZERO,
+            "Platform fee must be positive"
+        );
 
         // net = gross - total_fee
         assert_eq!(
@@ -568,11 +574,17 @@ mod tests {
             + quote.fees.platform_fee
             + quote.fees.spread_fee
             + quote.fees.bank_fee;
-        assert_eq!(quote.fees.total_fee, expected_total, "Total fee must be sum of components");
+        assert_eq!(
+            quote.fees.total_fee, expected_total,
+            "Total fee must be sum of components"
+        );
 
         // gross = crypto_amount * exchange_rate
         let expected_gross = dec!(100) * quote.exchange_rate;
-        assert_eq!(quote.gross_vnd_amount, expected_gross, "Gross must be amount * rate");
+        assert_eq!(
+            quote.gross_vnd_amount, expected_gross,
+            "Gross must be amount * rate"
+        );
     }
 
     // ========================================================================
@@ -626,7 +638,12 @@ mod tests {
         let service = create_test_service();
 
         let quote = service
-            .create_quote("user_dup", CryptoSymbol::USDT, dec!(50), test_bank_account())
+            .create_quote(
+                "user_dup",
+                CryptoSymbol::USDT,
+                dec!(50),
+                test_bank_account(),
+            )
             .unwrap();
 
         // First confirm succeeds
@@ -643,7 +660,12 @@ mod tests {
         let service = create_test_service();
 
         let quote = service
-            .create_quote("user_dcr", CryptoSymbol::USDT, dec!(200), test_bank_account())
+            .create_quote(
+                "user_dcr",
+                CryptoSymbol::USDT,
+                dec!(200),
+                test_bank_account(),
+            )
             .unwrap();
         let intent = service.confirm_quote(&quote.quote_id).unwrap();
 
@@ -675,7 +697,12 @@ mod tests {
         );
 
         let quote = service
-            .create_quote("user_exp", CryptoSymbol::USDT, dec!(100), test_bank_account())
+            .create_quote(
+                "user_exp",
+                CryptoSymbol::USDT,
+                dec!(100),
+                test_bank_account(),
+            )
             .unwrap();
 
         // Manually expire the quote by updating its expiration to the past
@@ -750,18 +777,29 @@ mod tests {
         let service = create_test_service();
 
         let quote = service
-            .create_quote("user_wrong", CryptoSymbol::USDT, dec!(100), test_bank_account())
+            .create_quote(
+                "user_wrong",
+                CryptoSymbol::USDT,
+                dec!(100),
+                test_bank_account(),
+            )
             .unwrap();
 
         // Try initiate_bank_transfer from QuoteCreated (should fail)
         let result = service.initiate_bank_transfer(&quote.quote_id);
-        assert!(result.is_err(), "Cannot initiate bank transfer from QuoteCreated");
+        assert!(
+            result.is_err(),
+            "Cannot initiate bank transfer from QuoteCreated"
+        );
 
         // Confirm quote -> CryptoPending
         let intent = service.confirm_quote(&quote.quote_id).unwrap();
 
         // Try initiate_bank_transfer from CryptoPending (should fail)
         let result = service.initiate_bank_transfer(&intent.id);
-        assert!(result.is_err(), "Cannot initiate bank transfer from CryptoPending");
+        assert!(
+            result.is_err(),
+            "Cannot initiate bank transfer from CryptoPending"
+        );
     }
 }

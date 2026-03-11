@@ -77,7 +77,10 @@ async fn test_publish_sends_event_to_subscriber() {
     assert_eq!(event.intent_id, "intent-001");
     assert_eq!(event.tenant_id, "tenant-A");
     assert_eq!(event.new_status, "COMPLETED");
-    assert!(!event.timestamp.to_rfc3339().is_empty(), "timestamp should be set");
+    assert!(
+        !event.timestamp.to_rfc3339().is_empty(),
+        "timestamp should be set"
+    );
 }
 
 #[tokio::test]
@@ -148,9 +151,7 @@ async fn test_many_subscribers_all_receive_events() {
     let sender = create_intent_event_channel();
     let num_subscribers = 20;
 
-    let mut receivers: Vec<_> = (0..num_subscribers)
-        .map(|_| sender.subscribe())
-        .collect();
+    let mut receivers: Vec<_> = (0..num_subscribers).map(|_| sender.subscribe()).collect();
 
     publish_intent_status(
         &sender,
@@ -389,7 +390,10 @@ async fn test_stream_lifecycle_with_tenant_filter() {
         "tenant-X".to_string(),
         "PENDING".to_string(),
     );
-    let event2 = timeout(RECV_TIMEOUT, stream2.next()).await.unwrap().unwrap();
+    let event2 = timeout(RECV_TIMEOUT, stream2.next())
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(event2.intent_id, "intent-X3");
 }
 
@@ -792,12 +796,7 @@ async fn test_empty_string_fields_are_accepted() {
     let sender = create_intent_event_channel();
     let mut rx = sender.subscribe();
 
-    publish_intent_status(
-        &sender,
-        "".to_string(),
-        "".to_string(),
-        "".to_string(),
-    );
+    publish_intent_status(&sender, "".to_string(), "".to_string(), "".to_string());
 
     let event = timeout(RECV_TIMEOUT, rx.recv()).await.unwrap().unwrap();
     assert_eq!(event.intent_id, "");
@@ -865,7 +864,10 @@ async fn test_rapid_subscribe_unsubscribe_cycles() {
         "tenant-R".to_string(),
         "FINAL".to_string(),
     );
-    let event = timeout(RECV_TIMEOUT, rx_final.recv()).await.unwrap().unwrap();
+    let event = timeout(RECV_TIMEOUT, rx_final.recv())
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(event.intent_id, "intent-final");
 }
 
@@ -907,7 +909,13 @@ async fn test_multiple_status_transitions_for_same_intent() {
     let sender = create_intent_event_channel();
     let mut stream = subscribe_for_tenant(&sender, "tenant-T".to_string());
 
-    let statuses = ["CREATED", "PENDING", "INSTRUCTION_ISSUED", "CONFIRMED", "COMPLETED"];
+    let statuses = [
+        "CREATED",
+        "PENDING",
+        "INSTRUCTION_ISSUED",
+        "CONFIRMED",
+        "COMPLETED",
+    ];
 
     for status in &statuses {
         publish_intent_status(

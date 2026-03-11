@@ -255,12 +255,7 @@ impl EkycService {
 
         // Try primary provider first
         let result = self
-            .verify_with_provider(
-                &request,
-                config,
-                config.primary_provider,
-                &reference_id,
-            )
+            .verify_with_provider(&request, config, config.primary_provider, &reference_id)
             .await;
 
         // If primary fails and fallback is configured, try fallback
@@ -340,7 +335,10 @@ impl EkycService {
         if !id_result.success {
             rejection_reasons.push(format!(
                 "ID verification failed: {}",
-                id_result.error_message.as_deref().unwrap_or("Unknown error")
+                id_result
+                    .error_message
+                    .as_deref()
+                    .unwrap_or("Unknown error")
             ));
         } else if id_result.confidence_score < config.min_confidence_score {
             rejection_reasons.push(format!(
@@ -427,10 +425,7 @@ impl EkycService {
         };
 
         // Step 4: Cross-verify user-provided data with OCR results
-        let data_verification = Self::verify_user_data(
-            &request.user_provided_data,
-            &id_result,
-        );
+        let data_verification = Self::verify_user_data(&request.user_provided_data, &id_result);
 
         if !data_verification.overall_match {
             if !data_verification.name_matches {
@@ -489,8 +484,7 @@ impl EkycService {
             .full_name
             .as_ref()
             .map(|ocr_name| {
-                Self::normalize_name(&user_data.full_name)
-                    == Self::normalize_name(ocr_name)
+                Self::normalize_name(&user_data.full_name) == Self::normalize_name(ocr_name)
             })
             .unwrap_or(false);
 
@@ -498,9 +492,7 @@ impl EkycService {
         let id_number_matches = id_result
             .id_number
             .as_ref()
-            .map(|ocr_id| {
-                Self::normalize_id(&user_data.id_number) == Self::normalize_id(ocr_id)
-            })
+            .map(|ocr_id| Self::normalize_id(&user_data.id_number) == Self::normalize_id(ocr_id))
             .unwrap_or(false);
 
         // Date of birth comparison (normalize format)
@@ -508,8 +500,7 @@ impl EkycService {
             .date_of_birth
             .as_ref()
             .map(|ocr_dob| {
-                Self::normalize_date(&user_data.date_of_birth)
-                    == Self::normalize_date(ocr_dob)
+                Self::normalize_date(&user_data.date_of_birth) == Self::normalize_date(ocr_dob)
             })
             .unwrap_or(false);
 
@@ -552,20 +543,10 @@ impl EkycService {
             let first_four: i32 = cleaned[..4].parse().unwrap_or(0);
             if first_four > 1900 {
                 // Likely YYYYMMDD
-                format!(
-                    "{}-{}-{}",
-                    &cleaned[..4],
-                    &cleaned[4..6],
-                    &cleaned[6..8]
-                )
+                format!("{}-{}-{}", &cleaned[..4], &cleaned[4..6], &cleaned[6..8])
             } else {
                 // Likely DDMMYYYY
-                format!(
-                    "{}-{}-{}",
-                    &cleaned[4..8],
-                    &cleaned[2..4],
-                    &cleaned[..2]
-                )
+                format!("{}-{}-{}", &cleaned[4..8], &cleaned[2..4], &cleaned[..2])
             }
         } else {
             cleaned
@@ -717,7 +698,13 @@ mod tests {
     #[test]
     fn test_provider_type_from_str() {
         assert_eq!(EkycProviderType::from_str("vnpay"), EkycProviderType::Vnpay);
-        assert_eq!(EkycProviderType::from_str("fpt_ai"), EkycProviderType::FptAi);
-        assert_eq!(EkycProviderType::from_str("unknown"), EkycProviderType::Mock);
+        assert_eq!(
+            EkycProviderType::from_str("fpt_ai"),
+            EkycProviderType::FptAi
+        );
+        assert_eq!(
+            EkycProviderType::from_str("unknown"),
+            EkycProviderType::Mock
+        );
     }
 }

@@ -1,7 +1,7 @@
 //! Yield module types and data structures
 
-use chrono::{DateTime, Utc};
 use alloy::primitives::{Address, B256, U256};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Unique identifier for yield protocols

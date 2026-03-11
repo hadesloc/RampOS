@@ -4,13 +4,7 @@
 //! real HTTP requests via reqwest. This validates the full middleware stack
 //! including TCP connection handling, header serialization, and concurrent access.
 
-use axum::{
-    extract::Request,
-    http::StatusCode,
-    middleware,
-    routing::get,
-    Router,
-};
+use axum::{extract::Request, http::StatusCode, middleware, routing::get, Router};
 use ramp_api::middleware::{
     rate_limit::{rate_limit_middleware, RateLimitConfig, RateLimiter},
     tenant::{TenantContext, TenantTier},
@@ -287,7 +281,11 @@ async fn test_rate_limit_per_tenant_isolation() {
         .unwrap()
         .parse::<u64>()
         .unwrap();
-    assert_eq!(remaining, limit - 1, "Tenant B should have full quota minus 1");
+    assert_eq!(
+        remaining,
+        limit - 1,
+        "Tenant B should have full quota minus 1"
+    );
 }
 
 // =============================================================================
@@ -356,7 +354,11 @@ async fn test_rate_limit_sliding_window_reset() {
         .unwrap()
         .parse::<u64>()
         .unwrap();
-    assert_eq!(remaining, limit - 1, "After reset, remaining should be limit - 1");
+    assert_eq!(
+        remaining,
+        limit - 1,
+        "After reset, remaining should be limit - 1"
+    );
 }
 
 // =============================================================================

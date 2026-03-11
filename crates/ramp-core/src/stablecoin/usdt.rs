@@ -3,8 +3,8 @@
 //! Tether is the largest stablecoin by market cap, available on multiple chains.
 //! Uses 6 decimals on most chains.
 
-use async_trait::async_trait;
 use alloy::primitives::{Address, U256};
+use async_trait::async_trait;
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
 
@@ -91,7 +91,9 @@ impl Stablecoin for UsdtToken {
             symbol: "USDT".to_string(),
             name: "Tether USD".to_string(),
             decimals: 6,
-            logo_url: Some("https://assets.coingecko.com/coins/images/325/large/Tether.png".to_string()),
+            logo_url: Some(
+                "https://assets.coingecko.com/coins/images/325/large/Tether.png".to_string(),
+            ),
             website: Some("https://tether.to".to_string()),
             description: Some("Tether (USDT) is a stablecoin pegged to the US Dollar".to_string()),
         }
@@ -154,12 +156,7 @@ impl Stablecoin for UsdtToken {
         ))
     }
 
-    async fn allowance(
-        &self,
-        chain_id: u64,
-        owner: Address,
-        spender: Address,
-    ) -> Result<U256> {
+    async fn allowance(&self, chain_id: u64, owner: Address, spender: Address) -> Result<U256> {
         let _contract = self.contract_address(chain_id).ok_or_else(|| {
             Error::Validation(format!("USDT not supported on chain {}", chain_id))
         })?;
@@ -238,7 +235,9 @@ mod tests {
 
     #[test]
     fn test_custom_contract() {
-        let custom_addr: Address = "0x0000000000000000000000000000000000000001".parse().unwrap();
+        let custom_addr: Address = "0x0000000000000000000000000000000000000001"
+            .parse()
+            .unwrap();
         let usdt = UsdtToken::new().with_contract(999, custom_addr);
 
         assert!(usdt.is_supported_on_chain(999));

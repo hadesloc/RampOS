@@ -368,7 +368,11 @@ impl PayoutService {
 
             if policy_approved {
                 self.intent_repo
-                    .update_state(&req.tenant_id, &intent_id, &PayoutState::PolicyApproved.to_string())
+                    .update_state(
+                        &req.tenant_id,
+                        &intent_id,
+                        &PayoutState::PolicyApproved.to_string(),
+                    )
                     .await?;
 
                 let tx = patterns::payout_vnd_initiated(
@@ -381,11 +385,19 @@ impl PayoutService {
                 self.ledger_repo.record_transaction(tx).await?;
 
                 self.intent_repo
-                    .update_state(&req.tenant_id, &intent_id, &PayoutState::Submitted.to_string())
+                    .update_state(
+                        &req.tenant_id,
+                        &intent_id,
+                        &PayoutState::Submitted.to_string(),
+                    )
                     .await?;
             } else {
                 self.intent_repo
-                    .update_state(&req.tenant_id, &intent_id, &PayoutState::RejectedByPolicy.to_string())
+                    .update_state(
+                        &req.tenant_id,
+                        &intent_id,
+                        &PayoutState::RejectedByPolicy.to_string(),
+                    )
                     .await?;
             }
         }
@@ -435,7 +447,11 @@ impl PayoutService {
             PayoutBankStatus::Success => {
                 // Update state
                 self.intent_repo
-                    .update_state(&req.tenant_id, &req.intent_id, &PayoutState::Confirmed.to_string())
+                    .update_state(
+                        &req.tenant_id,
+                        &req.intent_id,
+                        &PayoutState::Confirmed.to_string(),
+                    )
                     .await?;
 
                 // Complete clearing entries
@@ -449,11 +465,19 @@ impl PayoutService {
 
                 // Mark completed
                 self.intent_repo
-                    .update_state(&req.tenant_id, &req.intent_id, &PayoutState::Completed.to_string())
+                    .update_state(
+                        &req.tenant_id,
+                        &req.intent_id,
+                        &PayoutState::Completed.to_string(),
+                    )
                     .await?;
 
                 self.event_publisher
-                    .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &PayoutState::Completed.to_string())
+                    .publish_intent_status_changed(
+                        &req.intent_id,
+                        &req.tenant_id,
+                        &PayoutState::Completed.to_string(),
+                    )
                     .await?;
 
                 info!(
@@ -477,11 +501,19 @@ impl PayoutService {
 
                 // Update state to REVERSED (funds returned)
                 self.intent_repo
-                    .update_state(&req.tenant_id, &req.intent_id, &PayoutState::Reversed.to_string())
+                    .update_state(
+                        &req.tenant_id,
+                        &req.intent_id,
+                        &PayoutState::Reversed.to_string(),
+                    )
                     .await?;
 
                 self.event_publisher
-                    .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &PayoutState::Reversed.to_string())
+                    .publish_intent_status_changed(
+                        &req.intent_id,
+                        &req.tenant_id,
+                        &PayoutState::Reversed.to_string(),
+                    )
                     .await?;
 
                 self.event_publisher
@@ -558,7 +590,6 @@ impl PayoutService {
         Ok(true)
     }
 }
-
 
 #[cfg(test)]
 mod tests {

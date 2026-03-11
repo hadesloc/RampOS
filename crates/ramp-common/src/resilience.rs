@@ -425,10 +425,7 @@ impl ResilientClient {
     }
 
     /// Execute an operation with circuit breaker + retry protection.
-    pub async fn execute<F, Fut, T, E>(
-        &self,
-        operation: F,
-    ) -> Result<T, ResilientError<E>>
+    pub async fn execute<F, Fut, T, E>(&self, operation: F) -> Result<T, ResilientError<E>>
     where
         F: FnMut() -> Fut,
         Fut: std::future::Future<Output = Result<T, E>>,
@@ -672,10 +669,7 @@ mod tests {
         let cb = CircuitBreaker::with_defaults("test");
         let policy = RetryPolicy::default().without_jitter();
 
-        let result = with_circuit_breaker(&cb, &policy, || async {
-            Ok::<_, String>("ok")
-        })
-        .await;
+        let result = with_circuit_breaker(&cb, &policy, || async { Ok::<_, String>("ok") }).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "ok");
@@ -685,11 +679,8 @@ mod tests {
     #[tokio::test]
     async fn resilient_retries_then_succeeds() {
         let cb = CircuitBreaker::with_defaults("test");
-        let policy = RetryPolicy::new(
-            3,
-            Duration::from_millis(1),
-            Duration::from_millis(10),
-        ).without_jitter();
+        let policy = RetryPolicy::new(3, Duration::from_millis(1), Duration::from_millis(10))
+            .without_jitter();
 
         let counter = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
         let counter_clone = counter.clone();
@@ -722,16 +713,11 @@ mod tests {
                 success_threshold: 1,
             },
         );
-        let policy = RetryPolicy::new(
-            2,
-            Duration::from_millis(1),
-            Duration::from_millis(10),
-        ).without_jitter();
+        let policy = RetryPolicy::new(2, Duration::from_millis(1), Duration::from_millis(10))
+            .without_jitter();
 
-        let result = with_circuit_breaker(&cb, &policy, || async {
-            Err::<(), _>("always fails")
-        })
-        .await;
+        let result =
+            with_circuit_breaker(&cb, &policy, || async { Err::<(), _>("always fails") }).await;
 
         assert!(matches!(result, Err(ResilientError::OperationFailed(_))));
     }

@@ -18,6 +18,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
+use ramp_compliance::passport::{passport_summary_from_flags, PassportPortalSummary};
 use ramp_compliance::types::KycTier;
 use ramp_compliance::zkkyc::{ZkCredential, ZkCredentialIssuer, ZkKycProof, ZkKycService};
 use std::sync::OnceLock;
@@ -41,6 +42,16 @@ pub struct KYCStatus {
     pub verified_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rejection_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_rescreening_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document_expiry_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restriction_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alert_codes: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub passport_summary: Option<PassportPortalSummary>,
 }
 
 #[derive(Debug, Clone, Deserialize, Validate)]
@@ -224,7 +235,7 @@ pub fn router() -> Router<AppState> {
 
 /// GET /v1/portal/kyc/status - Get current KYC status
 pub async fn get_kyc_status(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     portal_user: PortalUser,
 ) -> Result<Json<KYCStatus>, ApiError> {
     info!(
@@ -233,18 +244,44 @@ pub async fn get_kyc_status(
         "Get KYC status requested"
     );
 
-    // In production, this would:
-    // 1. Extract user from auth middleware
-    // 2. Query user's KYC status from database
-    // 3. Return current status and tier
+    let tenant_id = ramp_common::types::TenantId::new(portal_user.tenant_id.to_string());
+    let user_id = ramp_common::types::UserId::new(portal_user.user_id.to_string());
+    let user = app_state
+        .user_service
+        .get_user(&tenant_id, &user_id)
+        .await
+        .map_err(ApiError::from)?;
+    let rescreening = user.risk_flags.get("rescreening");
 
-    // Mock response
     let status = KYCStatus {
-        status: "PENDING".to_string(),
-        tier: 0,
-        submitted_at: Some(Utc::now().to_rfc3339()),
-        verified_at: None,
+        status: user.kyc_status,
+        tier: i32::from(user.kyc_tier),
+        submitted_at: Some(user.created_at.to_rfc3339()),
+        verified_at: user.kyc_verified_at.map(|value| value.to_rfc3339()),
         rejection_reason: None,
+        next_rescreening_at: rescreening
+            .and_then(|value| value.get("nextRunAt"))
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        document_expiry_at: rescreening
+            .and_then(|value| value.get("documentExpiryAt"))
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        restriction_status: rescreening
+            .and_then(|value| value.get("restrictionStatus"))
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        alert_codes: rescreening
+            .and_then(|value| value.get("alertCodes"))
+            .and_then(|value| value.as_array())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|value| value.as_str().map(str::to_string))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|items| !items.is_empty()),
+        passport_summary: passport_summary_from_flags(&user.risk_flags),
     };
 
     Ok(Json(status))
@@ -300,6 +337,11 @@ pub async fn submit_kyc(
         submitted_at: Some(now.to_rfc3339()),
         verified_at: None,
         rejection_reason: None,
+        next_rescreening_at: None,
+        document_expiry_at: None,
+        restriction_status: None,
+        alert_codes: None,
+        passport_summary: None,
     };
 
     Ok(Json(status))
@@ -469,11 +511,7 @@ pub async fn verify_zk_kyc_proof(
     let result = service.verify_proof(&user_id, &proof);
 
     if result.valid {
-        service.store_verification(
-            &user_id,
-            &result.commitment_hash,
-            result.proven_tier,
-        );
+        service.store_verification(&user_id, &result.commitment_hash, result.proven_tier);
 
         let issuer = zk_credential_issuer();
         let _ = issuer.issue_credential(&user_id, &result.commitment_hash);
@@ -511,10 +549,7 @@ pub async fn get_zk_credential_status(
         .unwrap_or(KycTier::Tier0);
 
     let issuer = zk_credential_issuer();
-    let issued = issuer.issue_credential(
-        &user_id,
-        &format!("{:064x}", tier as i16),
-    );
+    let issued = issuer.issue_credential(&user_id, &format!("{:064x}", tier as i16));
 
     Ok(Json(Some(to_credential_response(issued))))
 }

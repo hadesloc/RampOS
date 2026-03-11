@@ -115,19 +115,10 @@ pub trait BankConfirmationRepository: Send + Sync {
     ) -> Result<Vec<BankConfirmationRow>>;
 
     /// Check for duplicate by bank_tx_id
-    async fn check_duplicate(
-        &self,
-        provider: &str,
-        bank_tx_id: &str,
-    ) -> Result<bool>;
+    async fn check_duplicate(&self, provider: &str, bank_tx_id: &str) -> Result<bool>;
 
     /// Update confirmation status after matching
-    async fn update_matched(
-        &self,
-        tenant_id: &TenantId,
-        id: &str,
-        intent_id: &str,
-    ) -> Result<()>;
+    async fn update_matched(&self, tenant_id: &TenantId, id: &str, intent_id: &str) -> Result<()>;
 
     /// Update confirmation status
     async fn update_status(
@@ -339,12 +330,7 @@ impl BankConfirmationRepository for PgBankConfirmationRepository {
         Ok(row.0)
     }
 
-    async fn update_matched(
-        &self,
-        tenant_id: &TenantId,
-        id: &str,
-        intent_id: &str,
-    ) -> Result<()> {
+    async fn update_matched(&self, tenant_id: &TenantId, id: &str, intent_id: &str) -> Result<()> {
         let mut tx = self
             .pool
             .begin()

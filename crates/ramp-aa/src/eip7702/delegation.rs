@@ -5,8 +5,8 @@
 //! - Revocation mechanism
 //! - Delegation registry for tracking active delegations
 
-use chrono::{DateTime, Utc};
 use alloy::primitives::{Address, U256};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -328,7 +328,9 @@ impl DelegationManager {
         // Check for existing active or pending delegation
         let delegations = self.registry.delegations.read().unwrap();
         let has_existing = delegations.get(&delegator).map_or(false, |list| {
-            list.iter().any(|d| d.status == DelegationStatus::Active || d.status == DelegationStatus::Pending)
+            list.iter().any(|d| {
+                d.status == DelegationStatus::Active || d.status == DelegationStatus::Pending
+            })
         });
         drop(delegations);
 
@@ -359,8 +361,13 @@ impl DelegationManager {
             ));
         }
 
-        let mut session =
-            SessionDelegation::new(delegator, delegate, self.config.chain_id, nonce, duration_secs);
+        let mut session = SessionDelegation::new(
+            delegator,
+            delegate,
+            self.config.chain_id,
+            nonce,
+            duration_secs,
+        );
 
         if let Some(perms) = permissions {
             session = session.with_permissions(perms);
@@ -536,6 +543,9 @@ mod tests {
 
         // Should fail exceeding limit
         let result = manager.create_session(other, test_delegate(), 0, 7200, None);
-        assert!(matches!(result, Err(Eip7702Error::DurationExceedsMax(_, _))));
+        assert!(matches!(
+            result,
+            Err(Eip7702Error::DurationExceedsMax(_, _))
+        ));
     }
 }

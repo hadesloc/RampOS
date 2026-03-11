@@ -125,11 +125,7 @@ impl PolicyEngine {
     }
 
     /// Check a transaction against the user's custody policy.
-    pub fn check_policy(
-        &self,
-        user_id: &str,
-        transaction: &TransactionRequest,
-    ) -> PolicyDecision {
+    pub fn check_policy(&self, user_id: &str, transaction: &TransactionRequest) -> PolicyDecision {
         let policies = self.policies.lock().unwrap();
         let policy = match policies.get(user_id) {
             Some(p) => p.clone(),
@@ -230,11 +226,7 @@ impl PolicyEngine {
     }
 
     /// Update or create a custody policy for a user.
-    pub fn update_policy(
-        &self,
-        user_id: &str,
-        policy: CustodyPolicy,
-    ) {
+    pub fn update_policy(&self, user_id: &str, policy: CustodyPolicy) {
         let mut policies = self.policies.lock().unwrap();
         policies.insert(user_id.to_string(), policy);
         info!(user_id, "Updated custody policy");

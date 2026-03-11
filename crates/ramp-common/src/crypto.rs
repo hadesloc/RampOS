@@ -3,8 +3,8 @@ use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
-use crate::Result;
 use crate::Error;
+use crate::Result;
 
 /// Generate HMAC-SHA256 signature for webhook
 ///
@@ -88,9 +88,7 @@ pub fn verify_webhook_signature(
     // We can't easily propagate errors here because verify_webhook_signature returns specific WebhookSignatureError
     // But verify_hmac_sha256 now returns Result<bool, Error>
     // So we map the generic error to a signature mismatch (safe default)
-    if !verify_hmac_sha256(secret, signed_payload.as_bytes(), &signature)
-        .unwrap_or(false)
-    {
+    if !verify_hmac_sha256(secret, signed_payload.as_bytes(), &signature).unwrap_or(false) {
         return Err(WebhookSignatureError::SignatureMismatch);
     }
 
@@ -149,7 +147,8 @@ mod tests {
         let payload = br#"{"event":"test"}"#;
         let timestamp = chrono::Utc::now().timestamp();
 
-        let signature = generate_webhook_signature(secret, timestamp, payload).expect("generate failed");
+        let signature =
+            generate_webhook_signature(secret, timestamp, payload).expect("generate failed");
         let result = verify_webhook_signature(secret, &signature, payload, 300);
 
         assert!(result.is_ok());

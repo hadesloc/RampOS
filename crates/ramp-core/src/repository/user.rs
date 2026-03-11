@@ -28,6 +28,12 @@ pub struct UserRow {
 pub trait UserRepository: Send + Sync {
     async fn get_by_id(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<Option<UserRow>>;
     async fn create(&self, user: &UserRow) -> Result<()>;
+    async fn list_due_for_rescreening(
+        &self,
+        tenant_id: &TenantId,
+        due_before: DateTime<Utc>,
+        limit: i64,
+    ) -> Result<Vec<UserRow>>;
     async fn update_kyc_tier(
         &self,
         tenant_id: &TenantId,
@@ -45,6 +51,12 @@ pub trait UserRepository: Send + Sync {
         tenant_id: &TenantId,
         user_id: &UserId,
         status: &str,
+    ) -> Result<()>;
+    async fn update_risk_flags(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        risk_flags: serde_json::Value,
     ) -> Result<()>;
     async fn update_limits(
         &self,
@@ -134,6 +146,40 @@ impl UserRepository for PgUserRepository {
         Ok(())
     }
 
+    async fn list_due_for_rescreening(
+        &self,
+        tenant_id: &TenantId,
+        due_before: DateTime<Utc>,
+        limit: i64,
+    ) -> Result<Vec<UserRow>> {
+        let rows = sqlx::query_as::<_, UserRow>(
+            r#"
+            SELECT *
+            FROM users
+            WHERE tenant_id = $1
+              AND status = 'ACTIVE'
+              AND COALESCE(
+                    NULLIF(risk_flags #>> '{rescreening,nextRunAt}', '')::timestamptz,
+                    COALESCE(kyc_verified_at, created_at) + INTERVAL '180 days'
+                  ) <= $2
+            ORDER BY COALESCE(
+                    NULLIF(risk_flags #>> '{rescreening,nextRunAt}', '')::timestamptz,
+                    COALESCE(kyc_verified_at, created_at) + INTERVAL '180 days'
+                ) ASC,
+                id ASC
+            LIMIT $3
+            "#,
+        )
+        .bind(&tenant_id.0)
+        .bind(due_before)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(rows)
+    }
+
     async fn update_kyc_tier(
         &self,
         tenant_id: &TenantId,
@@ -183,6 +229,30 @@ impl UserRepository for PgUserRepository {
             .execute(&self.pool)
             .await
             .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn update_risk_flags(
+        &self,
+        tenant_id: &TenantId,
+        user_id: &UserId,
+        risk_flags: serde_json::Value,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE users
+            SET risk_flags = $1,
+                updated_at = NOW()
+            WHERE tenant_id = $2 AND id = $3
+            "#,
+        )
+        .bind(risk_flags)
+        .bind(&tenant_id.0)
+        .bind(&user_id.0)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ramp_common::Error::Database(e.to_string()))?;
 
         Ok(())
     }

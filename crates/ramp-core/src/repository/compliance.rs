@@ -25,5 +25,8 @@ pub struct SbvReportSchedule {
 #[async_trait]
 pub trait ComplianceRepository: Send + Sync {
     async fn find_threshold_breaches(&self) -> Result<Vec<ComplianceBreach>>;
-    async fn find_upcoming_sbv_reports(&self, before: DateTime<Utc>) -> Result<Vec<SbvReportSchedule>>;
+    async fn find_upcoming_sbv_reports(
+        &self,
+        before: DateTime<Utc>,
+    ) -> Result<Vec<SbvReportSchedule>>;
 }

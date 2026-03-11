@@ -259,7 +259,10 @@ mod tests {
         // Default version should be the initial stable version, not the latest
         let default = ApiVersion::default_version();
         let latest = ApiVersion::latest();
-        assert!(default < latest, "Default version should be older than latest");
+        assert!(
+            default < latest,
+            "Default version should be older than latest"
+        );
         assert_eq!(default.to_string(), DEFAULT_VERSION);
     }
 

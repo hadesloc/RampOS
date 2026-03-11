@@ -116,8 +116,7 @@ pub fn init_telemetry(config: TelemetryConfig) -> anyhow::Result<()> {
             .init();
     } else {
         // Local logging only
-        let subscriber = tracing_subscriber::registry()
-            .with(env_filter);
+        let subscriber = tracing_subscriber::registry().with(env_filter);
 
         if config.json_logs {
             subscriber.with(fmt::layer().json()).init();

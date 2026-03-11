@@ -82,9 +82,10 @@ impl ThresholdManager {
     }
 
     pub fn update_config(&self, tenant_id: &str, config: ThresholdConfig) -> Result<()> {
-        let mut configs = self.configs.write().map_err(|e| {
-            anyhow::anyhow!("Configs write lock poisoned: {}", e)
-        })?;
+        let mut configs = self
+            .configs
+            .write()
+            .map_err(|e| anyhow::anyhow!("Configs write lock poisoned: {}", e))?;
         configs.insert(tenant_id.to_string(), config);
         Ok(())
     }
@@ -154,7 +155,9 @@ mod tests {
         let mut new_config = initial.clone();
         new_config.velocity_max_per_hour = 10;
 
-        manager.update_config(tenant, new_config).expect("Failed to update config");
+        manager
+            .update_config(tenant, new_config)
+            .expect("Failed to update config");
 
         let updated = manager.get_config(tenant);
         assert_eq!(updated.velocity_max_per_hour, 10);

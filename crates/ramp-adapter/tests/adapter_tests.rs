@@ -182,15 +182,16 @@ mod napas_tests {
             .parse_payin_webhook(payload.to_string().as_bytes(), None)
             .await;
 
-        assert!(result.is_err(), "Empty payload should be rejected after validation hardening");
+        assert!(
+            result.is_err(),
+            "Empty payload should be rejected after validation hardening"
+        );
     }
 
     #[tokio::test]
     async fn test_napas_parse_payin_webhook_invalid_json() {
         let adapter = make_napas();
-        let result = adapter
-            .parse_payin_webhook(b"not valid json", None)
-            .await;
+        let result = adapter.parse_payin_webhook(b"not valid json", None).await;
         assert!(result.is_err());
     }
 
@@ -237,7 +238,10 @@ mod napas_tests {
             .unwrap();
 
         assert_eq!(result.status, PayoutStatus::Failed);
-        assert_eq!(result.failure_reason, Some("Insufficient funds".to_string()));
+        assert_eq!(
+            result.failure_reason,
+            Some("Insufficient funds".to_string())
+        );
         assert!(result.completed_at.is_none());
     }
 
@@ -264,9 +268,7 @@ mod napas_tests {
     #[tokio::test]
     async fn test_napas_parse_payout_webhook_invalid_payload() {
         let adapter = make_napas();
-        let result = adapter
-            .parse_payout_webhook(b"invalid", None)
-            .await;
+        let result = adapter.parse_payout_webhook(b"invalid", None).await;
         assert!(result.is_err());
     }
 
@@ -286,9 +288,7 @@ mod napas_tests {
         let adapter = NapasAdapter::with_config(config).unwrap();
         let payload = serde_json::json!({"amount": 100}).to_string();
 
-        let result = adapter
-            .parse_payin_webhook(payload.as_bytes(), None)
-            .await;
+        let result = adapter.parse_payin_webhook(payload.as_bytes(), None).await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Missing webhook signature"));
@@ -357,8 +357,7 @@ mod vietqr_tests {
         assert_eq!(result.amount_vnd, Decimal::from(200_000));
 
         // The instructions should contain QR data
-        let instructions: serde_json::Value =
-            serde_json::from_str(&result.instructions).unwrap();
+        let instructions: serde_json::Value = serde_json::from_str(&result.instructions).unwrap();
         assert_eq!(instructions["type"], "vietqr");
         assert!(instructions["qr_image_base64"].as_str().unwrap().len() > 0);
         assert!(instructions["qr_content"].as_str().unwrap().len() > 0);
@@ -584,9 +583,7 @@ mod vietqr_tests {
         let adapter = VietQRAdapter::with_config(config).unwrap();
         let payload = serde_json::json!({"amount": 100}).to_string();
 
-        let result = adapter
-            .parse_payin_webhook(payload.as_bytes(), None)
-            .await;
+        let result = adapter.parse_payin_webhook(payload.as_bytes(), None).await;
         assert!(result.is_err());
     }
 
@@ -695,10 +692,7 @@ mod mock_adapter_tests {
         let payload =
             MockAdapter::create_payin_webhook_payload("MOCK_WH_001", 123_456, "BANK_TX_001");
 
-        let result = adapter
-            .parse_payin_webhook(&payload, None)
-            .await
-            .unwrap();
+        let result = adapter.parse_payin_webhook(&payload, None).await.unwrap();
 
         assert_eq!(result.reference_code, "MOCK_WH_001");
         assert_eq!(result.bank_tx_id, "BANK_TX_001");
@@ -713,10 +707,7 @@ mod mock_adapter_tests {
         let payload =
             MockAdapter::create_payout_webhook_payload("MOCK_PO_001", "completed", "TX_PO_001");
 
-        let result = adapter
-            .parse_payout_webhook(&payload, None)
-            .await
-            .unwrap();
+        let result = adapter.parse_payout_webhook(&payload, None).await.unwrap();
 
         assert_eq!(result.reference_code, "MOCK_PO_001");
         assert_eq!(result.bank_tx_id, "TX_PO_001");
@@ -730,10 +721,7 @@ mod mock_adapter_tests {
         let payload =
             MockAdapter::create_payout_webhook_payload("MOCK_PO_002", "failed", "TX_PO_002");
 
-        let result = adapter
-            .parse_payout_webhook(&payload, None)
-            .await
-            .unwrap();
+        let result = adapter.parse_payout_webhook(&payload, None).await.unwrap();
 
         assert_eq!(result.status, PayoutStatus::Failed);
         assert!(result.completed_at.is_none());
@@ -745,10 +733,7 @@ mod mock_adapter_tests {
         let payload =
             MockAdapter::create_payout_webhook_payload("MOCK_PO_003", "cancelled", "TX_PO_003");
 
-        let result = adapter
-            .parse_payout_webhook(&payload, None)
-            .await
-            .unwrap();
+        let result = adapter.parse_payout_webhook(&payload, None).await.unwrap();
 
         assert_eq!(result.status, PayoutStatus::Cancelled);
     }
@@ -759,10 +744,7 @@ mod mock_adapter_tests {
         let payload =
             MockAdapter::create_payout_webhook_payload("MOCK_PO_004", "something_else", "TX_004");
 
-        let result = adapter
-            .parse_payout_webhook(&payload, None)
-            .await
-            .unwrap();
+        let result = adapter.parse_payout_webhook(&payload, None).await.unwrap();
 
         assert_eq!(result.status, PayoutStatus::Processing);
     }
@@ -1086,9 +1068,7 @@ mod ekyc_tests {
         };
 
         let result = provider.verify_id(request).await.unwrap();
-        let stored = provider
-            .get_id_verification(&result.verification_id)
-            .await;
+        let stored = provider.get_id_verification(&result.verification_id).await;
         assert!(stored.is_some());
     }
 
@@ -1203,8 +1183,7 @@ mod ekyc_tests {
             blocked_ids: vec!["001234567890".to_string()],
             ..Default::default()
         };
-        let provider =
-            MockEkycProvider::with_behavior(EkycProviderConfig::default(), behavior);
+        let provider = MockEkycProvider::with_behavior(EkycProviderConfig::default(), behavior);
 
         let request = IdVerificationRequest {
             id_front_image: vec![0u8; 100],
@@ -1216,10 +1195,7 @@ mod ekyc_tests {
         let result = provider.verify_id(request).await.unwrap();
         assert!(!result.success);
         assert!(result.error_message.is_some());
-        assert!(result
-            .error_message
-            .unwrap()
-            .contains("blocked"));
+        assert!(result.error_message.unwrap().contains("blocked"));
     }
 
     #[tokio::test]
@@ -1477,7 +1453,10 @@ mod ekyc_tests {
 
         let result = FullEkycResult::calculate(id_verification, face_match, liveness, None);
         assert!(!result.passed);
-        assert!(result.failure_reasons.iter().any(|r| r.contains("Face match failed")));
+        assert!(result
+            .failure_reasons
+            .iter()
+            .any(|r| r.contains("Face match failed")));
     }
 
     #[test]

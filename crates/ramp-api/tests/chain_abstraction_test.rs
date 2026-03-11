@@ -4,9 +4,7 @@
 //! chain info types, API route handler DTOs, config-backed registry,
 //! bridge quote calculations, and input validation.
 
-use ramp_core::chain::{
-    ChainId, ChainInfo, ChainRegistry, ChainType, UnifiedAddress,
-};
+use ramp_core::chain::{ChainId, ChainInfo, ChainRegistry, ChainType, UnifiedAddress};
 
 // ============================================================
 // Test 1: Supported chains list from registry
@@ -64,10 +62,8 @@ fn test_chain_status_endpoint() {
 #[test]
 fn test_chain_bridge_quote_address_validation() {
     // EVM address validation
-    let valid_evm = UnifiedAddress::new(
-        ChainType::Evm,
-        "0x1234567890123456789012345678901234567890",
-    );
+    let valid_evm =
+        UnifiedAddress::new(ChainType::Evm, "0x1234567890123456789012345678901234567890");
     assert!(valid_evm.is_ok());
     let addr = valid_evm.unwrap();
     assert_eq!(addr.chain_type, ChainType::Evm);
@@ -244,7 +240,10 @@ fn test_bridge_request_dto() {
     assert_eq!(req.quote_id, "quote_abc123");
     assert_eq!(req.source_chain_id, ChainId::ETHEREUM.0);
     assert_eq!(req.destination_chain_id, ChainId::BASE.0);
-    assert_eq!(req.recipient_address, "0x0987654321098765432109876543210987654321");
+    assert_eq!(
+        req.recipient_address,
+        "0x0987654321098765432109876543210987654321"
+    );
 }
 
 // ============================================================
@@ -253,7 +252,7 @@ fn test_bridge_request_dto() {
 
 #[test]
 fn test_chain_response_dtos() {
-    use ramp_api::handlers::chain::{ChainListResponse, ChainDetailResponse};
+    use ramp_api::handlers::chain::{ChainDetailResponse, ChainListResponse};
 
     let list_resp = ChainListResponse {
         chains: vec![
@@ -361,10 +360,7 @@ fn test_config_registry_filter_by_type() {
         .iter()
         .filter(|c| c.chain_type == ChainType::Ton)
         .collect();
-    assert!(
-        !ton_chains.is_empty(),
-        "Should have at least 1 TON chain"
-    );
+    assert!(!ton_chains.is_empty(), "Should have at least 1 TON chain");
 }
 
 // ============================================================
@@ -499,7 +495,10 @@ fn test_bridge_request_validation_empty_quote() {
         "recipientAddress": "0x0987654321098765432109876543210987654321"
     }"#;
     let req: BridgeRequest = serde_json::from_str(json).unwrap();
-    assert!(req.quote_id.trim().is_empty(), "Empty quote_id should be caught by handler");
+    assert!(
+        req.quote_id.trim().is_empty(),
+        "Empty quote_id should be caught by handler"
+    );
 }
 
 // ============================================================
@@ -518,7 +517,10 @@ fn test_bridge_quote_zero_amount_detection() {
     }"#;
     let req: BridgeQuoteRequest = serde_json::from_str(json).unwrap();
     let amount: f64 = req.amount.parse().unwrap();
-    assert!(amount <= 0.0, "Zero amount should be caught by handler validation");
+    assert!(
+        amount <= 0.0,
+        "Zero amount should be caught by handler validation"
+    );
 }
 
 // ============================================================
@@ -531,8 +533,7 @@ fn test_multi_chain_type_coverage() {
 
     let chains = ChainRegistryConfig::default_chain_infos();
 
-    let types: std::collections::HashSet<ChainType> =
-        chains.iter().map(|c| c.chain_type).collect();
+    let types: std::collections::HashSet<ChainType> = chains.iter().map(|c| c.chain_type).collect();
 
     assert!(types.contains(&ChainType::Evm), "Must support EVM chains");
     assert!(

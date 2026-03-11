@@ -94,6 +94,7 @@ impl AdminRole {
 }
 
 /// RBAC permission check result
+#[derive(Debug)]
 pub struct AdminAuth {
     pub role: AdminRole,
     pub user_id: Option<String>,
@@ -102,26 +103,34 @@ pub struct AdminAuth {
 /// Check admin key and extract role information
 ///
 /// SECURITY: This implements proper RBAC with role-based access control.
-/// Format of X-Admin-Key: <key>:<role> or just <key> (defaults to Viewer)
+/// Role is derived from server configuration only, never from caller-controlled headers.
 pub(crate) fn check_admin_key_with_role(
     headers: &HeaderMap,
     required_role: AdminRole,
 ) -> Result<AdminAuth, ApiError> {
     let expected_key = std::env::var("RAMPOS_ADMIN_KEY")
         .map_err(|_| ApiError::Forbidden("Admin key not configured".to_string()))?;
+    let expected_parts: Vec<&str> = expected_key.splitn(2, ':').collect();
+    let configured_key = expected_parts[0];
+    let configured_role = std::env::var("RAMPOS_ADMIN_ROLE")
+        .ok()
+        .or_else(|| expected_parts.get(1).map(|value| value.to_string()))
+        .as_deref()
+        .and_then(AdminRole::from_str)
+        .unwrap_or(AdminRole::Viewer);
 
     let header_value = headers
         .get("X-Admin-Key")
         .and_then(|v| v.to_str().ok())
         .ok_or_else(|| ApiError::Forbidden("Invalid or missing X-Admin-Key".to_string()))?;
 
-    // Parse format: <key> or <key>:<role>
+    // Parse format: <key> or <key>:<ignored-suffix>
     let parts: Vec<&str> = header_value.splitn(2, ':').collect();
     let provided_key = parts[0];
 
     // Constant-time comparison to prevent timing attacks
     let provided_bytes = provided_key.as_bytes();
-    let expected_bytes = expected_key.as_bytes();
+    let expected_bytes = configured_key.as_bytes();
     let keys_match = provided_bytes.len() == expected_bytes.len()
         && bool::from(provided_bytes.ct_eq(expected_bytes));
 
@@ -129,15 +138,7 @@ pub(crate) fn check_admin_key_with_role(
         return Err(ApiError::Forbidden("Invalid admin key".to_string()));
     }
 
-    // Extract role from header or default to Viewer
-    // SECURITY: Role is embedded in the admin key value (key:role format).
-    // Do NOT accept role from a separate header to prevent privilege escalation.
-    let role = if parts.len() > 1 {
-        AdminRole::from_str(parts[1])
-            .ok_or_else(|| ApiError::Forbidden(format!("Invalid role: {}", parts[1])))?
-    } else {
-        AdminRole::Viewer
-    };
+    let role = configured_role;
 
     // Verify role meets requirement
     if role < required_role {
@@ -492,5 +493,24 @@ mod tests {
         std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
         let headers = HeaderMap::new();
         assert!(check_admin_key(&headers).is_err());
+    }
+
+    #[test]
+    fn test_check_admin_key_suffix_cannot_escalate_configured_viewer_role() {
+        std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
+        std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
+
+        let mut headers = HeaderMap::new();
+        headers.insert("X-Admin-Key", "admin-secret-key:admin".parse().unwrap());
+
+        let err = check_admin_key_admin(&headers).unwrap_err();
+        match err {
+            ApiError::Forbidden(message) => {
+                assert!(message.contains("Insufficient permissions"));
+            }
+            other => panic!("expected forbidden error, got {other:?}"),
+        }
+
+        std::env::remove_var("RAMPOS_ADMIN_ROLE");
     }
 }

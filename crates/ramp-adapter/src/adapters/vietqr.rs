@@ -93,7 +93,10 @@ impl VietQRAdapter {
     ///
     /// # Errors
     /// Returns an error if HTTP client creation fails
-    pub fn new(provider_code: impl Into<String>, webhook_secret: impl Into<String>) -> Result<Self> {
+    pub fn new(
+        provider_code: impl Into<String>,
+        webhook_secret: impl Into<String>,
+    ) -> Result<Self> {
         let config = VietQRConfig {
             base: AdapterConfig {
                 provider_code: provider_code.into(),
@@ -179,7 +182,11 @@ impl VietQRAdapter {
 
         // Additional Data (ID 62) - description/memo
         if !description.is_empty() {
-            let desc_field = format!("08{:02}{}", description.len().min(25), &description[..description.len().min(25)]);
+            let desc_field = format!(
+                "08{:02}{}",
+                description.len().min(25),
+                &description[..description.len().min(25)]
+            );
             content.push_str(&format!("62{:02}{}", desc_field.len(), desc_field));
         }
 
@@ -239,7 +246,10 @@ impl VietQRAdapter {
         let response = self
             .http_client
             .get(&url)
-            .header("x-client-id", self.config.client_id.as_deref().unwrap_or(""))
+            .header(
+                "x-client-id",
+                self.config.client_id.as_deref().unwrap_or(""),
+            )
             .header("x-api-key", &self.config.base.api_key)
             .send()
             .await
@@ -258,10 +268,8 @@ impl VietQRAdapter {
             });
         }
 
-        let data: VietQRBankListResponse = response
-            .json()
-            .await
-            .map_err(|e| Error::ExternalService {
+        let data: VietQRBankListResponse =
+            response.json().await.map_err(|e| Error::ExternalService {
                 service: "VietQR".to_string(),
                 message: format!("Failed to parse response: {}", e),
             })?;
@@ -454,7 +462,9 @@ impl RailsAdapter for VietQRAdapter {
             .or_else(|| data.get("reference_code"))
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::Validation("Missing or empty reference_code in VietQR webhook".to_string()))?
+            .ok_or_else(|| {
+                Error::Validation("Missing or empty reference_code in VietQR webhook".to_string())
+            })?
             .to_string();
 
         let bank_tx_id = data
@@ -463,7 +473,9 @@ impl RailsAdapter for VietQRAdapter {
             .or_else(|| data.get("ftCode"))
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::Validation("Missing or empty bank_tx_id in VietQR webhook".to_string()))?
+            .ok_or_else(|| {
+                Error::Validation("Missing or empty bank_tx_id in VietQR webhook".to_string())
+            })?
             .to_string();
 
         let amount = data
@@ -473,7 +485,9 @@ impl RailsAdapter for VietQRAdapter {
             .unwrap_or(0);
 
         if amount <= 0 {
-            return Err(Error::Validation("VietQR webhook amount must be positive".to_string()));
+            return Err(Error::Validation(
+                "VietQR webhook amount must be positive".to_string(),
+            ));
         }
 
         info!(
@@ -688,7 +702,12 @@ mod tests {
         let adapter = VietQRAdapter::new("vietqr", "test_secret").unwrap();
 
         let qr = adapter
-            .generate_qr_code("1234567890", Some(Decimal::from(50000)), "Test payment", "REF001")
+            .generate_qr_code(
+                "1234567890",
+                Some(Decimal::from(50000)),
+                "Test payment",
+                "REF001",
+            )
             .await
             .unwrap();
 

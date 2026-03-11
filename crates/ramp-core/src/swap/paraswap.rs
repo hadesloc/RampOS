@@ -3,17 +3,15 @@
 //! Integration with ParaSwap API for competitive swap routing.
 //! Known for gas efficiency and competitive rates.
 
-use async_trait::async_trait;
 use alloy::primitives::{Address, Bytes, U256};
-use ramp_common::{Error, Result};
+use async_trait::async_trait;
 #[allow(unused_imports)]
 use ramp_common::resilience::ResilientClient;
+use ramp_common::{Error, Result};
 use serde::Deserialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::{
-    AggregatorConfig, DexAggregator, SwapQuote, SwapRoute, SwapTxData, Token,
-};
+use super::{AggregatorConfig, DexAggregator, SwapQuote, SwapRoute, SwapTxData, Token};
 
 /// ParaSwap API response structures
 #[derive(Debug, Deserialize)]
@@ -172,7 +170,7 @@ impl ParaSwapAggregator {
             to_amount_min: min_output,
             estimated_gas: U256::from(140_000),
             gas_price: U256::from(30_000_000_000u64), // 30 gwei
-            price_impact_bps: 25, // 0.25%
+            price_impact_bps: 25,                     // 0.25%
             slippage_bps,
             route: vec![SwapRoute {
                 protocol: "ParaSwapPool".to_string(),
@@ -248,17 +246,23 @@ impl DexAggregator for ParaSwapAggregator {
             .as_secs();
 
         // Check for API key from config or environment variable
-        let api_key = self.config.api_key.clone()
+        let api_key = self
+            .config
+            .api_key
+            .clone()
             .or_else(|| std::env::var("PARASWAP_API_KEY").ok());
 
         // Check if we should use mock mode (test environments or explicit override).
         // In production mode, mock fallback is always disabled.
         let production_mode = Self::is_production_mode();
-        let use_mock = !production_mode && (std::env::var("PARASWAP_MOCK").unwrap_or_default() == "true"
-            || (cfg!(test) && self.config.api_url.is_empty() && api_key.is_none()));
+        let use_mock = !production_mode
+            && (std::env::var("PARASWAP_MOCK").unwrap_or_default() == "true"
+                || (cfg!(test) && self.config.api_url.is_empty() && api_key.is_none()));
 
         if use_mock {
-            tracing::warn!("ParaSwap mock mode active, returning mock quote in non-production mode");
+            tracing::warn!(
+                "ParaSwap mock mode active, returning mock quote in non-production mode"
+            );
             return self.mock_quote(from, to, amount, slippage_bps, chain_id, now);
         }
 
@@ -296,11 +300,9 @@ impl DexAggregator for ParaSwapAggregator {
                         request = request.header("X-API-Key", key.as_str());
                     }
 
-                    let response = request.send().await.map_err(|e| {
-                        Error::ExternalService {
-                            service: "ParaSwap".to_string(),
-                            message: format!("Quote request failed: {}", e),
-                        }
+                    let response = request.send().await.map_err(|e| Error::ExternalService {
+                        service: "ParaSwap".to_string(),
+                        message: format!("Quote request failed: {}", e),
                     })?;
 
                     if !response.status().is_success() {
@@ -313,12 +315,11 @@ impl DexAggregator for ParaSwapAggregator {
                         });
                     }
 
-                    let price_resp: ParaSwapPriceResponse = response.json().await.map_err(|e| {
-                        Error::ExternalService {
+                    let price_resp: ParaSwapPriceResponse =
+                        response.json().await.map_err(|e| Error::ExternalService {
                             service: "ParaSwap".to_string(),
                             message: format!("Failed to parse quote response: {}", e),
-                        }
-                    })?;
+                        })?;
 
                     Ok(price_resp)
                 }
@@ -334,7 +335,9 @@ impl DexAggregator for ParaSwapAggregator {
         let min_output = dest_amount - slippage_amount;
 
         // Build route from best_route
-        let route: Vec<SwapRoute> = price_resp.price_route.best_route
+        let route: Vec<SwapRoute> = price_resp
+            .price_route
+            .best_route
             .iter()
             .flat_map(|route_info| {
                 let percent = route_info.percent;
@@ -351,7 +354,10 @@ impl DexAggregator for ParaSwapAggregator {
             .collect();
 
         // Parse gas cost
-        let gas_cost = price_resp.price_route.gas_cost.parse::<U256>()
+        let gas_cost = price_resp
+            .price_route
+            .gas_cost
+            .parse::<U256>()
             .unwrap_or(U256::from(140_000));
 
         // Calculate price impact in basis points
@@ -397,17 +403,23 @@ impl DexAggregator for ParaSwapAggregator {
         );
 
         // Check for API key from config or environment variable
-        let api_key = self.config.api_key.clone()
+        let api_key = self
+            .config
+            .api_key
+            .clone()
             .or_else(|| std::env::var("PARASWAP_API_KEY").ok());
 
         // Check if we should use mock mode.
         // In production mode, mock fallback is always disabled.
         let production_mode = Self::is_production_mode();
-        let use_mock = !production_mode && (std::env::var("PARASWAP_MOCK").unwrap_or_default() == "true"
-            || (cfg!(test) && self.config.api_url.is_empty() && api_key.is_none()));
+        let use_mock = !production_mode
+            && (std::env::var("PARASWAP_MOCK").unwrap_or_default() == "true"
+                || (cfg!(test) && self.config.api_url.is_empty() && api_key.is_none()));
 
         if use_mock {
-            tracing::warn!("ParaSwap mock mode active, returning mock swap tx in non-production mode");
+            tracing::warn!(
+                "ParaSwap mock mode active, returning mock swap tx in non-production mode"
+            );
             return Ok(SwapTxData {
                 to: quote.swap_contract,
                 data: quote.swap_data.clone(),
@@ -432,11 +444,7 @@ impl DexAggregator for ParaSwapAggregator {
         }
 
         // Build the transaction request body for ParaSwap /transactions endpoint
-        let tx_url = format!(
-            "{}/transactions/{}",
-            self.api_url(),
-            chain_id,
-        );
+        let tx_url = format!("{}/transactions/{}", self.api_url(), chain_id,);
 
         let tx_body = serde_json::json!({
             "srcToken": Self::format_address(quote.from_token.address),
@@ -515,13 +523,13 @@ impl DexAggregator for ParaSwapAggregator {
         })?;
 
         let tx_data = Bytes::from(
-            hex::decode(tx_resp.data.trim_start_matches("0x")).map_err(|e| {
-                Error::Validation(format!("Invalid tx data hex: {}", e))
-            })?,
+            hex::decode(tx_resp.data.trim_start_matches("0x"))
+                .map_err(|e| Error::Validation(format!("Invalid tx data hex: {}", e)))?,
         );
 
         let value = Self::parse_amount(&tx_resp.value)?;
-        let _gas_price = Self::parse_amount(&tx_resp.gas_price).unwrap_or(U256::from(30_000_000_000u64));
+        let _gas_price =
+            Self::parse_amount(&tx_resp.gas_price).unwrap_or(U256::from(30_000_000_000u64));
 
         // Estimate gas limit with 15% buffer
         let estimated_gas = quote.estimated_gas * U256::from(115) / U256::from(100);
@@ -542,7 +550,9 @@ mod tests {
     fn usdt_token() -> Token {
         Token::new(
             "USDT",
-            "0xdAC17F958D2ee523a2206206994597C13D831ec7".parse().unwrap(),
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+                .parse()
+                .unwrap(),
             6,
             1,
         )
@@ -551,7 +561,9 @@ mod tests {
     fn usdc_token() -> Token {
         Token::new(
             "USDC",
-            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse().unwrap(),
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+                .parse()
+                .unwrap(),
             6,
             1,
         )
@@ -580,12 +592,7 @@ mod tests {
         let aggregator = ParaSwapAggregator::new(AggregatorConfig::default());
 
         let quote = aggregator
-            .quote(
-                usdt_token(),
-                usdc_token(),
-                U256::from(1_000_000_000u64),
-                50,
-            )
+            .quote(usdt_token(), usdc_token(), U256::from(1_000_000_000u64), 50)
             .await
             .unwrap();
 

@@ -137,10 +137,13 @@ async fn setup_cookie_app() -> TestCookieApp {
         ledger_service,
         onboarding_service,
         user_service,
-        webhook_service: Arc::new(ramp_core::service::webhook::WebhookService::new(
-            Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
-            tenant_repo.clone(),
-        ).unwrap()),
+        webhook_service: Arc::new(
+            ramp_core::service::webhook::WebhookService::new(
+                Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
+                tenant_repo.clone(),
+            )
+            .unwrap(),
+        ),
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
         report_generator,
@@ -166,6 +169,7 @@ async fn setup_cookie_app() -> TestCookieApp {
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
+        event_publisher,
     };
 
     let router = create_router(app_state);
@@ -797,10 +801,7 @@ async fn test_webauthn_register_with_long_email() {
     let response = app.router.oneshot(request).await.unwrap();
 
     // Should either accept or reject with validation error
-    assert!(
-        response.status() == StatusCode::OK
-            || response.status() == StatusCode::BAD_REQUEST
-    );
+    assert!(response.status() == StatusCode::OK || response.status() == StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

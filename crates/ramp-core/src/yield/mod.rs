@@ -15,15 +15,15 @@ mod types;
 
 pub use aave::AaveV3Protocol;
 pub use compound::CompoundV3Protocol;
-pub use service::YieldService;
+pub use service::{recommended_treasury_buffer_percent, YieldService};
 pub use strategy::{
     AggressiveStrategy, BalancedStrategy, ConservativeStrategy, RiskLevel, StrategyConfig,
     StrategyId, StrategyManager, StrategyPerformance, YieldStrategy,
 };
 pub use types::*;
 
-use async_trait::async_trait;
 use alloy::primitives::{Address, B256, U256};
+use async_trait::async_trait;
 use ramp_common::Result;
 
 /// Yield protocol trait for DeFi integrations

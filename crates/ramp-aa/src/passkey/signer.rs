@@ -173,24 +173,22 @@ mod tests {
 
     fn test_public_key() -> PasskeyPublicKey {
         PasskeyPublicKey {
-            x: "6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296"
-                .to_string(),
-            y: "4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5"
-                .to_string(),
+            x: "6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296".to_string(),
+            y: "4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5".to_string(),
         }
     }
 
     fn test_signature() -> P256Signature {
         P256Signature {
             r: [
-                0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
-                0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a,
-                0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
+                0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+                0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c,
+                0x1d, 0x1e, 0x1f, 0x20,
             ],
             s: [
-                0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d,
-                0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a,
-                0x3b, 0x3c, 0x3d, 0x3e, 0x3f, 0x40,
+                0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e,
+                0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c,
+                0x3d, 0x3e, 0x3f, 0x40,
             ],
         }
     }
@@ -231,10 +229,8 @@ mod tests {
     #[test]
     fn test_public_key_with_0x_prefix() {
         let pk = PasskeyPublicKey {
-            x: "0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296"
-                .to_string(),
-            y: "0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5"
-                .to_string(),
+            x: "0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296".to_string(),
+            y: "0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5".to_string(),
         };
 
         let x = pk.x_as_u256().unwrap();
@@ -257,8 +253,7 @@ mod tests {
         let sender: Address = "0x1234567890abcdef1234567890abcdef12345678"
             .parse()
             .unwrap();
-        let mut user_op =
-            UserOperation::new(sender, U256::ZERO, Bytes::default());
+        let mut user_op = UserOperation::new(sender, U256::ZERO, Bytes::default());
 
         let assertion = WebAuthnAssertion {
             authenticator_data: vec![0u8; 37],

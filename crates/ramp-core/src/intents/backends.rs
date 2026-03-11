@@ -212,8 +212,7 @@ impl OneInchBackend {
             _ => 1, // L2s
         };
         let eth_price = Decimal::new(3000, 0);
-        let cost_eth = Decimal::new(gas_units as i64, 0)
-            * Decimal::new(gas_price_gwei as i64, 0)
+        let cost_eth = Decimal::new(gas_units as i64, 0) * Decimal::new(gas_price_gwei as i64, 0)
             / Decimal::new(1_000_000_000, 0);
         cost_eth * eth_price
     }
@@ -237,20 +236,13 @@ impl SwapBackend for OneInchBackend {
         chain_id: u64,
         _slippage_bps: u16,
     ) -> Result<SwapBackendQuote> {
-        let url = format!(
-            "{}/swap/v6.0/{}/quote",
-            self.base_url, chain_id
-        );
+        let url = format!("{}/swap/v6.0/{}/quote", self.base_url, chain_id);
 
         let response = self
             .client
             .get(&url)
             .headers(self.build_headers())
-            .query(&[
-                ("src", from_token),
-                ("dst", to_token),
-                ("amount", amount),
-            ])
+            .query(&[("src", from_token), ("dst", to_token), ("amount", amount)])
             .send()
             .await
             .map_err(|e| ramp_common::Error::ExternalService {
@@ -268,10 +260,13 @@ impl SwapBackend for OneInchBackend {
         }
 
         let quote_resp: OneInchQuoteResponse =
-            response.json().await.map_err(|e| ramp_common::Error::ExternalService {
-                service: "1inch".to_string(),
-                message: format!("Failed to parse response: {}", e),
-            })?;
+            response
+                .json()
+                .await
+                .map_err(|e| ramp_common::Error::ExternalService {
+                    service: "1inch".to_string(),
+                    message: format!("Failed to parse response: {}", e),
+                })?;
 
         let now = chrono::Utc::now().timestamp() as u64;
 
@@ -297,10 +292,7 @@ impl SwapBackend for OneInchBackend {
     }
 
     async fn execute_swap(&self, quote: &SwapBackendQuote) -> Result<String> {
-        let url = format!(
-            "{}/swap/v6.0/{}/swap",
-            self.base_url, quote.chain_id
-        );
+        let url = format!("{}/swap/v6.0/{}/swap", self.base_url, quote.chain_id);
 
         let response = self
             .client
@@ -330,16 +322,22 @@ impl SwapBackend for OneInchBackend {
         }
 
         let swap_resp: OneInchSwapResponse =
-            response.json().await.map_err(|e| ramp_common::Error::ExternalService {
-                service: "1inch".to_string(),
-                message: format!("Failed to parse swap response: {}", e),
-            })?;
+            response
+                .json()
+                .await
+                .map_err(|e| ramp_common::Error::ExternalService {
+                    service: "1inch".to_string(),
+                    message: format!("Failed to parse swap response: {}", e),
+                })?;
 
         // In production, the tx data would be submitted to the blockchain
         // For now return a hash derived from the tx data
-        let tx_hash = format!("0x{}", hex::encode(sha2::Digest::finalize(
-            sha2::Sha256::new().chain_update(swap_resp.tx.data.as_bytes())
-        )));
+        let tx_hash = format!(
+            "0x{}",
+            hex::encode(sha2::Digest::finalize(
+                sha2::Sha256::new().chain_update(swap_resp.tx.data.as_bytes())
+            ))
+        );
         Ok(tx_hash)
     }
 }
@@ -467,10 +465,13 @@ impl SwapBackend for ParaSwapBackend {
         }
 
         let price_resp: ParaSwapPriceResponse =
-            response.json().await.map_err(|e| ramp_common::Error::ExternalService {
-                service: "ParaSwap".to_string(),
-                message: format!("Failed to parse response: {}", e),
-            })?;
+            response
+                .json()
+                .await
+                .map_err(|e| ramp_common::Error::ExternalService {
+                    service: "ParaSwap".to_string(),
+                    message: format!("Failed to parse response: {}", e),
+                })?;
 
         let now = chrono::Utc::now().timestamp() as u64;
         let gas_cost_usd = price_resp
@@ -498,10 +499,7 @@ impl SwapBackend for ParaSwapBackend {
     }
 
     async fn execute_swap(&self, quote: &SwapBackendQuote) -> Result<String> {
-        let url = format!(
-            "{}/transactions/{}",
-            self.base_url, quote.chain_id
-        );
+        let url = format!("{}/transactions/{}", self.base_url, quote.chain_id);
 
         let body = serde_json::json!({
             "srcToken": quote.from_token,
@@ -535,14 +533,20 @@ impl SwapBackend for ParaSwapBackend {
         }
 
         let tx_resp: ParaSwapTxResponse =
-            response.json().await.map_err(|e| ramp_common::Error::ExternalService {
-                service: "ParaSwap".to_string(),
-                message: format!("Failed to parse tx response: {}", e),
-            })?;
+            response
+                .json()
+                .await
+                .map_err(|e| ramp_common::Error::ExternalService {
+                    service: "ParaSwap".to_string(),
+                    message: format!("Failed to parse tx response: {}", e),
+                })?;
 
-        let tx_hash = format!("0x{}", hex::encode(sha2::Digest::finalize(
-            sha2::Sha256::new().chain_update(tx_resp.data.as_bytes())
-        )));
+        let tx_hash = format!(
+            "0x{}",
+            hex::encode(sha2::Digest::finalize(
+                sha2::Sha256::new().chain_update(tx_resp.data.as_bytes())
+            ))
+        );
         Ok(tx_hash)
     }
 }
@@ -585,8 +589,14 @@ impl StargateBackend {
     pub fn new() -> Self {
         let mut router_addresses = std::collections::HashMap::new();
         router_addresses.insert(1, "0x45f1A95A4D3f3836523F5c83673c797f4d4d263B".to_string());
-        router_addresses.insert(42161, "0x45f1A95A4D3f3836523F5c83673c797f4d4d263B".to_string());
-        router_addresses.insert(8453, "0x45f1A95A4D3f3836523F5c83673c797f4d4d263B".to_string());
+        router_addresses.insert(
+            42161,
+            "0x45f1A95A4D3f3836523F5c83673c797f4d4d263B".to_string(),
+        );
+        router_addresses.insert(
+            8453,
+            "0x45f1A95A4D3f3836523F5c83673c797f4d4d263B".to_string(),
+        );
         router_addresses.insert(10, "0x45f1A95A4D3f3836523F5c83673c797f4d4d263B".to_string());
 
         Self {
@@ -694,7 +704,11 @@ impl BridgeBackend for StargateBackend {
                             .unwrap_or(input_amount - fee_amount);
 
                         let estimated_time = quote_resp.estimated_time.unwrap_or(
-                            if from_chain == 1 || to_chain == 1 { 600 } else { 120 }
+                            if from_chain == 1 || to_chain == 1 {
+                                600
+                            } else {
+                                120
+                            },
                         );
 
                         Ok(BridgeBackendQuote {
@@ -728,12 +742,15 @@ impl BridgeBackend for StargateBackend {
     }
 
     async fn execute_bridge(&self, quote: &BridgeBackendQuote) -> Result<String> {
-        let router = self.router_addresses.get(&quote.from_chain).ok_or_else(|| {
-            ramp_common::Error::Validation(format!(
-                "No Stargate router for chain {}",
-                quote.from_chain
-            ))
-        })?;
+        let router = self
+            .router_addresses
+            .get(&quote.from_chain)
+            .ok_or_else(|| {
+                ramp_common::Error::Validation(format!(
+                    "No Stargate router for chain {}",
+                    quote.from_chain
+                ))
+            })?;
 
         // Build LayerZero message for Stargate bridge
         let payload = format!(
@@ -741,9 +758,12 @@ impl BridgeBackend for StargateBackend {
             router, quote.from_chain, quote.to_chain, quote.token, quote.input_amount
         );
 
-        let tx_hash = format!("0x{}", hex::encode(sha2::Digest::finalize(
-            sha2::Sha256::new().chain_update(payload.as_bytes())
-        )));
+        let tx_hash = format!(
+            "0x{}",
+            hex::encode(sha2::Digest::finalize(
+                sha2::Sha256::new().chain_update(payload.as_bytes())
+            ))
+        );
         Ok(tx_hash)
     }
 
@@ -768,11 +788,17 @@ impl BridgeBackend for StargateBackend {
                     Ok(sr) => {
                         let status = sr.status.as_deref().unwrap_or("pending");
                         Ok(match status {
-                            "completed" | "COMPLETED" | "success" => BridgeTransferStatus::Completed,
+                            "completed" | "COMPLETED" | "success" => {
+                                BridgeTransferStatus::Completed
+                            }
                             "failed" | "FAILED" => BridgeTransferStatus::Failed,
                             "in_transit" | "IN_TRANSIT" => BridgeTransferStatus::InTransit,
-                            "source_confirmed" | "SOURCE_CONFIRMED" => BridgeTransferStatus::SourceConfirmed,
-                            "dest_confirmed" | "DEST_CONFIRMED" => BridgeTransferStatus::DestConfirmed,
+                            "source_confirmed" | "SOURCE_CONFIRMED" => {
+                                BridgeTransferStatus::SourceConfirmed
+                            }
+                            "dest_confirmed" | "DEST_CONFIRMED" => {
+                                BridgeTransferStatus::DestConfirmed
+                            }
                             _ => BridgeTransferStatus::Pending,
                         })
                     }
@@ -832,8 +858,14 @@ impl AcrossBackend {
     pub fn new() -> Self {
         let mut spoke_pool_addresses = std::collections::HashMap::new();
         spoke_pool_addresses.insert(1, "0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5".to_string());
-        spoke_pool_addresses.insert(42161, "0xe35e9842fceaCA96570B734083f4a58e8F7C5f2A".to_string());
-        spoke_pool_addresses.insert(8453, "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64".to_string());
+        spoke_pool_addresses.insert(
+            42161,
+            "0xe35e9842fceaCA96570B734083f4a58e8F7C5f2A".to_string(),
+        );
+        spoke_pool_addresses.insert(
+            8453,
+            "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64".to_string(),
+        );
         spoke_pool_addresses.insert(10, "0x6f26Bf09B1C792e3228e5467807a900A503c0281".to_string());
 
         Self {
@@ -937,9 +969,13 @@ impl BridgeBackend for AcrossBackend {
 
                         let output_amount = input_amount.saturating_sub(fee_amount);
 
-                        let estimated_time = fees_resp
-                            .estimated_fill_time_secs
-                            .unwrap_or(if from_chain == 1 || to_chain == 1 { 300 } else { 60 });
+                        let estimated_time = fees_resp.estimated_fill_time_secs.unwrap_or(
+                            if from_chain == 1 || to_chain == 1 {
+                                300
+                            } else {
+                                60
+                            },
+                        );
 
                         Ok(BridgeBackendQuote {
                             provider: "Across".to_string(),
@@ -972,21 +1008,27 @@ impl BridgeBackend for AcrossBackend {
     }
 
     async fn execute_bridge(&self, quote: &BridgeBackendQuote) -> Result<String> {
-        let spoke_pool = self.spoke_pool_addresses.get(&quote.from_chain).ok_or_else(|| {
-            ramp_common::Error::Validation(format!(
-                "No Across SpokePool for chain {}",
-                quote.from_chain
-            ))
-        })?;
+        let spoke_pool = self
+            .spoke_pool_addresses
+            .get(&quote.from_chain)
+            .ok_or_else(|| {
+                ramp_common::Error::Validation(format!(
+                    "No Across SpokePool for chain {}",
+                    quote.from_chain
+                ))
+            })?;
 
         let payload = format!(
             "across:{}:{}:{}:{}:{}",
             spoke_pool, quote.from_chain, quote.to_chain, quote.token, quote.input_amount
         );
 
-        let tx_hash = format!("0x{}", hex::encode(sha2::Digest::finalize(
-            sha2::Sha256::new().chain_update(payload.as_bytes())
-        )));
+        let tx_hash = format!(
+            "0x{}",
+            hex::encode(sha2::Digest::finalize(
+                sha2::Sha256::new().chain_update(payload.as_bytes())
+            ))
+        );
         Ok(tx_hash)
     }
 
@@ -1081,7 +1123,10 @@ impl BackendRegistry {
                 continue;
             }
 
-            match backend.get_quote(from_token, to_token, amount, chain_id, slippage_bps).await {
+            match backend
+                .get_quote(from_token, to_token, amount, chain_id, slippage_bps)
+                .await
+            {
                 Ok(quote) => {
                     if let Some(ref current_best) = best {
                         // Compare output amounts
@@ -1151,8 +1196,8 @@ impl BackendRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::{MockServer, Mock, ResponseTemplate};
     use wiremock::matchers::{method, path, query_param};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[test]
     fn test_bridge_transfer_status() {
@@ -1205,8 +1250,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let backend = OneInchBackend::new(None)
-            .with_base_url(mock_server.uri());
+        let backend = OneInchBackend::new(None).with_base_url(mock_server.uri());
 
         let quote = backend
             .get_quote("USDC", "USDT", "1000000", 1, 50)
@@ -1231,8 +1275,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let backend = OneInchBackend::new(None)
-            .with_base_url(mock_server.uri());
+        let backend = OneInchBackend::new(None).with_base_url(mock_server.uri());
 
         let result = backend.get_quote("USDC", "USDT", "1000000", 1, 50).await;
         assert!(result.is_err());
@@ -1259,8 +1302,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let backend = OneInchBackend::new(None)
-            .with_base_url(mock_server.uri());
+        let backend = OneInchBackend::new(None).with_base_url(mock_server.uri());
 
         let quote = SwapBackendQuote {
             provider: "1inch".to_string(),
@@ -1303,8 +1345,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let backend = ParaSwapBackend::new(None)
-            .with_base_url(mock_server.uri());
+        let backend = ParaSwapBackend::new(None).with_base_url(mock_server.uri());
 
         let quote = backend
             .get_quote("USDC", "USDT", "1000000", 1, 50)
@@ -1330,8 +1371,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let backend = ParaSwapBackend::new(None)
-            .with_base_url(mock_server.uri());
+        let backend = ParaSwapBackend::new(None).with_base_url(mock_server.uri());
 
         let quote = SwapBackendQuote {
             provider: "ParaSwap".to_string(),
@@ -1362,8 +1402,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let backend = ParaSwapBackend::new(None)
-            .with_base_url(mock_server.uri());
+        let backend = ParaSwapBackend::new(None).with_base_url(mock_server.uri());
 
         let result = backend.get_quote("USDC", "USDT", "1000000", 1, 50).await;
         assert!(result.is_err());
@@ -1387,8 +1426,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let backend = StargateBackend::new()
-            .with_base_url(mock_server.uri());
+        let backend = StargateBackend::new().with_base_url(mock_server.uri());
 
         let quote = backend
             .get_quote("USDC", "1000000", 1, 42161)
@@ -1411,8 +1449,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let backend = StargateBackend::new()
-            .with_base_url(mock_server.uri());
+        let backend = StargateBackend::new().with_base_url(mock_server.uri());
 
         // Should still succeed with fallback
         let quote = backend
@@ -1484,8 +1521,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let backend = AcrossBackend::new()
-            .with_base_url(mock_server.uri());
+        let backend = AcrossBackend::new().with_base_url(mock_server.uri());
 
         let quote = backend
             .get_quote("USDC", "1000000", 1, 42161)
@@ -1508,8 +1544,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let backend = AcrossBackend::new()
-            .with_base_url(mock_server.uri());
+        let backend = AcrossBackend::new().with_base_url(mock_server.uri());
 
         let quote = backend
             .get_quote("USDC", "1000000", 1, 42161)
@@ -1720,8 +1755,8 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let backend = OneInchBackend::new(Some("test-api-key".to_string()))
-            .with_base_url(mock_server.uri());
+        let backend =
+            OneInchBackend::new(Some("test-api-key".to_string())).with_base_url(mock_server.uri());
 
         let quote = backend
             .get_quote("USDC", "USDT", "1000000", 1, 50)
@@ -1756,12 +1791,23 @@ mod tests {
         let stargate = StargateBackend::new().with_base_url(mock_server.uri());
         let across = AcrossBackend::new().with_base_url(mock_server.uri());
 
-        let sg_quote = stargate.get_quote("USDC", "10000000", 1, 42161).await.unwrap();
-        let ac_quote = across.get_quote("USDC", "10000000", 1, 42161).await.unwrap();
+        let sg_quote = stargate
+            .get_quote("USDC", "10000000", 1, 42161)
+            .await
+            .unwrap();
+        let ac_quote = across
+            .get_quote("USDC", "10000000", 1, 42161)
+            .await
+            .unwrap();
 
         let sg_out: u128 = sg_quote.output_amount.parse().unwrap();
         let ac_out: u128 = ac_quote.output_amount.parse().unwrap();
 
-        assert!(ac_out > sg_out, "Across should have lower fees: {} vs {}", ac_out, sg_out);
+        assert!(
+            ac_out > sg_out,
+            "Across should have lower fees: {} vs {}",
+            ac_out,
+            sg_out
+        );
     }
 }

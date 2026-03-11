@@ -9,9 +9,10 @@ use std::sync::Arc;
 use ramp_core::service::payin::{ConfirmPayinRequest, CreatePayinRequest, PayinService};
 use ramp_core::service::payout::{CreatePayoutRequest, PayoutService};
 
+use super::require_scoped_tenant;
 use super::types::{
-    ConfirmPayInInput, ConfirmPayInResult, CreatePayInInput, CreatePayInResult,
-    CreatePayoutInput, CreatePayoutResult,
+    ConfirmPayInInput, ConfirmPayInResult, CreatePayInInput, CreatePayInResult, CreatePayoutInput,
+    CreatePayoutResult,
 };
 
 /// Root mutation object for the GraphQL API
@@ -27,12 +28,13 @@ impl MutationRoot {
         input: CreatePayInInput,
     ) -> GqlResult<CreatePayInResult> {
         let payin_service = ctx.data::<Arc<PayinService>>()?;
+        let tenant_id = require_scoped_tenant(ctx, &tenant_id)?;
 
         let amount = Decimal::from_str(&input.amount_vnd)
             .map_err(|_| async_graphql::Error::new("Invalid amount format"))?;
 
         let req = CreatePayinRequest {
-            tenant_id: TenantId(tenant_id),
+            tenant_id,
             user_id: UserId(input.user_id),
             amount_vnd: VndAmount(amount),
             rails_provider: RailsProvider(input.rails_provider),
@@ -63,12 +65,13 @@ impl MutationRoot {
         input: ConfirmPayInInput,
     ) -> GqlResult<ConfirmPayInResult> {
         let payin_service = ctx.data::<Arc<PayinService>>()?;
+        let tenant_id = require_scoped_tenant(ctx, &tenant_id)?;
 
         let amount = Decimal::from_str(&input.amount_vnd)
             .map_err(|_| async_graphql::Error::new("Invalid amount format"))?;
 
         let req = ConfirmPayinRequest {
-            tenant_id: TenantId(tenant_id),
+            tenant_id,
             reference_code: ReferenceCode(input.reference_code),
             bank_tx_id: input.bank_tx_id,
             amount_vnd: VndAmount(amount),
@@ -95,12 +98,13 @@ impl MutationRoot {
         input: CreatePayoutInput,
     ) -> GqlResult<CreatePayoutResult> {
         let payout_service = ctx.data::<Arc<PayoutService>>()?;
+        let tenant_id = require_scoped_tenant(ctx, &tenant_id)?;
 
         let amount = Decimal::from_str(&input.amount_vnd)
             .map_err(|_| async_graphql::Error::new("Invalid amount format"))?;
 
         let req = CreatePayoutRequest {
-            tenant_id: TenantId(tenant_id),
+            tenant_id,
             user_id: UserId(input.user_id),
             amount_vnd: VndAmount(amount),
             rails_provider: RailsProvider(input.rails_provider),

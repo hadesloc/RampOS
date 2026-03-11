@@ -77,7 +77,8 @@ fn create_tenant_repo_with_test_tenant() -> Arc<MockTenantRepository> {
 fn build_authenticated_graphql_request(body: &serde_json::Value) -> Request<Body> {
     let body_str = serde_json::to_string(body).unwrap();
     let timestamp = Utc::now().timestamp().to_string();
-    let signature = compute_hmac_signature("POST", "/graphql", &timestamp, &body_str, TEST_API_SECRET);
+    let signature =
+        compute_hmac_signature("POST", "/graphql", &timestamp, &body_str, TEST_API_SECRET);
 
     Request::builder()
         .uri("/graphql")
@@ -175,6 +176,7 @@ async fn setup_app() -> axum::Router {
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
+        event_publisher,
     };
 
     create_router(app_state)
@@ -384,6 +386,36 @@ async fn test_graphql_extracts_tenant_from_auth() {
     );
 }
 
+#[tokio::test]
+async fn test_graphql_rejects_cross_tenant_query_even_with_valid_auth() {
+    let router = setup_app().await;
+
+    let body = serde_json::json!({
+        "query": r#"
+            query {
+                dashboardStats(tenantId: "tenant-cross-tenant") {
+                    totalUsers
+                }
+            }
+        "#
+    });
+
+    let request = build_authenticated_graphql_request(&body);
+    let response = router.oneshot(request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+    assert!(
+        json["errors"].as_array().is_some_and(|errors| !errors.is_empty()),
+        "expected cross-tenant GraphQL query to return errors, got {json:?}"
+    );
+}
+
 /// F07: Verify that a mutation sent WITHOUT auth is now rejected (unlike before).
 #[tokio::test]
 async fn test_graphql_mutation_without_auth_token() {
@@ -487,14 +519,27 @@ fn setup_app_state_with_data() -> (
             tenant_id: TEST_TENANT_ID.to_string(),
             user_id: "user-1".to_string(),
             intent_type: if i < 3 { "PAYIN_VND" } else { "PAYOUT_VND" }.to_string(),
-            state: if i == 0 { "COMPLETED" } else { "INSTRUCTION_ISSUED" }.to_string(),
+            state: if i == 0 {
+                "COMPLETED"
+            } else {
+                "INSTRUCTION_ISSUED"
+            }
+            .to_string(),
             state_history: serde_json::json!([{"state": "CREATED", "ts": base_time.to_rfc3339()}]),
             amount: Decimal::new((i as i64 + 1) * 100_000, 0),
             currency: "VND".to_string(),
-            actual_amount: if i == 0 { Some(Decimal::new(100_000, 0)) } else { None },
+            actual_amount: if i == 0 {
+                Some(Decimal::new(100_000, 0))
+            } else {
+                None
+            },
             rails_provider: Some("VCB".to_string()),
             reference_code: Some(format!("REF-{}", i + 1)),
-            bank_tx_id: if i == 0 { Some("BANK-TX-001".to_string()) } else { None },
+            bank_tx_id: if i == 0 {
+                Some("BANK-TX-001".to_string())
+            } else {
+                None
+            },
             chain_id: None,
             tx_hash: None,
             from_address: None,
@@ -586,6 +631,7 @@ fn setup_app_state_with_data() -> (
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
+        event_publisher,
     };
 
     (app_state, intent_repo, user_repo)
@@ -631,7 +677,10 @@ async fn test_graphql_resolver_query_nonexistent_user() {
     assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
 
     let data = resp.data.into_json().unwrap();
-    assert!(data["user"].is_null(), "Non-existent user should return null");
+    assert!(
+        data["user"].is_null(),
+        "Non-existent user should return null"
+    );
 }
 
 /// F07: Query users list returns correct data with pagination info
@@ -655,8 +704,14 @@ async fn test_graphql_resolver_query_users_list() {
     // Verify each edge has cursor and node
     for edge in edges {
         assert!(edge["cursor"].is_string(), "Each edge should have a cursor");
-        assert!(edge["node"]["id"].is_string(), "Each node should have an id");
-        assert!(edge["node"]["status"].is_string(), "Each node should have a status");
+        assert!(
+            edge["node"]["id"].is_string(),
+            "Each node should have an id"
+        );
+        assert!(
+            edge["node"]["status"].is_string(),
+            "Each node should have a status"
+        );
     }
 
     // Verify pagination info
@@ -686,8 +741,14 @@ async fn test_graphql_resolver_query_users_pagination() {
     let data = resp.data.into_json().unwrap();
     let edges = data["users"]["edges"].as_array().unwrap();
     assert_eq!(edges.len(), 2, "Should return exactly 2 users");
-    assert_eq!(data["users"]["pageInfo"]["hasNextPage"], true, "Should have next page");
-    assert_eq!(data["users"]["totalCount"], 3, "Total count should still be 3");
+    assert_eq!(
+        data["users"]["pageInfo"]["hasNextPage"], true,
+        "Should have next page"
+    );
+    assert_eq!(
+        data["users"]["totalCount"], 3,
+        "Total count should still be 3"
+    );
 }
 
 /// F07: Query a single intent by ID returns full data structure
@@ -798,7 +859,10 @@ async fn test_graphql_resolver_query_intents_no_user_returns_empty() {
 
     let data = resp.data.into_json().unwrap();
     let edges = data["intents"]["edges"].as_array().unwrap();
-    assert!(edges.is_empty(), "Without user_id filter, intents should return empty");
+    assert!(
+        edges.is_empty(),
+        "Without user_id filter, intents should return empty"
+    );
 }
 
 /// F07: Query dashboardStats returns correct aggregate data
@@ -842,14 +906,25 @@ async fn test_graphql_resolver_mutation_create_payin() {
     let data = resp.data.into_json().unwrap();
     let result = &data["createPayIn"];
     assert!(result["intentId"].is_string(), "Should return an intent ID");
-    assert!(!result["intentId"].as_str().unwrap().is_empty(), "Intent ID should not be empty");
-    assert!(result["referenceCode"].is_string(), "Should return a reference code");
+    assert!(
+        !result["intentId"].as_str().unwrap().is_empty(),
+        "Intent ID should not be empty"
+    );
+    assert!(
+        result["referenceCode"].is_string(),
+        "Should return a reference code"
+    );
     assert_eq!(result["status"], "INSTRUCTION_ISSUED");
 
     // Verify intent was actually created in the repository
     let intents = intent_repo.intents.lock().unwrap();
-    let new_intent = intents.iter().find(|i| i.id == result["intentId"].as_str().unwrap());
-    assert!(new_intent.is_some(), "Intent should exist in repository after creation");
+    let new_intent = intents
+        .iter()
+        .find(|i| i.id == result["intentId"].as_str().unwrap());
+    assert!(
+        new_intent.is_some(),
+        "Intent should exist in repository after creation"
+    );
 }
 
 /// F07: createPayIn mutation with invalid amount format returns error
@@ -864,7 +939,10 @@ async fn test_graphql_resolver_mutation_invalid_amount() {
     );
 
     let resp = schema.execute(&mutation).await;
-    assert!(!resp.errors.is_empty(), "Should return errors for invalid amount");
+    assert!(
+        !resp.errors.is_empty(),
+        "Should return errors for invalid amount"
+    );
     let error_msg = resp.errors[0].message.to_lowercase();
     assert!(
         error_msg.contains("invalid") || error_msg.contains("amount"),
@@ -886,7 +964,10 @@ async fn test_graphql_resolver_mutation_missing_required_fields() {
     );
 
     let resp = schema.execute(&mutation).await;
-    assert!(!resp.errors.is_empty(), "Missing required fields should produce errors");
+    assert!(
+        !resp.errors.is_empty(),
+        "Missing required fields should produce errors"
+    );
 }
 
 /// F07: Schema introspection exposes expected query and mutation fields
@@ -917,11 +998,26 @@ async fn test_graphql_resolver_schema_fields() {
         .map(|f| f["name"].as_str().unwrap())
         .collect();
 
-    assert!(query_fields.contains(&"intent"), "Schema should have 'intent' query");
-    assert!(query_fields.contains(&"intents"), "Schema should have 'intents' query");
-    assert!(query_fields.contains(&"user"), "Schema should have 'user' query");
-    assert!(query_fields.contains(&"users"), "Schema should have 'users' query");
-    assert!(query_fields.contains(&"dashboardStats"), "Schema should have 'dashboardStats' query");
+    assert!(
+        query_fields.contains(&"intent"),
+        "Schema should have 'intent' query"
+    );
+    assert!(
+        query_fields.contains(&"intents"),
+        "Schema should have 'intents' query"
+    );
+    assert!(
+        query_fields.contains(&"user"),
+        "Schema should have 'user' query"
+    );
+    assert!(
+        query_fields.contains(&"users"),
+        "Schema should have 'users' query"
+    );
+    assert!(
+        query_fields.contains(&"dashboardStats"),
+        "Schema should have 'dashboardStats' query"
+    );
 
     let mutation_fields: Vec<&str> = data["__schema"]["mutationType"]["fields"]
         .as_array()
@@ -930,9 +1026,18 @@ async fn test_graphql_resolver_schema_fields() {
         .map(|f| f["name"].as_str().unwrap())
         .collect();
 
-    assert!(mutation_fields.contains(&"createPayIn"), "Schema should have 'createPayIn' mutation");
-    assert!(mutation_fields.contains(&"confirmPayIn"), "Schema should have 'confirmPayIn' mutation");
-    assert!(mutation_fields.contains(&"createPayout"), "Schema should have 'createPayout' mutation");
+    assert!(
+        mutation_fields.contains(&"createPayIn"),
+        "Schema should have 'createPayIn' mutation"
+    );
+    assert!(
+        mutation_fields.contains(&"confirmPayIn"),
+        "Schema should have 'confirmPayIn' mutation"
+    );
+    assert!(
+        mutation_fields.contains(&"createPayout"),
+        "Schema should have 'createPayout' mutation"
+    );
 }
 
 /// F07: Intent fields include timestamps (createdAt, updatedAt, expiresAt)
@@ -951,10 +1056,22 @@ async fn test_graphql_resolver_intent_timestamp_fields() {
 
     let data = resp.data.into_json().unwrap();
     let intent = &data["intent"];
-    assert!(intent["createdAt"].is_string(), "createdAt should be a string");
-    assert!(intent["updatedAt"].is_string(), "updatedAt should be a string");
-    assert!(intent["expiresAt"].is_string(), "expiresAt should be present for this intent");
-    assert!(intent["completedAt"].is_string(), "completedAt should be present for completed intent");
+    assert!(
+        intent["createdAt"].is_string(),
+        "createdAt should be a string"
+    );
+    assert!(
+        intent["updatedAt"].is_string(),
+        "updatedAt should be a string"
+    );
+    assert!(
+        intent["expiresAt"].is_string(),
+        "expiresAt should be present for this intent"
+    );
+    assert!(
+        intent["completedAt"].is_string(),
+        "completedAt should be present for completed intent"
+    );
 }
 
 /// F07: User fields include risk_score and risk_flags
@@ -974,8 +1091,14 @@ async fn test_graphql_resolver_user_risk_fields() {
     let data = resp.data.into_json().unwrap();
     let user = &data["user"];
     assert_eq!(user["id"], "user-1");
-    assert!(user["riskScore"].is_string(), "riskScore should be a string representation");
-    assert!(user["riskFlags"].is_array(), "riskFlags should be a JSON array");
+    assert!(
+        user["riskScore"].is_string(),
+        "riskScore should be a string representation"
+    );
+    assert!(
+        user["riskFlags"].is_array(),
+        "riskFlags should be a JSON array"
+    );
 }
 
 /// F07: createPayIn with idempotency_key passes it through to the created intent
@@ -1000,7 +1123,10 @@ async fn test_graphql_resolver_mutation_create_payin_with_idempotency_key() {
     // Verify the intent in repository has the idempotency key
     let intents = intent_repo.intents.lock().unwrap();
     let created = intents.iter().find(|i| i.id == intent_id).unwrap();
-    assert_eq!(created.idempotency_key, Some("test-idem-key-999".to_string()));
+    assert_eq!(
+        created.idempotency_key,
+        Some("test-idem-key-999".to_string())
+    );
 }
 
 // ============================================================================
@@ -1036,34 +1162,79 @@ async fn test_graphql_schema_has_all_expected_types() {
 
     // Core object types
     assert!(types.contains(&"QueryRoot"), "Schema should have QueryRoot");
-    assert!(types.contains(&"MutationRoot"), "Schema should have MutationRoot");
-    assert!(types.contains(&"SubscriptionRoot"), "Schema should have SubscriptionRoot");
+    assert!(
+        types.contains(&"MutationRoot"),
+        "Schema should have MutationRoot"
+    );
+    assert!(
+        types.contains(&"SubscriptionRoot"),
+        "Schema should have SubscriptionRoot"
+    );
 
     // Domain types
-    assert!(types.contains(&"IntentType"), "Schema should have IntentType");
+    assert!(
+        types.contains(&"IntentType"),
+        "Schema should have IntentType"
+    );
     assert!(types.contains(&"UserType"), "Schema should have UserType");
-    assert!(types.contains(&"DashboardStatsType"), "Schema should have DashboardStatsType");
+    assert!(
+        types.contains(&"DashboardStatsType"),
+        "Schema should have DashboardStatsType"
+    );
 
     // Connection/pagination types
-    assert!(types.contains(&"IntentConnection"), "Schema should have IntentConnection");
-    assert!(types.contains(&"IntentEdge"), "Schema should have IntentEdge");
-    assert!(types.contains(&"UserConnection"), "Schema should have UserConnection");
+    assert!(
+        types.contains(&"IntentConnection"),
+        "Schema should have IntentConnection"
+    );
+    assert!(
+        types.contains(&"IntentEdge"),
+        "Schema should have IntentEdge"
+    );
+    assert!(
+        types.contains(&"UserConnection"),
+        "Schema should have UserConnection"
+    );
     assert!(types.contains(&"UserEdge"), "Schema should have UserEdge");
     assert!(types.contains(&"PageInfo"), "Schema should have PageInfo");
 
     // Input types
-    assert!(types.contains(&"IntentFilter"), "Schema should have IntentFilter input");
-    assert!(types.contains(&"CreatePayInInput"), "Schema should have CreatePayInInput");
-    assert!(types.contains(&"ConfirmPayInInput"), "Schema should have ConfirmPayInInput");
-    assert!(types.contains(&"CreatePayoutInput"), "Schema should have CreatePayoutInput");
+    assert!(
+        types.contains(&"IntentFilter"),
+        "Schema should have IntentFilter input"
+    );
+    assert!(
+        types.contains(&"CreatePayInInput"),
+        "Schema should have CreatePayInInput"
+    );
+    assert!(
+        types.contains(&"ConfirmPayInInput"),
+        "Schema should have ConfirmPayInInput"
+    );
+    assert!(
+        types.contains(&"CreatePayoutInput"),
+        "Schema should have CreatePayoutInput"
+    );
 
     // Result types
-    assert!(types.contains(&"CreatePayInResult"), "Schema should have CreatePayInResult");
-    assert!(types.contains(&"ConfirmPayInResult"), "Schema should have ConfirmPayInResult");
-    assert!(types.contains(&"CreatePayoutResult"), "Schema should have CreatePayoutResult");
+    assert!(
+        types.contains(&"CreatePayInResult"),
+        "Schema should have CreatePayInResult"
+    );
+    assert!(
+        types.contains(&"ConfirmPayInResult"),
+        "Schema should have ConfirmPayInResult"
+    );
+    assert!(
+        types.contains(&"CreatePayoutResult"),
+        "Schema should have CreatePayoutResult"
+    );
 
     // Subscription event type
-    assert!(types.contains(&"IntentStatusEvent"), "Schema should have IntentStatusEvent");
+    assert!(
+        types.contains(&"IntentStatusEvent"),
+        "Schema should have IntentStatusEvent"
+    );
 }
 
 /// F07-T2: Subscription type exposes the intentStatusChanged field with correct arguments.
@@ -1167,10 +1338,22 @@ async fn test_graphql_intent_status_event_type_fields() {
         .map(|f| f["name"].as_str().unwrap())
         .collect();
 
-    assert!(fields.contains(&"intentId"), "IntentStatusEvent should have 'intentId'");
-    assert!(fields.contains(&"tenantId"), "IntentStatusEvent should have 'tenantId'");
-    assert!(fields.contains(&"newStatus"), "IntentStatusEvent should have 'newStatus'");
-    assert!(fields.contains(&"timestamp"), "IntentStatusEvent should have 'timestamp'");
+    assert!(
+        fields.contains(&"intentId"),
+        "IntentStatusEvent should have 'intentId'"
+    );
+    assert!(
+        fields.contains(&"tenantId"),
+        "IntentStatusEvent should have 'tenantId'"
+    );
+    assert!(
+        fields.contains(&"newStatus"),
+        "IntentStatusEvent should have 'newStatus'"
+    );
+    assert!(
+        fields.contains(&"timestamp"),
+        "IntentStatusEvent should have 'timestamp'"
+    );
 }
 
 /// F07-T2: GraphQL error response follows spec format (errors array with message).
@@ -1185,7 +1368,11 @@ async fn test_graphql_error_response_follows_spec_format() {
 
     let request = build_authenticated_graphql_request(&body);
     let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK, "GraphQL errors should still return HTTP 200");
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "GraphQL errors should still return HTTP 200"
+    );
 
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
@@ -1193,9 +1380,15 @@ async fn test_graphql_error_response_follows_spec_format() {
     let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     // Per GraphQL spec, errors should be an array
-    assert!(json["errors"].is_array(), "Error response should have 'errors' array");
+    assert!(
+        json["errors"].is_array(),
+        "Error response should have 'errors' array"
+    );
     let errors = json["errors"].as_array().unwrap();
-    assert!(!errors.is_empty(), "Errors array should not be empty for invalid query");
+    assert!(
+        !errors.is_empty(),
+        "Errors array should not be empty for invalid query"
+    );
 
     // Each error must have a 'message' field per spec
     for error in errors {
@@ -1239,9 +1432,21 @@ async fn test_graphql_batch_query_via_separate_requests() {
     let resp2 = schema.execute(&query2).await;
     let resp3 = schema.execute(&query3).await;
 
-    assert!(resp1.errors.is_empty(), "Query 1 errors: {:?}", resp1.errors);
-    assert!(resp2.errors.is_empty(), "Query 2 errors: {:?}", resp2.errors);
-    assert!(resp3.errors.is_empty(), "Query 3 errors: {:?}", resp3.errors);
+    assert!(
+        resp1.errors.is_empty(),
+        "Query 1 errors: {:?}",
+        resp1.errors
+    );
+    assert!(
+        resp2.errors.is_empty(),
+        "Query 2 errors: {:?}",
+        resp2.errors
+    );
+    assert!(
+        resp3.errors.is_empty(),
+        "Query 3 errors: {:?}",
+        resp3.errors
+    );
 
     let data1 = resp1.data.into_json().unwrap();
     assert_eq!(data1["user"]["id"], "user-1");

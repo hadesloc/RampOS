@@ -193,10 +193,7 @@ impl InMemorySettlementRepo {
     // -- Reconciliation CRUD --
 
     fn insert_recon_record(&self, r: ReconciliationRecord) {
-        self.recon_records
-            .lock()
-            .unwrap()
-            .insert(r.id.clone(), r);
+        self.recon_records.lock().unwrap().insert(r.id.clone(), r);
     }
 
     #[allow(dead_code)]
@@ -483,7 +480,10 @@ fn test_settlement_batch_lifecycle() {
         &repo,
         tenant,
         vec![s1.id.clone(), s2.id.clone()],
-        vec![(dec!(5_000_000), dec!(100_000)), (dec!(8_000_000), dec!(160_000))],
+        vec![
+            (dec!(5_000_000), dec!(100_000)),
+            (dec!(8_000_000), dec!(160_000)),
+        ],
     );
 
     // Batch: Pending -> Processing
@@ -566,9 +566,9 @@ fn test_settlement_calculation_accuracy_multiple() {
 
     // 3 settlements with varying amounts and fee rates.
     let items = vec![
-        (dec!(10_000_000), dec!(200_000)),   // 2% fee
-        (dec!(50_000_000), dec!(500_000)),   // 1% fee
-        (dec!(100_000_000), dec!(750_000)),  // 0.75% fee
+        (dec!(10_000_000), dec!(200_000)),  // 2% fee
+        (dec!(50_000_000), dec!(500_000)),  // 1% fee
+        (dec!(100_000_000), dec!(750_000)), // 0.75% fee
     ];
 
     let ids: Vec<String> = (0..3).map(|i| format!("stl_multi_{}", i)).collect();
@@ -579,10 +579,7 @@ fn test_settlement_calculation_accuracy_multiple() {
 
     assert_eq!(batch.total_gross_amount, expected_gross);
     assert_eq!(batch.total_fees, expected_fees);
-    assert_eq!(
-        batch.total_net_amount,
-        expected_gross - expected_fees
-    );
+    assert_eq!(batch.total_net_amount, expected_gross - expected_fees);
     // Specific values:
     assert_eq!(batch.total_gross_amount, dec!(160_000_000));
     assert_eq!(batch.total_fees, dec!(1_450_000));
@@ -631,7 +628,7 @@ fn test_settlement_calculation_small_amounts() {
 
     // Micro settlement.
     let gross = dec!(50_000); // 50K VND
-    let fee = dec!(1_000);    // 2% fee
+    let fee = dec!(1_000); // 2% fee
     let batch = create_batch(
         &repo,
         "tenantMicro",
@@ -806,7 +803,10 @@ fn test_reconciliation_within_tolerance() {
         tolerance,
     );
 
-    assert!(rec.matched, "50 VND over should match within 100 VND tolerance");
+    assert!(
+        rec.matched,
+        "50 VND over should match within 100 VND tolerance"
+    );
     assert_eq!(rec.discrepancy, dec!(50));
 }
 
@@ -824,7 +824,10 @@ fn test_reconciliation_outside_tolerance() {
         tolerance,
     );
 
-    assert!(!rec.matched, "200 VND discrepancy should NOT match within 100 VND tolerance");
+    assert!(
+        !rec.matched,
+        "200 VND discrepancy should NOT match within 100 VND tolerance"
+    );
     assert_eq!(rec.discrepancy, dec!(-200));
 }
 
@@ -1007,7 +1010,10 @@ fn test_settlement_batch_failure_propagation() {
         &repo,
         tenant,
         vec![s1.id.clone(), s2.id.clone()],
-        vec![(dec!(10_000_000), dec!(200_000)), (dec!(15_000_000), dec!(300_000))],
+        vec![
+            (dec!(10_000_000), dec!(200_000)),
+            (dec!(15_000_000), dec!(300_000)),
+        ],
     );
 
     // Batch Pending -> Processing.
@@ -1026,8 +1032,12 @@ fn test_settlement_batch_failure_propagation() {
 
     // After batch failure, individual settlements should be marked Failed too.
     for sid in &batch.settlement_ids {
-        repo.update_status(sid, SettlementStatus::Failed, Some("Batch failed".to_string()))
-            .unwrap();
+        repo.update_status(
+            sid,
+            SettlementStatus::Failed,
+            Some("Batch failed".to_string()),
+        )
+        .unwrap();
     }
     assert_eq!(repo.count_by_status(&SettlementStatus::Failed), 2);
 }
@@ -1041,7 +1051,9 @@ fn test_settlement_error_message_preserved_on_failure() {
     repo.update_status(&s.id, SettlementStatus::Processing, None)
         .unwrap();
 
-    let detailed_error = "NAPAS error code=E042: insufficient funds in pool account, reference=RAMP-ABC12345".to_string();
+    let detailed_error =
+        "NAPAS error code=E042: insufficient funds in pool account, reference=RAMP-ABC12345"
+            .to_string();
     repo.update_status(
         &s.id,
         SettlementStatus::Failed,
@@ -1050,7 +1062,10 @@ fn test_settlement_error_message_preserved_on_failure() {
     .unwrap();
 
     let stored = repo.get_settlement(&s.id).unwrap();
-    assert_eq!(stored.error_message.as_deref(), Some(detailed_error.as_str()));
+    assert_eq!(
+        stored.error_message.as_deref(),
+        Some(detailed_error.as_str())
+    );
 }
 
 // ============================================================================
@@ -1158,15 +1173,16 @@ async fn test_concurrent_status_transitions() {
         .cloned()
         .map(|id| {
             let repo = repo.clone();
-            tokio::spawn(async move {
-                repo.update_status(&id, SettlementStatus::Processing, None)
-            })
+            tokio::spawn(async move { repo.update_status(&id, SettlementStatus::Processing, None) })
         })
         .collect();
 
     for h in handles {
         let result = h.await.unwrap();
-        assert!(result.is_ok(), "Concurrent Processing transition should succeed");
+        assert!(
+            result.is_ok(),
+            "Concurrent Processing transition should succeed"
+        );
     }
 
     assert_eq!(repo.count_by_status(&SettlementStatus::Processing), 10);
@@ -1178,9 +1194,7 @@ async fn test_concurrent_status_transitions() {
         .cloned()
         .map(|id| {
             let repo = repo.clone();
-            tokio::spawn(async move {
-                repo.update_status(&id, SettlementStatus::Completed, None)
-            })
+            tokio::spawn(async move { repo.update_status(&id, SettlementStatus::Completed, None) })
         })
         .collect();
 

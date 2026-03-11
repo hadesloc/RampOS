@@ -1,7 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { CheckoutResult, CheckoutCallbacks, CryptoAsset, Network, PaymentMethod, WidgetTheme } from '../types/index';
+import type {
+  CheckoutResult,
+  CheckoutCallbacks,
+  CryptoAsset,
+  HeadlessCheckoutOptions,
+  Network,
+  PaymentMethod,
+  RemoteWidgetConfig,
+  WidgetTheme,
+  WidgetThemeTokens,
+} from '../types/index';
 import { RampOSEventEmitter } from '../utils/events';
 import { resolveTheme } from './shared/theme';
+import { resolveThemeTokens } from '../config/theme-tokens';
 import Button from './shared/Button';
 import Input from './shared/Input';
 
@@ -13,7 +24,10 @@ export interface RampOSCheckoutProps extends CheckoutCallbacks {
   network?: Network;
   walletAddress?: string;
   theme?: WidgetTheme;
+  themeTokens?: WidgetThemeTokens;
   environment?: 'sandbox' | 'production';
+  remoteConfig?: RemoteWidgetConfig;
+  headless?: HeadlessCheckoutOptions;
 }
 
 type CheckoutStep = 'select-asset' | 'enter-amount' | 'kyc-check' | 'payment-method' | 'summary' | 'processing' | 'success' | 'failed';
@@ -39,12 +53,15 @@ const RampOSCheckout: React.FC<RampOSCheckoutProps> = ({
   network: initialNetwork,
   walletAddress: initialWallet,
   theme: themeProp,
+  themeTokens,
+  remoteConfig,
+  headless,
   onSuccess,
   onError,
   onClose,
   onReady,
 }) => {
-  const theme = resolveTheme(themeProp);
+  const theme = resolveTheme(resolveThemeTokens(themeProp, themeTokens));
   const emitter = RampOSEventEmitter.getInstance();
 
   const [step, setStep] = useState<CheckoutStep>(() => {
@@ -61,7 +78,16 @@ const RampOSCheckout: React.FC<RampOSCheckoutProps> = ({
   const [kycVerified, setKycVerified] = useState(false);
 
   useEffect(() => {
-    emitter.emit('CHECKOUT_READY');
+    emitter.emit(
+      'CHECKOUT_READY',
+      headless?.emitState
+        ? {
+            flowId: headless.flowId ?? null,
+            mode: 'headless',
+            remoteConfigUrl: remoteConfig?.url ?? null,
+          }
+        : undefined
+    );
     onReady?.();
   }, []);
 

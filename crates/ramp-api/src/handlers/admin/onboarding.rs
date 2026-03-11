@@ -11,7 +11,7 @@ use tracing::info;
 use crate::dto::{CreateTenantRequest, SuspendTenantRequest, UpdateTenantRequest};
 use crate::error::ApiError;
 use crate::extract::ValidatedJson;
-use ramp_core::service::onboarding::{ApiCredentials, OnboardingService};
+use ramp_core::service::onboarding::{ApiCredentials, OnboardingService, TenantBootstrapRequest};
 
 // ============================================================================
 // Response DTOs
@@ -41,7 +41,10 @@ pub async fn create_tenant(
     info!(name = %request.name, "Creating new tenant");
 
     let tenant = onboarding_service
-        .create_tenant(&request.name, request.config)
+        .bootstrap_tenant(TenantBootstrapRequest {
+            name: request.name,
+            config: request.config,
+        })
         .await
         .map_err(ApiError::from)?;
 
@@ -113,7 +116,7 @@ pub async fn update_tenant(
     Path(tenant_id): Path<String>,
     ValidatedJson(request): ValidatedJson<UpdateTenantRequest>,
 ) -> Result<StatusCode, ApiError> {
-    super::tier::check_admin_key(&headers)?;
+    super::tier::check_admin_key_operator(&headers)?;
     info!(tenant_id = %tenant_id, "Updating tenant");
 
     let id = TenantId::new(tenant_id);
@@ -137,4 +140,80 @@ pub async fn update_tenant(
     }
 
     Ok(StatusCode::OK)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use ramp_core::{
+        repository::{tenant::TenantRow, TenantRepository},
+        service::ledger::LedgerService,
+        test_utils::{MockLedgerRepository, MockTenantRepository},
+    };
+    use rust_decimal_macros::dec;
+
+    #[tokio::test]
+    async fn test_update_tenant_rejects_viewer_role() {
+        std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
+        std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
+
+        let tenant_repo = Arc::new(MockTenantRepository::new());
+        tenant_repo.add_tenant(TenantRow {
+            id: "tenant-1".to_string(),
+            name: "Tenant 1".to_string(),
+            status: "ACTIVE".to_string(),
+            api_key_hash: "hash".to_string(),
+            api_secret_encrypted: None,
+            webhook_secret_hash: "webhook-hash".to_string(),
+            webhook_secret_encrypted: None,
+            webhook_url: None,
+            config: serde_json::json!({}),
+            daily_payin_limit_vnd: Some(dec!(1000)),
+            daily_payout_limit_vnd: Some(dec!(500)),
+            api_version: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        });
+
+        let ledger_repo = Arc::new(MockLedgerRepository::new());
+        let onboarding_service = Arc::new(OnboardingService::new(
+            tenant_repo.clone(),
+            Arc::new(LedgerService::new(ledger_repo)),
+        ));
+
+        let mut headers = HeaderMap::new();
+        headers.insert("X-Admin-Key", "admin-secret-key".parse().unwrap());
+
+        let request = UpdateTenantRequest {
+            webhook_url: Some("https://example.com/webhook".to_string()),
+            daily_payin_limit_vnd: None,
+            daily_payout_limit_vnd: None,
+        };
+
+        let err = update_tenant(
+            headers,
+            State(onboarding_service),
+            Path("tenant-1".to_string()),
+            ValidatedJson(request),
+        )
+        .await
+        .unwrap_err();
+
+        match err {
+            ApiError::Forbidden(message) => {
+                assert!(message.contains("Insufficient permissions"));
+            }
+            other => panic!("expected forbidden error, got {other:?}"),
+        }
+
+        let stored = tenant_repo
+            .get_by_id(&TenantId::new("tenant-1"))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.webhook_url, None);
+
+        std::env::remove_var("RAMPOS_ADMIN_ROLE");
+    }
 }

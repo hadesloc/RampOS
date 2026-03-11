@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 
+use super::require_scoped_tenant;
 use super::types::IntentStatusEvent;
 
 /// Broadcast sender for intent status change events.
@@ -55,19 +56,19 @@ impl SubscriptionRoot {
         ctx: &Context<'_>,
         #[graphql(desc = "Tenant ID to subscribe to")] tenant_id: String,
     ) -> async_graphql::Result<IntentEventStream> {
+        let scoped_tenant_id = require_scoped_tenant(ctx, &tenant_id)?;
         let sender = ctx.data::<Arc<IntentEventSender>>()?;
         let rx = sender.subscribe();
 
-        let stream = BroadcastStream::new(rx)
-            .filter_map(move |result| {
-                let tenant_id = tenant_id.clone();
-                async move {
-                    match result {
-                        Ok(event) if event.tenant_id == tenant_id => Some(event),
-                        _ => None,
-                    }
+        let stream = BroadcastStream::new(rx).filter_map(move |result| {
+            let tenant_id = scoped_tenant_id.0.clone();
+            async move {
+                match result {
+                    Ok(event) if event.tenant_id == tenant_id => Some(event),
+                    _ => None,
                 }
-            });
+            }
+        });
 
         Ok(Box::pin(stream))
     }

@@ -26,38 +26,65 @@ use ramp_core::repository::user::UserRow;
 
 pub mod audit;
 pub mod bridge;
+pub mod config_bundle;
 pub mod documents;
+pub mod extensions;
 pub mod fraud;
+pub mod incidents;
 pub mod intent;
+pub mod kyb;
 pub mod ledger;
 pub mod licensing;
 pub mod limits;
+pub mod liquidity;
 pub mod offramp;
 pub mod onboarding;
+pub mod passport;
 pub mod reports;
+pub mod reconciliation;
+pub mod rescreening;
+pub mod rfq;
+pub mod risk_lab;
 pub mod rules;
+pub mod sandbox;
+pub mod settlement;
 pub mod tier;
+pub mod treasury;
+pub mod travel_rule;
 pub mod webhooks;
 pub mod yield_strategy;
-pub mod rfq;
+#[cfg(test)]
+mod licensing_tests;
 
 pub use audit::*;
 pub use bridge::*;
+pub use config_bundle::*;
 pub use documents::*;
+pub use extensions::*;
 pub use fraud::*;
+pub use incidents::*;
 pub use intent::*;
+pub use kyb::*;
 pub use ledger::*;
 pub use licensing::*;
 pub use limits::*;
+pub use liquidity::*;
 pub use offramp::*;
 pub use onboarding::*;
+pub use passport::*;
 pub use reports::*;
+pub use reconciliation::*;
+pub use rescreening::*;
+pub use rfq::*;
+pub use risk_lab::*;
 pub use rules::*;
+pub use sandbox::*;
+pub use settlement::*;
 pub use tier::*;
+pub use treasury::*;
+pub use travel_rule::*;
 pub use webhooks::*;
 pub use yield_strategy::*;
-pub use rfq::*;
-
 
 // ============================================================================
 // Case Management DTOs
@@ -1057,7 +1084,7 @@ pub async fn create_recon_batch(
     Extension(tenant_ctx): Extension<TenantContext>,
     Json(request): Json<CreateReconBatchRequest>,
 ) -> Result<Json<ReconBatchResponse>, ApiError> {
-    super::tier::check_admin_key(&headers)?;
+    super::tier::check_admin_key_operator(&headers)?;
     info!(
         tenant = %tenant_ctx.tenant_id.0,
         rails_provider = %request.rails_provider,
@@ -1114,6 +1141,47 @@ fn map_user_response(user: &UserRow) -> UserResponse {
     }
 }
 
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+    use crate::middleware::tenant::{TenantContext, TenantTier};
+    use axum::{http::HeaderMap, Json};
+    use chrono::{Duration, Utc};
+    use ramp_common::types::TenantId;
+
+    #[tokio::test]
+    async fn create_recon_batch_rejects_viewer_role() {
+        std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
+        std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
+
+        let mut headers = HeaderMap::new();
+        headers.insert("X-Admin-Key", "admin-secret-key".parse().unwrap());
+
+        let tenant_ctx = TenantContext {
+            tenant_id: TenantId::new("tenant_recon_scope"),
+            name: "Tenant".to_string(),
+            tier: TenantTier::Standard,
+        };
+        let now = Utc::now();
+        let request = CreateReconBatchRequest {
+            rails_provider: "VIETQR".to_string(),
+            period_start: now - Duration::hours(1),
+            period_end: now,
+        };
+
+        let err = create_recon_batch(headers, Extension(tenant_ctx), Json(request))
+            .await
+            .unwrap_err();
+
+        match err {
+            ApiError::Forbidden(_) => {}
+            other => panic!("expected forbidden error, got {other:?}"),
+        }
+
+        std::env::remove_var("RAMPOS_ADMIN_ROLE");
+    }
+}
+
 fn parse_case_status(status: &str) -> Result<CaseStatus, String> {
     match status.to_uppercase().as_str() {
         "OPEN" => Ok(CaseStatus::Open),
@@ -1139,6 +1207,9 @@ fn parse_case_severity(severity: &str) -> Result<CaseSeverity, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::middleware::tenant::{TenantContext, TenantTier};
+    use axum::{extract::Extension, http::HeaderMap, Json};
+    use ramp_common::types::TenantId;
 
     #[test]
     fn test_case_stats_serialization() {
@@ -1160,5 +1231,37 @@ mod tests {
         let json = serde_json::to_string(&stats).expect("serialization failed");
         assert!(json.contains("\"total\":100"));
         assert!(json.contains("\"avgResolutionHours\":24.5"));
+    }
+
+    #[tokio::test]
+    async fn test_create_recon_batch_rejects_viewer_role() {
+        std::env::set_var("RAMPOS_ADMIN_KEY", "recon-secret");
+        std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
+
+        let mut headers = HeaderMap::new();
+        headers.insert("X-Admin-Key", "recon-secret".parse().unwrap());
+
+        let err = create_recon_batch(
+            headers,
+            Extension(TenantContext {
+                tenant_id: TenantId::new("tenant_recon"),
+                name: "Tenant Recon".to_string(),
+                tier: TenantTier::Standard,
+            }),
+            Json(CreateReconBatchRequest {
+                rails_provider: "VCB".to_string(),
+                period_start: Utc::now(),
+                period_end: Utc::now(),
+            }),
+        )
+        .await
+        .unwrap_err();
+
+        match err {
+            ApiError::Forbidden(_) => {}
+            other => panic!("expected forbidden error, got {other:?}"),
+        }
+
+        std::env::remove_var("RAMPOS_ADMIN_ROLE");
     }
 }

@@ -13,10 +13,10 @@ use axum::{
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
-use ramp_api::versioning::{ApiVersion, TransformerRegistry};
 use ramp_api::middleware::versioning::{
     version_negotiation_middleware, VERSION_HEADER, VERSION_RESPONSE_HEADER,
 };
+use ramp_api::versioning::{ApiVersion, TransformerRegistry};
 
 /// Helper: build a simple test app with version negotiation middleware
 fn versioned_app() -> Router {
@@ -67,10 +67,7 @@ async fn test_request_with_latest_version_header() {
 async fn test_request_without_version_uses_default() {
     let app = versioned_app();
 
-    let req = Request::builder()
-        .uri("/test")
-        .body(Body::empty())
-        .unwrap();
+    let req = Request::builder().uri("/test").body(Body::empty()).unwrap();
 
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -94,9 +91,7 @@ async fn test_invalid_version_header_returns_error() {
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
-    let body = axum::body::to_bytes(resp.into_body(), 4096)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
     let error: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(error["error"]["code"], "INVALID_VERSION_FORMAT");
     assert!(error["error"]["minimum_version"].is_string());
@@ -116,9 +111,7 @@ async fn test_too_old_version_header_returns_error() {
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
-    let body = axum::body::to_bytes(resp.into_body(), 4096)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
     let error: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(error["error"]["code"], "VERSION_TOO_OLD");
 }
@@ -136,9 +129,7 @@ async fn test_future_version_header_returns_error() {
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
-    let body = axum::body::to_bytes(resp.into_body(), 4096)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
     let error: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(error["error"]["code"], "VERSION_UNKNOWN");
 }
@@ -277,7 +268,9 @@ fn test_transformer_roundtrip() {
     });
 
     // Upgrade to v2
-    let upgraded = registry.upgrade_request(&v1, &v2, original.clone()).unwrap();
+    let upgraded = registry
+        .upgrade_request(&v1, &v2, original.clone())
+        .unwrap();
     assert_eq!(upgraded["amount_minor"], 25000);
 
     // Simulate a v2 response based on the upgraded request
@@ -337,7 +330,10 @@ impl ramp_api::versioning::VersionTransformer for V20260301ToV20260401 {
     fn to_version(&self) -> ApiVersion {
         ApiVersion::parse("2026-04-01").expect("valid")
     }
-    fn transform_request(&self, mut payload: Value) -> Result<Value, ramp_api::versioning::TransformError> {
+    fn transform_request(
+        &self,
+        mut payload: Value,
+    ) -> Result<Value, ramp_api::versioning::TransformError> {
         if let Some(obj) = payload.as_object_mut() {
             // v3 adds a "metadata" wrapper around description
             if let Some(desc) = obj.remove("description") {
@@ -347,7 +343,10 @@ impl ramp_api::versioning::VersionTransformer for V20260301ToV20260401 {
         }
         Ok(payload)
     }
-    fn transform_response(&self, mut payload: Value) -> Result<Value, ramp_api::versioning::TransformError> {
+    fn transform_response(
+        &self,
+        mut payload: Value,
+    ) -> Result<Value, ramp_api::versioning::TransformError> {
         if let Some(obj) = payload.as_object_mut() {
             // Unwrap metadata.note back to description
             if let Some(meta) = obj.remove("metadata") {
@@ -430,7 +429,9 @@ fn test_multi_hop_roundtrip() {
         "description": "roundtrip chain"
     });
 
-    let _upgraded = registry.upgrade_request(&v1, &v3, original_request).unwrap();
+    let _upgraded = registry
+        .upgrade_request(&v1, &v3, original_request)
+        .unwrap();
 
     // Simulate v3 response
     let v3_response = json!({
@@ -458,10 +459,7 @@ async fn test_tenant_pinned_version_used_when_no_header() {
         .route("/test", get(|| async { "ok" }))
         .layer(from_fn(version_negotiation_middleware));
 
-    let mut req = Request::builder()
-        .uri("/test")
-        .body(Body::empty())
-        .unwrap();
+    let mut req = Request::builder().uri("/test").body(Body::empty()).unwrap();
 
     req.extensions_mut().insert(TenantApiVersion {
         version: ApiVersion::parse("2026-03-01").unwrap(),
@@ -510,10 +508,7 @@ async fn test_incompatible_tenant_pinned_falls_to_default() {
         .route("/test", get(|| async { "ok" }))
         .layer(from_fn(version_negotiation_middleware));
 
-    let mut req = Request::builder()
-        .uri("/test")
-        .body(Body::empty())
-        .unwrap();
+    let mut req = Request::builder().uri("/test").body(Body::empty()).unwrap();
 
     // Tenant pinned to an incompatible old version
     req.extensions_mut().insert(TenantApiVersion {
@@ -564,7 +559,11 @@ fn test_non_deprecated_status_preserved_on_downgrade() {
     for status in &["completed", "failed", "processing", "cancelled"] {
         let response = json!({ "status": status });
         let downgraded = registry.downgrade_response(&v1, &v2, response).unwrap();
-        assert_eq!(downgraded["status"], *status, "Status '{}' should be preserved", status);
+        assert_eq!(
+            downgraded["status"], *status,
+            "Status '{}' should be preserved",
+            status
+        );
     }
 }
 
@@ -677,10 +676,7 @@ fn test_default_version_is_older_than_latest() {
 async fn test_no_header_no_tenant_uses_default() {
     let app = versioned_app();
 
-    let req = Request::builder()
-        .uri("/test")
-        .body(Body::empty())
-        .unwrap();
+    let req = Request::builder().uri("/test").body(Body::empty()).unwrap();
 
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -703,7 +699,9 @@ fn test_registry_upgrade_with_no_matching_transformer() {
     let latest = ApiVersion::latest();
 
     let input = json!({ "foo": "bar" });
-    let output = registry.upgrade_request(&unknown, &latest, input.clone()).unwrap();
+    let output = registry
+        .upgrade_request(&unknown, &latest, input.clone())
+        .unwrap();
     // No transformer found, so payload passes through unchanged
     assert_eq!(output, input);
 }
@@ -716,7 +714,9 @@ fn test_registry_downgrade_with_no_matching_transformer() {
     let latest = ApiVersion::latest();
 
     let input = json!({ "foo": "bar" });
-    let output = registry.downgrade_response(&unknown, &latest, input.clone()).unwrap();
+    let output = registry
+        .downgrade_response(&unknown, &latest, input.clone())
+        .unwrap();
     // No transformer chain starts at unknown, payload unchanged
     assert_eq!(output, input);
 }
@@ -823,9 +823,7 @@ async fn test_version_error_response_structure() {
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
-    let body = axum::body::to_bytes(resp.into_body(), 4096)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
     let error: Value = serde_json::from_slice(&body).unwrap();
 
     // Verify full error structure
@@ -847,9 +845,7 @@ async fn test_too_old_version_error_includes_guidance() {
         .unwrap();
 
     let resp = app.oneshot(req).await.unwrap();
-    let body = axum::body::to_bytes(resp.into_body(), 4096)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
     let error: Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(error["error"]["code"], "VERSION_TOO_OLD");

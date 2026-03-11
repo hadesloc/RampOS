@@ -9,9 +9,7 @@ use ramp_common::{Error, Result};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-use super::{
-    AggregatorRegistry, SwapQuote, SwapTxData, Token,
-};
+use super::{AggregatorRegistry, SwapQuote, SwapTxData, Token};
 
 /// Route finding result
 #[derive(Debug, Clone)]
@@ -258,7 +256,9 @@ impl SwapRouter {
 
         let gas_score = if max_gas > min_gas {
             let range: u128 = (max_gas - min_gas).try_into().unwrap_or(u128::MAX);
-            let from_max: u128 = (max_gas - quote.estimated_gas).try_into().unwrap_or(u128::MAX);
+            let from_max: u128 = (max_gas - quote.estimated_gas)
+                .try_into()
+                .unwrap_or(u128::MAX);
             (from_max as f64 / range as f64) * 100.0
         } else {
             100.0 // All same gas
@@ -285,12 +285,9 @@ impl SwapRouter {
 
     /// Build swap transaction from a quote
     pub async fn build_swap_tx(&self, quote: &SwapQuote, recipient: Address) -> Result<SwapTxData> {
-        let aggregator = self
-            .registry
-            .by_name(&quote.aggregator)
-            .ok_or_else(|| {
-                Error::Validation(format!("Aggregator {} not found", quote.aggregator))
-            })?;
+        let aggregator = self.registry.by_name(&quote.aggregator).ok_or_else(|| {
+            Error::Validation(format!("Aggregator {} not found", quote.aggregator))
+        })?;
 
         aggregator.build_swap_tx(quote, recipient).await
     }
@@ -323,7 +320,10 @@ impl SwapRouter {
 
         QuoteComparison {
             output_difference: output_diff,
-            output_difference_bps: Self::calculate_difference_bps(quote_a.to_amount, quote_b.to_amount),
+            output_difference_bps: Self::calculate_difference_bps(
+                quote_a.to_amount,
+                quote_b.to_amount,
+            ),
             gas_difference: gas_diff,
             better_output: better_output.clone(),
             better_gas: better_gas.clone(),
@@ -337,7 +337,9 @@ impl SwapRouter {
         let max = std::cmp::max(a, b);
         let min = std::cmp::min(a, b);
         let diff = max - min;
-        let bps_val: u64 = ((diff * U256::from(10000)) / max).try_into().unwrap_or(0u64);
+        let bps_val: u64 = ((diff * U256::from(10000)) / max)
+            .try_into()
+            .unwrap_or(0u64);
         bps_val as u16
     }
 }
@@ -359,15 +361,21 @@ mod tests {
 
     fn create_test_registry() -> AggregatorRegistry {
         let mut registry = AggregatorRegistry::new();
-        registry.register(Arc::new(OneInchAggregator::new(AggregatorConfig::default())));
-        registry.register(Arc::new(ParaSwapAggregator::new(AggregatorConfig::default())));
+        registry.register(Arc::new(
+            OneInchAggregator::new(AggregatorConfig::default()),
+        ));
+        registry.register(Arc::new(ParaSwapAggregator::new(
+            AggregatorConfig::default(),
+        )));
         registry
     }
 
     fn usdt_token() -> Token {
         Token::new(
             "USDT",
-            "0xdAC17F958D2ee523a2206206994597C13D831ec7".parse().unwrap(),
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+                .parse()
+                .unwrap(),
             6,
             1,
         )
@@ -376,7 +384,9 @@ mod tests {
     fn usdc_token() -> Token {
         Token::new(
             "USDC",
-            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse().unwrap(),
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+                .parse()
+                .unwrap(),
             6,
             1,
         )
@@ -388,12 +398,7 @@ mod tests {
         let router = SwapRouter::new(registry);
 
         let result = router
-            .find_best_route(
-                usdt_token(),
-                usdc_token(),
-                U256::from(1_000_000_000u64),
-                50,
-            )
+            .find_best_route(usdt_token(), usdc_token(), U256::from(1_000_000_000u64), 50)
             .await
             .unwrap();
 
@@ -408,12 +413,7 @@ mod tests {
         let router = SwapRouter::new(registry);
 
         let quotes = router
-            .get_all_quotes(
-                usdt_token(),
-                usdc_token(),
-                U256::from(1_000_000_000u64),
-                50,
-            )
+            .get_all_quotes(usdt_token(), usdc_token(), U256::from(1_000_000_000u64), 50)
             .await;
 
         assert_eq!(quotes.len(), 2); // 1inch and ParaSwap

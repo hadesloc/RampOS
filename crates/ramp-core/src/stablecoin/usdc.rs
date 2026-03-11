@@ -3,8 +3,8 @@
 //! USD Coin is a fully reserved stablecoin issued by Circle.
 //! Uses 6 decimals on all chains.
 
-use async_trait::async_trait;
 use alloy::primitives::{Address, U256};
+use async_trait::async_trait;
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
 
@@ -91,7 +91,10 @@ impl Stablecoin for UsdcToken {
             symbol: "USDC".to_string(),
             name: "USD Coin".to_string(),
             decimals: 6,
-            logo_url: Some("https://assets.coingecko.com/coins/images/6319/large/USD_Coin_icon.png".to_string()),
+            logo_url: Some(
+                "https://assets.coingecko.com/coins/images/6319/large/USD_Coin_icon.png"
+                    .to_string(),
+            ),
             website: Some("https://www.circle.com/usdc".to_string()),
             description: Some("USDC is a fully reserved stablecoin issued by Circle".to_string()),
         }
@@ -144,12 +147,7 @@ impl Stablecoin for UsdcToken {
         ))
     }
 
-    async fn allowance(
-        &self,
-        chain_id: u64,
-        owner: Address,
-        spender: Address,
-    ) -> Result<U256> {
+    async fn allowance(&self, chain_id: u64, owner: Address, spender: Address) -> Result<U256> {
         let _contract = self.contract_address(chain_id).ok_or_else(|| {
             Error::Validation(format!("USDC not supported on chain {}", chain_id))
         })?;

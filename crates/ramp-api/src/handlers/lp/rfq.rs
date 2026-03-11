@@ -86,8 +86,7 @@ pub struct BidResponse {
 // ============================================================================
 
 pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/rfq/:rfq_id/bid", post(submit_bid))
+    Router::new().route("/rfq/:rfq_id/bid", post(submit_bid))
 }
 
 // ============================================================================
@@ -108,9 +107,11 @@ pub async fn submit_bid(
     let (lp_id, tenant_id_str) = parse_lp_key(&lp_key)?;
     let tenant_id = TenantId(tenant_id_str);
 
-    let pool = app_state.db_pool.as_ref().ok_or_else(|| {
-        ApiError::Internal("RFQ service unavailable".to_string())
-    })?.clone();
+    let pool = app_state
+        .db_pool
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("RFQ service unavailable".to_string()))?
+        .clone();
 
     // Parse amounts
     let exchange_rate: Decimal = req
@@ -124,10 +125,14 @@ pub async fn submit_bid(
         .map_err(|_| ApiError::Validation("vnd_amount must be a valid number".to_string()))?;
 
     if exchange_rate <= Decimal::ZERO {
-        return Err(ApiError::Validation("exchange_rate must be positive".to_string()));
+        return Err(ApiError::Validation(
+            "exchange_rate must be positive".to_string(),
+        ));
     }
     if vnd_amount <= Decimal::ZERO {
-        return Err(ApiError::Validation("vnd_amount must be positive".to_string()));
+        return Err(ApiError::Validation(
+            "vnd_amount must be positive".to_string(),
+        ));
     }
 
     let svc = RfqService::new(

@@ -3,8 +3,8 @@
 //! Provides off-chain price data when Chainlink is unavailable.
 
 use super::{Price, PriceOracle, PriceSource};
-use async_trait::async_trait;
 use alloy::primitives::Address;
+use async_trait::async_trait;
 use ramp_common::{Error, Result};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -90,9 +90,9 @@ impl CoinGeckoFallback {
 
     /// Fetch price from CoinGecko API
     async fn fetch_coingecko_price(&self, token: Address, chain_id: u64) -> Result<Price> {
-        let token_id = self.get_token_id(token).ok_or_else(|| {
-            Error::Validation(format!("No CoinGecko ID for token {:?}", token))
-        })?;
+        let token_id = self
+            .get_token_id(token)
+            .ok_or_else(|| Error::Validation(format!("No CoinGecko ID for token {:?}", token)))?;
 
         // In production, this would make an HTTP request:
         // GET /simple/price?ids={token_id}&vs_currencies=usd
@@ -114,7 +114,12 @@ impl CoinGeckoFallback {
             _ => Decimal::ONE,
         };
 
-        Ok(Price::new(token, chain_id, price_usd, PriceSource::CoinGecko))
+        Ok(Price::new(
+            token,
+            chain_id,
+            price_usd,
+            PriceSource::CoinGecko,
+        ))
     }
 
     /// Fetch prices for multiple tokens in a single API call

@@ -51,9 +51,16 @@ struct TestApp {
 
 /// Generate HMAC-SHA256 signature for a request
 /// Format: {method}\n{path}\n{timestamp}\n{body}
-fn generate_signature(method: &str, path: &str, timestamp: &str, body: &str, secret: &str) -> String {
+fn generate_signature(
+    method: &str,
+    path: &str,
+    timestamp: &str,
+    body: &str,
+    secret: &str,
+) -> String {
     let message = format!("{}\n{}\n{}\n{}", method, path, timestamp, body);
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take any size key");
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take any size key");
     mac.update(message.as_bytes());
     hex::encode(mac.finalize().into_bytes())
 }
@@ -247,10 +254,13 @@ async fn setup_app() -> TestApp {
         ledger_service,
         onboarding_service,
         user_service,
-        webhook_service: Arc::new(ramp_core::service::webhook::WebhookService::new(
-            Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
-            tenant_repo.clone(),
-        ).unwrap()),
+        webhook_service: Arc::new(
+            ramp_core::service::webhook::WebhookService::new(
+                Arc::new(ramp_core::test_utils::MockWebhookRepository::new()),
+                tenant_repo.clone(),
+            )
+            .unwrap(),
+        ),
         tenant_repo: tenant_repo.clone(),
         intent_repo: intent_repo.clone(),
         report_generator,
@@ -383,7 +393,13 @@ async fn test_auth_middleware_invalid_key() {
     // Use an invalid API key with valid signature format
     let body = serde_json::to_string(&payload).unwrap();
     let timestamp = Utc::now().to_rfc3339();
-    let signature = generate_signature("POST", "/v1/intents/payin", &timestamp, &body, &app.api_secret);
+    let signature = generate_signature(
+        "POST",
+        "/v1/intents/payin",
+        &timestamp,
+        &body,
+        &app.api_secret,
+    );
 
     let request = Request::builder()
         .uri("/v1/intents/payin")
@@ -407,7 +423,13 @@ async fn test_auth_middleware_timestamp() {
     let now = Utc::now();
     let body = "{}";
     let timestamp = now.to_rfc3339();
-    let signature = generate_signature("POST", "/v1/intents/payin", &timestamp, body, &app.api_secret);
+    let signature = generate_signature(
+        "POST",
+        "/v1/intents/payin",
+        &timestamp,
+        body,
+        &app.api_secret,
+    );
 
     let request_valid = Request::builder()
         .uri("/v1/intents/payin")
@@ -426,7 +448,13 @@ async fn test_auth_middleware_timestamp() {
     // Expired timestamp - should fail with 401
     let expired = now - Duration::seconds(301);
     let expired_timestamp = expired.to_rfc3339();
-    let expired_signature = generate_signature("POST", "/v1/intents/payin", &expired_timestamp, body, &app.api_secret);
+    let expired_signature = generate_signature(
+        "POST",
+        "/v1/intents/payin",
+        &expired_timestamp,
+        body,
+        &app.api_secret,
+    );
 
     let request_expired = Request::builder()
         .uri("/v1/intents/payin")
@@ -458,7 +486,13 @@ async fn test_idempotency_service_handling() {
 
     // Request 1 with Idempotency-Key
     let timestamp1 = Utc::now().to_rfc3339();
-    let signature1 = generate_signature("POST", "/v1/intents/payin", &timestamp1, &body, &app.api_secret);
+    let signature1 = generate_signature(
+        "POST",
+        "/v1/intents/payin",
+        &timestamp1,
+        &body,
+        &app.api_secret,
+    );
 
     let request1 = Request::builder()
         .uri("/v1/intents/payin")
@@ -476,7 +510,13 @@ async fn test_idempotency_service_handling() {
 
     // Request 2 with same Idempotency-Key
     let timestamp2 = Utc::now().to_rfc3339();
-    let signature2 = generate_signature("POST", "/v1/intents/payin", &timestamp2, &body, &app.api_secret);
+    let signature2 = generate_signature(
+        "POST",
+        "/v1/intents/payin",
+        &timestamp2,
+        &body,
+        &app.api_secret,
+    );
 
     let request2 = Request::builder()
         .uri("/v1/intents/payin")
@@ -582,8 +622,14 @@ async fn test_payout_endpoint_success() {
     // Debug: print response body for payout
     let status = response.status();
     if status != StatusCode::OK {
-        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        eprintln!("DEBUG test_payout: status={}, body={}", status, String::from_utf8_lossy(&body_bytes));
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        eprintln!(
+            "DEBUG test_payout: status={}, body={}",
+            status,
+            String::from_utf8_lossy(&body_bytes)
+        );
         panic!("Expected 200, got {}", status);
     }
 
@@ -621,8 +667,14 @@ async fn test_trade_endpoint_success() {
     // Debug: print response body for trade
     let status = response.status();
     if status != StatusCode::OK {
-        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        eprintln!("DEBUG test_trade: status={}, body={}", status, String::from_utf8_lossy(&body_bytes));
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        eprintln!(
+            "DEBUG test_trade: status={}, body={}",
+            status,
+            String::from_utf8_lossy(&body_bytes)
+        );
         panic!("Expected 200, got {}", status);
     }
 }
@@ -805,8 +857,14 @@ async fn test_list_intents() {
 
     // Debug: print response body for list_intents
     let status = response.status();
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    eprintln!("DEBUG test_list_intents: status={}, body={}", status, String::from_utf8_lossy(&body_bytes));
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    eprintln!(
+        "DEBUG test_list_intents: status={}, body={}",
+        status,
+        String::from_utf8_lossy(&body_bytes)
+    );
 
     assert_eq!(status, StatusCode::OK);
 }

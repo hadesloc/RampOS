@@ -15,9 +15,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::{
-    Chain, ChainId, ChainRegistry, EvmChain, EvmChainConfig,
-    SolanaChain, SolanaChainConfig, TonChain, TonChainConfig, Transaction, TxHash,
-    TxStatus, UnifiedAddress, Balance, TokenBalance, FeeEstimate, Result
+    Balance, Chain, ChainId, ChainRegistry, EvmChain, EvmChainConfig, FeeEstimate, Result,
+    SolanaChain, SolanaChainConfig, TokenBalance, TonChain, TonChainConfig, Transaction, TxHash,
+    TxStatus, UnifiedAddress,
 };
 
 /// Service for unified chain interactions
@@ -106,7 +106,11 @@ impl ChainAbstractionLayer {
     }
 
     /// Get balance on a specific chain
-    pub fn get_balance<'a>(&'a self, chain_id: ChainId, address: &'a str) -> Result<impl std::future::Future<Output = Result<Balance>> + 'a> {
+    pub fn get_balance<'a>(
+        &'a self,
+        chain_id: ChainId,
+        address: &'a str,
+    ) -> Result<impl std::future::Future<Output = Result<Balance>> + 'a> {
         let chain = self.get_chain(chain_id)?;
         Ok(async move { chain.get_balance(address).await })
     }

@@ -49,7 +49,8 @@ impl DocumentStorage for MockDocumentStorage {
             tenant_id, user_id, doc_type, file_id, extension
         );
 
-        self.storage.lock()
+        self.storage
+            .lock()
             .map_err(|e| StorageError::BackendError(format!("Storage lock poisoned: {}", e)))?
             .insert(key.clone(), data);
         Ok(key)
@@ -60,7 +61,9 @@ impl DocumentStorage for MockDocumentStorage {
             sleep(self.delay).await;
         }
 
-        let storage = self.storage.lock()
+        let storage = self
+            .storage
+            .lock()
             .map_err(|e| StorageError::BackendError(format!("Storage lock poisoned: {}", e)))?;
         storage
             .get(url)
@@ -73,7 +76,9 @@ impl DocumentStorage for MockDocumentStorage {
             sleep(self.delay).await;
         }
 
-        let mut storage = self.storage.lock()
+        let mut storage = self
+            .storage
+            .lock()
             .map_err(|e| StorageError::BackendError(format!("Storage lock poisoned: {}", e)))?;
         storage.remove(url);
         Ok(())

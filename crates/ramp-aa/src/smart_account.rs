@@ -1,6 +1,6 @@
-use async_trait::async_trait;
-use alloy::primitives::{Address, Bytes, U256, keccak256};
 use alloy::dyn_abi::DynSolValue;
+use alloy::primitives::{keccak256, Address, Bytes, U256};
+use async_trait::async_trait;
 use ramp_common::{
     types::{TenantId, UserId},
     Result,
@@ -140,7 +140,8 @@ impl SmartAccountService {
         let params = DynSolValue::Tuple(vec![
             DynSolValue::Address(owner),
             DynSolValue::Uint(salt, 256),
-        ]).abi_encode();
+        ])
+        .abi_encode();
         data.extend_from_slice(&params);
 
         Ok(Bytes::from(data))
@@ -164,7 +165,8 @@ impl SmartAccountService {
             DynSolValue::Address(to),
             DynSolValue::Uint(value, 256),
             DynSolValue::Bytes(data.unwrap_or_default().to_vec()),
-        ]).abi_encode();
+        ])
+        .abi_encode();
         call_data.extend_from_slice(&params);
 
         Ok(UserOperation::new(
@@ -183,8 +185,14 @@ impl SmartAccountService {
         // Build executeBatch(address[],uint256[],bytes[]) call
         let selector = [0x34, 0xfc, 0xd5, 0xbe]; // keccak256("executeBatch(address[],uint256[],bytes[])")[:4]
 
-        let targets: Vec<DynSolValue> = calls.iter().map(|(t, _, _)| DynSolValue::Address(*t)).collect();
-        let values: Vec<DynSolValue> = calls.iter().map(|(_, v, _)| DynSolValue::Uint(*v, 256)).collect();
+        let targets: Vec<DynSolValue> = calls
+            .iter()
+            .map(|(t, _, _)| DynSolValue::Address(*t))
+            .collect();
+        let values: Vec<DynSolValue> = calls
+            .iter()
+            .map(|(_, v, _)| DynSolValue::Uint(*v, 256))
+            .collect();
         let datas: Vec<DynSolValue> = calls
             .iter()
             .map(|(_, _, d)| DynSolValue::Bytes(d.to_vec()))
@@ -197,7 +205,8 @@ impl SmartAccountService {
             DynSolValue::Array(targets),
             DynSolValue::Array(values),
             DynSolValue::Array(datas),
-        ]).abi_encode();
+        ])
+        .abi_encode();
         call_data.extend_from_slice(&params);
 
         Ok(UserOperation::new(

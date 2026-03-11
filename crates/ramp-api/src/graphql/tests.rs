@@ -2,10 +2,14 @@
 
 use async_graphql::{Request, Schema};
 use chrono::Utc;
+use futures::StreamExt;
 use rust_decimal_macros::dec;
 use serde_json::json;
 use std::sync::Arc;
 
+use crate::middleware::tenant::{TenantContext, TenantTier};
+use ramp_common::ledger::{AccountType, LedgerCurrency};
+use ramp_common::types::*;
 use ramp_core::event::InMemoryEventPublisher;
 use ramp_core::repository::intent::{IntentRepository, IntentRow};
 use ramp_core::repository::user::UserRow;
@@ -13,15 +17,11 @@ use ramp_core::service::payin::PayinService;
 use ramp_core::service::payout::PayoutService;
 use ramp_core::service::user::UserService;
 use ramp_core::test_utils::{MockIntentRepository, MockLedgerRepository, MockUserRepository};
-use ramp_common::types::*;
-use ramp_common::ledger::{AccountType, LedgerCurrency};
 
 use super::mutation::MutationRoot;
 use super::pagination;
 use super::query::QueryRoot;
-use super::subscription::{
-    create_intent_event_channel, publish_intent_status, SubscriptionRoot,
-};
+use super::subscription::{create_intent_event_channel, publish_intent_status, SubscriptionRoot};
 
 /// Helper: create a test schema with mocked repositories
 fn create_test_schema() -> (
@@ -50,10 +50,7 @@ fn create_test_schema() -> (
         event_publisher.clone(),
     ));
 
-    let user_service = Arc::new(UserService::new(
-        user_repo.clone(),
-        event_publisher.clone(),
-    ));
+    let user_service = Arc::new(UserService::new(user_repo.clone(), event_publisher.clone()));
 
     let schema = Schema::build(QueryRoot, MutationRoot, SubscriptionRoot)
         .data::<Arc<dyn ramp_core::repository::intent::IntentRepository>>(intent_repo.clone())
@@ -112,6 +109,14 @@ fn create_test_intent(tenant_id: &str, user_id: &str, intent_id: &str) -> Intent
     }
 }
 
+fn test_tenant_context(tenant_id: &str) -> TenantContext {
+    TenantContext {
+        tenant_id: TenantId::new(tenant_id),
+        name: format!("tenant-{tenant_id}"),
+        tier: TenantTier::Standard,
+    }
+}
+
 // ============================================================================
 // Schema Validation Tests
 // ============================================================================
@@ -165,6 +170,28 @@ async fn test_query_intent_not_found() {
 
     let data = resp.data.into_json().unwrap();
     assert!(data["intent"].is_null());
+}
+
+#[tokio::test]
+async fn test_query_intent_rejects_mismatched_authenticated_tenant() {
+    let (schema, intent_repo, _, _) = create_test_schema();
+
+    let intent = create_test_intent("tenant-authenticated", "user1", "intent-001");
+    intent_repo.create(&intent).await.unwrap();
+
+    let query = r#"
+        query {
+            intent(tenantId: "tenant-other", id: "intent-001") {
+                id
+            }
+        }
+    "#;
+
+    let resp = schema
+        .execute(Request::new(query).data(test_tenant_context("tenant-authenticated")))
+        .await;
+
+    assert!(!resp.errors.is_empty(), "expected tenant mismatch error");
 }
 
 #[tokio::test]
@@ -339,7 +366,10 @@ async fn test_mutation_create_payin() {
 
     let data = resp.data.into_json().unwrap();
     assert!(!data["createPayIn"]["intentId"].as_str().unwrap().is_empty());
-    assert!(!data["createPayIn"]["referenceCode"].as_str().unwrap().is_empty());
+    assert!(!data["createPayIn"]["referenceCode"]
+        .as_str()
+        .unwrap()
+        .is_empty());
     assert_eq!(data["createPayIn"]["status"], "INSTRUCTION_ISSUED");
 }
 
@@ -380,7 +410,10 @@ async fn test_mutation_create_payout() {
     assert!(resp.errors.is_empty(), "Errors: {:?}", resp.errors);
 
     let data = resp.data.into_json().unwrap();
-    assert!(!data["createPayout"]["intentId"].as_str().unwrap().is_empty());
+    assert!(!data["createPayout"]["intentId"]
+        .as_str()
+        .unwrap()
+        .is_empty());
     assert_eq!(data["createPayout"]["status"], "PAYOUT_SUBMITTED");
 }
 
@@ -403,7 +436,35 @@ async fn test_mutation_create_payin_invalid_amount() {
     "#;
 
     let resp = schema.execute(Request::new(query)).await;
-    assert!(!resp.errors.is_empty(), "Expected an error for invalid amount");
+    assert!(
+        !resp.errors.is_empty(),
+        "Expected an error for invalid amount"
+    );
+}
+
+#[tokio::test]
+async fn test_mutation_create_payin_rejects_mismatched_authenticated_tenant() {
+    let (schema, _, user_repo, _) = create_test_schema();
+
+    user_repo.add_user(create_test_user("tenant-authenticated", "user-001"));
+
+    let query = r#"
+        mutation {
+            createPayIn(tenantId: "tenant-other", input: {
+                userId: "user-001",
+                amountVnd: "100000",
+                railsProvider: "VIETCOMBANK"
+            }) {
+                intentId
+            }
+        }
+    "#;
+
+    let resp = schema
+        .execute(Request::new(query).data(test_tenant_context("tenant-authenticated")))
+        .await;
+
+    assert!(!resp.errors.is_empty(), "expected tenant mismatch error");
 }
 
 // ============================================================================
@@ -472,4 +533,26 @@ async fn test_publish_multiple_events() {
     assert_eq!(e1.intent_id, "i1");
     assert_eq!(e2.intent_id, "i2");
     assert_eq!(e3.tenant_id, "t2");
+}
+
+#[tokio::test]
+async fn test_subscription_rejects_mismatched_authenticated_tenant() {
+    let (schema, _, _, _) = create_test_schema();
+    let request = Request::new(
+        r#"
+            subscription {
+                intentStatusChanged(tenantId: "tenant-other") {
+                    intentId
+                }
+            }
+        "#,
+    )
+    .data(test_tenant_context("tenant-authenticated"));
+
+    let responses: Vec<_> = schema.execute_stream(request).take(1).collect().await;
+    assert_eq!(responses.len(), 1);
+    assert!(
+        !responses[0].errors.is_empty(),
+        "expected tenant mismatch error"
+    );
 }

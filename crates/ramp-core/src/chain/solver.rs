@@ -7,11 +7,15 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use super::bridge::BridgeQuote;
 use super::swap::SwapQuote;
 use super::{ChainError, ChainId, Result};
+use crate::service::liquidity_policy::{
+    LiquidityPolicyCandidate, LiquidityPolicyConfig, LiquidityPolicyEvaluator,
+};
 
 /// An intent representing what the user wants to achieve
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,7 +83,17 @@ impl IntentSolver {
         available_swaps: &[SwapQuote],
         available_bridges: &[BridgeQuote],
     ) -> Result<ExecutionRoute> {
-        let key = Self::cache_key(intent);
+        self.solve_with_policy(intent, available_swaps, available_bridges, None)
+    }
+
+    pub fn solve_with_policy(
+        &self,
+        intent: &Intent,
+        available_swaps: &[SwapQuote],
+        available_bridges: &[BridgeQuote],
+        policy: Option<&LiquidityPolicyConfig>,
+    ) -> Result<ExecutionRoute> {
+        let key = Self::cache_key_with_policy(intent, policy.map(|value| value.version.as_str()));
 
         // Check cache first
         if let Some(cached) = self.get_cached(&key) {
@@ -109,15 +123,12 @@ impl IntentSolver {
         }
 
         // Select the cheapest route (highest output)
-        let best = candidates
-            .into_iter()
-            .max_by_key(|r| r.total_output)
-            .ok_or_else(|| {
-                ChainError::Internal(format!(
-                    "No route found for {} -> {} ({} -> {})",
-                    intent.source_chain, intent.dest_chain, intent.source_token, intent.dest_token
-                ))
-            })?;
+        let best = self.select_route(candidates, policy).ok_or_else(|| {
+            ChainError::Internal(format!(
+                "No route found for {} -> {} ({} -> {})",
+                intent.source_chain, intent.dest_chain, intent.source_token, intent.dest_token
+            ))
+        })?;
 
         self.cache_route(&key, &best);
         Ok(best)
@@ -216,9 +227,7 @@ impl IntentSolver {
         // Find a bridge between the chains
         let bridge = bridges
             .iter()
-            .filter(|b| {
-                b.source_chain == intent.source_chain && b.dest_chain == intent.dest_chain
-            })
+            .filter(|b| b.source_chain == intent.source_chain && b.dest_chain == intent.dest_chain)
             .max_by_key(|b| b.amount_received)?;
 
         let mut steps: Vec<RouteAction> = Vec::new();
@@ -283,9 +292,9 @@ impl IntentSolver {
         if intent.amount == 0 {
             return false;
         }
-        let actual_slippage_bps =
-            ((intent.amount.saturating_sub(route.total_output)) as f64 / intent.amount as f64
-                * 10000.0) as u32;
+        let actual_slippage_bps = ((intent.amount.saturating_sub(route.total_output)) as f64
+            / intent.amount as f64
+            * 10000.0) as u32;
         actual_slippage_bps <= intent.max_slippage_bps
     }
 
@@ -315,15 +324,63 @@ impl IntentSolver {
 
     /// Generate cache key
     fn cache_key(intent: &Intent) -> String {
+        Self::cache_key_with_policy(intent, None)
+    }
+
+    fn cache_key_with_policy(intent: &Intent, policy_version: Option<&str>) -> String {
         format!(
-            "{}:{}:{}:{}:{}",
+            "{}:{}:{}:{}:{}:{}",
             intent.source_chain.0,
             intent.dest_chain.0,
             intent.source_token,
             intent.dest_token,
-            intent.amount
+            intent.amount,
+            policy_version.unwrap_or("no-policy")
         )
     }
+
+    fn select_route(
+        &self,
+        candidates: Vec<ExecutionRoute>,
+        policy: Option<&LiquidityPolicyConfig>,
+    ) -> Option<ExecutionRoute> {
+        if candidates.is_empty() {
+            return None;
+        }
+
+        let policy_candidates: Vec<_> = candidates
+            .iter()
+            .enumerate()
+            .map(|(index, route)| LiquidityPolicyCandidate {
+                candidate_id: index.to_string(),
+                lp_id: format!("route_{}", index),
+                quoted_rate: decimal_from_u128(route.total_output),
+                quoted_vnd_amount: decimal_from_u128(route.total_output),
+                quote_count: 0,
+                reliability_score: None,
+                fill_rate: None,
+                reject_rate: None,
+                dispute_rate: None,
+                avg_slippage_bps: Some(Decimal::from(route.price_impact_bps)),
+                p95_settlement_latency_seconds: Some(
+                    route.estimated_time_secs.min(i32::MAX as u64) as i32,
+                ),
+            })
+            .collect();
+
+        let decision = LiquidityPolicyEvaluator::evaluate(&policy_candidates, policy);
+        decision.and_then(|value| {
+            value
+                .selected_candidate_id
+                .parse::<usize>()
+                .ok()
+                .and_then(|index| candidates.get(index).cloned())
+        })
+    }
+}
+
+fn decimal_from_u128(value: u128) -> Decimal {
+    Decimal::from_str_exact(&value.to_string()).unwrap_or(Decimal::ZERO)
 }
 
 impl Default for IntentSolver {
@@ -400,12 +457,7 @@ mod tests {
         }
     }
 
-    fn cross_chain_intent(
-        src: ChainId,
-        dst: ChainId,
-        token: &str,
-        amount: u128,
-    ) -> Intent {
+    fn cross_chain_intent(src: ChainId, dst: ChainId, token: &str, amount: u128) -> Intent {
         Intent {
             source_chain: src,
             dest_chain: dst,
@@ -597,5 +649,41 @@ mod tests {
         let intent3 = same_chain_intent("WETH", "USDC", 2000);
         let key3 = IntentSolver::cache_key(&intent3);
         assert_ne!(key1, key3, "Different intent should produce different key");
+    }
+
+    #[test]
+    fn test_solve_with_policy_preserves_best_output_when_reliability_data_is_absent() {
+        let solver = IntentSolver::new();
+        let intent = same_chain_intent("WETH", "USDC", 1000);
+        let swaps = vec![
+            make_swap(ChainId::ETHEREUM, "WETH", "USDC", 1000, 950),
+            make_swap(ChainId::ETHEREUM, "WETH", "USDC", 1000, 995),
+        ];
+
+        let policy = crate::service::liquidity_policy::LiquidityPolicyConfig {
+            version: "solver-policy-v1".to_string(),
+            direction: crate::service::liquidity_policy::LiquidityPolicyDirection::Offramp,
+            reliability_window_kind: "ROLLING_30D".to_string(),
+            min_reliability_observations: 3,
+            weights: crate::service::liquidity_policy::LiquidityPolicyWeights::default(),
+        };
+
+        let route = solver
+            .solve_with_policy(&intent, &swaps, &[], Some(&policy))
+            .unwrap();
+
+        assert_eq!(route.total_output, 995);
+    }
+
+    #[test]
+    fn test_cache_key_with_policy_version_changes() {
+        let intent = same_chain_intent("WETH", "USDC", 1000);
+
+        let no_policy = IntentSolver::cache_key_with_policy(&intent, None);
+        let v1 = IntentSolver::cache_key_with_policy(&intent, Some("policy-v1"));
+        let v2 = IntentSolver::cache_key_with_policy(&intent, Some("policy-v2"));
+
+        assert_ne!(no_policy, v1);
+        assert_ne!(v1, v2);
     }
 }

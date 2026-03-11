@@ -59,6 +59,19 @@ func main() {
 - **Full API Coverage**: Intents, Users, Ledger, Compliance, Account Abstraction, Passkeys
 - **Zero Dependencies**: Uses only Go stdlib (`net/http`, `crypto`, `encoding/json`)
 
+## Contract-Driven Note
+
+RampOS keeps the public SDKs aligned to the OpenAPI contract and uses the thin `rampos-cli` preview for bounded admin/operator flows that are not yet first-class SDK namespaces.
+
+For example, the reconciliation workbench and evidence export surface currently live behind:
+
+```bash
+python scripts/rampos-cli.py reconciliation workbench
+python scripts/rampos-cli.py reconciliation evidence --discrepancy-id <id>
+```
+
+Use `scripts/validate-openapi.sh` and `scripts/test-rampos-cli.sh` together when validating SDK/CLI drift locally.
+
 ## Authentication
 
 The SDK uses API Key + Secret for authentication. HMAC-SHA256 signatures are automatically generated.

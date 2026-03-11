@@ -5,16 +5,14 @@ use axum::{
     response::{IntoResponse, Redirect},
     Json,
 };
-use ramp_core::sso::{
-    SsoAuthRequest, SsoCallback, SsoProviderSummary,
-};
 use chrono::{Duration, Utc};
 use once_cell::sync::Lazy;
+use ramp_core::sso::{SsoAuthRequest, SsoCallback, SsoProviderSummary};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use crate::AppState;
 use crate::error::ApiError;
+use crate::AppState;
 
 fn sanitize_redirect_target(input: &str) -> String {
     // Only allow relative in-app paths to prevent open redirects.
@@ -78,8 +76,8 @@ pub async fn sso_login(
 
     // Construct return URL (callback URL)
     // Read base URL from environment to avoid hardcoded localhost in production
-    let api_base_url = std::env::var("API_BASE_URL")
-        .unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let api_base_url =
+        std::env::var("API_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
     let callback_url = format!("{}/v1/auth/sso/{}/callback", api_base_url, provider_id);
 
     let state_token = uuid::Uuid::new_v4().to_string();
@@ -99,7 +97,11 @@ pub async fn sso_login(
         nonce: Some(uuid::Uuid::new_v4().to_string()),
     };
 
-    let response = state.sso_service.initiate_auth(&request).await.map_err(ApiError::from)?;
+    let response = state
+        .sso_service
+        .initiate_auth(&request)
+        .await
+        .map_err(ApiError::from)?;
 
     Ok(Redirect::to(&response.auth_url))
 }
@@ -151,13 +153,18 @@ pub async fn sso_callback(
         code,
         saml_response: params.get("SAMLResponse").cloned(),
         state: state_token.to_string(),
+        redirect_uri: Some(flow_state.callback_url.clone()),
         error,
         error_description,
     };
 
     // Authenticate with provider
     let tenant_id = ramp_common::types::TenantId::new(&provider_id);
-    let _sso_user = state.sso_service.handle_callback(&tenant_id, &callback).await.map_err(ApiError::from)?;
+    let _sso_user = state
+        .sso_service
+        .handle_callback(&tenant_id, &callback)
+        .await
+        .map_err(ApiError::from)?;
 
     // Session issuance is intentionally hard-failed until production session plumbing exists.
     // Never mint or return synthetic SSO tokens from runtime handlers.

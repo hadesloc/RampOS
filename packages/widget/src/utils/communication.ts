@@ -14,10 +14,12 @@ export class RampOSEventEmitter {
 
   public emit(type: WidgetEventType, payload?: any): void {
     const event: WidgetEvent = { type, payload };
+    const safeDefaultOrigin =
+      typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
 
     // Post message to parent window
     if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ rampos: event }, '*');
+      window.parent.postMessage({ rampos: event }, safeDefaultOrigin);
     }
 
     // Dispatch custom event for local listeners (Web Component usage)

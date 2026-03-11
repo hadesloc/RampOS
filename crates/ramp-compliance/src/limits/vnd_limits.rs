@@ -52,10 +52,7 @@ pub enum VndLimitResult {
         requested_amount: Decimal,
     },
     /// User tier not allowed
-    TierNotAllowed {
-        tier: KycTier,
-        reason: String,
-    },
+    TierNotAllowed { tier: KycTier, reason: String },
 }
 
 impl VndLimitResult {
@@ -91,9 +88,9 @@ impl VndTierLimits {
     /// Default limits for Tier 1 (Basic eKYC) - 100M VND/day, 1B VND/month
     pub fn tier1() -> Self {
         Self {
-            single_transaction_limit: Decimal::from(50_000_000),     // 50M VND per transaction
-            daily_limit: Decimal::from(100_000_000),                 // 100M VND per day
-            monthly_limit: Decimal::from(1_000_000_000),             // 1B VND per month
+            single_transaction_limit: Decimal::from(50_000_000), // 50M VND per transaction
+            daily_limit: Decimal::from(100_000_000),             // 100M VND per day
+            monthly_limit: Decimal::from(1_000_000_000),         // 1B VND per month
             requires_manual_approval_threshold: Some(Decimal::from(80_000_000)), // 80M VND
         }
     }
@@ -101,9 +98,9 @@ impl VndTierLimits {
     /// Default limits for Tier 2 (Verified) - 500M VND/day, 5B VND/month
     pub fn tier2() -> Self {
         Self {
-            single_transaction_limit: Decimal::from(200_000_000),    // 200M VND per transaction
-            daily_limit: Decimal::from(500_000_000),                 // 500M VND per day
-            monthly_limit: Decimal::from(5_000_000_000i64),          // 5B VND per month
+            single_transaction_limit: Decimal::from(200_000_000), // 200M VND per transaction
+            daily_limit: Decimal::from(500_000_000),              // 500M VND per day
+            monthly_limit: Decimal::from(5_000_000_000i64),       // 5B VND per month
             requires_manual_approval_threshold: Some(Decimal::from(400_000_000)), // 400M VND
         }
     }
@@ -111,9 +108,9 @@ impl VndTierLimits {
     /// Default limits for Tier 3 (Premium) - Custom limits with approval
     pub fn tier3() -> Self {
         Self {
-            single_transaction_limit: Decimal::from(1_000_000_000),  // 1B VND per transaction
-            daily_limit: Decimal::MAX,                                // Unlimited
-            monthly_limit: Decimal::MAX,                              // Unlimited
+            single_transaction_limit: Decimal::from(1_000_000_000), // 1B VND per transaction
+            daily_limit: Decimal::MAX,                              // Unlimited
+            monthly_limit: Decimal::MAX,                            // Unlimited
             requires_manual_approval_threshold: Some(Decimal::from(500_000_000)), // 500M VND
         }
     }
@@ -227,11 +224,7 @@ pub trait VndLimitDataProvider: Send + Sync {
     ) -> Result<Decimal>;
 
     /// Get user's KYC tier
-    async fn get_user_tier(
-        &self,
-        tenant_id: &TenantId,
-        user_id: &UserId,
-    ) -> Result<KycTier>;
+    async fn get_user_tier(&self, tenant_id: &TenantId, user_id: &UserId) -> Result<KycTier>;
 
     /// Record a successful transaction for limit tracking
     async fn record_transaction(
@@ -270,7 +263,13 @@ impl VndLimitChecker {
         let today_midnight_vn = Ho_Chi_Minh
             .with_ymd_and_hms(now_vn.year(), now_vn.month(), now_vn.day(), 0, 0, 0)
             .single()
-            .unwrap_or_else(|| now_vn.date_naive().and_time(NaiveTime::MIN).and_utc().with_timezone(&Ho_Chi_Minh));
+            .unwrap_or_else(|| {
+                now_vn
+                    .date_naive()
+                    .and_time(NaiveTime::MIN)
+                    .and_utc()
+                    .with_timezone(&Ho_Chi_Minh)
+            });
         today_midnight_vn.with_timezone(&Utc)
     }
 
@@ -280,18 +279,32 @@ impl VndLimitChecker {
         let month_start_vn = Ho_Chi_Minh
             .with_ymd_and_hms(now_vn.year(), now_vn.month(), 1, 0, 0, 0)
             .single()
-            .unwrap_or_else(|| now_vn.date_naive().and_time(NaiveTime::MIN).and_utc().with_timezone(&Ho_Chi_Minh));
+            .unwrap_or_else(|| {
+                now_vn
+                    .date_naive()
+                    .and_time(NaiveTime::MIN)
+                    .and_utc()
+                    .with_timezone(&Ho_Chi_Minh)
+            });
         month_start_vn.with_timezone(&Utc)
     }
 
     /// Get next daily reset time (next midnight Vietnam time)
     pub fn get_next_daily_reset(&self) -> DateTime<Utc> {
         let now_vn = Utc::now().with_timezone(&Ho_Chi_Minh);
-        let tomorrow = now_vn.date_naive().succ_opt().unwrap_or(now_vn.date_naive());
+        let tomorrow = now_vn
+            .date_naive()
+            .succ_opt()
+            .unwrap_or(now_vn.date_naive());
         let tomorrow_midnight_vn = Ho_Chi_Minh
             .with_ymd_and_hms(tomorrow.year(), tomorrow.month(), tomorrow.day(), 0, 0, 0)
             .single()
-            .unwrap_or_else(|| tomorrow.and_time(NaiveTime::MIN).and_utc().with_timezone(&Ho_Chi_Minh));
+            .unwrap_or_else(|| {
+                tomorrow
+                    .and_time(NaiveTime::MIN)
+                    .and_utc()
+                    .with_timezone(&Ho_Chi_Minh)
+            });
         tomorrow_midnight_vn.with_timezone(&Utc)
     }
 
@@ -306,7 +319,13 @@ impl VndLimitChecker {
         let next_month_start_vn = Ho_Chi_Minh
             .with_ymd_and_hms(next_year, next_month, 1, 0, 0, 0)
             .single()
-            .unwrap_or_else(|| now_vn.date_naive().and_time(NaiveTime::MIN).and_utc().with_timezone(&Ho_Chi_Minh));
+            .unwrap_or_else(|| {
+                now_vn
+                    .date_naive()
+                    .and_time(NaiveTime::MIN)
+                    .and_utc()
+                    .with_timezone(&Ho_Chi_Minh)
+            });
         next_month_start_vn.with_timezone(&Utc)
     }
 
@@ -357,7 +376,9 @@ impl VndLimitChecker {
         };
 
         // Check single transaction limit
-        if !limits.single_transaction_limit.is_zero() && amount_vnd > limits.single_transaction_limit {
+        if !limits.single_transaction_limit.is_zero()
+            && amount_vnd > limits.single_transaction_limit
+        {
             warn!(
                 user_id = %user_id,
                 amount = %amount_vnd,
@@ -535,7 +556,6 @@ pub struct MockVndLimitDataProvider {
     pub recorded_transactions: std::sync::Mutex<Vec<(String, Decimal, String)>>,
 }
 
-
 impl MockVndLimitDataProvider {
     pub fn new() -> Self {
         Self {
@@ -568,13 +588,11 @@ impl MockVndLimitDataProvider {
     }
 }
 
-
 impl Default for MockVndLimitDataProvider {
     fn default() -> Self {
         Self::new()
     }
 }
-
 
 #[async_trait]
 impl VndLimitDataProvider for MockVndLimitDataProvider {
@@ -596,11 +614,7 @@ impl VndLimitDataProvider for MockVndLimitDataProvider {
         Ok(*self.monthly_used.lock().expect("Lock poisoned"))
     }
 
-    async fn get_user_tier(
-        &self,
-        _tenant_id: &TenantId,
-        _user_id: &UserId,
-    ) -> Result<KycTier> {
+    async fn get_user_tier(&self, _tenant_id: &TenantId, _user_id: &UserId) -> Result<KycTier> {
         Ok(*self.tier.lock().expect("Lock poisoned"))
     }
 
@@ -694,10 +708,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(matches!(
-            result,
-            VndLimitResult::DailyLimitExceeded { .. }
-        ));
+        assert!(matches!(result, VndLimitResult::DailyLimitExceeded { .. }));
     }
 
     #[tokio::test]
@@ -819,7 +830,7 @@ mod tests {
             VndTierLimits {
                 single_transaction_limit: dec!(200_000_000), // 200M
                 daily_limit: dec!(500_000_000),              // 500M
-                monthly_limit: dec!(5_000_000_000),       // 5B
+                monthly_limit: dec!(5_000_000_000),          // 5B
                 requires_manual_approval_threshold: None,
             },
         );

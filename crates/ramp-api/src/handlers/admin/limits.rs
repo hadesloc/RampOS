@@ -222,23 +222,25 @@ pub async fn update_limit_config(
 
     if let Some(custom_limits) = request.custom_tier_limits {
         for input in custom_limits {
-            let limits = VndTierLimits {
-                single_transaction_limit: input
-                    .single_transaction_limit_vnd
-                    .map(Decimal::from)
-                    .unwrap_or_else(|| VndTierLimits::for_tier(KycTier::from_i16(input.tier)).single_transaction_limit),
-                daily_limit: input
-                    .daily_limit_vnd
-                    .map(Decimal::from)
-                    .unwrap_or_else(|| VndTierLimits::for_tier(KycTier::from_i16(input.tier)).daily_limit),
-                monthly_limit: input
-                    .monthly_limit_vnd
-                    .map(Decimal::from)
-                    .unwrap_or_else(|| VndTierLimits::for_tier(KycTier::from_i16(input.tier)).monthly_limit),
-                requires_manual_approval_threshold: input
-                    .requires_manual_approval_threshold
-                    .map(Decimal::from),
-            };
+            let limits =
+                VndTierLimits {
+                    single_transaction_limit: input
+                        .single_transaction_limit_vnd
+                        .map(Decimal::from)
+                        .unwrap_or_else(|| {
+                            VndTierLimits::for_tier(KycTier::from_i16(input.tier))
+                                .single_transaction_limit
+                        }),
+                    daily_limit: input.daily_limit_vnd.map(Decimal::from).unwrap_or_else(|| {
+                        VndTierLimits::for_tier(KycTier::from_i16(input.tier)).daily_limit
+                    }),
+                    monthly_limit: input.monthly_limit_vnd.map(Decimal::from).unwrap_or_else(
+                        || VndTierLimits::for_tier(KycTier::from_i16(input.tier)).monthly_limit,
+                    ),
+                    requires_manual_approval_threshold: input
+                        .requires_manual_approval_threshold
+                        .map(Decimal::from),
+                };
             config.tier_limits.insert(input.tier, limits);
         }
     }
@@ -290,7 +292,8 @@ pub async fn get_user_limit_status(
     let tier_limits = VndTierLimits::for_tier(tier);
 
     // Query actual daily/monthly usage from database
-    let (daily_used, monthly_used) = query_user_usage(&app_state, &tenant_ctx.tenant_id.0, &user_id).await;
+    let (daily_used, monthly_used) =
+        query_user_usage(&app_state, &tenant_ctx.tenant_id.0, &user_id).await;
 
     let daily_remaining = if tier_limits.daily_limit > daily_used {
         tier_limits.daily_limit - daily_used
@@ -356,7 +359,8 @@ pub async fn set_user_limits(
         &user_id,
         &request,
         auth.user_id.as_deref(),
-    ).await?;
+    )
+    .await?;
 
     let now = chrono::Utc::now();
     Ok(Json(SetUserLimitsResponse {
@@ -443,7 +447,10 @@ fn map_tier_limits(tier: KycTier, limits: VndTierLimits) -> TierLimitsResponse {
     }
 }
 
-fn map_user_limit_status(status: VndUserLimitStatus, has_custom_limits: bool) -> UserLimitStatusResponse {
+fn map_user_limit_status(
+    status: VndUserLimitStatus,
+    has_custom_limits: bool,
+) -> UserLimitStatusResponse {
     UserLimitStatusResponse {
         user_id: status.user_id,
         tenant_id: status.tenant_id,
@@ -544,7 +551,7 @@ async fn query_user_usage(
         "SELECT COALESCE(SUM(amount), 0) FROM intents
          WHERE tenant_id = $1 AND user_id = $2
          AND state IN ('COMPLETED', 'SETTLED')
-         AND created_at >= CURRENT_DATE"
+         AND created_at >= CURRENT_DATE",
     )
     .bind(tenant_id)
     .bind(user_id)
@@ -557,7 +564,7 @@ async fn query_user_usage(
         "SELECT COALESCE(SUM(amount), 0) FROM intents
          WHERE tenant_id = $1 AND user_id = $2
          AND state IN ('COMPLETED', 'SETTLED')
-         AND created_at >= DATE_TRUNC('month', CURRENT_DATE)"
+         AND created_at >= DATE_TRUNC('month', CURRENT_DATE)",
     )
     .bind(tenant_id)
     .bind(user_id)
@@ -613,14 +620,12 @@ async fn remove_user_custom_limits(
         return Ok(());
     };
 
-    sqlx::query(
-        "DELETE FROM user_transaction_limits WHERE tenant_id = $1 AND user_id = $2"
-    )
-    .bind(tenant_id)
-    .bind(user_id)
-    .execute(pool)
-    .await
-    .map_err(|e| ApiError::Internal(format!("Failed to remove user limits: {}", e)))?;
+    sqlx::query("DELETE FROM user_transaction_limits WHERE tenant_id = $1 AND user_id = $2")
+        .bind(tenant_id)
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| ApiError::Internal(format!("Failed to remove user limits: {}", e)))?;
 
     Ok(())
 }

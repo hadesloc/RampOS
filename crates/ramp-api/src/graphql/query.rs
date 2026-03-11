@@ -1,12 +1,13 @@
 //! GraphQL Query resolvers
 
 use async_graphql::{Context, Object, Result as GqlResult, ID};
-use ramp_common::types::{IntentId, TenantId, UserId};
+use ramp_common::types::{IntentId, UserId};
 use ramp_core::service::user::UserService;
 use std::sync::Arc;
 
 use ramp_core::repository::intent::IntentRepository;
 
+use super::require_scoped_tenant;
 use super::pagination::{self, IntentConnection, UserConnection};
 use super::types::{DashboardStatsType, IntentFilter, IntentType, UserType};
 
@@ -23,7 +24,7 @@ impl QueryRoot {
         #[graphql(desc = "Intent ID")] id: ID,
     ) -> GqlResult<Option<IntentType>> {
         let intent_repo = ctx.data::<Arc<dyn IntentRepository>>()?;
-        let tid = TenantId(tenant_id);
+        let tid = require_scoped_tenant(ctx, &tenant_id)?;
         let iid = IntentId(id.to_string());
 
         let intent = intent_repo
@@ -44,7 +45,7 @@ impl QueryRoot {
         #[graphql(desc = "Cursor to start after")] after: Option<String>,
     ) -> GqlResult<IntentConnection> {
         let intent_repo = ctx.data::<Arc<dyn IntentRepository>>()?;
-        let tid = TenantId(tenant_id.clone());
+        let tid = require_scoped_tenant(ctx, &tenant_id)?;
 
         let offset = after
             .as_ref()
@@ -64,9 +65,7 @@ impl QueryRoot {
             intent_repo
                 .list_by_user(&tid, &uid, limit + 1, offset as i64)
                 .await
-                .map_err(|e| {
-                    async_graphql::Error::new(format!("Failed to list intents: {}", e))
-                })?
+                .map_err(|e| async_graphql::Error::new(format!("Failed to list intents: {}", e)))?
         } else {
             // Without a user_id, return empty since the repo requires user scoping
             Vec::new()
@@ -91,7 +90,9 @@ impl QueryRoot {
             .map(IntentType)
             .collect();
 
-        Ok(pagination::build_intent_connection(items, first, after, None))
+        Ok(pagination::build_intent_connection(
+            items, first, after, None,
+        ))
     }
 
     /// Get a single user by ID
@@ -102,7 +103,7 @@ impl QueryRoot {
         #[graphql(desc = "User ID")] id: ID,
     ) -> GqlResult<Option<UserType>> {
         let user_service = ctx.data::<Arc<UserService>>()?;
-        let tid = TenantId(tenant_id);
+        let tid = require_scoped_tenant(ctx, &tenant_id)?;
         let uid = UserId(id.to_string());
 
         match user_service.get_user(&tid, &uid).await {
@@ -120,7 +121,7 @@ impl QueryRoot {
         #[graphql(desc = "Cursor to start after")] after: Option<String>,
     ) -> GqlResult<UserConnection> {
         let user_service = ctx.data::<Arc<UserService>>()?;
-        let tid = TenantId(tenant_id.clone());
+        let tid = require_scoped_tenant(ctx, &tenant_id)?;
 
         let offset = after
             .as_ref()
@@ -137,7 +138,12 @@ impl QueryRoot {
 
         let items: Vec<UserType> = users.into_iter().map(UserType).collect();
 
-        Ok(pagination::build_user_connection(items, first, after, Some(total)))
+        Ok(pagination::build_user_connection(
+            items,
+            first,
+            after,
+            Some(total),
+        ))
     }
 
     /// Get dashboard summary statistics
@@ -147,7 +153,7 @@ impl QueryRoot {
         #[graphql(desc = "Tenant ID for multi-tenant isolation")] tenant_id: String,
     ) -> GqlResult<DashboardStatsType> {
         let user_service = ctx.data::<Arc<UserService>>()?;
-        let tid = TenantId(tenant_id);
+        let tid = require_scoped_tenant(ctx, &tenant_id)?;
 
         let (_, total_users) = user_service
             .list_users(&tid, 0, 0, None, None, None)

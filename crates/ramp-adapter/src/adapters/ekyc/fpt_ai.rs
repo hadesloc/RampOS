@@ -535,7 +535,10 @@ impl EkycProvider for FptAiEkycProvider {
         let form = multipart::Form::new().part("image", part);
 
         // We expect this to fail (bad image), but if we get a response, the service is up
-        match self.make_multipart_request::<FptAiOcrResponse>("", form).await {
+        match self
+            .make_multipart_request::<FptAiOcrResponse>("", form)
+            .await
+        {
             Ok(_) => Ok(true),
             Err(e) => {
                 // Check if it's an API error (service is up but request failed)
@@ -580,7 +583,10 @@ mod tests {
 
     #[test]
     fn test_get_ocr_endpoint() {
-        assert_eq!(FptAiEkycProvider::get_ocr_endpoint(IdDocumentType::Cccd), "");
+        assert_eq!(
+            FptAiEkycProvider::get_ocr_endpoint(IdDocumentType::Cccd),
+            ""
+        );
         assert_eq!(
             FptAiEkycProvider::get_ocr_endpoint(IdDocumentType::Passport),
             "/passport"

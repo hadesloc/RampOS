@@ -7,9 +7,9 @@
 //! - Reserve proof integration
 //! - Collateralization ratio monitoring
 
+use alloy::primitives::{Address, B256, U256};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use alloy::primitives::{Address, B256, U256};
 use ramp_common::{
     types::{TenantId, UserId},
     Error, Result,
@@ -51,15 +51,15 @@ pub struct VnstProtocolConfig {
 impl Default for VnstProtocolConfig {
     fn default() -> Self {
         Self {
-            min_mint_vnd: Decimal::from(100_000),        // 100K VND minimum
+            min_mint_vnd: Decimal::from(100_000), // 100K VND minimum
             max_mint_vnd: Some(Decimal::from(10_000_000_000i64)), // 10B VND max
             min_burn_vnst: U256::from(100_000u64) * U256::from(10u64).pow(U256::from(18)), // 100K VNST
             max_burn_vnst: None,
-            mint_fee_bps: 10,  // 0.1%
-            burn_fee_bps: 10,  // 0.1%
-            min_collateralization_ratio: 100, // 100% backed
-            peg_deviation_warning_bps: 50,    // 0.5% warning
-            peg_deviation_critical_bps: 200,  // 2% critical
+            mint_fee_bps: 10,                  // 0.1%
+            burn_fee_bps: 10,                  // 0.1%
+            min_collateralization_ratio: 100,  // 100% backed
+            peg_deviation_warning_bps: 50,     // 0.5% warning
+            peg_deviation_critical_bps: 200,   // 2% critical
             reserve_proof_interval_secs: 3600, // 1 hour
             vnst_contract: None,
             primary_chain_id: 56, // BSC
@@ -242,20 +242,10 @@ pub trait VnstProtocolDataProvider: Send + Sync {
     ) -> Result<String>;
 
     /// Execute mint on chain
-    async fn execute_mint(
-        &self,
-        chain_id: u64,
-        recipient: Address,
-        amount: U256,
-    ) -> Result<B256>;
+    async fn execute_mint(&self, chain_id: u64, recipient: Address, amount: U256) -> Result<B256>;
 
     /// Execute burn on chain
-    async fn execute_burn(
-        &self,
-        chain_id: u64,
-        from: Address,
-        amount: U256,
-    ) -> Result<B256>;
+    async fn execute_burn(&self, chain_id: u64, from: Address, amount: U256) -> Result<B256>;
 }
 
 /// VNST Protocol Service
@@ -265,7 +255,10 @@ pub struct VnstProtocolService {
 }
 
 impl VnstProtocolService {
-    pub fn new(config: VnstProtocolConfig, data_provider: Arc<dyn VnstProtocolDataProvider>) -> Self {
+    pub fn new(
+        config: VnstProtocolConfig,
+        data_provider: Arc<dyn VnstProtocolDataProvider>,
+    ) -> Self {
         Self {
             config,
             data_provider,
@@ -513,13 +506,17 @@ impl VnstProtocolService {
             reserve_breakdown: vec![
                 ReserveAsset {
                     asset_type: "VND Bank Deposits".to_string(),
-                    amount_vnd: total_vnd_reserves * Decimal::from_str_exact("0.80").unwrap_or(Decimal::from(80) / Decimal::from(100)),
+                    amount_vnd: total_vnd_reserves
+                        * Decimal::from_str_exact("0.80")
+                            .unwrap_or(Decimal::from(80) / Decimal::from(100)),
                     percentage: Decimal::from(80),
                     custodian: "Vietnam Bank Partner".to_string(),
                 },
                 ReserveAsset {
                     asset_type: "VND Government Bonds".to_string(),
-                    amount_vnd: total_vnd_reserves * Decimal::from_str_exact("0.20").unwrap_or(Decimal::from(20) / Decimal::from(100)),
+                    amount_vnd: total_vnd_reserves
+                        * Decimal::from_str_exact("0.20")
+                            .unwrap_or(Decimal::from(20) / Decimal::from(100)),
                     percentage: Decimal::from(20),
                     custodian: "State Treasury".to_string(),
                 },
@@ -534,11 +531,20 @@ impl VnstProtocolService {
 
     /// Check VND/VNST peg status
     pub async fn check_peg(&self) -> Result<VnstPegStatus> {
-        let current_rate = self.data_provider.get_current_rate().await.unwrap_or(Decimal::ONE);
+        let current_rate = self
+            .data_provider
+            .get_current_rate()
+            .await
+            .unwrap_or(Decimal::ONE);
         let target_rate = Decimal::ONE;
 
-        let deviation_decimal = (current_rate - target_rate).abs() / target_rate * Decimal::from(10_000);
-        let deviation_bps = deviation_decimal.trunc().to_string().parse::<i32>().unwrap_or(0);
+        let deviation_decimal =
+            (current_rate - target_rate).abs() / target_rate * Decimal::from(10_000);
+        let deviation_bps = deviation_decimal
+            .trunc()
+            .to_string()
+            .parse::<i32>()
+            .unwrap_or(0);
 
         let (status, message) = if deviation_bps < self.config.peg_deviation_warning_bps as i32 {
             (PegHealthStatus::Healthy, "VNST peg is stable".to_string())
@@ -574,7 +580,8 @@ impl VnstProtocolService {
     /// Check collateralization ratio
     pub async fn check_collateralization(&self, tenant_id: &TenantId) -> Result<bool> {
         let reserves = self.get_reserves(tenant_id).await?;
-        Ok(reserves.collateralization_ratio >= Decimal::from(self.config.min_collateralization_ratio))
+        Ok(reserves.collateralization_ratio
+            >= Decimal::from(self.config.min_collateralization_ratio))
     }
 
     /// Get current configuration
@@ -595,7 +602,9 @@ pub struct MockVnstProtocolDataProvider {
 impl MockVnstProtocolDataProvider {
     pub fn new() -> Self {
         Self {
-            total_supply: std::sync::Mutex::new(U256::from(1_000_000_000u64) * U256::from(10u64).pow(U256::from(18))),
+            total_supply: std::sync::Mutex::new(
+                U256::from(1_000_000_000u64) * U256::from(10u64).pow(U256::from(18)),
+            ),
             vnd_reserves: std::sync::Mutex::new(Decimal::from(1_000_000_000i64)),
             current_rate: std::sync::Mutex::new(Decimal::ONE),
             mints: std::sync::Mutex::new(Vec::new()),
@@ -671,12 +680,7 @@ impl VnstProtocolDataProvider for MockVnstProtocolDataProvider {
         Ok(B256::ZERO)
     }
 
-    async fn execute_burn(
-        &self,
-        _chain_id: u64,
-        _from: Address,
-        _amount: U256,
-    ) -> Result<B256> {
+    async fn execute_burn(&self, _chain_id: u64, _from: Address, _amount: U256) -> Result<B256> {
         Ok(B256::ZERO)
     }
 }
@@ -826,7 +830,10 @@ mod tests {
     async fn test_get_reserves() {
         let service = create_test_service();
 
-        let reserves = service.get_reserves(&TenantId::new("tenant1")).await.unwrap();
+        let reserves = service
+            .get_reserves(&TenantId::new("tenant1"))
+            .await
+            .unwrap();
 
         assert!(reserves.total_supply > U256::ZERO);
         assert!(reserves.total_vnd_reserves > Decimal::ZERO);

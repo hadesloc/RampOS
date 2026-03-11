@@ -1,5 +1,5 @@
-use alloy::primitives::{Address, Bytes, B256, U256, keccak256};
 use alloy::dyn_abi::DynSolValue;
+use alloy::primitives::{keccak256, Address, Bytes, B256, U256};
 use serde::{Deserialize, Serialize};
 
 /// ERC-4337 UserOperation
@@ -75,7 +75,8 @@ impl UserOperation {
             DynSolValue::Uint(self.max_fee_per_gas, 256),
             DynSolValue::Uint(self.max_priority_fee_per_gas, 256),
             DynSolValue::Bytes(keccak256(&self.paymaster_and_data).as_slice().to_vec()),
-        ]).abi_encode();
+        ])
+        .abi_encode();
 
         let user_op_hash = keccak256(&packed);
 
@@ -84,7 +85,8 @@ impl UserOperation {
             DynSolValue::FixedBytes(user_op_hash, 32),
             DynSolValue::Address(entry_point),
             DynSolValue::Uint(U256::from(chain_id), 256),
-        ]).abi_encode();
+        ])
+        .abi_encode();
 
         keccak256(&final_hash)
     }

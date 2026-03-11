@@ -8,13 +8,13 @@
 //! - GET /v1/yield/performance - Get yield performance metrics
 //! - POST /v1/yield/rebalance - Trigger manual rebalance
 
+use alloy::primitives::Address;
 use axum::{
     extract::{Extension, Path, Query, State},
     http::HeaderMap,
     Json,
 };
 use chrono::Utc;
-use alloy::primitives::Address;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -192,7 +192,10 @@ pub async fn activate_strategy(
 
     // Validate strategy exists
     if !["conservative", "balanced", "aggressive"].contains(&strategy_id.as_str()) {
-        return Err(ApiError::NotFound(format!("Strategy {} not found", strategy_id)));
+        return Err(ApiError::NotFound(format!(
+            "Strategy {} not found",
+            strategy_id
+        )));
     }
 
     let now = Utc::now();

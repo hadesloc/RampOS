@@ -18,8 +18,7 @@ use tracing::info;
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
 use ramp_compliance::documents::{
-    ComplianceDocumentGenerator, ComplianceReportType,
-    DocumentFormat,
+    ComplianceDocumentGenerator, ComplianceReportType, DocumentFormat,
 };
 
 /// Request body for document generation
@@ -67,6 +66,13 @@ fn default_limit() -> i64 {
 }
 
 const MAX_LIMIT: i64 = 100;
+
+fn document_key_belongs_to_tenant(document_key: &str, tenant_id: &str) -> bool {
+    document_key
+        .split('/')
+        .next()
+        .is_some_and(|prefix| prefix == tenant_id)
+}
 
 /// Response for listing documents
 #[derive(Debug, Clone, Serialize)]
@@ -124,15 +130,18 @@ pub async fn generate_document(
     );
 
     // Parse document type
-    let _doc_type = parse_document_type(&request.document_type)
-        .map_err(|e| ApiError::BadRequest(e))?;
+    let _doc_type =
+        parse_document_type(&request.document_type).map_err(|e| ApiError::BadRequest(e))?;
 
     // Parse format
-    let format: DocumentFormat = request.format.parse()
+    let format: DocumentFormat = request
+        .format
+        .parse()
         .map_err(|e: String| ApiError::BadRequest(e))?;
 
     // Generate the report
-    let report = state.generator
+    let report = state
+        .generator
         .generate_compliance_report(
             tenant_ctx.tenant_id.clone(),
             request.period_start,
@@ -142,7 +151,8 @@ pub async fn generate_document(
         .map_err(|e| ApiError::Internal(format!("Failed to generate report: {}", e)))?;
 
     // Save to storage
-    let doc = state.generator
+    let doc = state
+        .generator
         .save_document(tenant_ctx.tenant_id.clone(), &report, format)
         .await
         .map_err(|e| ApiError::Internal(format!("Failed to save document: {}", e)))?;
@@ -176,12 +186,19 @@ pub async fn download_document(
         "Downloading document"
     );
 
-    let format: DocumentFormat = params.format
+    let format: DocumentFormat = params
+        .format
         .as_ref()
         .map(|f| f.parse())
         .transpose()
         .map_err(|e: String| ApiError::BadRequest(e))?
         .unwrap_or(DocumentFormat::Json);
+
+    if !document_key_belongs_to_tenant(&document_id, &tenant_ctx.tenant_id.0) {
+        return Err(ApiError::NotFound(
+            "Document not found. Document keys are tenant-scoped.".to_string(),
+        ));
+    }
 
     let content = state
         .generator
@@ -197,7 +214,11 @@ pub async fn download_document(
         (header::CONTENT_TYPE, format.content_type()),
         (
             header::CONTENT_DISPOSITION,
-            &format!("attachment; filename=\"document_{}.{}\"", document_id, format.extension()),
+            &format!(
+                "attachment; filename=\"document_{}.{}\"",
+                document_id,
+                format.extension()
+            ),
         ),
     ];
 
@@ -249,11 +270,14 @@ pub async fn generate_compliance_report(
     );
 
     // Parse format
-    let format: DocumentFormat = request.format.parse()
+    let format: DocumentFormat = request
+        .format
+        .parse()
         .map_err(|e: String| ApiError::BadRequest(e))?;
 
     // Generate the report
-    let report = state.generator
+    let report = state
+        .generator
         .generate_compliance_report(
             tenant_ctx.tenant_id.clone(),
             request.period_start,
@@ -265,14 +289,22 @@ pub async fn generate_compliance_report(
     // Export based on format
     let (content, content_type, filename) = match format {
         DocumentFormat::Html => {
-            let html = state.generator.export_to_html(&report)
+            let html = state
+                .generator
+                .export_to_html(&report)
                 .map_err(|e| ApiError::Internal(format!("Failed to export HTML: {}", e)))?;
             (html.into_bytes(), "text/html", "compliance_report.html")
         }
         DocumentFormat::Json => {
-            let json = state.generator.export_to_json(&report)
+            let json = state
+                .generator
+                .export_to_json(&report)
                 .map_err(|e| ApiError::Internal(format!("Failed to export JSON: {}", e)))?;
-            (json.into_bytes(), "application/json", "compliance_report.json")
+            (
+                json.into_bytes(),
+                "application/json",
+                "compliance_report.json",
+            )
         }
         DocumentFormat::Csv => {
             let csv = serde_json::to_string_pretty(&report)
@@ -312,12 +344,9 @@ pub async fn generate_transaction_summary(
         "Generating transaction summary"
     );
 
-    let summary = state.generator
-        .generate_transaction_summary(
-            &tenant_ctx.tenant_id,
-            params.start_date,
-            params.end_date,
-        )
+    let summary = state
+        .generator
+        .generate_transaction_summary(&tenant_ctx.tenant_id, params.start_date, params.end_date)
         .await
         .map_err(|e| ApiError::Internal(format!("Failed to generate summary: {}", e)))?;
 
@@ -339,12 +368,9 @@ pub async fn generate_kyc_statistics(
         "Generating KYC statistics"
     );
 
-    let stats = state.generator
-        .generate_kyc_statistics(
-            &tenant_ctx.tenant_id,
-            params.start_date,
-            params.end_date,
-        )
+    let stats = state
+        .generator
+        .generate_kyc_statistics(&tenant_ctx.tenant_id, params.start_date, params.end_date)
         .await
         .map_err(|e| ApiError::Internal(format!("Failed to generate statistics: {}", e)))?;
 
@@ -366,12 +392,9 @@ pub async fn generate_aml_metrics(
         "Generating AML metrics"
     );
 
-    let metrics = state.generator
-        .generate_aml_metrics(
-            &tenant_ctx.tenant_id,
-            params.start_date,
-            params.end_date,
-        )
+    let metrics = state
+        .generator
+        .generate_aml_metrics(&tenant_ctx.tenant_id, params.start_date, params.end_date)
         .await
         .map_err(|e| ApiError::Internal(format!("Failed to generate metrics: {}", e)))?;
 
@@ -389,11 +412,15 @@ pub struct DocumentReportQueryParams {
 fn parse_document_type(s: &str) -> Result<ComplianceReportType, String> {
     match s.to_lowercase().as_str() {
         "full_compliance" | "fullcompliance" => Ok(ComplianceReportType::FullCompliance),
-        "transaction_summary" | "transactionsummary" => Ok(ComplianceReportType::TransactionSummary),
+        "transaction_summary" | "transactionsummary" => {
+            Ok(ComplianceReportType::TransactionSummary)
+        }
         "kyc_statistics" | "kycstatistics" => Ok(ComplianceReportType::KycStatistics),
         "aml_metrics" | "amlmetrics" => Ok(ComplianceReportType::AmlMetrics),
         "monthly_regulatory" | "monthlyregulatory" => Ok(ComplianceReportType::MonthlyRegulatory),
-        "quarterly_compliance" | "quarterlycompliance" => Ok(ComplianceReportType::QuarterlyCompliance),
+        "quarterly_compliance" | "quarterlycompliance" => {
+            Ok(ComplianceReportType::QuarterlyCompliance)
+        }
         _ => Err(format!("Unknown document type: {}", s)),
     }
 }
@@ -408,5 +435,17 @@ mod tests {
         assert!(parse_document_type("FullCompliance").is_ok());
         assert!(parse_document_type("transaction_summary").is_ok());
         assert!(parse_document_type("unknown").is_err());
+    }
+
+    #[test]
+    fn test_document_key_scope_guard_only_accepts_current_tenant_prefix() {
+        assert!(document_key_belongs_to_tenant(
+            "tenant_alpha/00000000-0000-0000-0000-000000000000/report/example.json",
+            "tenant_alpha"
+        ));
+        assert!(!document_key_belongs_to_tenant(
+            "tenant_beta/00000000-0000-0000-0000-000000000000/report/example.json",
+            "tenant_alpha"
+        ));
     }
 }

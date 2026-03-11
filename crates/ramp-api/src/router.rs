@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use axum::http::{header, HeaderName, HeaderValue, Method};
 use axum::{
     middleware,
@@ -16,19 +17,19 @@ use tower_http::{
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
+use ramp_core::billing::BillingService;
+use ramp_core::event::EventPublisher;
 use ramp_core::repository::intent::IntentRepository;
 use ramp_core::repository::licensing::LicensingRepository;
 use ramp_core::repository::tenant::TenantRepository;
 use ramp_core::repository::BankConfirmationRepository;
-use ramp_core::billing::BillingService;
-use ramp_core::event::EventPublisher;
-use ramp_core::stablecoin::VnstProtocolService;
 use ramp_core::service::{
-    ledger::LedgerService, metrics::MetricsRegistry, onboarding::OnboardingService,
-    payin::PayinService, payout::PayoutService, trade::TradeService, user::UserService,
-    webhook::WebhookService, ComplianceAuditService,
+    default_sandbox_presets, ledger::LedgerService, metrics::MetricsRegistry,
+    onboarding::OnboardingService, payin::PayinService, payout::PayoutService, trade::TradeService,
+    user::UserService, webhook::WebhookService, ComplianceAuditService, SandboxService,
 };
 use ramp_core::sso::SsoService;
+use ramp_core::stablecoin::VnstProtocolService;
 
 use crate::graphql;
 use crate::handlers;
@@ -37,13 +38,11 @@ use crate::handlers::bank_webhooks::BankWebhookState;
 use crate::handlers::ws::WsState;
 use crate::middleware::{
     auth_middleware, billing::usage_metering_middleware, error_sanitizer_middleware,
-    idempotency_middleware,
-    portal_auth_middleware, rate_limit_middleware, request_id_middleware,
-    tiered_rate_limit_middleware, versioning::version_negotiation_middleware,
-    IdempotencyHandler, PortalAuthConfig, RateLimiter,
-    TieredRateLimitState,
+    idempotency_middleware, portal_auth_middleware, rate_limit_middleware, request_id_middleware,
+    tiered_rate_limit_middleware, versioning::version_negotiation_middleware, IdempotencyHandler,
+    PortalAuthConfig, RateLimiter, TieredRateLimitState,
 };
-use crate::openapi::{ApiDoc, docs_handler, openapi_json};
+use crate::openapi::{docs_handler, openapi_json, ApiDoc};
 
 use ramp_compliance::case::CaseManager;
 use ramp_compliance::reports::ctr::CtrService;
@@ -83,6 +82,38 @@ pub struct AppState {
     pub event_publisher: Arc<dyn EventPublisher>,
 }
 
+struct NoopSandboxScenarioRunner;
+
+#[async_trait]
+impl ramp_core::service::SandboxScenarioRunner for NoopSandboxScenarioRunner {
+    async fn start_run(
+        &self,
+        request: ramp_core::service::SandboxScenarioRunRequest,
+    ) -> ramp_common::Result<ramp_core::service::SandboxScenarioRun> {
+        Ok(ramp_core::service::SandboxScenarioRun {
+            run_id: "sandbox_run_placeholder".to_string(),
+            tenant_id: request.tenant_id,
+            preset_code: request.preset_code,
+            scenario_code: request.scenario_code,
+            status: ramp_core::service::SandboxScenarioStatus::Pending,
+            metadata: request.metadata,
+        })
+    }
+}
+
+impl AppState {
+    pub fn sandbox_service(&self) -> Arc<ramp_core::service::SandboxService> {
+        build_sandbox_service(self.onboarding_service.clone())
+    }
+}
+
+fn build_sandbox_service(onboarding_service: Arc<OnboardingService>) -> Arc<SandboxService> {
+    Arc::new(SandboxService::new(
+        onboarding_service,
+        Arc::new(NoopSandboxScenarioRunner),
+        default_sandbox_presets(),
+    ))
+}
 
 /// Create the API router with full middleware stack
 pub fn create_router(state: AppState) -> Router {
@@ -102,7 +133,10 @@ pub fn create_router(state: AppState) -> Router {
     ) -> ([(axum::http::HeaderName, &'static str); 1], String) {
         let body = registry.export_metrics();
         (
-            [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
+            [(
+                axum::http::header::CONTENT_TYPE,
+                "text/plain; version=0.0.4; charset=utf-8",
+            )],
             body,
         )
     }
@@ -132,7 +166,10 @@ pub fn create_router(state: AppState) -> Router {
     // Event routes (auth required)
     let sso_routes = Router::new()
         .route("/:provider/login", get(handlers::auth::sso::sso_login))
-        .route("/:provider/callback", get(handlers::auth::sso::sso_callback))
+        .route(
+            "/:provider/callback",
+            get(handlers::auth::sso::sso_callback),
+        )
         .with_state(state.clone());
 
     let event_routes = Router::new()
@@ -178,6 +215,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/tenants/:id/suspend", post(handlers::suspend_tenant))
         .with_state(state.onboarding_service.clone());
 
+    // Sandbox routes stay additive to the existing admin surface and use the
+    // dedicated sandbox service state wired in W1.
+    let sandbox_routes = handlers::admin::sandbox::routes().with_state(state.sandbox_service());
+
     // 2. Report Routes -> ReportGenerator
     // Already defined above as report_routes
 
@@ -198,14 +239,35 @@ pub fn create_router(state: AppState) -> Router {
         .route("/ledger/balances", get(handlers::admin::list_balances))
         // Webhooks
         .route("/webhooks", get(handlers::admin::list_webhooks))
+        .route(
+            "/webhooks/catalog",
+            get(handlers::admin::get_webhook_catalog),
+        )
+        .route(
+            "/webhooks/history",
+            get(handlers::admin::list_webhook_delivery_history),
+        )
         .route("/webhooks/:id", get(handlers::admin::get_webhook))
+        .route(
+            "/webhooks/:id/replay",
+            post(handlers::admin::replay_webhook_event),
+        )
         .route("/webhooks/:id/retry", post(handlers::admin::retry_webhook))
-        .route("/webhooks/configs/:id/deliveries", get(handlers::admin::list_webhook_deliveries))
+        .route(
+            "/webhooks/configs/:id/deliveries",
+            get(handlers::admin::list_webhook_deliveries),
+        )
         // Cases
         .route("/cases", get(handlers::list_cases))
         .route("/cases/stats", get(handlers::get_case_stats))
         .route("/cases/:id", get(handlers::get_case))
         .route("/cases/:id", patch(handlers::update_case))
+        // Incidents
+        .route("/incidents/search", get(handlers::admin::search_incidents))
+        .route(
+            "/incidents/timeline",
+            get(handlers::admin::get_incident_timeline),
+        )
         .route(
             "/cases/:id/sar",
             post(handlers::admin::reports::generate_sar),
@@ -217,21 +279,168 @@ pub fn create_router(state: AppState) -> Router {
         // Reconciliation
         .route("/recon/batches", get(handlers::list_recon_batches))
         .route("/recon/batches", post(handlers::create_recon_batch))
+        .route(
+            "/reconciliation/workbench",
+            get(handlers::admin::get_reconciliation_workbench),
+        )
+        .route(
+            "/reconciliation/export",
+            get(handlers::admin::export_reconciliation_workbench),
+        )
+        .route(
+            "/reconciliation/evidence/:id",
+            get(handlers::admin::get_reconciliation_evidence),
+        )
+        .route(
+            "/reconciliation/evidence/:id/export",
+            get(handlers::admin::export_reconciliation_evidence),
+        )
         // VND Transaction Limits
         .route("/limits/tiers", get(handlers::admin::get_tier_limits))
-        .route("/limits/config", get(handlers::admin::get_limit_config).put(handlers::admin::update_limit_config))
-        .route("/limits/user/:user_id", get(handlers::admin::get_user_limit_status).put(handlers::admin::set_user_limits).delete(handlers::admin::remove_user_limits))
+        .route(
+            "/limits/config",
+            get(handlers::admin::get_limit_config).put(handlers::admin::update_limit_config),
+        )
+        .route(
+            "/limits/user/:user_id",
+            get(handlers::admin::get_user_limit_status)
+                .put(handlers::admin::set_user_limits)
+                .delete(handlers::admin::remove_user_limits),
+        )
         // Off-ramp management
-        .route("/offramp/pending", get(handlers::admin::offramp::list_pending_offramps))
-        .route("/offramp/:id/approve", post(handlers::admin::offramp::approve_offramp))
-        .route("/offramp/:id/reject", post(handlers::admin::offramp::reject_offramp))
+        .route(
+            "/offramp/pending",
+            get(handlers::admin::offramp::list_pending_offramps),
+        )
+        .route(
+            "/offramp/:id/approve",
+            post(handlers::admin::offramp::approve_offramp),
+        )
+        .route(
+            "/offramp/:id/reject",
+            post(handlers::admin::offramp::reject_offramp),
+        )
         // RFQ auction management
         .route("/rfq/open", get(handlers::admin::rfq::list_open_rfqs))
-        .route("/rfq/:id/finalize", post(handlers::admin::rfq::finalize_rfq))
+        .route(
+            "/rfq/:id/finalize",
+            post(handlers::admin::rfq::finalize_rfq),
+        )
+        // Liquidity reliability + policy
+        .route(
+            "/liquidity/scorecard",
+            get(handlers::admin::get_liquidity_scorecard),
+        )
+        .route(
+            "/liquidity/policies/compare",
+            get(handlers::admin::compare_liquidity_policies),
+        )
+        .route(
+            "/liquidity/policies/activate",
+            post(handlers::admin::activate_liquidity_policy),
+        )
+        // Travel Rule registry + queue
+        .route(
+            "/travel-rule/registry",
+            get(handlers::admin::list_registry).post(handlers::admin::create_registry_record),
+        )
+        .route(
+            "/travel-rule/registry/:vasp_code/review",
+            post(handlers::admin::review_registry_record),
+        )
+        .route(
+            "/travel-rule/registry/:vasp_code/interoperability",
+            post(handlers::admin::update_registry_interoperability),
+        )
+        .route(
+            "/travel-rule/disclosures",
+            get(handlers::admin::list_disclosures).post(handlers::admin::create_disclosure),
+        )
+        .route(
+            "/travel-rule/disclosures/:id/retry",
+            post(handlers::admin::retry_disclosure),
+        )
+        .route(
+            "/travel-rule/exceptions",
+            get(handlers::admin::list_exceptions),
+        )
+        .route(
+            "/travel-rule/exceptions/:id/resolve",
+            post(handlers::admin::resolve_exception),
+        )
+        // Rescreening
+        .route(
+            "/rescreening/runs",
+            get(handlers::admin::list_rescreening_runs),
+        )
+        .route(
+            "/rescreening/users/:id/restrict",
+            post(handlers::admin::apply_rescreening_restriction),
+        )
+        // Passport vault
+        .route("/passport/queue", get(handlers::admin::list_passport_queue))
+        .route(
+            "/passport/packages/:id",
+            get(handlers::admin::get_passport_package),
+        )
+        // KYB graph
+        .route("/kyb/reviews", get(handlers::admin::list_kyb_reviews))
+        .route("/kyb/graph/:id", get(handlers::admin::get_kyb_graph))
+        // Config bundles and extensions
+        .route(
+            "/config-bundles/export",
+            get(handlers::admin::export_config_bundle),
+        )
+        .route("/extensions", get(handlers::admin::list_whitelisted_extension_actions))
+        // Treasury control tower
+        .route(
+            "/treasury/workbench",
+            get(handlers::admin::get_treasury_workbench),
+        )
+        .route(
+            "/treasury/export",
+            get(handlers::admin::export_treasury_workbench),
+        )
+        // Settlement workbench
+        .route(
+            "/settlement/workbench",
+            get(handlers::admin::get_settlement_workbench),
+        )
+        .route(
+            "/settlement/export",
+            get(handlers::admin::export_settlement_workbench),
+        )
+        // Risk lab
+        .route(
+            "/risk-lab/catalog",
+            get(handlers::admin::get_risk_lab_catalog),
+        )
+        .route("/risk-lab/replay", post(handlers::admin::replay_risk_lab))
+        .route(
+            "/risk-lab/compare",
+            get(handlers::admin::compare_risk_lab_replays),
+        )
+        .route(
+            "/risk-lab/replays/:id",
+            get(handlers::admin::get_risk_lab_replay),
+        )
+        .route(
+            "/risk-lab/replays/:id/graph",
+            get(handlers::admin::explain_risk_lab_replay),
+        )
         // Fraud score management
-        .route("/fraud/scores", get(handlers::admin::fraud::list_fraud_scores))
-        .route("/fraud/scores/:id", get(handlers::admin::fraud::get_fraud_score))
-        .route("/fraud/review", post(handlers::admin::fraud::submit_fraud_review))
+        .route(
+            "/fraud/scores",
+            get(handlers::admin::fraud::list_fraud_scores),
+        )
+        .route(
+            "/fraud/scores/:id",
+            get(handlers::admin::fraud::get_fraud_score),
+        )
+        .route(
+            "/fraud/review",
+            post(handlers::admin::fraud::submit_fraud_review),
+        )
         .with_state(state.clone());
 
     // Admin Reports - needs to be separated or use AppState if ReportGenerator is in AppState
@@ -291,14 +500,8 @@ pub fn create_router(state: AppState) -> Router {
                 "/licensing/status/:tenant_id",
                 get(handlers::admin::get_tenant_status),
             )
-            .route(
-                "/licensing/submit",
-                post(handlers::admin::submit_license),
-            )
-            .route(
-                "/licensing/deadlines",
-                get(handlers::admin::get_deadlines),
-            )
+            .route("/licensing/submit", post(handlers::admin::submit_license))
+            .route("/licensing/deadlines", get(handlers::admin::get_deadlines))
             .with_state(licensing_repo.clone())
     } else {
         Router::new()
@@ -329,8 +532,14 @@ pub fn create_router(state: AppState) -> Router {
 
     // Domain management routes
     let domain_routes = Router::new()
-        .route("/", get(handlers::domain::list_domains).post(handlers::domain::create_domain))
-        .route("/:id", get(handlers::domain::get_domain).delete(handlers::domain::delete_domain))
+        .route(
+            "/",
+            get(handlers::domain::list_domains).post(handlers::domain::create_domain),
+        )
+        .route(
+            "/:id",
+            get(handlers::domain::get_domain).delete(handlers::domain::delete_domain),
+        )
         .route("/:id/verify-dns", post(handlers::domain::verify_dns))
         .route("/:id/provision-ssl", post(handlers::domain::provision_ssl))
         .with_state(state.clone());
@@ -343,14 +552,21 @@ pub fn create_router(state: AppState) -> Router {
         .merge(licensing_routes)
         .merge(audit_routes)
         .nest("/reports", report_routes)
+        .nest("/sandbox", sandbox_routes)
         .nest("/domains", domain_routes);
 
     // Yield Strategy routes
     let yield_routes = Router::new()
         .route("/strategies", get(handlers::admin::list_strategies))
         .route("/strategies/:id", get(handlers::admin::get_strategy))
-        .route("/strategies/:id/activate", post(handlers::admin::activate_strategy))
-        .route("/strategies/:id/deactivate", post(handlers::admin::deactivate_strategy))
+        .route(
+            "/strategies/:id/activate",
+            post(handlers::admin::activate_strategy),
+        )
+        .route(
+            "/strategies/:id/deactivate",
+            post(handlers::admin::deactivate_strategy),
+        )
         .route("/performance", get(handlers::admin::get_performance))
         .route("/rebalance", post(handlers::admin::trigger_rebalance))
         .route("/apys", get(handlers::admin::get_current_apys))
@@ -425,13 +641,20 @@ pub fn create_router(state: AppState) -> Router {
 
     // Custody routes (admin/operator auth required)
     let custody_routes = Router::new()
-        .route("/keys/generate", post(handlers::custody::generate_custody_keys))
+        .route(
+            "/keys/generate",
+            post(handlers::custody::generate_custody_keys),
+        )
         .route("/sign", post(handlers::custody::sign_with_custody))
         .route(
             "/policies",
-            get(handlers::custody::get_custody_policy).put(handlers::custody::update_custody_policy),
+            get(handlers::custody::get_custody_policy)
+                .put(handlers::custody::update_custody_policy),
         )
-        .route("/policies/check", post(handlers::custody::check_custody_policy));
+        .route(
+            "/policies/check",
+            post(handlers::custody::check_custody_policy),
+        );
 
     // API v1 routes with authentication
     let mut api_v1 = Router::new()
@@ -474,7 +697,8 @@ pub fn create_router(state: AppState) -> Router {
 
     // Bank webhook routes (no tenant auth required - uses provider-specific signature verification)
     // POST /v1/webhooks/bank/:provider - receives bank confirmations for pay-ins
-    let mut bank_webhook_routes = if let Some(ref confirmation_repo) = state.bank_confirmation_repo {
+    let mut bank_webhook_routes = if let Some(ref confirmation_repo) = state.bank_confirmation_repo
+    {
         let bank_webhook_state = BankWebhookState::new(confirmation_repo.clone());
         Router::new()
             .route(
@@ -527,24 +751,21 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/graphql", gql_router)
         .nest("/v1", api_v1)
         // Portal auth routes (no JWT required - these issue tokens)
-        .nest(
-            "/v1/portal/auth",
-            portal_auth_routes.clone(),
-        )
+        .nest("/v1/portal/auth", portal_auth_routes.clone())
         // Portal protected routes (JWT required)
         .nest("/v1/portal", portal_protected_routes)
         // Legacy auth endpoint (same as /v1/portal/auth for backwards compatibility)
-        .nest(
-            "/v1/auth",
-            portal_auth_routes,
-        )
+        .nest("/v1/auth", portal_auth_routes)
         // Bank webhook routes (no auth required - uses signature verification)
         .nest("/v1/webhooks/bank", bank_webhook_routes)
         .nest("/v1/auth/sso", sso_routes)
         // WebSocket endpoint for real-time updates (JWT auth via query param)
         .nest("/v1/portal", ws_routes)
         // LP (Liquidity Provider) routes — authenticated via X-LP-Key header
-        .nest("/v1/lp", handlers::lp::rfq::router().with_state(state.clone()))
+        .nest(
+            "/v1/lp",
+            handlers::lp::rfq::router().with_state(state.clone()),
+        )
         .layer(middleware::from_fn(request_id_middleware))
         .layer(middleware::from_fn(error_sanitizer_middleware))
         .layer({
@@ -635,4 +856,33 @@ pub fn create_router(state: AppState) -> Router {
                     HeaderName::from_static("rampos-version"),
                 ])
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_sandbox_service;
+    use ramp_core::service::LedgerService;
+    use ramp_core::test_utils::{MockLedgerRepository, MockTenantRepository};
+    use std::sync::Arc;
+
+    #[test]
+    fn build_sandbox_service_exposes_seeded_presets() {
+        let tenant_repo = Arc::new(MockTenantRepository::new());
+        let ledger_repo = Arc::new(MockLedgerRepository::new());
+        let onboarding_service = Arc::new(ramp_core::service::OnboardingService::new(
+            tenant_repo,
+            Arc::new(LedgerService::new(ledger_repo)),
+        ));
+
+        let sandbox_service = build_sandbox_service(onboarding_service);
+        let presets = sandbox_service.list_presets();
+
+        assert_eq!(presets.len(), 3);
+        assert!(presets.iter().any(|preset| {
+            preset.code == "BASELINE"
+                && preset
+                    .default_scenarios
+                    .contains(&"PAYIN_BASELINE".to_string())
+        }));
+    }
 }

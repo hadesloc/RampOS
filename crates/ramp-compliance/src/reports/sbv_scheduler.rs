@@ -9,8 +9,8 @@ use crate::reports::sbv_ctr::{
     SbvIdType, SbvTransactionType, SBV_CTR_THRESHOLD_VND,
 };
 use crate::reports::sbv_sar::{
-    RecommendedAction, RiskIndicator, SbvRiskLevel, SbvSarReport,
-    SbvSarWeeklySummary, SuspiciousActivityType,
+    RecommendedAction, RiskIndicator, SbvRiskLevel, SbvSarReport, SbvSarWeeklySummary,
+    SuspiciousActivityType,
 };
 use chrono::{DateTime, Datelike, Duration, NaiveTime, Timelike, Utc};
 use ramp_common::types::TenantId;
@@ -89,7 +89,9 @@ impl SbvReportScheduler {
 
         match row {
             Some(r) => Ok(SbvFilingInstitution {
-                name: r.try_get("legal_name").unwrap_or_else(|_| "Unknown".to_string()),
+                name: r
+                    .try_get("legal_name")
+                    .unwrap_or_else(|_| "Unknown".to_string()),
                 tax_id: r.try_get("tax_id").unwrap_or_else(|_| "".to_string()),
                 business_registration_number: r
                     .try_get("business_registration_number")
@@ -98,9 +100,15 @@ impl SbvReportScheduler {
                     .try_get("sbv_license_number")
                     .unwrap_or_else(|_| "".to_string()),
                 address: r.try_get("address").unwrap_or_else(|_| "".to_string()),
-                province_code: r.try_get("province_code").unwrap_or_else(|_| "".to_string()),
-                phone: r.try_get("contact_phone").unwrap_or_else(|_| "".to_string()),
-                email: r.try_get("contact_email").unwrap_or_else(|_| "".to_string()),
+                province_code: r
+                    .try_get("province_code")
+                    .unwrap_or_else(|_| "".to_string()),
+                phone: r
+                    .try_get("contact_phone")
+                    .unwrap_or_else(|_| "".to_string()),
+                email: r
+                    .try_get("contact_email")
+                    .unwrap_or_else(|_| "".to_string()),
             }),
             None => {
                 // Return default for testing
@@ -177,8 +185,12 @@ impl SbvReportScheduler {
         }
 
         let filing_institution = self.get_filing_institution(&tenant_id).await?;
-        let mut report =
-            SbvCtrReport::new(tenant_id.clone(), filing_institution, start_of_day, end_of_day);
+        let mut report = SbvCtrReport::new(
+            tenant_id.clone(),
+            filing_institution,
+            start_of_day,
+            end_of_day,
+        );
 
         for row in rows {
             let id: uuid::Uuid = row.try_get("id")?;
@@ -210,14 +222,8 @@ impl SbvReportScheduler {
             // Extract customer info from KYC data
             let customer = if let Some(data) = verification_data {
                 SbvCustomerInfo {
-                    full_name: data["full_name"]
-                        .as_str()
-                        .unwrap_or("Unknown")
-                        .to_string(),
-                    id_number: data["id_number"]
-                        .as_str()
-                        .unwrap_or("Unknown")
-                        .to_string(),
+                    full_name: data["full_name"].as_str().unwrap_or("Unknown").to_string(),
+                    id_number: data["id_number"].as_str().unwrap_or("Unknown").to_string(),
                     id_type: match data["id_type"].as_str().unwrap_or("") {
                         "CCCD" => SbvIdType::CitizenId,
                         "CMND" => SbvIdType::NationalId,
@@ -230,14 +236,8 @@ impl SbvReportScheduler {
                         .as_str()
                         .map(|s| s.to_string()),
                     date_of_birth: None,
-                    nationality: data["nationality"]
-                        .as_str()
-                        .unwrap_or("VN")
-                        .to_string(),
-                    permanent_address: data["address"]
-                        .as_str()
-                        .unwrap_or("Unknown")
-                        .to_string(),
+                    nationality: data["nationality"].as_str().unwrap_or("VN").to_string(),
+                    permanent_address: data["address"].as_str().unwrap_or("Unknown").to_string(),
                     current_address: None,
                     phone: data["phone"].as_str().map(|s| s.to_string()),
                     occupation: data["occupation"].as_str().map(|s| s.to_string()),
@@ -332,11 +332,7 @@ impl SbvReportScheduler {
         .map_err(|e| ramp_common::Error::Database(format!("Database error: {}", e)))?;
 
         let mut summary = SbvSarWeeklySummary {
-            summary_id: format!(
-                "SBV-SAR-WEEKLY-{}-{}",
-                tenant_id,
-                week_end.format("%Y%m%d")
-            ),
+            summary_id: format!("SBV-SAR-WEEKLY-{}-{}", tenant_id, week_end.format("%Y%m%d")),
             generated_at: Utc::now(),
             week_start,
             week_end,
@@ -355,7 +351,8 @@ impl SbvReportScheduler {
             let report_id: String = row.try_get("report_id")?;
             let risk_level: String = row.try_get("risk_level").unwrap_or_default();
             let activity_type: String = row.try_get("activity_type").unwrap_or_default();
-            let amount: i64 = row.try_get::<Decimal, _>("total_amount_vnd")
+            let amount: i64 = row
+                .try_get::<Decimal, _>("total_amount_vnd")
                 .map(|d| d.to_i64().unwrap_or(0))
                 .unwrap_or(0);
 
@@ -410,11 +407,12 @@ impl SbvReportScheduler {
         .await
         .map_err(|e| ramp_common::Error::Database(format!("Database error: {}", e)))?;
 
-        let row = case_row.ok_or_else(|| {
-            ramp_common::Error::NotFound(format!("Case not found: {}", case_id))
-        })?;
+        let row = case_row
+            .ok_or_else(|| ramp_common::Error::NotFound(format!("Case not found: {}", case_id)))?;
 
-        let severity: String = row.try_get("severity").unwrap_or_else(|_| "Medium".to_string());
+        let severity: String = row
+            .try_get("severity")
+            .unwrap_or_else(|_| "Medium".to_string());
         let rule_name: String = row
             .try_get("rule_name")
             .unwrap_or_else(|_| "Unknown".to_string());
@@ -617,8 +615,7 @@ impl SbvReportScheduler {
             return false;
         }
 
-        if let Ok(scheduled_time) =
-            NaiveTime::parse_from_str(&self.config.weekly_sar_time, "%H:%M")
+        if let Ok(scheduled_time) = NaiveTime::parse_from_str(&self.config.weekly_sar_time, "%H:%M")
         {
             let current_time = now.time();
             let diff = (current_time.num_seconds_from_midnight() as i32)

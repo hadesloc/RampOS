@@ -669,7 +669,8 @@ mod tests {
             "status": "SUCCESS"
         }"#;
 
-        let payload: VietQrWebhookPayload = serde_json::from_str(json).expect("deserialization failed");
+        let payload: VietQrWebhookPayload =
+            serde_json::from_str(json).expect("deserialization failed");
         assert_eq!(payload.transaction_id, "VQR123456");
         assert_eq!(payload.reference_code, "TENANT1_REF001");
         assert_eq!(payload.amount, 1000000);
@@ -688,7 +689,8 @@ mod tests {
             "stsCode": "00"
         }"#;
 
-        let payload: NapasWebhookPayload = serde_json::from_str(json).expect("deserialization failed");
+        let payload: NapasWebhookPayload =
+            serde_json::from_str(json).expect("deserialization failed");
         assert_eq!(payload.trans_id, "NAPAS123456");
         assert_eq!(payload.ref_no, "TENANT1-REF-001");
     }

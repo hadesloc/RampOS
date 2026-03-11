@@ -508,7 +508,6 @@ fn base64_url_encode(data: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(data)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -109,11 +109,7 @@ pub trait EventPublisher: Send + Sync {
     ) -> Result<()>;
 
     /// Publish RFQ created event (notifies LPs that a new auction is open)
-    async fn publish_rfq_created(
-        &self,
-        rfq_id: &str,
-        tenant_id: &TenantId,
-    ) -> Result<()>;
+    async fn publish_rfq_created(&self, rfq_id: &str, tenant_id: &TenantId) -> Result<()>;
 
     /// Publish RFQ matched event (auction completed, winner selected)
     async fn publish_rfq_matched(
@@ -270,11 +266,7 @@ impl EventPublisher for NatsEventPublisher {
         self.publish(&subject, payload.to_string().as_bytes()).await
     }
 
-    async fn publish_rfq_created(
-        &self,
-        rfq_id: &str,
-        tenant_id: &TenantId,
-    ) -> Result<()> {
+    async fn publish_rfq_created(&self, rfq_id: &str, tenant_id: &TenantId) -> Result<()> {
         let subject = format!("{}.rfq.created", self.stream_prefix);
         let payload = serde_json::json!({
             "rfq_id": rfq_id,
@@ -419,11 +411,7 @@ impl EventPublisher for InMemoryEventPublisher {
         Ok(())
     }
 
-    async fn publish_rfq_created(
-        &self,
-        rfq_id: &str,
-        tenant_id: &TenantId,
-    ) -> Result<()> {
+    async fn publish_rfq_created(&self, rfq_id: &str, tenant_id: &TenantId) -> Result<()> {
         let event = serde_json::json!({
             "type": "rfq.created",
             "rfq_id": rfq_id,

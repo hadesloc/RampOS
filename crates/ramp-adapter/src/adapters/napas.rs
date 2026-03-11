@@ -125,7 +125,10 @@ impl NapasAdapter {
     ///
     /// # Errors
     /// Returns an error if HTTP client creation fails
-    pub fn new(provider_code: impl Into<String>, webhook_secret: impl Into<String>) -> Result<Self> {
+    pub fn new(
+        provider_code: impl Into<String>,
+        webhook_secret: impl Into<String>,
+    ) -> Result<Self> {
         let config = NapasConfig {
             base: AdapterConfig {
                 provider_code: provider_code.into(),
@@ -161,18 +164,14 @@ impl NapasAdapter {
     pub fn from_env(mut config: NapasConfig) -> Result<Self> {
         // Load private key from env var or file
         if config.private_key_pem.is_none() {
-            config.private_key_pem = Self::load_pem_from_env(
-                "NAPAS_RSA_PRIVATE_KEY_PEM",
-                "NAPAS_RSA_KEY_FILE",
-            )?;
+            config.private_key_pem =
+                Self::load_pem_from_env("NAPAS_RSA_PRIVATE_KEY_PEM", "NAPAS_RSA_KEY_FILE")?;
         }
 
         // Load Napas public key from env var or file
         if config.napas_public_key_pem.is_none() {
-            config.napas_public_key_pem = Self::load_pem_from_env(
-                "NAPAS_RSA_PUBLIC_KEY_PEM",
-                "NAPAS_RSA_PUBLIC_KEY_FILE",
-            )?;
+            config.napas_public_key_pem =
+                Self::load_pem_from_env("NAPAS_RSA_PUBLIC_KEY_PEM", "NAPAS_RSA_PUBLIC_KEY_FILE")?;
         }
 
         // In production mode, RSA private key is required
@@ -188,10 +187,7 @@ impl NapasAdapter {
 
     /// Load a PEM string from an environment variable, falling back to reading a file
     /// path from a second environment variable.
-    fn load_pem_from_env(
-        pem_env_var: &str,
-        file_env_var: &str,
-    ) -> Result<Option<String>> {
+    fn load_pem_from_env(pem_env_var: &str, file_env_var: &str) -> Result<Option<String>> {
         // Try inline PEM first
         if let Ok(pem) = std::env::var(pem_env_var) {
             if !pem.is_empty() {
@@ -228,7 +224,10 @@ impl NapasAdapter {
             .build()
             .map_err(|e| Error::Internal(format!("Failed to create HTTP client: {}", e)))?;
 
-        Ok(Self { config, http_client })
+        Ok(Self {
+            config,
+            http_client,
+        })
     }
 
     /// Generate RSA-SHA256 request signature for Napas API.
@@ -345,7 +344,7 @@ impl NapasAdapter {
             .await
             .map_err(|e| Error::ExternalService {
                 service: "Napas".to_string(),
-                message: format!("API request failed: {}", e)
+                message: format!("API request failed: {}", e),
             })?;
 
         if !response.status().is_success() {
@@ -363,7 +362,7 @@ impl NapasAdapter {
             .await
             .map_err(|e| Error::ExternalService {
                 service: "Napas".to_string(),
-                message: format!("Failed to parse response: {}", e)
+                message: format!("Failed to parse response: {}", e),
             })
     }
 }
@@ -434,7 +433,9 @@ impl RailsAdapter for NapasAdapter {
             .or_else(|| data.get("reference_code"))
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::Validation("Missing or empty reference_code in webhook".to_string()))?
+            .ok_or_else(|| {
+                Error::Validation("Missing or empty reference_code in webhook".to_string())
+            })?
             .to_string();
 
         let bank_tx_id = data
@@ -447,7 +448,9 @@ impl RailsAdapter for NapasAdapter {
 
         let amount = data.get("amount").and_then(|v| v.as_i64()).unwrap_or(0);
         if amount <= 0 {
-            return Err(Error::Validation("Webhook amount must be positive".to_string()));
+            return Err(Error::Validation(
+                "Webhook amount must be positive".to_string(),
+            ));
         }
 
         info!(
@@ -497,14 +500,12 @@ impl RailsAdapter for NapasAdapter {
         // Real API call
         let napas_request = NapasTransferRequest {
             merchant_txn_ref: request.reference_code.clone(),
-            amount: request
-                .amount_vnd
-                .to_string()
-                .parse::<i64>()
-                .map_err(|_| Error::Validation(format!(
+            amount: request.amount_vnd.to_string().parse::<i64>().map_err(|_| {
+                Error::Validation(format!(
                     "Cannot convert amount {} to integer for Napas API",
                     request.amount_vnd
-                )))?,
+                ))
+            })?,
             currency: "VND".to_string(),
             beneficiary_bank_code: request.recipient_bank_code.clone(),
             beneficiary_account: request.recipient_account_number.clone(),
@@ -684,7 +685,10 @@ mod tests {
             NapasAdapter::parse_status("COMPLETED"),
             PayoutStatus::Completed
         );
-        assert_eq!(NapasAdapter::parse_status("SUCCESS"), PayoutStatus::Completed);
+        assert_eq!(
+            NapasAdapter::parse_status("SUCCESS"),
+            PayoutStatus::Completed
+        );
         assert_eq!(NapasAdapter::parse_status("FAILED"), PayoutStatus::Failed);
         assert_eq!(
             NapasAdapter::parse_status("CANCELLED"),
@@ -811,7 +815,9 @@ mod tests {
         let adapter = NapasAdapter::with_config(config).unwrap();
 
         let payload = r#"{"merchantTxnRef":"TX001","amount":100000}"#;
-        let signature = adapter.sign_request(payload).expect("signing should succeed");
+        let signature = adapter
+            .sign_request(payload)
+            .expect("signing should succeed");
 
         // Signature should be non-empty base64
         assert!(!signature.is_empty());
@@ -847,7 +853,9 @@ mod tests {
         let adapter = NapasAdapter::with_config(config).unwrap();
 
         let payload = r#"{"merchantTxnRef":"TX001","amount":100000}"#;
-        let signature = adapter.sign_request(payload).expect("signing should succeed");
+        let signature = adapter
+            .sign_request(payload)
+            .expect("signing should succeed");
 
         // Verification with wrong public key should fail
         assert!(!adapter.verify_response_signature(payload, &signature));
@@ -878,7 +886,9 @@ mod tests {
         let adapter = NapasAdapter::with_config(config).unwrap();
 
         let payload = r#"{"merchantTxnRef":"TX001","amount":100000}"#;
-        let signature = adapter.sign_request(payload).expect("signing should succeed");
+        let signature = adapter
+            .sign_request(payload)
+            .expect("signing should succeed");
 
         // Verify with tampered payload should fail
         let tampered = r#"{"merchantTxnRef":"TX001","amount":999999}"#;
@@ -1036,7 +1046,9 @@ mod tests {
         let payload_str = std::str::from_utf8(payload).unwrap();
 
         // Sign the payload as if Napas signed it
-        let signature = adapter.sign_request(payload_str).expect("signing should succeed");
+        let signature = adapter
+            .sign_request(payload_str)
+            .expect("signing should succeed");
 
         // verify_webhook_signature should use RSA in production mode
         assert!(adapter.verify_webhook_signature(payload, &signature));

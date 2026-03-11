@@ -5,11 +5,7 @@
 //! - GET/PUT /v1/portal/settings/security
 //! - GET/PUT /v1/portal/settings/notifications
 
-use axum::{
-    extract::State,
-    routing::get,
-    Json, Router,
-};
+use axum::{extract::State, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
@@ -127,9 +123,10 @@ pub async fn get_profile(
         "Get profile requested"
     );
 
-    let pool = app_state.db_pool.as_ref().ok_or_else(|| {
-        ApiError::Internal("Database not configured".to_string())
-    })?;
+    let pool = app_state
+        .db_pool
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Database not configured".to_string()))?;
 
     // Query profile from database
     let row: Option<(String, String, Option<String>, Option<String>)> = sqlx::query_as(
@@ -143,9 +140,8 @@ pub async fn get_profile(
         ApiError::Internal("Failed to retrieve profile".to_string())
     })?;
 
-    let (full_name, email, phone, avatar_url) = row.ok_or_else(|| {
-        ApiError::NotFound("User not found".to_string())
-    })?;
+    let (full_name, email, phone, avatar_url) =
+        row.ok_or_else(|| ApiError::NotFound("User not found".to_string()))?;
 
     Ok(Json(ProfileResponse {
         full_name,
@@ -166,9 +162,10 @@ pub async fn update_profile(
         "Update profile requested"
     );
 
-    let pool = app_state.db_pool.as_ref().ok_or_else(|| {
-        ApiError::Internal("Database not configured".to_string())
-    })?;
+    let pool = app_state
+        .db_pool
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Database not configured".to_string()))?;
 
     let user_id = portal_user.user_id.to_string();
 
@@ -189,9 +186,7 @@ pub async fn update_profile(
     }
 
     if updates.is_empty() {
-        return Err(ApiError::Validation(
-            "No fields to update".to_string(),
-        ));
+        return Err(ApiError::Validation("No fields to update".to_string()));
     }
 
     updates.push("updated_at = NOW()".to_string());
@@ -249,9 +244,10 @@ pub async fn get_security(
         "Get security settings requested"
     );
 
-    let pool = app_state.db_pool.as_ref().ok_or_else(|| {
-        ApiError::Internal("Database not configured".to_string())
-    })?;
+    let pool = app_state
+        .db_pool
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Database not configured".to_string()))?;
 
     let user_id = portal_user.user_id.to_string();
 
@@ -313,27 +309,25 @@ pub async fn update_security(
         ));
     }
 
-    let pool = app_state.db_pool.as_ref().ok_or_else(|| {
-        ApiError::Internal("Database not configured".to_string())
-    })?;
+    let pool = app_state
+        .db_pool
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Database not configured".to_string()))?;
 
     let user_id = portal_user.user_id.to_string();
 
     // Fetch current password hash
-    let row: Option<(Option<String>,)> = sqlx::query_as(
-        "SELECT password_hash FROM portal_users WHERE id = $1",
-    )
-    .bind(&user_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| {
-        warn!(error = %e, "Failed to query user password");
-        ApiError::Internal("Failed to verify password".to_string())
-    })?;
+    let row: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT password_hash FROM portal_users WHERE id = $1")
+            .bind(&user_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| {
+                warn!(error = %e, "Failed to query user password");
+                ApiError::Internal("Failed to verify password".to_string())
+            })?;
 
-    let (stored_hash,) = row.ok_or_else(|| {
-        ApiError::NotFound("User not found".to_string())
-    })?;
+    let (stored_hash,) = row.ok_or_else(|| ApiError::NotFound("User not found".to_string()))?;
 
     // Verify current password
     if let Some(hash) = stored_hash {
@@ -341,14 +335,11 @@ pub async fn update_security(
             password_hash::{PasswordHash, PasswordVerifier},
             Argon2,
         };
-        let parsed = PasswordHash::new(&hash).map_err(|_| {
-            ApiError::Internal("Invalid password hash in database".to_string())
-        })?;
+        let parsed = PasswordHash::new(&hash)
+            .map_err(|_| ApiError::Internal("Invalid password hash in database".to_string()))?;
         Argon2::default()
             .verify_password(req.current_password.as_bytes(), &parsed)
-            .map_err(|_| {
-                ApiError::BadRequest("Current password is incorrect".to_string())
-            })?;
+            .map_err(|_| ApiError::BadRequest("Current password is incorrect".to_string()))?;
     } else {
         // No password set (WebAuthn-only account) - current_password must be empty
         if !req.current_password.is_empty() {
@@ -403,9 +394,10 @@ pub async fn get_notifications(
         "Get notification preferences requested"
     );
 
-    let pool = app_state.db_pool.as_ref().ok_or_else(|| {
-        ApiError::Internal("Database not configured".to_string())
-    })?;
+    let pool = app_state
+        .db_pool
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Database not configured".to_string()))?;
 
     let user_id = portal_user.user_id.to_string();
 
@@ -440,9 +432,10 @@ pub async fn update_notifications(
         "Update notification preferences requested"
     );
 
-    let pool = app_state.db_pool.as_ref().ok_or_else(|| {
-        ApiError::Internal("Database not configured".to_string())
-    })?;
+    let pool = app_state
+        .db_pool
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Database not configured".to_string()))?;
 
     let user_id = portal_user.user_id.to_string();
 

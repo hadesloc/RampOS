@@ -152,7 +152,10 @@ impl NapasOffRampAdapter {
                 Ok(NapasAccountInfo {
                     bank_code: bank_code.to_uppercase(),
                     account_number: account_number.to_string(),
-                    account_name: format!("ACCOUNT HOLDER {}", &account_number[..4.min(account_number.len())]),
+                    account_name: format!(
+                        "ACCOUNT HOLDER {}",
+                        &account_number[..4.min(account_number.len())]
+                    ),
                     is_active: true,
                     account_type: "CHECKING".to_string(),
                 })
@@ -174,7 +177,9 @@ impl NapasOffRampAdapter {
 
         // Validate amount limits (Napas 247 limit: 500M VND per transaction)
         if amount_vnd > Decimal::new(500_000_000, 0) {
-            return Err("Amount exceeds Napas 247 single transaction limit of 500M VND".to_string());
+            return Err(
+                "Amount exceeds Napas 247 single transaction limit of 500M VND".to_string(),
+            );
         }
 
         // Check if destination account exists and is active
@@ -188,7 +193,10 @@ impl NapasOffRampAdapter {
             }
         }
 
-        let reference = format!("NAPAS-{}", Uuid::now_v7().to_string().replace("-", "")[..12].to_uppercase());
+        let reference = format!(
+            "NAPAS-{}",
+            Uuid::now_v7().to_string().replace("-", "")[..12].to_uppercase()
+        );
         let internal_ref = format!("RAMP-{}", &Uuid::now_v7().to_string()[..8].to_uppercase());
 
         let result = NapasTransferResult {
@@ -205,7 +213,10 @@ impl NapasOffRampAdapter {
         };
 
         // Store transfer
-        let mut transfers = self.transfers.lock().map_err(|_| "Lock error".to_string())?;
+        let mut transfers = self
+            .transfers
+            .lock()
+            .map_err(|_| "Lock error".to_string())?;
         transfers.insert(reference.clone(), result.clone());
 
         Ok(result)
@@ -213,7 +224,10 @@ impl NapasOffRampAdapter {
 
     /// Get the status of a transfer
     pub fn get_transfer_status(&self, reference: &str) -> Result<NapasTransferResult, String> {
-        let transfers = self.transfers.lock().map_err(|_| "Lock error".to_string())?;
+        let transfers = self
+            .transfers
+            .lock()
+            .map_err(|_| "Lock error".to_string())?;
 
         match transfers.get(reference) {
             Some(transfer) => {
@@ -232,7 +246,10 @@ impl NapasOffRampAdapter {
 
     /// Simulate a completed transfer (for testing)
     pub fn simulate_complete(&self, reference: &str) -> Result<NapasTransferResult, String> {
-        let mut transfers = self.transfers.lock().map_err(|_| "Lock error".to_string())?;
+        let mut transfers = self
+            .transfers
+            .lock()
+            .map_err(|_| "Lock error".to_string())?;
 
         match transfers.get_mut(reference) {
             Some(transfer) => {
@@ -249,7 +266,10 @@ impl NapasOffRampAdapter {
         reference: &str,
         reason: &str,
     ) -> Result<NapasTransferResult, String> {
-        let mut transfers = self.transfers.lock().map_err(|_| "Lock error".to_string())?;
+        let mut transfers = self
+            .transfers
+            .lock()
+            .map_err(|_| "Lock error".to_string())?;
 
         match transfers.get_mut(reference) {
             Some(transfer) => {
@@ -332,11 +352,8 @@ mod tests {
     #[test]
     fn test_transfer_zero_amount() {
         let adapter = NapasOffRampAdapter::new();
-        let result = adapter.instant_transfer(
-            test_from_account(),
-            test_to_account(),
-            Decimal::ZERO,
-        );
+        let result =
+            adapter.instant_transfer(test_from_account(), test_to_account(), Decimal::ZERO);
         assert!(result.is_err());
     }
 
@@ -388,10 +405,7 @@ mod tests {
             .simulate_failure(&transfer.reference, "Insufficient funds")
             .unwrap();
         assert_eq!(failed.status, NapasTransferStatus::Failed);
-        assert_eq!(
-            failed.error_message,
-            Some("Insufficient funds".to_string())
-        );
+        assert_eq!(failed.error_message, Some("Insufficient funds".to_string()));
     }
 
     #[test]

@@ -19,23 +19,28 @@ use std::fmt;
 use std::sync::Arc;
 use thiserror::Error;
 
-pub mod evm;
-pub mod solana;
-pub mod ton;
 pub mod abstraction;
-pub mod swap;
 pub mod bridge;
-pub mod solver;
+pub mod evm;
 pub mod execution;
+pub mod solana;
+pub mod solver;
+pub mod swap;
+pub mod ton;
 
-pub use evm::{EvmChain, EvmChainConfig};
-pub use solana::{SolanaChain, SolanaChainConfig};
-pub use ton::{TonChain, TonChainConfig};
 pub use abstraction::ChainAbstractionLayer;
-pub use swap::{SwapAdapter, SwapQuote, SwapResult, SwapStatus, SwapToken, RouteStep, MockDexSwapAdapter};
-pub use bridge::{BridgeAdapter, BridgeQuote, BridgeTransferStatus, BridgeTransferResult, BridgeStatusResponse, MockBridgeAdapter};
-pub use solver::{IntentSolver, Intent, ExecutionRoute, RouteAction};
+pub use bridge::{
+    BridgeAdapter, BridgeQuote, BridgeStatusResponse, BridgeTransferResult, BridgeTransferStatus,
+    MockBridgeAdapter,
+};
+pub use evm::{EvmChain, EvmChainConfig};
 pub use execution::{ExecutionEngine, ExecutionResult, ExecutionStatus, ExecutionStep, StepStatus};
+pub use solana::{SolanaChain, SolanaChainConfig};
+pub use solver::{ExecutionRoute, Intent, IntentSolver, RouteAction};
+pub use swap::{
+    MockDexSwapAdapter, RouteStep, SwapAdapter, SwapQuote, SwapResult, SwapStatus, SwapToken,
+};
+pub use ton::{TonChain, TonChainConfig};
 
 /// Chain abstraction errors
 #[derive(Debug, Error)]
@@ -441,7 +446,8 @@ mod tests {
 
     #[test]
     fn test_unified_address_evm() {
-        let addr = UnifiedAddress::new(ChainType::Evm, "0x1234567890123456789012345678901234567890");
+        let addr =
+            UnifiedAddress::new(ChainType::Evm, "0x1234567890123456789012345678901234567890");
         assert!(addr.is_ok());
 
         let invalid = UnifiedAddress::new(ChainType::Evm, "invalid");

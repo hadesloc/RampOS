@@ -19,6 +19,16 @@ export { default as Modal } from './components/shared/Modal';
 export { RampOSEventEmitter, onRampOSMessage } from './utils/events';
 export { RampOSApiClient } from './utils/api';
 export { resolveTheme, themeToCSS, themeToCSSVars } from './components/shared/theme';
+export {
+  buildHeadlessCheckoutConfig,
+  resolveHeadlessCheckoutConfig,
+} from './headless/index';
+export { fetchRemoteCheckoutConfig, mergeCheckoutConfig } from './config/remote-config';
+export {
+  DEFAULT_THEME_TOKENS,
+  themeTokensToTheme,
+  resolveThemeTokens,
+} from './config/theme-tokens';
 
 // Types
 export type {
@@ -29,8 +39,12 @@ export type {
   KYCStatus,
   PaymentMethod,
   WidgetTheme,
+  WidgetThemeTokens,
   CheckoutConfig,
+  HeadlessCheckoutConfig,
+  HeadlessCheckoutOptions,
   CheckoutResult,
+  RemoteWidgetConfig,
   KYCConfig,
   KYCResult,
   KYCDocument,

@@ -3,7 +3,7 @@
 use async_graphql::{Object, SimpleObject};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 
-use super::types::{IntentType, UserType, LedgerEntryType};
+use super::types::{IntentType, LedgerEntryType, UserType};
 
 /// Page info for cursor-based pagination
 #[derive(SimpleObject, Debug, Clone)]

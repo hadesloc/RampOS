@@ -9,9 +9,9 @@ mod stargate;
 pub use across::AcrossBridge;
 pub use stargate::StargateBridge;
 
+use alloy::primitives::{Address, B256, U256};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use alloy::primitives::{Address, B256, U256};
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -235,48 +235,123 @@ impl Default for BridgeConfig {
     fn default() -> Self {
         let mut stargate_routers = HashMap::new();
         // Stargate V2 Router addresses
-        stargate_routers.insert(1, "0x45f1A95A4D3f3836523F5c83673c797f4d4d263B".parse().unwrap());
-        stargate_routers.insert(42161, "0x45f1A95A4D3f3836523F5c83673c797f4d4d263B".parse().unwrap());
-        stargate_routers.insert(8453, "0x45f1A95A4D3f3836523F5c83673c797f4d4d263B".parse().unwrap());
-        stargate_routers.insert(10, "0x45f1A95A4D3f3836523F5c83673c797f4d4d263B".parse().unwrap());
+        stargate_routers.insert(
+            1,
+            "0x45f1A95A4D3f3836523F5c83673c797f4d4d263B"
+                .parse()
+                .unwrap(),
+        );
+        stargate_routers.insert(
+            42161,
+            "0x45f1A95A4D3f3836523F5c83673c797f4d4d263B"
+                .parse()
+                .unwrap(),
+        );
+        stargate_routers.insert(
+            8453,
+            "0x45f1A95A4D3f3836523F5c83673c797f4d4d263B"
+                .parse()
+                .unwrap(),
+        );
+        stargate_routers.insert(
+            10,
+            "0x45f1A95A4D3f3836523F5c83673c797f4d4d263B"
+                .parse()
+                .unwrap(),
+        );
 
         let mut across_spoke_pools = HashMap::new();
         // Across Protocol SpokePool addresses
-        across_spoke_pools.insert(1, "0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5".parse().unwrap());
-        across_spoke_pools.insert(42161, "0xe35e9842fceaCA96570B734083f4a58e8F7C5f2A".parse().unwrap());
-        across_spoke_pools.insert(8453, "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64".parse().unwrap());
-        across_spoke_pools.insert(10, "0x6f26Bf09B1C792e3228e5467807a900A503c0281".parse().unwrap());
+        across_spoke_pools.insert(
+            1,
+            "0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5"
+                .parse()
+                .unwrap(),
+        );
+        across_spoke_pools.insert(
+            42161,
+            "0xe35e9842fceaCA96570B734083f4a58e8F7C5f2A"
+                .parse()
+                .unwrap(),
+        );
+        across_spoke_pools.insert(
+            8453,
+            "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64"
+                .parse()
+                .unwrap(),
+        );
+        across_spoke_pools.insert(
+            10,
+            "0x6f26Bf09B1C792e3228e5467807a900A503c0281"
+                .parse()
+                .unwrap(),
+        );
 
         let mut token_addresses: HashMap<ChainId, HashMap<BridgeToken, Address>> = HashMap::new();
 
         // Ethereum
         let mut eth_tokens = HashMap::new();
-        eth_tokens.insert(BridgeToken::USDT, "0xdAC17F958D2ee523a2206206994597C13D831ec7".parse().unwrap());
-        eth_tokens.insert(BridgeToken::USDC, "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse().unwrap());
+        eth_tokens.insert(
+            BridgeToken::USDT,
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+                .parse()
+                .unwrap(),
+        );
+        eth_tokens.insert(
+            BridgeToken::USDC,
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+                .parse()
+                .unwrap(),
+        );
         token_addresses.insert(1, eth_tokens);
 
         // Arbitrum
         let mut arb_tokens = HashMap::new();
-        arb_tokens.insert(BridgeToken::USDT, "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9".parse().unwrap());
-        arb_tokens.insert(BridgeToken::USDC, "0xaf88d065e77c8cC2239327C5EDb3A432268e5831".parse().unwrap());
+        arb_tokens.insert(
+            BridgeToken::USDT,
+            "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9"
+                .parse()
+                .unwrap(),
+        );
+        arb_tokens.insert(
+            BridgeToken::USDC,
+            "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+                .parse()
+                .unwrap(),
+        );
         token_addresses.insert(42161, arb_tokens);
 
         // Base
         let mut base_tokens = HashMap::new();
-        base_tokens.insert(BridgeToken::USDC, "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".parse().unwrap());
+        base_tokens.insert(
+            BridgeToken::USDC,
+            "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+                .parse()
+                .unwrap(),
+        );
         token_addresses.insert(8453, base_tokens);
 
         // Optimism
         let mut op_tokens = HashMap::new();
-        op_tokens.insert(BridgeToken::USDT, "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58".parse().unwrap());
-        op_tokens.insert(BridgeToken::USDC, "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85".parse().unwrap());
+        op_tokens.insert(
+            BridgeToken::USDT,
+            "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58"
+                .parse()
+                .unwrap(),
+        );
+        op_tokens.insert(
+            BridgeToken::USDC,
+            "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"
+                .parse()
+                .unwrap(),
+        );
         token_addresses.insert(10, op_tokens);
 
         Self {
             stargate_routers,
             across_spoke_pools,
             token_addresses,
-            default_slippage_bps: 50, // 0.5%
+            default_slippage_bps: 50,    // 0.5%
             quote_validity_seconds: 300, // 5 minutes
         }
     }
@@ -330,7 +405,10 @@ impl BridgeRegistry {
         let mut best_quote: Option<BridgeQuote> = None;
 
         for bridge in self.bridges.values() {
-            match bridge.quote(from_chain, to_chain, token, amount, recipient).await {
+            match bridge
+                .quote(from_chain, to_chain, token, amount, recipient)
+                .await
+            {
                 Ok(quote) => {
                     if let Some(ref current_best) = best_quote {
                         // Choose quote with higher output amount
@@ -345,7 +423,8 @@ impl BridgeRegistry {
             }
         }
 
-        best_quote.ok_or_else(|| Error::Validation("No bridge available for this route".to_string()))
+        best_quote
+            .ok_or_else(|| Error::Validation("No bridge available for this route".to_string()))
     }
 
     /// Get all quotes from all bridges for a route
@@ -360,7 +439,10 @@ impl BridgeRegistry {
         let mut quotes = Vec::new();
 
         for bridge in self.bridges.values() {
-            match bridge.quote(from_chain, to_chain, token, amount, recipient).await {
+            match bridge
+                .quote(from_chain, to_chain, token, amount, recipient)
+                .await
+            {
                 Ok(quote) => quotes.push(quote),
                 Err(e) => {
                     tracing::warn!(
@@ -426,7 +508,10 @@ mod tests {
     fn test_supported_chain() {
         assert_eq!(SupportedChain::Ethereum.chain_id(), 1);
         assert_eq!(SupportedChain::Arbitrum.chain_id(), 42161);
-        assert_eq!(SupportedChain::from_chain_id(8453), Some(SupportedChain::Base));
+        assert_eq!(
+            SupportedChain::from_chain_id(8453),
+            Some(SupportedChain::Base)
+        );
         assert_eq!(SupportedChain::from_chain_id(999), None);
     }
 
@@ -442,7 +527,11 @@ mod tests {
         let config = BridgeConfig::default();
         assert!(config.stargate_routers.contains_key(&1));
         assert!(config.across_spoke_pools.contains_key(&42161));
-        assert!(config.token_addresses.get(&1).unwrap().contains_key(&BridgeToken::USDT));
+        assert!(config
+            .token_addresses
+            .get(&1)
+            .unwrap()
+            .contains_key(&BridgeToken::USDT));
     }
 
     #[test]
@@ -456,7 +545,9 @@ mod tests {
     fn test_get_token_address() {
         let registry = BridgeRegistry::default();
         assert!(registry.get_token_address(1, BridgeToken::USDT).is_some());
-        assert!(registry.get_token_address(42161, BridgeToken::USDC).is_some());
+        assert!(registry
+            .get_token_address(42161, BridgeToken::USDC)
+            .is_some());
     }
 
     #[test]

@@ -59,7 +59,7 @@ impl ScoreHistoryManager {
                 id, tenant_id, user_id, intent_id, score, triggered_rules, action_taken
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-            "#
+            "#,
         )
         .bind(id)
         .bind(tenant_id_str)

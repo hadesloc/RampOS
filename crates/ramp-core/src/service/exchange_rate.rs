@@ -112,9 +112,10 @@ impl ExchangeRateService {
 
         // Check cache first
         {
-            let cache = self.cache.lock().map_err(|_| {
-                Error::Internal("Failed to acquire cache lock".to_string())
-            })?;
+            let cache = self
+                .cache
+                .lock()
+                .map_err(|_| Error::Internal("Failed to acquire cache lock".to_string()))?;
             if let Some(cached) = cache.get(&pair) {
                 let age = Utc::now() - cached.cached_at;
                 if age.num_seconds() < self.cache_ttl_secs {
@@ -129,9 +130,10 @@ impl ExchangeRateService {
 
         // Cache the result
         {
-            let mut cache = self.cache.lock().map_err(|_| {
-                Error::Internal("Failed to acquire cache lock".to_string())
-            })?;
+            let mut cache = self
+                .cache
+                .lock()
+                .map_err(|_| Error::Internal("Failed to acquire cache lock".to_string()))?;
             cache.insert(
                 pair.clone(),
                 CachedRate {
@@ -163,9 +165,10 @@ impl ExchangeRateService {
             consumed: false,
         };
 
-        let mut locks = self.locked_rates.lock().map_err(|_| {
-            Error::Internal("Failed to acquire locked_rates lock".to_string())
-        })?;
+        let mut locks = self
+            .locked_rates
+            .lock()
+            .map_err(|_| Error::Internal("Failed to acquire locked_rates lock".to_string()))?;
         locks.insert(lock_id.clone(), locked.clone());
 
         info!(lock_id = %lock_id, expires_at = %expires_at, "Rate locked");
@@ -174,9 +177,10 @@ impl ExchangeRateService {
 
     /// Check if a locked rate is still valid (not expired, not consumed)
     pub fn is_rate_valid(&self, locked_rate_id: &str) -> Result<bool> {
-        let locks = self.locked_rates.lock().map_err(|_| {
-            Error::Internal("Failed to acquire locked_rates lock".to_string())
-        })?;
+        let locks = self
+            .locked_rates
+            .lock()
+            .map_err(|_| Error::Internal("Failed to acquire locked_rates lock".to_string()))?;
 
         match locks.get(locked_rate_id) {
             Some(locked) => {
@@ -189,9 +193,10 @@ impl ExchangeRateService {
 
     /// Get a locked rate by ID (returns None if not found or expired)
     pub fn get_locked_rate(&self, locked_rate_id: &str) -> Result<Option<LockedRate>> {
-        let locks = self.locked_rates.lock().map_err(|_| {
-            Error::Internal("Failed to acquire locked_rates lock".to_string())
-        })?;
+        let locks = self
+            .locked_rates
+            .lock()
+            .map_err(|_| Error::Internal("Failed to acquire locked_rates lock".to_string()))?;
 
         match locks.get(locked_rate_id) {
             Some(locked) => {
@@ -207,9 +212,10 @@ impl ExchangeRateService {
 
     /// Consume a locked rate (mark as used)
     pub fn consume_locked_rate(&self, locked_rate_id: &str) -> Result<LockedRate> {
-        let mut locks = self.locked_rates.lock().map_err(|_| {
-            Error::Internal("Failed to acquire locked_rates lock".to_string())
-        })?;
+        let mut locks = self
+            .locked_rates
+            .lock()
+            .map_err(|_| Error::Internal("Failed to acquire locked_rates lock".to_string()))?;
 
         match locks.get_mut(locked_rate_id) {
             Some(locked) => {
@@ -254,9 +260,9 @@ impl ExchangeRateService {
 
         // Determine spread based on asset
         let spread = match asset {
-            CryptoSymbol::BTC | CryptoSymbol::ETH => Decimal::new(2, 3),  // 0.2%
+            CryptoSymbol::BTC | CryptoSymbol::ETH => Decimal::new(2, 3), // 0.2%
             CryptoSymbol::USDT | CryptoSymbol::USDC => Decimal::new(1, 3), // 0.1%
-            _ => Decimal::new(3, 3), // 0.3%
+            _ => Decimal::new(3, 3),                                     // 0.3%
         };
 
         let spread_amount = vwap * spread;
@@ -277,12 +283,12 @@ impl ExchangeRateService {
     fn get_simulated_sources(&self, asset: CryptoSymbol) -> Result<Vec<PriceSource>> {
         // Simulated prices in VND
         let base_price = match asset {
-            CryptoSymbol::BTC => Decimal::new(2_500_000_000, 0),    // 2.5 billion VND
-            CryptoSymbol::ETH => Decimal::new(80_000_000, 0),       // 80 million VND
-            CryptoSymbol::USDT => Decimal::new(25_400, 0),          // 25,400 VND
-            CryptoSymbol::USDC => Decimal::new(25_380, 0),          // 25,380 VND
-            CryptoSymbol::BNB => Decimal::new(15_000_000, 0),       // 15 million VND
-            CryptoSymbol::SOL => Decimal::new(5_500_000, 0),        // 5.5 million VND
+            CryptoSymbol::BTC => Decimal::new(2_500_000_000, 0), // 2.5 billion VND
+            CryptoSymbol::ETH => Decimal::new(80_000_000, 0),    // 80 million VND
+            CryptoSymbol::USDT => Decimal::new(25_400, 0),       // 25,400 VND
+            CryptoSymbol::USDC => Decimal::new(25_380, 0),       // 25,380 VND
+            CryptoSymbol::BNB => Decimal::new(15_000_000, 0),    // 15 million VND
+            CryptoSymbol::SOL => Decimal::new(5_500_000, 0),     // 5.5 million VND
             CryptoSymbol::Other => {
                 return Err(Error::Validation("Unsupported asset: OTHER".to_string()));
             }
@@ -310,9 +316,10 @@ impl ExchangeRateService {
 
     /// Clear expired locks (maintenance)
     pub fn cleanup_expired_locks(&self) -> Result<usize> {
-        let mut locks = self.locked_rates.lock().map_err(|_| {
-            Error::Internal("Failed to acquire locked_rates lock".to_string())
-        })?;
+        let mut locks = self
+            .locked_rates
+            .lock()
+            .map_err(|_| Error::Internal("Failed to acquire locked_rates lock".to_string()))?;
         let now = Utc::now();
         let before = locks.len();
         locks.retain(|_, v| now < v.expires_at);
@@ -400,9 +407,7 @@ mod tests {
     #[test]
     fn test_lock_rate() {
         let service = ExchangeRateService::new();
-        let locked = service
-            .lock_rate(CryptoSymbol::BTC, "VND", 60)
-            .unwrap();
+        let locked = service.lock_rate(CryptoSymbol::BTC, "VND", 60).unwrap();
 
         assert!(locked.id.starts_with("lr_"));
         assert!(!locked.consumed);
@@ -412,9 +417,7 @@ mod tests {
     #[test]
     fn test_is_rate_valid() {
         let service = ExchangeRateService::new();
-        let locked = service
-            .lock_rate(CryptoSymbol::BTC, "VND", 60)
-            .unwrap();
+        let locked = service.lock_rate(CryptoSymbol::BTC, "VND", 60).unwrap();
 
         assert!(service.is_rate_valid(&locked.id).unwrap());
         assert!(!service.is_rate_valid("nonexistent").unwrap());
@@ -438,9 +441,7 @@ mod tests {
     #[test]
     fn test_consume_locked_rate() {
         let service = ExchangeRateService::new();
-        let locked = service
-            .lock_rate(CryptoSymbol::ETH, "VND", 60)
-            .unwrap();
+        let locked = service.lock_rate(CryptoSymbol::ETH, "VND", 60).unwrap();
 
         let consumed = service.consume_locked_rate(&locked.id).unwrap();
         assert!(consumed.consumed);
@@ -453,9 +454,7 @@ mod tests {
     #[test]
     fn test_consume_expired_rate() {
         let service = ExchangeRateService::new();
-        let locked = service
-            .lock_rate(CryptoSymbol::BTC, "VND", 1)
-            .unwrap();
+        let locked = service.lock_rate(CryptoSymbol::BTC, "VND", 1).unwrap();
 
         thread::sleep(StdDuration::from_millis(1100));
 
@@ -466,9 +465,7 @@ mod tests {
     #[test]
     fn test_get_locked_rate() {
         let service = ExchangeRateService::new();
-        let locked = service
-            .lock_rate(CryptoSymbol::USDT, "VND", 60)
-            .unwrap();
+        let locked = service.lock_rate(CryptoSymbol::USDT, "VND", 60).unwrap();
 
         let retrieved = service.get_locked_rate(&locked.id).unwrap();
         assert!(retrieved.is_some());

@@ -96,8 +96,14 @@ impl KycService {
     ) -> StorageResult<String> {
         // Cap presigned URL expiry to 1 hour maximum to limit exposure
         const MAX_EXPIRY: std::time::Duration = std::time::Duration::from_secs(3600);
-        let capped_expiry = if expiry > MAX_EXPIRY { MAX_EXPIRY } else { expiry };
-        self.storage.generate_presigned_url(url, capped_expiry).await
+        let capped_expiry = if expiry > MAX_EXPIRY {
+            MAX_EXPIRY
+        } else {
+            expiry
+        };
+        self.storage
+            .generate_presigned_url(url, capped_expiry)
+            .await
     }
 
     /// Submit KYC verification

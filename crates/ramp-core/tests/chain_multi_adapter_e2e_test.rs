@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use ramp_core::chain::{
     Chain, ChainAbstractionLayer, ChainError, ChainId, ChainInfo, ChainRegistry, ChainType,
-    EvmChain, EvmChainConfig, SolanaChain, SolanaChainConfig, TonChain,
-    TonChainConfig, Transaction, TxHash, UnifiedAddress,
+    EvmChain, EvmChainConfig, SolanaChain, SolanaChainConfig, TonChain, TonChainConfig,
+    Transaction, TxHash, UnifiedAddress,
 };
 
 // ---------------------------------------------------------------------------
@@ -188,18 +188,16 @@ fn test_ton_user_friendly_address_validation() {
 #[test]
 fn test_ton_masterchain_address() {
     let chain = make_ton_mainnet();
-    let result = chain.validate_address(
-        "-1:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8",
-    );
+    let result = chain
+        .validate_address("-1:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8");
     assert!(result.is_ok());
 }
 
 #[test]
 fn test_ton_address_invalid_workchain() {
     let chain = make_ton_mainnet();
-    let result = chain.validate_address(
-        "2:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8",
-    );
+    let result = chain
+        .validate_address("2:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8");
     assert!(result.is_err());
 }
 
@@ -236,7 +234,11 @@ fn test_chain_registry_get_or_error() {
     let result = registry.get_or_error(ChainId::ETHEREUM);
     assert!(result.is_err());
     let err_msg = format!("{}", result.err().unwrap());
-    assert!(err_msg.contains("1"), "Error should contain chain id '1', got: {}", err_msg);
+    assert!(
+        err_msg.contains("1"),
+        "Error should contain chain id '1', got: {}",
+        err_msg
+    );
 }
 
 #[test]
@@ -291,17 +293,27 @@ fn test_chain_abstraction_layer_validate_address_cross_chain() {
     cal.register(Arc::new(make_ton_mainnet()));
 
     // EVM address on Ethereum chain
-    assert!(cal.validate_address(ChainId::ETHEREUM, VALID_EVM_ADDR).is_ok());
+    assert!(cal
+        .validate_address(ChainId::ETHEREUM, VALID_EVM_ADDR)
+        .is_ok());
 
     // Solana address on Solana chain
-    assert!(cal.validate_address(ChainId::SOLANA_MAINNET, VALID_SOLANA_ADDR).is_ok());
+    assert!(cal
+        .validate_address(ChainId::SOLANA_MAINNET, VALID_SOLANA_ADDR)
+        .is_ok());
 
     // TON address on TON chain
-    assert!(cal.validate_address(ChainId::TON_MAINNET, VALID_TON_RAW_ADDR).is_ok());
+    assert!(cal
+        .validate_address(ChainId::TON_MAINNET, VALID_TON_RAW_ADDR)
+        .is_ok());
 
     // Wrong address format on wrong chain should fail
-    assert!(cal.validate_address(ChainId::ETHEREUM, VALID_SOLANA_ADDR).is_err());
-    assert!(cal.validate_address(ChainId::SOLANA_MAINNET, VALID_EVM_ADDR).is_err());
+    assert!(cal
+        .validate_address(ChainId::ETHEREUM, VALID_SOLANA_ADDR)
+        .is_err());
+    assert!(cal
+        .validate_address(ChainId::SOLANA_MAINNET, VALID_EVM_ADDR)
+        .is_err());
 }
 
 #[test]

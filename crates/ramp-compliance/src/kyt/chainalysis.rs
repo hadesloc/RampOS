@@ -189,13 +189,12 @@ impl ChainalysisKytProvider {
                         )));
                     }
 
-                    let alerts: AlertsResponse =
-                        alerts_response.json().await.map_err(|e| {
-                            ramp_common::Error::Internal(format!(
-                                "Failed to parse Chainalysis alerts response: {}",
-                                e
-                            ))
-                        })?;
+                    let alerts: AlertsResponse = alerts_response.json().await.map_err(|e| {
+                        ramp_common::Error::Internal(format!(
+                            "Failed to parse Chainalysis alerts response: {}",
+                            e
+                        ))
+                    })?;
 
                     Ok(alerts)
                 }
@@ -304,8 +303,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let provider =
-            ChainalysisKytProvider::new("test-key".to_string(), Some(mock_server.uri()));
+        let provider = ChainalysisKytProvider::new("test-key".to_string(), Some(mock_server.uri()));
         let address = WalletAddress("0x1234567890abcdef".to_string());
         let result = provider
             .check_address(&address, "ethereum")
@@ -344,8 +342,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let provider =
-            ChainalysisKytProvider::new("test-key".to_string(), Some(mock_server.uri()));
+        let provider = ChainalysisKytProvider::new("test-key".to_string(), Some(mock_server.uri()));
         let address = WalletAddress("0xbadaddress".to_string());
         let result = provider
             .check_address(&address, "ethereum")
@@ -384,8 +381,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let provider =
-            ChainalysisKytProvider::new("test-key".to_string(), Some(mock_server.uri()));
+        let provider = ChainalysisKytProvider::new("test-key".to_string(), Some(mock_server.uri()));
         let address = WalletAddress("0xsuspicious".to_string());
         let result = provider
             .check_address(&address, "ethereum")
@@ -406,8 +402,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let provider =
-            ChainalysisKytProvider::new("bad-key".to_string(), Some(mock_server.uri()));
+        let provider = ChainalysisKytProvider::new("bad-key".to_string(), Some(mock_server.uri()));
         let address = WalletAddress("0x123".to_string());
         let result = provider.check_address(&address, "ethereum").await;
 
@@ -416,10 +411,22 @@ mod tests {
 
     #[test]
     fn test_chain_mapping() {
-        assert_eq!(ChainalysisKytProvider::map_chain_to_network("eth"), "Ethereum");
-        assert_eq!(ChainalysisKytProvider::map_chain_to_network("btc"), "Bitcoin");
-        assert_eq!(ChainalysisKytProvider::map_chain_to_network("polygon"), "Polygon");
+        assert_eq!(
+            ChainalysisKytProvider::map_chain_to_network("eth"),
+            "Ethereum"
+        );
+        assert_eq!(
+            ChainalysisKytProvider::map_chain_to_network("btc"),
+            "Bitcoin"
+        );
+        assert_eq!(
+            ChainalysisKytProvider::map_chain_to_network("polygon"),
+            "Polygon"
+        );
         assert_eq!(ChainalysisKytProvider::map_chain_to_network("base"), "Base");
-        assert_eq!(ChainalysisKytProvider::map_chain_to_network("unknown"), "unknown");
+        assert_eq!(
+            ChainalysisKytProvider::map_chain_to_network("unknown"),
+            "unknown"
+        );
     }
 }

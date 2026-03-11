@@ -40,6 +40,35 @@ Rate limit headers are included in responses:
 - `X-RateLimit-Remaining`: Remaining requests
 - `X-RateLimit-Reset`: Reset timestamp
 
+## Event Catalog Contract
+
+RampOS currently exposes webhook-compatible event names through a stable `v1` catalog. The current public event set is:
+
+| Event Name | Version | Wrapper | Notes |
+|------------|---------|---------|-------|
+| `intent.status.changed` | `v1` | `webhook_event` | Intent lifecycle updates |
+| `risk.review.required` | `v1` | `webhook_event` | Risk/compliance review entry |
+| `kyc.flagged` | `v1` | `webhook_event` | KYC issue notification |
+| `recon.batch.ready` | `v1` | `webhook_event` | Reconciliation batch completion |
+
+### Wrapper Semantics
+
+Current cataloged webhook payloads use this envelope:
+
+```json
+{
+  "id": "evt_abc123def456",
+  "type": "intent.status.changed",
+  "created_at": "2026-01-23T10:15:00Z",
+  "data": {
+    "intentId": "intent_pi_abc123",
+    "newStatus": "FUNDS_CONFIRMED"
+  }
+}
+```
+
+The field paths under `data` are part of the contract. Current examples include `data.intentId`, `data.newStatus`, `data.userId`, and `data.batchId`.
+
 ## Endpoints
 
 ### Health Check

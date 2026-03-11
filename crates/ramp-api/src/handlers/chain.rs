@@ -273,15 +273,15 @@ pub async fn get_bridge_quote(
     }
 
     // Validate chains exist via registry
-    let source_info = ChainRegistryConfig::get_chain_info(request.source_chain_id)
-        .ok_or_else(|| {
+    let source_info =
+        ChainRegistryConfig::get_chain_info(request.source_chain_id).ok_or_else(|| {
             ApiError::NotFound(format!(
                 "Source chain {} not supported",
                 request.source_chain_id
             ))
         })?;
-    let dest_info = ChainRegistryConfig::get_chain_info(request.destination_chain_id)
-        .ok_or_else(|| {
+    let dest_info =
+        ChainRegistryConfig::get_chain_info(request.destination_chain_id).ok_or_else(|| {
             ApiError::NotFound(format!(
                 "Destination chain {} not supported",
                 request.destination_chain_id
@@ -390,9 +390,7 @@ pub async fn initiate_bridge(
 
     // Validate quote_id format
     if request.quote_id.trim().is_empty() {
-        return Err(ApiError::BadRequest(
-            "quote_id cannot be empty".to_string(),
-        ));
+        return Err(ApiError::BadRequest("quote_id cannot be empty".to_string()));
     }
     if !request.quote_id.starts_with("quote_") {
         return Err(ApiError::BadRequest(
@@ -401,15 +399,15 @@ pub async fn initiate_bridge(
     }
 
     // Validate chains exist via registry
-    let source_info = ChainRegistryConfig::get_chain_info(request.source_chain_id)
-        .ok_or_else(|| {
+    let source_info =
+        ChainRegistryConfig::get_chain_info(request.source_chain_id).ok_or_else(|| {
             ApiError::NotFound(format!(
                 "Source chain {} not supported",
                 request.source_chain_id
             ))
         })?;
-    let _dest_info = ChainRegistryConfig::get_chain_info(request.destination_chain_id)
-        .ok_or_else(|| {
+    let _dest_info =
+        ChainRegistryConfig::get_chain_info(request.destination_chain_id).ok_or_else(|| {
             ApiError::NotFound(format!(
                 "Destination chain {} not supported",
                 request.destination_chain_id
@@ -574,10 +572,7 @@ impl ChainRegistryConfig {
 
     /// Estimate bridge parameters based on source/destination chain types.
     /// Returns (bridge_fee_bps, gas_estimate, estimated_time_seconds).
-    pub fn estimate_bridge_params(
-        source: &ChainInfo,
-        dest: &ChainInfo,
-    ) -> (u64, f64, u64) {
+    pub fn estimate_bridge_params(source: &ChainInfo, dest: &ChainInfo) -> (u64, f64, u64) {
         // Bridge fee in basis points varies by route
         let bridge_fee_bps = match (&source.chain_type, &dest.chain_type) {
             // EVM <-> EVM: cheapest, well-established bridges
@@ -594,19 +589,19 @@ impl ChainRegistryConfig {
 
         // Estimated gas cost (in source chain's smallest unit)
         let gas_estimate = match source.chain_type {
-            ChainType::Evm => 50000.0, // ~50k gas units
-            ChainType::Solana => 5000.0, // ~5000 lamports
+            ChainType::Evm => 50000.0,    // ~50k gas units
+            ChainType::Solana => 5000.0,  // ~5000 lamports
             ChainType::Ton => 10000000.0, // ~0.01 TON in nanotons
         };
 
         // Estimated time in seconds
         let estimated_time = match (&source.chain_type, &dest.chain_type) {
-            (ChainType::Evm, ChainType::Evm) => 300,     // 5 min
+            (ChainType::Evm, ChainType::Evm) => 300, // 5 min
             (ChainType::Evm, ChainType::Solana) | (ChainType::Solana, ChainType::Evm) => 600, // 10 min
             (ChainType::Evm, ChainType::Ton) | (ChainType::Ton, ChainType::Evm) => 900, // 15 min
-            (ChainType::Solana, ChainType::Solana) => 60,  // 1 min
-            (ChainType::Ton, ChainType::Ton) => 120,       // 2 min
-            _ => 600,                                       // 10 min default
+            (ChainType::Solana, ChainType::Solana) => 60,                               // 1 min
+            (ChainType::Ton, ChainType::Ton) => 120,                                    // 2 min
+            _ => 600, // 10 min default
         };
 
         (bridge_fee_bps, gas_estimate, estimated_time)
@@ -652,7 +647,10 @@ mod tests {
     #[test]
     fn test_registry_config_default_chains() {
         let chains = ChainRegistryConfig::default_chain_infos();
-        assert!(chains.len() >= 8, "Should have at least 8 chains (6 EVM + Solana + TON)");
+        assert!(
+            chains.len() >= 8,
+            "Should have at least 8 chains (6 EVM + Solana + TON)"
+        );
 
         // Verify Ethereum is included
         let eth = chains.iter().find(|c| c.chain_id == 1).unwrap();

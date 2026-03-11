@@ -17,6 +17,9 @@ use crate::repository::{
     webhook::{WebhookEventRow, WebhookRepository},
 };
 use crate::service::crypto::CryptoService;
+use crate::service::event_catalog::{EventCatalog, EventCatalogEntry};
+use crate::service::incident_timeline::IncidentTimelineEntry;
+use crate::service::replay::ReplayTimelineEntry;
 
 /// Webhook event types
 #[derive(Debug, Clone)]
@@ -35,6 +38,46 @@ impl std::fmt::Display for WebhookEventType {
             WebhookEventType::KycFlagged => write!(f, "kyc.flagged"),
             WebhookEventType::ReconBatchReady => write!(f, "recon.batch.ready"),
         }
+    }
+}
+
+impl WebhookEventType {
+    pub fn catalog_entry(&self) -> Result<EventCatalogEntry> {
+        let event_name = self.to_string();
+        EventCatalog::current()
+            .find(&event_name)
+            .cloned()
+            .ok_or_else(|| {
+                ramp_common::Error::Validation(format!(
+                    "Webhook event '{}' is not registered in the event catalog",
+                    event_name
+                ))
+            })
+    }
+}
+
+pub(crate) fn build_catalog_payload(event: &WebhookEventRow) -> Result<serde_json::Value> {
+    let catalog_entry = EventCatalog::current()
+        .find(&event.event_type)
+        .cloned()
+        .ok_or_else(|| {
+            ramp_common::Error::Validation(format!(
+                "Webhook event '{}' is not registered in the event catalog",
+                event.event_type
+            ))
+        })?;
+
+    match catalog_entry.payload_wrapper.as_str() {
+        "webhook_event" => Ok(serde_json::json!({
+            "id": event.id,
+            "type": event.event_type,
+            "created_at": event.created_at.to_rfc3339(),
+            "data": event.payload,
+        })),
+        other => Err(ramp_common::Error::Validation(format!(
+            "Unsupported payload wrapper '{}' for webhook event '{}'",
+            other, event.event_type
+        ))),
     }
 }
 
@@ -68,7 +111,12 @@ impl WebhookService {
             http_client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
                 .build()
-                .map_err(|e| ramp_common::Error::Internal(format!("Failed to create webhook HTTP client: {}", e)))?,
+                .map_err(|e| {
+                    ramp_common::Error::Internal(format!(
+                        "Failed to create webhook HTTP client: {}",
+                        e
+                    ))
+                })?,
         })
     }
 
@@ -91,7 +139,12 @@ impl WebhookService {
             http_client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
                 .build()
-                .map_err(|e| ramp_common::Error::Internal(format!("Failed to create webhook HTTP client: {}", e)))?,
+                .map_err(|e| {
+                    ramp_common::Error::Internal(format!(
+                        "Failed to create webhook HTTP client: {}",
+                        e
+                    ))
+                })?,
         })
     }
 
@@ -103,13 +156,14 @@ impl WebhookService {
         intent_id: Option<&IntentId>,
         payload: serde_json::Value,
     ) -> Result<EventId> {
+        let catalog_entry = event_type.catalog_entry()?;
         let event_id = EventId::new();
         let now = Utc::now();
 
         let event_row = WebhookEventRow {
             id: event_id.0.clone(),
             tenant_id: tenant_id.0.clone(),
-            event_type: event_type.to_string(),
+            event_type: catalog_entry.event_name,
             intent_id: intent_id.map(|id| id.0.clone()),
             payload,
             status: "PENDING".to_string(),
@@ -170,6 +224,7 @@ impl WebhookService {
         let webhook_url = tenant
             .webhook_url
             .ok_or_else(|| ramp_common::Error::Internal("No webhook URL configured".into()))?;
+        crate::service::onboarding::validate_webhook_url(&webhook_url)?;
 
         // SECURITY FIX: Use the encrypted webhook secret, not the hash
         // The hash should only be used for verification, not for HMAC signing
@@ -179,37 +234,27 @@ impl WebhookService {
                 "Webhook secret not configured. Please update tenant with encrypted webhook secret.".into()
             ))?;
 
-        // Decrypt the webhook secret if CryptoService is available.
-        // The encrypted blob format is: nonce (12 bytes) || ciphertext.
-        // If no CryptoService is configured, use the raw bytes as the HMAC key
-        // (backward-compatible with unencrypted secrets).
-        let webhook_secret = if let Some(ref crypto) = self.crypto_service {
-            if webhook_secret_encrypted.len() <= 12 {
-                return Err(ramp_common::Error::Encryption(
-                    "Encrypted webhook secret too short (must be nonce + ciphertext)".into()
-                ));
-            }
-            let (nonce, ciphertext) = webhook_secret_encrypted.split_at(12);
-            crypto.decrypt_secret(nonce, ciphertext)?
-        } else {
-            webhook_secret_encrypted
-        };
+        let webhook_secret = crate::service::crypto::decode_secret_from_storage(
+            &webhook_secret_encrypted,
+            "webhook secret",
+        )?;
 
         // Build webhook payload
-        let payload = serde_json::json!({
-            "id": event.id,
-            "type": event.event_type,
-            "created_at": event.created_at.to_rfc3339(),
-            "data": event.payload,
-        });
+        let payload = build_catalog_payload(event)?;
 
         let payload_bytes = serde_json::to_vec(&payload)
             .map_err(|e| ramp_common::Error::Internal(e.to_string()))?;
 
         // Generate signature using the decrypted secret
         let timestamp = Utc::now().timestamp();
-        let signature = ramp_common::crypto::generate_webhook_signature(&webhook_secret, timestamp, &payload_bytes)
-            .map_err(|e| ramp_common::Error::Internal(format!("Failed to generate signature: {}", e)))?;
+        let signature = ramp_common::crypto::generate_webhook_signature(
+            &webhook_secret,
+            timestamp,
+            &payload_bytes,
+        )
+        .map_err(|e| {
+            ramp_common::Error::Internal(format!("Failed to generate signature: {}", e))
+        })?;
 
         // Send request
         let response = self
@@ -267,7 +312,12 @@ impl WebhookService {
 
     /// Schedule a retry with exponential backoff
     #[allow(dead_code)]
-    pub(crate) async fn schedule_retry(&self, event_id: &EventId, error: &str, attempts: i32) -> Result<()> {
+    pub(crate) async fn schedule_retry(
+        &self,
+        event_id: &EventId,
+        error: &str,
+        attempts: i32,
+    ) -> Result<()> {
         let max_attempts = 10;
 
         if attempts >= max_attempts {
@@ -310,6 +360,44 @@ impl WebhookService {
             .await
     }
 
+    /// Build replay-ready timeline entries for an intent using queued/delivered webhook records.
+    pub async fn replay_timeline_entries_for_intent(
+        &self,
+        tenant_id: &TenantId,
+        intent_id: &IntentId,
+    ) -> Result<Vec<ReplayTimelineEntry>> {
+        let events = self.get_events_by_intent(tenant_id, intent_id).await?;
+        Ok(events
+            .into_iter()
+            .map(ReplayTimelineEntry::from_webhook_event)
+            .collect())
+    }
+
+    /// Build incident-timeline entries for an intent from existing webhook records.
+    pub async fn incident_timeline_entries_for_intent(
+        &self,
+        tenant_id: &TenantId,
+        intent_id: &IntentId,
+    ) -> Result<Vec<IncidentTimelineEntry>> {
+        let events = self.get_events_by_intent(tenant_id, intent_id).await?;
+        Ok(events
+            .into_iter()
+            .map(IncidentTimelineEntry::from_webhook_event)
+            .collect())
+    }
+
+    /// Build a single incident-timeline entry for a webhook event lookup.
+    pub async fn incident_timeline_entry_for_event(
+        &self,
+        tenant_id: &TenantId,
+        event_id: &str,
+    ) -> Result<Option<IncidentTimelineEntry>> {
+        Ok(self
+            .get_event(tenant_id, event_id)
+            .await?
+            .map(IncidentTimelineEntry::from_webhook_event))
+    }
+
     /// List webhook events
     pub async fn list_events(
         &self,
@@ -317,7 +405,9 @@ impl WebhookService {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<WebhookEventRow>> {
-        self.webhook_repo.list_events(tenant_id, limit, offset).await
+        self.webhook_repo
+            .list_events(tenant_id, limit, offset)
+            .await
     }
 
     /// Get a specific webhook event

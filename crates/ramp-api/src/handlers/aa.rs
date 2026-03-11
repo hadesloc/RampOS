@@ -1,10 +1,10 @@
 //! Account Abstraction (ERC-4337) API Handlers
 
+use alloy::primitives::{Address, Bytes, B256, U256};
 use axum::{
     extract::{Extension, Path, State},
     Json,
 };
-use alloy::primitives::{Address, Bytes, B256, U256};
 use std::sync::Arc;
 use tracing::{info, instrument, warn};
 
@@ -103,8 +103,10 @@ impl AAServiceState {
             }
         };
 
-        let paymaster_service = Arc::new(PaymasterService::new(paymaster_address, signer_key)
-            .map_err(|e| anyhow::anyhow!("Failed to create paymaster service: {}", e))?);
+        let paymaster_service = Arc::new(
+            PaymasterService::new(paymaster_address, signer_key)
+                .map_err(|e| anyhow::anyhow!("Failed to create paymaster service: {}", e))?,
+        );
 
         Ok(Self {
             smart_account_service,
@@ -143,7 +145,10 @@ impl AAServiceState {
         let mut signer_key = vec![0u8; 32];
         signer_key[31] = 1;
 
-        let paymaster_service = Arc::new(PaymasterService::new(paymaster_address, signer_key).expect("Failed to create test paymaster service"));
+        let paymaster_service = Arc::new(
+            PaymasterService::new(paymaster_address, signer_key)
+                .expect("Failed to create test paymaster service"),
+        );
 
         Self {
             smart_account_service,
@@ -945,11 +950,7 @@ mod tests {
 
     #[test]
     fn test_convert_user_op_to_dto() {
-        let op = UserOperation::new(
-            Address::ZERO,
-            U256::from(1),
-            Bytes::from(vec![0x12, 0x34]),
-        );
+        let op = UserOperation::new(Address::ZERO, U256::from(1), Bytes::from(vec![0x12, 0x34]));
 
         let dto = convert_user_op_to_dto(&op);
         assert_eq!(dto.sender, "0x0000000000000000000000000000000000000000");

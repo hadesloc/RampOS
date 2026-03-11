@@ -108,7 +108,7 @@ impl MpcSigningService {
 
         let request = SigningRequest {
             message_hash: message_hash.clone(),
-            requester_party_id: 1, // Default requester is party 1
+            requester_party_id: 1,        // Default requester is party 1
             approval_parties: vec![2, 3], // Request approval from other parties
         };
 
@@ -133,8 +133,7 @@ impl MpcSigningService {
 
         info!(
             session_id = session_id.as_str(),
-            user_id,
-            "Created signing session"
+            user_id, "Created signing session"
         );
 
         Ok(session)
@@ -150,9 +149,9 @@ impl MpcSigningService {
         partial_sig: Vec<u8>,
     ) -> ramp_common::Result<SigningSession> {
         let mut sessions = self.sessions.lock().unwrap();
-        let session = sessions
-            .get_mut(session_id)
-            .ok_or_else(|| ramp_common::Error::NotFound(format!("Signing session not found: {}", session_id)))?;
+        let session = sessions.get_mut(session_id).ok_or_else(|| {
+            ramp_common::Error::NotFound(format!("Signing session not found: {}", session_id))
+        })?;
 
         // Validate session state
         if session.status != SigningSessionStatus::Pending {
@@ -208,14 +207,11 @@ impl MpcSigningService {
     /// Requires the session to be in Approved status (threshold met).
     /// In production, this would use MPC signature combination.
     /// Here we simulate by hashing all partial signatures together with the message.
-    pub fn combine_signatures(
-        &self,
-        session_id: &str,
-    ) -> ramp_common::Result<Vec<u8>> {
+    pub fn combine_signatures(&self, session_id: &str) -> ramp_common::Result<Vec<u8>> {
         let mut sessions = self.sessions.lock().unwrap();
-        let session = sessions
-            .get_mut(session_id)
-            .ok_or_else(|| ramp_common::Error::NotFound(format!("Signing session not found: {}", session_id)))?;
+        let session = sessions.get_mut(session_id).ok_or_else(|| {
+            ramp_common::Error::NotFound(format!("Signing session not found: {}", session_id))
+        })?;
 
         if session.status != SigningSessionStatus::Approved {
             return Err(ramp_common::Error::Validation(format!(
@@ -247,14 +243,11 @@ impl MpcSigningService {
     }
 
     /// Reject a signing session.
-    pub fn reject_signing(
-        &self,
-        session_id: &str,
-    ) -> ramp_common::Result<SigningSession> {
+    pub fn reject_signing(&self, session_id: &str) -> ramp_common::Result<SigningSession> {
         let mut sessions = self.sessions.lock().unwrap();
-        let session = sessions
-            .get_mut(session_id)
-            .ok_or_else(|| ramp_common::Error::NotFound(format!("Signing session not found: {}", session_id)))?;
+        let session = sessions.get_mut(session_id).ok_or_else(|| {
+            ramp_common::Error::NotFound(format!("Signing session not found: {}", session_id))
+        })?;
 
         if session.status == SigningSessionStatus::Signed {
             return Err(ramp_common::Error::Validation(
@@ -287,11 +280,7 @@ impl MpcSigningService {
     }
 
     /// Generate a simulated partial signature for a party.
-    fn generate_partial_signature(
-        &self,
-        party_id: u8,
-        message_hash: &[u8],
-    ) -> PartialSignature {
+    fn generate_partial_signature(&self, party_id: u8, message_hash: &[u8]) -> PartialSignature {
         let mut hasher = Sha256::new();
         hasher.update(&[party_id]);
         hasher.update(message_hash);

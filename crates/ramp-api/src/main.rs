@@ -1,7 +1,7 @@
 //! RampOS Server - Main binary
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::{info, warn};
 
@@ -71,11 +71,8 @@ async fn main() -> anyhow::Result<()> {
     // Create event publisher via config-driven factory.
     // Respects EVENT_PUBLISHER env var (accepted: "nats", "memory").
     // Rejects in-memory publisher when running in production mode.
-    let event_publisher = providers::build_event_publisher(
-        &config.nats.url,
-        &config.nats.stream_name,
-    )
-    .await?;
+    let event_publisher =
+        providers::build_event_publisher(&config.nats.url, &config.nats.stream_name).await?;
 
     // Create services (with_pool for atomic cross-repo transactions)
     let payin_service = Arc::new(PayinService::with_pool(
@@ -239,7 +236,6 @@ async fn main() -> anyhow::Result<()> {
         event_publisher: event_publisher.clone(),
     };
 
-
     // Graceful shutdown flag
     let shutdown_flag = Arc::new(AtomicBool::new(false));
 
@@ -315,7 +311,10 @@ async fn main() -> anyhow::Result<()> {
             .await
             {
                 Ok(result) if result.rows_affected() > 0 => {
-                    info!(expired = result.rows_affected(), "RFQ expiry job: expired RFQs");
+                    info!(
+                        expired = result.rows_affected(),
+                        "RFQ expiry job: expired RFQs"
+                    );
                 }
                 Err(e) => {
                     tracing::error!(error = %e, "RFQ expiry job failed");
@@ -325,7 +324,6 @@ async fn main() -> anyhow::Result<()> {
             tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
         }
     });
-
 
     // Graceful shutdown signal handler
     let shutdown_flag_signal = shutdown_flag.clone();

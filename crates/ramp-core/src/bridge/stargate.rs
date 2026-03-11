@@ -7,9 +7,9 @@
 //! and the LayerZero Scan API for status tracking, with fallback to
 //! hardcoded estimates when the APIs are unreachable.
 
+use alloy::primitives::{Address, U256};
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
-use alloy::primitives::{Address, U256};
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use tracing;
@@ -196,10 +196,7 @@ impl StargateBridge {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            return Err(format!(
-                "Stargate API returned HTTP {}: {}",
-                status, body
-            ));
+            return Err(format!("Stargate API returned HTTP {}: {}", status, body));
         }
 
         resp.json::<StargateQuoteResponse>()
@@ -237,7 +234,12 @@ impl StargateBridge {
 
     /// Calculate bridge fee using hardcoded fallback values.
     /// Used when the Stargate API is unreachable.
-    fn calculate_fee_fallback(&self, _from_chain: ChainId, _to_chain: ChainId, amount: U256) -> U256 {
+    fn calculate_fee_fallback(
+        &self,
+        _from_chain: ChainId,
+        _to_chain: ChainId,
+        amount: U256,
+    ) -> U256 {
         // Stargate typically charges ~0.06% fee
         // For fallback: 6 basis points
         amount * U256::from(6) / U256::from(10000)
@@ -246,11 +248,11 @@ impl StargateBridge {
     /// Estimate gas cost using hardcoded fallback values (in 6-decimal USD).
     fn estimate_gas_fallback(&self, from_chain: ChainId, to_chain: ChainId) -> U256 {
         let base_gas = match from_chain {
-            1 => U256::from(5_000_000u64),     // $5 on Ethereum
-            42161 => U256::from(100_000u64),   // $0.10 on Arbitrum
-            8453 => U256::from(50_000u64),     // $0.05 on Base
-            10 => U256::from(100_000u64),      // $0.10 on Optimism
-            137 => U256::from(10_000u64),      // $0.01 on Polygon
+            1 => U256::from(5_000_000u64),   // $5 on Ethereum
+            42161 => U256::from(100_000u64), // $0.10 on Arbitrum
+            8453 => U256::from(50_000u64),   // $0.05 on Base
+            10 => U256::from(100_000u64),    // $0.10 on Optimism
+            137 => U256::from(10_000u64),    // $0.01 on Polygon
             _ => U256::from(500_000u64),
         };
 
@@ -330,52 +332,59 @@ impl CrossChainBridge for StargateBridge {
             .ok_or_else(|| Error::Validation("Destination chain not supported".to_string()))?;
 
         // Try to fetch real quote from the Stargate API, fall back to hardcoded values
-        let (bridge_fee, gas_fee, amount_out, estimated_time_secs) =
-            match self.fetch_quote(from_chain, to_chain, token, amount, recipient).await {
-                Ok(api_resp) => {
-                    tracing::info!(
-                        "Stargate API returned quote for {} -> {} (token {:?}, amount {})",
-                        from_chain,
-                        to_chain,
-                        token,
-                        amount,
+        let (bridge_fee, gas_fee, amount_out, estimated_time_secs) = match self
+            .fetch_quote(from_chain, to_chain, token, amount, recipient)
+            .await
+        {
+            Ok(api_resp) => {
+                tracing::info!(
+                    "Stargate API returned quote for {} -> {} (token {:?}, amount {})",
+                    from_chain,
+                    to_chain,
+                    token,
+                    amount,
+                );
+
+                if !api_resp.available {
+                    return Err(Error::Validation(format!(
+                        "Stargate route unavailable: {}",
+                        api_resp
+                            .error
+                            .unwrap_or_else(|| "unknown reason".to_string())
+                    )));
+                }
+
+                // Parse fees from the API response
+                let stargate_fee = api_resp.stargate_fee.parse::<U256>().unwrap_or_else(|_| {
+                    tracing::warn!(
+                        "Failed to parse Stargate fee '{}', using fallback",
+                        api_resp.stargate_fee
                     );
+                    self.calculate_fee_fallback(from_chain, to_chain, amount)
+                });
 
-                    if !api_resp.available {
-                        return Err(Error::Validation(format!(
-                            "Stargate route unavailable: {}",
-                            api_resp.error.unwrap_or_else(|| "unknown reason".to_string())
-                        )));
-                    }
+                // LZ messaging fee is in native gas, convert to approximate USD
+                // For simplicity we treat it as a gas overhead estimate
+                let lz_fee = api_resp
+                    .lz_fee
+                    .parse::<U256>()
+                    .unwrap_or_else(|_| self.estimate_gas_fallback(from_chain, to_chain));
+                // Cap gas fee to a reasonable USD-denominated value (6 decimals)
+                // If the raw value is in wei (18 decimals), scale down
+                let gas_fee = if lz_fee > U256::from(100_000_000u64) {
+                    // Likely in wei -- use fallback since precise conversion
+                    // requires a price oracle
+                    self.estimate_gas_fallback(from_chain, to_chain)
+                } else {
+                    lz_fee
+                };
 
-                    // Parse fees from the API response
-                    let stargate_fee =
-                        api_resp.stargate_fee.parse::<U256>().unwrap_or_else(|_| {
-                            tracing::warn!(
-                                "Failed to parse Stargate fee '{}', using fallback",
-                                api_resp.stargate_fee
-                            );
-                            self.calculate_fee_fallback(from_chain, to_chain, amount)
-                        });
-
-                    // LZ messaging fee is in native gas, convert to approximate USD
-                    // For simplicity we treat it as a gas overhead estimate
-                    let lz_fee = api_resp.lz_fee.parse::<U256>().unwrap_or_else(|_| {
-                        self.estimate_gas_fallback(from_chain, to_chain)
-                    });
-                    // Cap gas fee to a reasonable USD-denominated value (6 decimals)
-                    // If the raw value is in wei (18 decimals), scale down
-                    let gas_fee = if lz_fee > U256::from(100_000_000u64) {
-                        // Likely in wei -- use fallback since precise conversion
-                        // requires a price oracle
-                        self.estimate_gas_fallback(from_chain, to_chain)
-                    } else {
-                        lz_fee
-                    };
-
-                    // Parse amount received
-                    let amount_received =
-                        api_resp.amount_received.parse::<U256>().unwrap_or_else(|_| {
+                // Parse amount received
+                let amount_received =
+                    api_resp
+                        .amount_received
+                        .parse::<U256>()
+                        .unwrap_or_else(|_| {
                             if amount > stargate_fee {
                                 amount - stargate_fee
                             } else {
@@ -383,35 +392,39 @@ impl CrossChainBridge for StargateBridge {
                             }
                         });
 
-                    let est_time = if api_resp.estimated_time > 0 {
-                        api_resp.estimated_time
-                    } else {
-                        self.estimated_time(from_chain, to_chain)
-                    };
+                let est_time = if api_resp.estimated_time > 0 {
+                    api_resp.estimated_time
+                } else {
+                    self.estimated_time(from_chain, to_chain)
+                };
 
-                    (stargate_fee, gas_fee, amount_received, est_time)
-                }
-                Err(api_err) => {
-                    tracing::warn!(
-                        "Stargate API call failed, using fallback fees: {}",
-                        api_err
-                    );
+                (stargate_fee, gas_fee, amount_received, est_time)
+            }
+            Err(api_err) => {
+                tracing::warn!("Stargate API call failed, using fallback fees: {}", api_err);
 
-                    let bridge_fee = self.calculate_fee_fallback(from_chain, to_chain, amount);
-                    let gas_fee = self.estimate_gas_fallback(from_chain, to_chain);
-                    let amount_out = if amount > bridge_fee {
-                        amount - bridge_fee
-                    } else {
-                        U256::ZERO
-                    };
+                let bridge_fee = self.calculate_fee_fallback(from_chain, to_chain, amount);
+                let gas_fee = self.estimate_gas_fallback(from_chain, to_chain);
+                let amount_out = if amount > bridge_fee {
+                    amount - bridge_fee
+                } else {
+                    U256::ZERO
+                };
 
-                    (bridge_fee, gas_fee, amount_out, self.estimated_time(from_chain, to_chain))
-                }
-            };
+                (
+                    bridge_fee,
+                    gas_fee,
+                    amount_out,
+                    self.estimated_time(from_chain, to_chain),
+                )
+            }
+        };
 
         // Ensure amount_out is positive
         if amount_out.is_zero() {
-            return Err(Error::Validation("Amount too low to cover fees".to_string()));
+            return Err(Error::Validation(
+                "Amount too low to cover fees".to_string(),
+            ));
         }
 
         let execution_data = serde_json::json!({
@@ -471,10 +484,7 @@ impl CrossChainBridge for StargateBridge {
         //
         // Since on-chain submission requires a wallet/signer (handled at
         // a higher layer), we return a placeholder hash here.
-        let mock_tx_hash = format!(
-            "0x{:064x}",
-            Uuid::new_v4().as_u128()
-        );
+        let mock_tx_hash = format!("0x{:064x}", Uuid::new_v4().as_u128());
 
         tracing::info!(
             "Stargate bridge execution prepared for {} -> {} (amount: {})",
@@ -483,7 +493,9 @@ impl CrossChainBridge for StargateBridge {
             quote.amount,
         );
 
-        Ok(mock_tx_hash.parse().map_err(|_| Error::Internal("Failed to create tx hash".to_string()))?)
+        Ok(mock_tx_hash
+            .parse()
+            .map_err(|_| Error::Internal("Failed to create tx hash".to_string()))?)
     }
 
     async fn status(&self, tx_hash: TxHash) -> Result<BridgeStatus> {
@@ -495,9 +507,10 @@ impl CrossChainBridge for StargateBridge {
                         "DELIVERED" | "SUCCEEDED" => BridgeStatus::Completed,
                         "INFLIGHT" | "CONFIRMING" => BridgeStatus::InProgress,
                         "PENDING" | "CREATED" => BridgeStatus::Pending,
-                        "FAILED" | "BLOCKED" | "STORED" => {
-                            BridgeStatus::Failed(format!("LayerZero message status: {}", msg.status))
-                        }
+                        "FAILED" | "BLOCKED" | "STORED" => BridgeStatus::Failed(format!(
+                            "LayerZero message status: {}",
+                            msg.status
+                        )),
                         _ => BridgeStatus::InProgress,
                     };
                     return Ok(status);
@@ -525,9 +538,9 @@ impl CrossChainBridge for StargateBridge {
         // Stargate typically completes in 1-5 minutes
         // Slower for Ethereum mainnet as source/destination
         match (from_chain, to_chain) {
-            (1, _) => 180,     // 3 minutes from Ethereum
-            (_, 1) => 300,     // 5 minutes to Ethereum
-            _ => 60,           // 1 minute between L2s
+            (1, _) => 180, // 3 minutes from Ethereum
+            (_, 1) => 300, // 5 minutes to Ethereum
+            _ => 60,       // 1 minute between L2s
         }
     }
 }

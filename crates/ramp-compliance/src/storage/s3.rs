@@ -2,10 +2,7 @@ use super::{DocumentStorage, DocumentType, StorageError, StorageResult};
 use async_trait::async_trait;
 use aws_config::SdkConfig;
 use aws_sdk_s3::{
-    presigning::PresigningConfig,
-    primitives::ByteStream,
-    types::ServerSideEncryption,
-    Client,
+    presigning::PresigningConfig, primitives::ByteStream, types::ServerSideEncryption, Client,
 };
 use std::time::Duration;
 use tracing::info;
@@ -198,14 +195,21 @@ impl LocalFilesystemStorage {
         let filepath = self.base_dir.join(url);
         // Canonicalize to resolve any symlinks or remaining traversal
         // For non-existent files, check the parent directory
-        let canonical_base = self.base_dir.canonicalize().map_err(|_| StorageError::InvalidPath)?;
+        let canonical_base = self
+            .base_dir
+            .canonicalize()
+            .map_err(|_| StorageError::InvalidPath)?;
         let check_path = if filepath.exists() {
-            filepath.canonicalize().map_err(|_| StorageError::InvalidPath)?
+            filepath
+                .canonicalize()
+                .map_err(|_| StorageError::InvalidPath)?
         } else {
             // For new files, check that the parent is under base_dir
             let parent = filepath.parent().ok_or(StorageError::InvalidPath)?;
             if parent.exists() {
-                let canonical_parent = parent.canonicalize().map_err(|_| StorageError::InvalidPath)?;
+                let canonical_parent = parent
+                    .canonicalize()
+                    .map_err(|_| StorageError::InvalidPath)?;
                 if !canonical_parent.starts_with(&canonical_base) {
                     return Err(StorageError::InvalidPath);
                 }
@@ -238,7 +242,11 @@ impl DocumentStorage for LocalFilesystemStorage {
         extension: &str,
     ) -> StorageResult<String> {
         let file_id = Uuid::new_v4();
-        let dir = self.base_dir.join(&tenant_id).join(&user_id).join(doc_type.to_string());
+        let dir = self
+            .base_dir
+            .join(&tenant_id)
+            .join(&user_id)
+            .join(doc_type.to_string());
         tokio::fs::create_dir_all(&dir)
             .await
             .map_err(|e| StorageError::IoError(e))?;

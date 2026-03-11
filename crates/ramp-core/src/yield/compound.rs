@@ -8,9 +8,9 @@
 //! When no RPC URL is provided, falls back to simulated in-memory state for
 //! local development and testing.
 
-use async_trait::async_trait;
 use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::providers::Provider;
+use async_trait::async_trait;
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
@@ -66,33 +66,42 @@ pub struct CompoundV3Addresses {
 impl CompoundV3Addresses {
     pub fn ethereum_mainnet() -> Result<Self> {
         Ok(Self {
-            comet_usdc: "0xc3d688B66703497DAA19211EEdff47f25384cdc3".parse()
+            comet_usdc: "0xc3d688B66703497DAA19211EEdff47f25384cdc3"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid comet address: {}", e)))?,
-            comp_token: "0xc00e94Cb662C3520282E6f5717214004A7f26888".parse()
+            comp_token: "0xc00e94Cb662C3520282E6f5717214004A7f26888"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid COMP address: {}", e)))?,
-            rewards: "0x1B0e765F6224C21223AeA2af16c1C46E38885a40".parse()
+            rewards: "0x1B0e765F6224C21223AeA2af16c1C46E38885a40"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid rewards address: {}", e)))?,
         })
     }
 
     pub fn polygon_mainnet() -> Result<Self> {
         Ok(Self {
-            comet_usdc: "0xF25212E676D1F7F89Cd72fFEe66158f541246445".parse()
+            comet_usdc: "0xF25212E676D1F7F89Cd72fFEe66158f541246445"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid comet address: {}", e)))?,
-            comp_token: "0x8505b9d2254A7Ae468c0E9dd10Ccea3A837aef5c".parse()
+            comp_token: "0x8505b9d2254A7Ae468c0E9dd10Ccea3A837aef5c"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid COMP address: {}", e)))?,
-            rewards: "0x45939657d1CA34A8FA39A924B71D28Fe8431e581".parse()
+            rewards: "0x45939657d1CA34A8FA39A924B71D28Fe8431e581"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid rewards address: {}", e)))?,
         })
     }
 
     pub fn arbitrum() -> Result<Self> {
         Ok(Self {
-            comet_usdc: "0xA5EDBDD9646f8dFF606d7448e414884C7d905dCA".parse()
+            comet_usdc: "0xA5EDBDD9646f8dFF606d7448e414884C7d905dCA"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid comet address: {}", e)))?,
-            comp_token: "0x354A6dA3fcde098F8389cad84b0182725c6C91dE".parse()
+            comp_token: "0x354A6dA3fcde098F8389cad84b0182725c6C91dE"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid COMP address: {}", e)))?,
-            rewards: "0x88730d254A2f7e6AC8388c3198aFd694bA9f7fae".parse()
+            rewards: "0x88730d254A2f7e6AC8388c3198aFd694bA9f7fae"
+                .parse()
                 .map_err(|e| Error::Internal(format!("Invalid rewards address: {}", e)))?,
         })
     }
@@ -127,7 +136,8 @@ pub struct CompoundV3Protocol {
     account: Address,
     supported_tokens: HashMap<Address, CompoundTokenConfig>,
     /// Optional JSON-RPC provider for on-chain reads.
-    provider: Option<alloy::providers::RootProvider<alloy::transports::http::Http<reqwest::Client>>>,
+    provider:
+        Option<alloy::providers::RootProvider<alloy::transports::http::Http<reqwest::Client>>>,
     /// HTTP client for Compound V3 REST API calls.
     http: reqwest::Client,
     // Simulated state -- used only when provider is None.
@@ -163,10 +173,10 @@ impl CompoundV3Protocol {
         account: Address,
         rpc_url: &str,
     ) -> Result<Self> {
-        let url: reqwest::Url = rpc_url.parse()
+        let url: reqwest::Url = rpc_url
+            .parse()
             .map_err(|e| Error::Internal(format!("Invalid RPC URL: {}", e)))?;
-        let provider = alloy::providers::ProviderBuilder::new()
-            .on_http(url);
+        let provider = alloy::providers::ProviderBuilder::new().on_http(url);
 
         Ok(Self {
             chain_id,
@@ -180,38 +190,56 @@ impl CompoundV3Protocol {
         })
     }
 
-    fn default_tokens(chain_id: u64, addresses: &CompoundV3Addresses) -> HashMap<Address, CompoundTokenConfig> {
+    fn default_tokens(
+        chain_id: u64,
+        addresses: &CompoundV3Addresses,
+    ) -> HashMap<Address, CompoundTokenConfig> {
         let mut tokens = HashMap::new();
 
         match chain_id {
             1 => {
                 // Ethereum Mainnet USDC
-                if let Ok(underlying) = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse::<Address>() {
-                    tokens.insert(underlying, CompoundTokenConfig {
+                if let Ok(underlying) =
+                    "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse::<Address>()
+                {
+                    tokens.insert(
                         underlying,
-                        comet: addresses.comet_usdc,
-                        decimals: 6,
-                    });
+                        CompoundTokenConfig {
+                            underlying,
+                            comet: addresses.comet_usdc,
+                            decimals: 6,
+                        },
+                    );
                 }
             }
             137 => {
                 // Polygon USDC
-                if let Ok(underlying) = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174".parse::<Address>() {
-                    tokens.insert(underlying, CompoundTokenConfig {
+                if let Ok(underlying) =
+                    "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174".parse::<Address>()
+                {
+                    tokens.insert(
                         underlying,
-                        comet: addresses.comet_usdc,
-                        decimals: 6,
-                    });
+                        CompoundTokenConfig {
+                            underlying,
+                            comet: addresses.comet_usdc,
+                            decimals: 6,
+                        },
+                    );
                 }
             }
             42161 => {
                 // Arbitrum USDC
-                if let Ok(underlying) = "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8".parse::<Address>() {
-                    tokens.insert(underlying, CompoundTokenConfig {
+                if let Ok(underlying) =
+                    "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8".parse::<Address>()
+                {
+                    tokens.insert(
                         underlying,
-                        comet: addresses.comet_usdc,
-                        decimals: 6,
-                    });
+                        CompoundTokenConfig {
+                            underlying,
+                            comet: addresses.comet_usdc,
+                            decimals: 6,
+                        },
+                    );
                 }
             }
             _ => {}
@@ -307,13 +335,10 @@ impl CompoundV3Protocol {
 
         // The Compound V3 API may return different structures depending on
         // the endpoint version.  We try to be flexible.
-        let body: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| Error::ExternalService {
-                service: "Compound V3 API".to_string(),
-                message: format!("JSON parse error: {}", e),
-            })?;
+        let body: serde_json::Value = resp.json().await.map_err(|e| Error::ExternalService {
+            service: "Compound V3 API".to_string(),
+            message: format!("JSON parse error: {}", e),
+        })?;
 
         // Try to extract APY from known response shapes.
         let apy = self.extract_apy_from_json(&body, &token_hex)?;
@@ -376,12 +401,10 @@ impl CompoundV3Protocol {
 
     /// Parse a numeric APR field from a JSON value.
     fn parse_apr_field(obj: &serde_json::Value, key: &str) -> Option<f64> {
-        obj.get(key).and_then(|v| {
-            match v {
-                serde_json::Value::Number(n) => n.as_f64(),
-                serde_json::Value::String(s) => s.parse::<f64>().ok(),
-                _ => None,
-            }
+        obj.get(key).and_then(|v| match v {
+            serde_json::Value::Number(n) => n.as_f64(),
+            serde_json::Value::String(s) => s.parse::<f64>().ok(),
+            _ => None,
         })
     }
 
@@ -413,11 +436,14 @@ impl CompoundV3Protocol {
     /// The supply rate is a per-second rate scaled by 1e18.
     /// APY = supplyRate * SECONDS_PER_YEAR / 1e18 * 100
     async fn fetch_apy_onchain(&self, token: Address) -> Result<f64> {
-        let provider = self.provider.as_ref().ok_or_else(|| {
-            Error::Internal("No RPC provider configured".to_string())
-        })?;
+        let provider = self
+            .provider
+            .as_ref()
+            .ok_or_else(|| Error::Internal("No RPC provider configured".to_string()))?;
 
-        let comet = self.supported_tokens.get(&token)
+        let comet = self
+            .supported_tokens
+            .get(&token)
             .ok_or_else(|| Error::Business(format!("Token not supported: {:?}", token)))?
             .comet;
 
@@ -425,7 +451,9 @@ impl CompoundV3Protocol {
         let utilization = {
             let tx = alloy::rpc::types::TransactionRequest::default()
                 .to(comet)
-                .input(alloy::rpc::types::TransactionInput::new(Bytes::from(GET_UTILIZATION_SELECTOR.to_vec())));
+                .input(alloy::rpc::types::TransactionInput::new(Bytes::from(
+                    GET_UTILIZATION_SELECTOR.to_vec(),
+                )));
 
             let result = provider
                 .call(&tx)
@@ -453,7 +481,9 @@ impl CompoundV3Protocol {
 
             let tx = alloy::rpc::types::TransactionRequest::default()
                 .to(comet)
-                .input(alloy::rpc::types::TransactionInput::new(Bytes::from(calldata)));
+                .input(alloy::rpc::types::TransactionInput::new(Bytes::from(
+                    calldata,
+                )));
 
             let result = provider
                 .call(&tx)
@@ -503,11 +533,14 @@ impl CompoundV3Protocol {
 
     /// Read the Comet balance (supplied amount) for `self.account` on-chain.
     async fn fetch_balance_onchain(&self, token: Address) -> Result<U256> {
-        let provider = self.provider.as_ref().ok_or_else(|| {
-            Error::Internal("No RPC provider configured".to_string())
-        })?;
+        let provider = self
+            .provider
+            .as_ref()
+            .ok_or_else(|| Error::Internal("No RPC provider configured".to_string()))?;
 
-        let comet = self.supported_tokens.get(&token)
+        let comet = self
+            .supported_tokens
+            .get(&token)
             .ok_or_else(|| Error::Business(format!("Token not supported: {:?}", token)))?
             .comet;
 
@@ -518,7 +551,9 @@ impl CompoundV3Protocol {
 
         let tx = alloy::rpc::types::TransactionRequest::default()
             .to(comet)
-            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(calldata)));
+            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(
+                calldata,
+            )));
 
         let result = provider
             .call(&tx)
@@ -538,9 +573,10 @@ impl CompoundV3Protocol {
 
     /// Check if the account is liquidatable on-chain.
     async fn fetch_is_liquidatable(&self) -> Result<bool> {
-        let provider = self.provider.as_ref().ok_or_else(|| {
-            Error::Internal("No RPC provider configured".to_string())
-        })?;
+        let provider = self
+            .provider
+            .as_ref()
+            .ok_or_else(|| Error::Internal("No RPC provider configured".to_string()))?;
 
         // Use the first comet address (primary market)
         let comet = self.addresses.comet_usdc;
@@ -552,7 +588,9 @@ impl CompoundV3Protocol {
 
         let tx = alloy::rpc::types::TransactionRequest::default()
             .to(comet)
-            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(calldata)));
+            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(
+                calldata,
+            )));
 
         let result = provider
             .call(&tx)
@@ -706,8 +744,7 @@ impl YieldProtocol for CompoundV3Protocol {
         if current_balance < amount {
             return Err(Error::Business(format!(
                 "Insufficient balance: {} < {}",
-                current_balance,
-                amount
+                current_balance, amount
             )));
         }
 
@@ -831,7 +868,9 @@ mod tests {
     use super::*;
 
     fn test_account() -> Address {
-        "0x742d35Cc6634C0532925a3b844Bc9e7595f00000".parse().unwrap()
+        "0x742d35Cc6634C0532925a3b844Bc9e7595f00000"
+            .parse()
+            .unwrap()
     }
 
     #[test]
@@ -855,7 +894,9 @@ mod tests {
         let addresses = CompoundV3Addresses::ethereum_mainnet().unwrap();
         let protocol = CompoundV3Protocol::new(1, addresses, test_account());
 
-        let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse().unwrap();
+        let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+            .parse()
+            .unwrap();
         // Without RPC/API, should return the hardcoded fallback
         let apy = protocol.current_apy(usdc).await.unwrap();
         assert!(apy > 0.0);
@@ -866,7 +907,9 @@ mod tests {
         let addresses = CompoundV3Addresses::ethereum_mainnet().unwrap();
         let protocol = CompoundV3Protocol::new(1, addresses, test_account());
 
-        let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse().unwrap();
+        let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+            .parse()
+            .unwrap();
         let amount = U256::from(1000) * U256::from(1_000_000u64); // 1000 USDC
 
         // Deposit
@@ -890,7 +933,8 @@ mod tests {
     #[test]
     fn test_with_rpc_creation() {
         let addresses = CompoundV3Addresses::ethereum_mainnet().unwrap();
-        let result = CompoundV3Protocol::with_rpc(1, addresses, test_account(), "http://localhost:8545");
+        let result =
+            CompoundV3Protocol::with_rpc(1, addresses, test_account(), "http://localhost:8545");
         assert!(result.is_ok());
         assert!(result.unwrap().is_live());
     }

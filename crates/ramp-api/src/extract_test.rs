@@ -36,7 +36,9 @@ async fn test_valid_payload() {
                 .method("POST")
                 .uri("/test")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&payload).expect("serialization failed")))
+                .body(Body::from(
+                    serde_json::to_string(&payload).expect("serialization failed"),
+                ))
                 .unwrap(),
         )
         .await
@@ -60,7 +62,9 @@ async fn test_invalid_payload_empty_name() {
                 .method("POST")
                 .uri("/test")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&payload).expect("serialization failed")))
+                .body(Body::from(
+                    serde_json::to_string(&payload).expect("serialization failed"),
+                ))
                 .unwrap(),
         )
         .await
@@ -92,7 +96,9 @@ async fn test_invalid_payload_age_too_low() {
                 .method("POST")
                 .uri("/test")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&payload).expect("serialization failed")))
+                .body(Body::from(
+                    serde_json::to_string(&payload).expect("serialization failed"),
+                ))
                 .unwrap(),
         )
         .await
@@ -195,7 +201,9 @@ async fn test_multiple_validation_errors() {
                 .method("POST")
                 .uri("/test")
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&payload).expect("serialization failed")))
+                .body(Body::from(
+                    serde_json::to_string(&payload).expect("serialization failed"),
+                ))
                 .unwrap(),
         )
         .await

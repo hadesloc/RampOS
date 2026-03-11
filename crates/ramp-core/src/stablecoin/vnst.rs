@@ -4,8 +4,8 @@
 //! Primarily operates on BNB Chain and Ethereum.
 //! Uses 18 decimals.
 
-use async_trait::async_trait;
 use alloy::primitives::{Address, U256};
+use async_trait::async_trait;
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
 
@@ -149,12 +149,7 @@ impl Stablecoin for VnstToken {
         ))
     }
 
-    async fn allowance(
-        &self,
-        chain_id: u64,
-        owner: Address,
-        spender: Address,
-    ) -> Result<U256> {
+    async fn allowance(&self, chain_id: u64, owner: Address, spender: Address) -> Result<U256> {
         let _contract = self.contract_address(chain_id).ok_or_else(|| {
             Error::Validation(format!("VNST not supported on chain {}", chain_id))
         })?;
@@ -253,7 +248,11 @@ mod tests {
 
         // VNST is specifically designed for Vietnam market
         // Clone the description so it's not consumed
-        assert!(metadata.description.clone().unwrap().contains("Vietnamese Dong"));
+        assert!(metadata
+            .description
+            .clone()
+            .unwrap()
+            .contains("Vietnamese Dong"));
         assert!(metadata.description.is_some());
     }
 }

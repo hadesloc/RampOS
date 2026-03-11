@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 
 export default function SettingsPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [tenantScopeError, setTenantScopeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [apiKey, setApiKey] = useState("");
@@ -42,8 +43,9 @@ export default function SettingsPage() {
       setLoading(true);
       try {
         const tenants = await tenantsApi.list();
-        if (tenants.length > 0) {
+        if (tenants.length === 1) {
           const currentTenant = tenants[0];
+          setTenantScopeError(null);
           setTenant(currentTenant);
           setApiKey(currentTenant.api_key_prefix + "*****************************");
 
@@ -57,6 +59,11 @@ export default function SettingsPage() {
             minPayout: (config.min_payout as string) || "50000",
             maxPayout: (config.max_payout as string) || "200000000",
           });
+        } else if (tenants.length > 1) {
+          setTenant(null);
+          setTenantScopeError(
+            "Settings require a single server-resolved tenant. Refine tenant scoping before editing secrets or config.",
+          );
         }
       } catch (err: any) {
         console.error("Failed to fetch tenant settings:", err);
@@ -155,7 +162,7 @@ export default function SettingsPage() {
   if (!tenant) {
       return (
           <div className="text-center py-8 text-muted-foreground">
-              No tenant configuration found.
+              {tenantScopeError ?? "No tenant configuration found."}
           </div>
       );
   }

@@ -247,22 +247,38 @@ impl DepositService {
         // Update to confirming state if not already
         if current_state == DepositState::Detected {
             self.intent_repo
-                .update_state(&req.tenant_id, &req.intent_id, &DepositState::Confirming.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &req.intent_id,
+                    &DepositState::Confirming.to_string(),
+                )
                 .await?;
 
             self.event_publisher
-                .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &DepositState::Confirming.to_string())
+                .publish_intent_status_changed(
+                    &req.intent_id,
+                    &req.tenant_id,
+                    &DepositState::Confirming.to_string(),
+                )
                 .await?;
         }
 
         // Check if we have enough confirmations
         if req.confirmations >= required_confirmations {
             self.intent_repo
-                .update_state(&req.tenant_id, &req.intent_id, &DepositState::Confirmed.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &req.intent_id,
+                    &DepositState::Confirmed.to_string(),
+                )
                 .await?;
 
             self.event_publisher
-                .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &DepositState::Confirmed.to_string())
+                .publish_intent_status_changed(
+                    &req.intent_id,
+                    &req.tenant_id,
+                    &DepositState::Confirmed.to_string(),
+                )
                 .await?;
 
             info!(
@@ -306,7 +322,11 @@ impl DepositService {
             );
 
             self.intent_repo
-                .update_state(&req.tenant_id, &req.intent_id, &DepositState::KytFlagged.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &req.intent_id,
+                    &DepositState::KytFlagged.to_string(),
+                )
                 .await?;
 
             self.event_publisher
@@ -318,11 +338,19 @@ impl DepositService {
 
         // KYT passed
         self.intent_repo
-            .update_state(&req.tenant_id, &req.intent_id, &DepositState::KytChecked.to_string())
+            .update_state(
+                &req.tenant_id,
+                &req.intent_id,
+                &DepositState::KytChecked.to_string(),
+            )
             .await?;
 
         self.event_publisher
-            .publish_intent_status_changed(&req.intent_id, &req.tenant_id, &DepositState::KytChecked.to_string())
+            .publish_intent_status_changed(
+                &req.intent_id,
+                &req.tenant_id,
+                &DepositState::KytChecked.to_string(),
+            )
             .await?;
 
         info!(
@@ -371,7 +399,11 @@ impl DepositService {
             .await?;
 
         self.event_publisher
-            .publish_intent_status_changed(intent_id, tenant_id, &DepositState::Credited.to_string())
+            .publish_intent_status_changed(
+                intent_id,
+                tenant_id,
+                &DepositState::Credited.to_string(),
+            )
             .await?;
 
         info!(
@@ -407,7 +439,11 @@ impl DepositService {
             .await?;
 
         self.event_publisher
-            .publish_intent_status_changed(intent_id, tenant_id, &DepositState::Completed.to_string())
+            .publish_intent_status_changed(
+                intent_id,
+                tenant_id,
+                &DepositState::Completed.to_string(),
+            )
             .await?;
 
         info!(intent_id = %intent_id, "Deposit completed");

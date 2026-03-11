@@ -55,6 +55,19 @@ The SDK organizes API methods into service namespaces that mirror the TypeScript
 | `client.webhook_service` | Webhook endpoint management       |
 | `client.webhooks`      | Webhook signature verification       |
 
+## Contract-Driven Note
+
+RampOS keeps the public SDKs aligned to the OpenAPI contract and uses the thin `rampos-cli` preview for bounded admin/operator flows that are not yet first-class SDK namespaces.
+
+The reconciliation workbench and evidence export surface currently live behind:
+
+```bash
+python scripts/rampos-cli.py reconciliation workbench
+python scripts/rampos-cli.py reconciliation evidence --discrepancy-id <id>
+```
+
+Use `scripts/validate-openapi.sh` and `scripts/test-rampos-cli.sh` together when validating SDK/CLI drift locally.
+
 ## Examples
 
 ### Pay-In Flow

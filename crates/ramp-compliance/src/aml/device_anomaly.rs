@@ -332,19 +332,22 @@ impl MockDeviceHistoryStore {
 #[async_trait]
 impl DeviceHistoryStore for MockDeviceHistoryStore {
     async fn get_history(&self, user_id: &UserId) -> Result<DeviceHistory> {
-        let map = self.history.lock().map_err(|e| {
-            Error::Internal(format!("History lock poisoned: {}", e))
-        })?;
+        let map = self
+            .history
+            .lock()
+            .map_err(|e| Error::Internal(format!("History lock poisoned: {}", e)))?;
         Ok(map.get(&user_id.to_string()).cloned().unwrap_or_default())
     }
 
     async fn update_history(&self, user_id: &UserId, context: &DeviceContext) -> Result<()> {
-        let mut map = self.history.lock().map_err(|e| {
-            Error::Internal(format!("History lock poisoned: {}", e))
-        })?;
-        let mut device_map = self.device_users.lock().map_err(|e| {
-            Error::Internal(format!("Device users lock poisoned: {}", e))
-        })?;
+        let mut map = self
+            .history
+            .lock()
+            .map_err(|e| Error::Internal(format!("History lock poisoned: {}", e)))?;
+        let mut device_map = self
+            .device_users
+            .lock()
+            .map_err(|e| Error::Internal(format!("Device users lock poisoned: {}", e)))?;
 
         let history = map.entry(user_id.to_string()).or_default();
 
@@ -420,9 +423,10 @@ impl DeviceHistoryStore for MockDeviceHistoryStore {
     }
 
     async fn get_users_on_device(&self, device_fingerprint: &str) -> Result<Vec<UserId>> {
-        let map = self.device_users.lock().map_err(|e| {
-            Error::Internal(format!("Device users lock poisoned: {}", e))
-        })?;
+        let map = self
+            .device_users
+            .lock()
+            .map_err(|e| Error::Internal(format!("Device users lock poisoned: {}", e)))?;
         if let Some(users) = map.get(device_fingerprint) {
             Ok(users.iter().map(UserId::new).collect())
         } else {
@@ -581,15 +585,22 @@ mod tests {
 
         // Device 1
         let d1 = create_device_ctx("d1", "1.1.1.1", "VN");
-        rule.evaluate(&create_context("u1", d1)).await.expect("Failed to evaluate rule");
+        rule.evaluate(&create_context("u1", d1))
+            .await
+            .expect("Failed to evaluate rule");
 
         // Device 2
         let d2 = create_device_ctx("d2", "1.1.1.1", "VN");
-        rule.evaluate(&create_context("u1", d2)).await.expect("Failed to evaluate rule");
+        rule.evaluate(&create_context("u1", d2))
+            .await
+            .expect("Failed to evaluate rule");
 
         // Device 3 (should trigger)
         let d3 = create_device_ctx("d3", "1.1.1.1", "VN");
-        let result = rule.evaluate(&create_context("u1", d3)).await.expect("Failed to evaluate rule");
+        let result = rule
+            .evaluate(&create_context("u1", d3))
+            .await
+            .expect("Failed to evaluate rule");
 
         assert!(result.risk_score.expect("Risk score missing").0 >= 20.0);
         assert!(result.reason.contains("Too many unique devices"));

@@ -4,7 +4,10 @@ use axum::{
     routing::get,
     Router,
 };
-use ramp_api::{handlers::intent::get_intent, middleware::tenant::{TenantContext, TenantTier}};
+use ramp_api::{
+    handlers::intent::get_intent,
+    middleware::tenant::{TenantContext, TenantTier},
+};
 use ramp_common::types::{IntentId, TenantId};
 use ramp_core::repository::intent::{IntentRepository, IntentRow};
 use std::sync::Arc;

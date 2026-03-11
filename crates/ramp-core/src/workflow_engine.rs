@@ -25,13 +25,8 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-use crate::temporal_worker::{
-    WorkflowSignal, WorkflowTask, WorkflowStatus,
-    TemporalWorkerConfig,
-};
-use crate::workflows::{
-    PayinWorkflowInput, PayoutWorkflowInput, TradeWorkflowInput,
-};
+use crate::temporal_worker::{TemporalWorkerConfig, WorkflowSignal, WorkflowStatus, WorkflowTask};
+use crate::workflows::{PayinWorkflowInput, PayoutWorkflowInput, TradeWorkflowInput};
 use ramp_common::Result;
 
 /// Persisted workflow state for database-backed recovery
@@ -62,7 +57,13 @@ pub trait WorkflowStateRepository: Send + Sync {
     /// List workflows by status
     async fn list_by_status(&self, status: &str) -> Result<Vec<WorkflowState>>;
     /// Update workflow status
-    async fn update_status(&self, workflow_id: &str, status: &str, result_json: Option<&str>, error: Option<&str>) -> Result<()>;
+    async fn update_status(
+        &self,
+        workflow_id: &str,
+        status: &str,
+        result_json: Option<&str>,
+        error: Option<&str>,
+    ) -> Result<()>;
 }
 
 /// Core workflow engine trait.
@@ -130,7 +131,13 @@ impl InProcessEngine {
     }
 
     /// Persist workflow state if a state repository is configured
-    async fn persist_state(&self, workflow_id: &str, workflow_type: &str, input_json: &str, status: &str) {
+    async fn persist_state(
+        &self,
+        workflow_id: &str,
+        workflow_type: &str,
+        input_json: &str,
+        status: &str,
+    ) {
         if let Some(repo) = &self.state_repo {
             let now = chrono::Utc::now().to_rfc3339();
             let state = WorkflowState {
@@ -151,7 +158,13 @@ impl InProcessEngine {
     }
 
     /// Update persisted workflow status
-    async fn update_persisted_status(&self, workflow_id: &str, status: &str, result: Option<&str>, error: Option<&str>) {
+    async fn update_persisted_status(
+        &self,
+        workflow_id: &str,
+        status: &str,
+        result: Option<&str>,
+        error: Option<&str>,
+    ) {
         if let Some(repo) = &self.state_repo {
             if let Err(e) = repo.update_status(workflow_id, status, result, error).await {
                 warn!(error = %e, workflow_id = %workflow_id, "Failed to update persisted workflow status");
@@ -163,31 +176,43 @@ impl InProcessEngine {
 #[async_trait]
 impl WorkflowEngine for InProcessEngine {
     async fn start_payin(&self, input: PayinWorkflowInput) -> Result<String> {
-        let workflow_id = self.worker.start_workflow(WorkflowTask::Payin(input.clone())).await?;
+        let workflow_id = self
+            .worker
+            .start_workflow(WorkflowTask::Payin(input.clone()))
+            .await?;
 
         // Persist state
         if let Ok(json) = serde_json::to_string(&input) {
-            self.persist_state(&workflow_id, "payin", &json, "PENDING").await;
+            self.persist_state(&workflow_id, "payin", &json, "PENDING")
+                .await;
         }
 
         Ok(workflow_id)
     }
 
     async fn start_payout(&self, input: PayoutWorkflowInput) -> Result<String> {
-        let workflow_id = self.worker.start_workflow(WorkflowTask::Payout(input.clone())).await?;
+        let workflow_id = self
+            .worker
+            .start_workflow(WorkflowTask::Payout(input.clone()))
+            .await?;
 
         if let Ok(json) = serde_json::to_string(&input) {
-            self.persist_state(&workflow_id, "payout", &json, "PENDING").await;
+            self.persist_state(&workflow_id, "payout", &json, "PENDING")
+                .await;
         }
 
         Ok(workflow_id)
     }
 
     async fn start_trade(&self, input: TradeWorkflowInput) -> Result<String> {
-        let workflow_id = self.worker.start_workflow(WorkflowTask::Trade(input.clone())).await?;
+        let workflow_id = self
+            .worker
+            .start_workflow(WorkflowTask::Trade(input.clone()))
+            .await?;
 
         if let Ok(json) = serde_json::to_string(&input) {
-            self.persist_state(&workflow_id, "trade", &json, "PENDING").await;
+            self.persist_state(&workflow_id, "trade", &json, "PENDING")
+                .await;
         }
 
         Ok(workflow_id)
@@ -216,18 +241,17 @@ impl WorkflowEngine for InProcessEngine {
     }
 
     async fn cancel(&self, workflow_id: &str, reason: &str) -> Result<()> {
-        let intent_id = workflow_id
-            .split('-')
-            .skip(1)
-            .collect::<Vec<_>>()
-            .join("-");
+        let intent_id = workflow_id.split('-').skip(1).collect::<Vec<_>>().join("-");
 
-        self.worker.signal_workflow(WorkflowSignal::Cancel {
-            intent_id,
-            reason: reason.to_string(),
-        }).await?;
+        self.worker
+            .signal_workflow(WorkflowSignal::Cancel {
+                intent_id,
+                reason: reason.to_string(),
+            })
+            .await?;
 
-        self.update_persisted_status(workflow_id, "CANCELLED", None, Some(reason)).await;
+        self.update_persisted_status(workflow_id, "CANCELLED", None, Some(reason))
+            .await;
         Ok(())
     }
 
@@ -308,8 +332,10 @@ impl TemporalEngine {
         workflow_type: &str,
         input_json: &str,
     ) -> Result<String> {
-        let url = format!("{}/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
-            self.temporal_url);
+        let url = format!(
+            "{}/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
+            self.temporal_url
+        );
 
         // Build gRPC-style request body
         let request_body = serde_json::json!({
@@ -342,7 +368,8 @@ impl TemporalEngine {
             .build()
             .map_err(|e| ramp_common::Error::Internal(format!("HTTP client error: {}", e)))?;
 
-        match client.post(&url)
+        match client
+            .post(&url)
             .header("content-type", "application/json")
             .json(&request_body)
             .send()
@@ -350,10 +377,12 @@ impl TemporalEngine {
         {
             Ok(response) => {
                 if response.status().is_success() {
-                    let body: serde_json::Value = response.json().await
-                        .map_err(|e| ramp_common::Error::Internal(format!("Response parse error: {}", e)))?;
+                    let body: serde_json::Value = response.json().await.map_err(|e| {
+                        ramp_common::Error::Internal(format!("Response parse error: {}", e))
+                    })?;
 
-                    let run_id = body.get("run_id")
+                    let run_id = body
+                        .get("run_id")
                         .and_then(|v| v.as_str())
                         .unwrap_or("unknown")
                         .to_string();
@@ -365,10 +394,10 @@ impl TemporalEngine {
                     );
 
                     // Track the submission
-                    self.submitted.write().await.insert(
-                        workflow_id.to_string(),
-                        WorkflowStatus::Running,
-                    );
+                    self.submitted
+                        .write()
+                        .await
+                        .insert(workflow_id.to_string(), WorkflowStatus::Running);
 
                     Ok(run_id)
                 } else {
@@ -379,9 +408,10 @@ impl TemporalEngine {
                         body = %body,
                         "Temporal server rejected workflow submission"
                     );
-                    Err(ramp_common::Error::Internal(
-                        format!("Temporal submission failed ({}): {}", status, body)
-                    ))
+                    Err(ramp_common::Error::Internal(format!(
+                        "Temporal submission failed ({}): {}",
+                        status, body
+                    )))
                 }
             }
             Err(e) => {
@@ -414,9 +444,10 @@ impl TemporalEngine {
                     }
                 }
 
-                Err(ramp_common::Error::Internal(
-                    format!("Temporal server unreachable and no fallback available: {}", e)
-                ))
+                Err(ramp_common::Error::Internal(format!(
+                    "Temporal server unreachable and no fallback available: {}",
+                    e
+                )))
             }
         }
     }
@@ -435,7 +466,9 @@ impl TemporalEngine {
 
         match client.get(&url).send().await {
             Ok(response) if response.status().is_success() => {
-                let body: serde_json::Value = response.json().await
+                let body: serde_json::Value = response
+                    .json()
+                    .await
                     .map_err(|e| ramp_common::Error::Internal(e.to_string()))?;
 
                 let status = body
@@ -446,7 +479,9 @@ impl TemporalEngine {
 
                 Ok(match status {
                     "WORKFLOW_EXECUTION_STATUS_COMPLETED" => WorkflowStatus::Completed,
-                    "WORKFLOW_EXECUTION_STATUS_FAILED" => WorkflowStatus::Failed("Workflow failed".to_string()),
+                    "WORKFLOW_EXECUTION_STATUS_FAILED" => {
+                        WorkflowStatus::Failed("Workflow failed".to_string())
+                    }
                     "WORKFLOW_EXECUTION_STATUS_CANCELED" => WorkflowStatus::Cancelled,
                     "WORKFLOW_EXECUTION_STATUS_TERMINATED" => WorkflowStatus::Cancelled,
                     _ => WorkflowStatus::Running,
@@ -455,7 +490,10 @@ impl TemporalEngine {
             _ => {
                 // Check local tracking
                 let submitted = self.submitted.read().await;
-                Ok(submitted.get(workflow_id).cloned().unwrap_or(WorkflowStatus::Running))
+                Ok(submitted
+                    .get(workflow_id)
+                    .cloned()
+                    .unwrap_or(WorkflowStatus::Running))
             }
         }
     }
@@ -467,7 +505,8 @@ impl WorkflowEngine for TemporalEngine {
         let workflow_id = format!("payin-{}", input.intent_id);
         let input_json = serde_json::to_string(&input)
             .map_err(|e| ramp_common::Error::Internal(e.to_string()))?;
-        self.submit_workflow(&workflow_id, "PayinWorkflow", &input_json).await?;
+        self.submit_workflow(&workflow_id, "PayinWorkflow", &input_json)
+            .await?;
         Ok(workflow_id)
     }
 
@@ -475,7 +514,8 @@ impl WorkflowEngine for TemporalEngine {
         let workflow_id = format!("payout-{}", input.intent_id);
         let input_json = serde_json::to_string(&input)
             .map_err(|e| ramp_common::Error::Internal(e.to_string()))?;
-        self.submit_workflow(&workflow_id, "PayoutWorkflow", &input_json).await?;
+        self.submit_workflow(&workflow_id, "PayoutWorkflow", &input_json)
+            .await?;
         Ok(workflow_id)
     }
 
@@ -483,7 +523,8 @@ impl WorkflowEngine for TemporalEngine {
         let workflow_id = format!("trade-{}", input.intent_id);
         let input_json = serde_json::to_string(&input)
             .map_err(|e| ramp_common::Error::Internal(e.to_string()))?;
-        self.submit_workflow(&workflow_id, "TradeWorkflow", &input_json).await?;
+        self.submit_workflow(&workflow_id, "TradeWorkflow", &input_json)
+            .await?;
         Ok(workflow_id)
     }
 
@@ -513,22 +554,20 @@ impl WorkflowEngine for TemporalEngine {
         info!(workflow_id = %workflow_id, reason = %reason, "Cancelling workflow via Temporal");
 
         // Update local tracking
-        self.submitted.write().await.insert(
-            workflow_id.to_string(),
-            WorkflowStatus::Cancelled,
-        );
+        self.submitted
+            .write()
+            .await
+            .insert(workflow_id.to_string(), WorkflowStatus::Cancelled);
 
         // If fallback is available, also cancel there
         if let Some(fallback) = &self.fallback_worker {
-            let intent_id = workflow_id
-                .split('-')
-                .skip(1)
-                .collect::<Vec<_>>()
-                .join("-");
-            let _ = fallback.signal_workflow(WorkflowSignal::Cancel {
-                intent_id,
-                reason: reason.to_string(),
-            }).await;
+            let intent_id = workflow_id.split('-').skip(1).collect::<Vec<_>>().join("-");
+            let _ = fallback
+                .signal_workflow(WorkflowSignal::Cancel {
+                    intent_id,
+                    reason: reason.to_string(),
+                })
+                .await;
         }
 
         Ok(())
@@ -591,8 +630,7 @@ pub fn create_workflow_engine(
         );
 
         let config = TemporalWorkerConfig::from_env();
-        let engine = TemporalEngine::new(temporal_url, config)
-            .with_fallback(worker);
+        let engine = TemporalEngine::new(temporal_url, config).with_fallback(worker);
 
         Arc::new(engine)
     } else {
@@ -615,8 +653,8 @@ mod tests {
     use crate::test_utils::{MockIntentRepository, MockLedgerRepository};
     use crate::workflows::BankAccountInfo;
     use crate::workflows::BankConfirmation;
-    use ramp_compliance::{case::CaseManager, InMemoryCaseStore, MockTransactionHistoryStore};
     use ramp_compliance::aml::AmlEngine;
+    use ramp_compliance::{case::CaseManager, InMemoryCaseStore, MockTransactionHistoryStore};
 
     fn create_test_worker() -> Arc<crate::temporal_worker::TemporalWorker> {
         let config = TemporalWorkerConfig::default();
@@ -729,7 +767,8 @@ mod tests {
         let engine = TemporalEngine::new(
             "http://localhost:99999".to_string(), // unreachable
             config,
-        ).with_fallback(worker);
+        )
+        .with_fallback(worker);
 
         let input = PayinWorkflowInput {
             tenant_id: "tenant1".to_string(),

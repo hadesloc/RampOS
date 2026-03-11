@@ -581,16 +581,15 @@ impl RuleStore {
 
     /// Get current version
     pub fn version(&self) -> String {
-        self.version.read()
+        self.version
+            .read()
             .map(|v| v.clone())
             .unwrap_or_else(|_| "unknown".to_string())
     }
 
     /// Get rule count
     pub fn count(&self) -> usize {
-        self.rules.read()
-            .map(|r| r.len())
-            .unwrap_or(0)
+        self.rules.read().map(|r| r.len()).unwrap_or(0)
     }
 }
 
@@ -655,7 +654,9 @@ mod tests {
     #[test]
     fn test_rule_store() {
         let store = RuleStore::new();
-        let count = store.load_from_json(SAMPLE_RULES_JSON).expect("Failed to load rules");
+        let count = store
+            .load_from_json(SAMPLE_RULES_JSON)
+            .expect("Failed to load rules");
         assert_eq!(count, 2);
         assert_eq!(store.version(), "1.0.0");
     }
@@ -733,14 +734,18 @@ mod tests {
 
         // Should match (1500 > 1000)
         let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
-        let result = rt.block_on(rule.evaluate(&context)).expect("Failed to evaluate rule");
+        let result = rt
+            .block_on(rule.evaluate(&context))
+            .expect("Failed to evaluate rule");
         assert!(!result.passed); // Failed rule means "matched" and flagged
         assert!(result.create_case);
         assert_eq!(result.risk_score.map(|s| s.0), Some(50.0));
 
         // Should not match (500 < 1000)
         context.current_amount = Decimal::from(500);
-        let result = rt.block_on(rule.evaluate(&context)).expect("Failed to evaluate rule");
+        let result = rt
+            .block_on(rule.evaluate(&context))
+            .expect("Failed to evaluate rule");
         assert!(result.passed);
     }
 
@@ -779,19 +784,25 @@ mod tests {
 
         // Should match
         let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
-        let result = rt.block_on(rule.evaluate(&context)).expect("Failed to evaluate rule");
+        let result = rt
+            .block_on(rule.evaluate(&context))
+            .expect("Failed to evaluate rule");
         assert!(!result.passed);
 
         // Fail first condition
         let mut context2 = context.clone();
         context2.current_amount = Decimal::from(500);
-        let result = rt.block_on(rule.evaluate(&context2)).expect("Failed to evaluate rule");
+        let result = rt
+            .block_on(rule.evaluate(&context2))
+            .expect("Failed to evaluate rule");
         assert!(result.passed);
 
         // Fail second condition
         let mut context3 = context.clone();
         context3.metadata = serde_json::json!({"country": "US"});
-        let result = rt.block_on(rule.evaluate(&context3)).expect("Failed to evaluate rule");
+        let result = rt
+            .block_on(rule.evaluate(&context3))
+            .expect("Failed to evaluate rule");
         assert!(result.passed);
     }
 }

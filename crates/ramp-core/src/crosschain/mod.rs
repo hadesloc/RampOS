@@ -8,13 +8,13 @@
 mod executor;
 mod relayer;
 
-pub use executor::{IntentExecutor, ExecutionResult, ExecutionConfig};
-pub use relayer::{CrossChainRelayer, RelayerConfig, MessageStatus, CrossChainMessage};
+pub use executor::{ExecutionConfig, ExecutionResult, IntentExecutor};
+pub use relayer::{CrossChainMessage, CrossChainRelayer, MessageStatus, RelayerConfig};
 
 use crate::bridge::{BridgeQuote, BridgeToken, ChainId, TxHash};
+use alloy::primitives::{Address, U256};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use alloy::primitives::{Address, U256};
 use ramp_common::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -267,19 +267,27 @@ impl IntentExecution {
     }
 
     pub fn current_step(&self) -> Option<&ExecutionStep> {
-        self.steps.iter().find(|s| s.status == StepStatus::Pending || s.status == StepStatus::Submitted)
+        self.steps
+            .iter()
+            .find(|s| s.status == StepStatus::Pending || s.status == StepStatus::Submitted)
     }
 
     pub fn current_step_mut(&mut self) -> Option<&mut ExecutionStep> {
-        self.steps.iter_mut().find(|s| s.status == StepStatus::Pending || s.status == StepStatus::Submitted)
+        self.steps
+            .iter_mut()
+            .find(|s| s.status == StepStatus::Pending || s.status == StepStatus::Submitted)
     }
 
     pub fn all_steps_completed(&self) -> bool {
-        self.steps.iter().all(|s| s.status == StepStatus::Confirmed || s.status == StepStatus::Skipped)
+        self.steps
+            .iter()
+            .all(|s| s.status == StepStatus::Confirmed || s.status == StepStatus::Skipped)
     }
 
     pub fn has_failed_step(&self) -> bool {
-        self.steps.iter().any(|s| s.status == StepStatus::Failed || s.status == StepStatus::Reverted)
+        self.steps
+            .iter()
+            .any(|s| s.status == StepStatus::Failed || s.status == StepStatus::Reverted)
     }
 
     pub fn can_retry(&self) -> bool {
@@ -446,7 +454,10 @@ mod tests {
         .with_metadata("slippage", serde_json::json!(0.5));
 
         assert_eq!(intent.metadata.len(), 2);
-        assert_eq!(intent.metadata.get("output_token").unwrap(), &serde_json::json!("WETH"));
+        assert_eq!(
+            intent.metadata.get("output_token").unwrap(),
+            &serde_json::json!("WETH")
+        );
     }
 
     #[test]
@@ -481,8 +492,13 @@ mod tests {
     #[test]
     fn test_execution_current_step() {
         let intent = CrossChainIntent::new(
-            IntentType::Bridge, 1, 42161, BridgeToken::USDC,
-            U256::from(1000000u64), Address::ZERO, Address::ZERO,
+            IntentType::Bridge,
+            1,
+            42161,
+            BridgeToken::USDC,
+            U256::from(1000000u64),
+            Address::ZERO,
+            Address::ZERO,
         );
         let mut execution = IntentExecution::new(intent);
         execution.add_step(StepType::Approve, 1, serde_json::json!({}));
@@ -497,8 +513,13 @@ mod tests {
     #[test]
     fn test_execution_current_step_mut() {
         let intent = CrossChainIntent::new(
-            IntentType::Bridge, 1, 42161, BridgeToken::USDC,
-            U256::from(1000000u64), Address::ZERO, Address::ZERO,
+            IntentType::Bridge,
+            1,
+            42161,
+            BridgeToken::USDC,
+            U256::from(1000000u64),
+            Address::ZERO,
+            Address::ZERO,
         );
         let mut execution = IntentExecution::new(intent);
         execution.add_step(StepType::Approve, 1, serde_json::json!({}));
@@ -513,8 +534,13 @@ mod tests {
     #[test]
     fn test_execution_all_steps_completed() {
         let intent = CrossChainIntent::new(
-            IntentType::Bridge, 1, 42161, BridgeToken::USDC,
-            U256::from(1000000u64), Address::ZERO, Address::ZERO,
+            IntentType::Bridge,
+            1,
+            42161,
+            BridgeToken::USDC,
+            U256::from(1000000u64),
+            Address::ZERO,
+            Address::ZERO,
         );
         let mut execution = IntentExecution::new(intent);
         execution.add_step(StepType::Approve, 1, serde_json::json!({}));
@@ -532,8 +558,13 @@ mod tests {
     #[test]
     fn test_execution_has_failed_step() {
         let intent = CrossChainIntent::new(
-            IntentType::Bridge, 1, 42161, BridgeToken::USDC,
-            U256::from(1000000u64), Address::ZERO, Address::ZERO,
+            IntentType::Bridge,
+            1,
+            42161,
+            BridgeToken::USDC,
+            U256::from(1000000u64),
+            Address::ZERO,
+            Address::ZERO,
         );
         let mut execution = IntentExecution::new(intent);
         execution.add_step(StepType::Approve, 1, serde_json::json!({}));
@@ -547,8 +578,13 @@ mod tests {
     #[test]
     fn test_execution_has_reverted_step() {
         let intent = CrossChainIntent::new(
-            IntentType::Bridge, 1, 42161, BridgeToken::USDC,
-            U256::from(1000000u64), Address::ZERO, Address::ZERO,
+            IntentType::Bridge,
+            1,
+            42161,
+            BridgeToken::USDC,
+            U256::from(1000000u64),
+            Address::ZERO,
+            Address::ZERO,
         );
         let mut execution = IntentExecution::new(intent);
         execution.add_step(StepType::Bridge, 1, serde_json::json!({}));
@@ -560,8 +596,13 @@ mod tests {
     #[test]
     fn test_execution_can_retry_limit() {
         let intent = CrossChainIntent::new(
-            IntentType::Bridge, 1, 42161, BridgeToken::USDC,
-            U256::from(1000000u64), Address::ZERO, Address::ZERO,
+            IntentType::Bridge,
+            1,
+            42161,
+            BridgeToken::USDC,
+            U256::from(1000000u64),
+            Address::ZERO,
+            Address::ZERO,
         );
         let mut execution = IntentExecution::new(intent);
         assert!(execution.can_retry());
@@ -576,8 +617,13 @@ mod tests {
     #[test]
     fn test_execution_mark_completed() {
         let intent = CrossChainIntent::new(
-            IntentType::Bridge, 1, 42161, BridgeToken::USDC,
-            U256::from(1000000u64), Address::ZERO, Address::ZERO,
+            IntentType::Bridge,
+            1,
+            42161,
+            BridgeToken::USDC,
+            U256::from(1000000u64),
+            Address::ZERO,
+            Address::ZERO,
         );
         let mut execution = IntentExecution::new(intent);
         assert!(execution.completed_at.is_none());
@@ -590,21 +636,34 @@ mod tests {
     #[test]
     fn test_execution_mark_failed() {
         let intent = CrossChainIntent::new(
-            IntentType::Bridge, 1, 42161, BridgeToken::USDC,
-            U256::from(1000000u64), Address::ZERO, Address::ZERO,
+            IntentType::Bridge,
+            1,
+            42161,
+            BridgeToken::USDC,
+            U256::from(1000000u64),
+            Address::ZERO,
+            Address::ZERO,
         );
         let mut execution = IntentExecution::new(intent);
 
         execution.mark_failed("bridge timeout".to_string());
-        assert_eq!(execution.status, IntentStatus::Failed("bridge timeout".to_string()));
+        assert_eq!(
+            execution.status,
+            IntentStatus::Failed("bridge timeout".to_string())
+        );
         assert!(execution.completed_at.is_some());
     }
 
     #[test]
     fn test_step_status_skipped_counts_as_completed() {
         let intent = CrossChainIntent::new(
-            IntentType::Bridge, 1, 42161, BridgeToken::USDC,
-            U256::from(1000000u64), Address::ZERO, Address::ZERO,
+            IntentType::Bridge,
+            1,
+            42161,
+            BridgeToken::USDC,
+            U256::from(1000000u64),
+            Address::ZERO,
+            Address::ZERO,
         );
         let mut execution = IntentExecution::new(intent);
         execution.add_step(StepType::Approve, 1, serde_json::json!({}));
@@ -616,8 +675,13 @@ mod tests {
     #[test]
     fn test_step_indices_sequential() {
         let intent = CrossChainIntent::new(
-            IntentType::Bridge, 1, 42161, BridgeToken::USDC,
-            U256::from(1000000u64), Address::ZERO, Address::ZERO,
+            IntentType::Bridge,
+            1,
+            42161,
+            BridgeToken::USDC,
+            U256::from(1000000u64),
+            Address::ZERO,
+            Address::ZERO,
         );
         let mut execution = IntentExecution::new(intent);
         execution.add_step(StepType::Approve, 1, serde_json::json!({}));
@@ -641,8 +705,13 @@ mod tests {
         ];
         for intent_type in types {
             let intent = CrossChainIntent::new(
-                intent_type, 1, 42161, BridgeToken::USDC,
-                U256::from(1000u64), Address::ZERO, Address::ZERO,
+                intent_type,
+                1,
+                42161,
+                BridgeToken::USDC,
+                U256::from(1000u64),
+                Address::ZERO,
+                Address::ZERO,
             );
             assert_eq!(intent.intent_type, intent_type);
         }

@@ -59,13 +59,18 @@ impl UnifiedBalance {
 
     /// Get the number of chains with non-zero balance
     pub fn active_chains(&self) -> usize {
-        self.per_chain.iter().filter(|b| b.amount > Decimal::ZERO).count()
+        self.per_chain
+            .iter()
+            .filter(|b| b.amount > Decimal::ZERO)
+            .count()
     }
 
     /// Get the chain with the highest balance
     pub fn largest_chain(&self) -> Option<&ChainBalance> {
         self.per_chain.iter().max_by(|a, b| {
-            a.amount.partial_cmp(&b.amount).unwrap_or(std::cmp::Ordering::Equal)
+            a.amount
+                .partial_cmp(&b.amount)
+                .unwrap_or(std::cmp::Ordering::Equal)
         })
     }
 
@@ -100,29 +105,74 @@ impl UnifiedBalanceService {
 
         // Configure common stablecoins across known chains
         // USDC
-        token_configs.insert("USDC".to_string(), vec![
-            (1, Some("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string()), 6),
-            (42161, Some("0xaf88d065e77c8cC2239327C5EDb3A432268e5831".to_string()), 6),
-            (8453, Some("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".to_string()), 6),
-            (10, Some("0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85".to_string()), 6),
-            (137, Some("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359".to_string()), 6),
-        ]);
+        token_configs.insert(
+            "USDC".to_string(),
+            vec![
+                (
+                    1,
+                    Some("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string()),
+                    6,
+                ),
+                (
+                    42161,
+                    Some("0xaf88d065e77c8cC2239327C5EDb3A432268e5831".to_string()),
+                    6,
+                ),
+                (
+                    8453,
+                    Some("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".to_string()),
+                    6,
+                ),
+                (
+                    10,
+                    Some("0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85".to_string()),
+                    6,
+                ),
+                (
+                    137,
+                    Some("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359".to_string()),
+                    6,
+                ),
+            ],
+        );
 
         // USDT
-        token_configs.insert("USDT".to_string(), vec![
-            (1, Some("0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string()), 6),
-            (42161, Some("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9".to_string()), 6),
-            (10, Some("0x94b008aA00579c1307B0EF2c499aD98a8ce58e58".to_string()), 6),
-            (137, Some("0xc2132D05D31c914a87C6611C10748AEb04B58e8F".to_string()), 6),
-        ]);
+        token_configs.insert(
+            "USDT".to_string(),
+            vec![
+                (
+                    1,
+                    Some("0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string()),
+                    6,
+                ),
+                (
+                    42161,
+                    Some("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9".to_string()),
+                    6,
+                ),
+                (
+                    10,
+                    Some("0x94b008aA00579c1307B0EF2c499aD98a8ce58e58".to_string()),
+                    6,
+                ),
+                (
+                    137,
+                    Some("0xc2132D05D31c914a87C6611C10748AEb04B58e8F".to_string()),
+                    6,
+                ),
+            ],
+        );
 
         // ETH (native on EVM chains)
-        token_configs.insert("ETH".to_string(), vec![
-            (1, None, 18),
-            (42161, None, 18),
-            (8453, None, 18),
-            (10, None, 18),
-        ]);
+        token_configs.insert(
+            "ETH".to_string(),
+            vec![
+                (1, None, 18),
+                (42161, None, 18),
+                (8453, None, 18),
+                (10, None, 18),
+            ],
+        );
 
         Self {
             chains,
@@ -245,10 +295,7 @@ impl UnifiedBalanceService {
     /// Get total portfolio value in USD
     pub async fn get_total_usd_value(&self, user_id: &str) -> Decimal {
         let balances = self.get_unified_balances(user_id).await;
-        balances
-            .iter()
-            .filter_map(|b| b.usd_value)
-            .sum()
+        balances.iter().filter_map(|b| b.usd_value).sum()
     }
 
     /// Invalidate cached balances for a user
@@ -282,9 +329,13 @@ impl UnifiedBalanceService {
     // Helper: generate deterministic mock balance
     fn mock_balance(&self, user_id: &str, symbol: &str, chain_id: u64) -> Decimal {
         // Generate a deterministic but realistic mock balance based on user_id hash
-        let hash = user_id.bytes().fold(0u64, |acc, b| acc.wrapping_add(b as u64));
+        let hash = user_id
+            .bytes()
+            .fold(0u64, |acc, b| acc.wrapping_add(b as u64));
         let seed = hash.wrapping_mul(chain_id).wrapping_add(
-            symbol.bytes().fold(0u64, |acc, b| acc.wrapping_add(b as u64)),
+            symbol
+                .bytes()
+                .fold(0u64, |acc, b| acc.wrapping_add(b as u64)),
         );
 
         // Generate balance between 0 and 10000

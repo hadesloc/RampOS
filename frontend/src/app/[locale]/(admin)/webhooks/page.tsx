@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { webhooksApi, type WebhookEvent } from "@/lib/api";
-import { Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -55,12 +56,10 @@ export default function WebhooksPage() {
     try {
       const response = await webhooksApi.list({
         status: filter.status || undefined,
-        // event_type not yet supported in list params according to types, but we can filter client side if needed
-        // assuming backend supports status filter
+        event_type: filter.eventType || undefined,
       });
       setEvents(response.data);
     } catch (err: any) {
-      console.error("Failed to fetch webhooks:", err);
       setError(err.message || "Failed to load webhook events");
       toast({
         variant: "destructive",
@@ -70,33 +69,11 @@ export default function WebhooksPage() {
     } finally {
       setLoading(false);
     }
-  }, [filter.status, toast]);
+  }, [filter.eventType, filter.status, toast]);
 
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
-
-  const handleRetry = async (id: string) => {
-    try {
-        await webhooksApi.retry(id);
-        toast({
-            title: "Success",
-            description: "Webhook delivery retried",
-        });
-        fetchEvents();
-    } catch (err: any) {
-        toast({
-            variant: "destructive",
-            title: "Error",
-            description: err.message || "Failed to retry webhook",
-        });
-    }
-  };
-
-  const filteredEvents = events.filter((event) => {
-    if (filter.eventType && !event.event_type.includes(filter.eventType)) return false;
-    return true;
-  });
 
   const stats = {
     total: events.length,
@@ -104,6 +81,8 @@ export default function WebhooksPage() {
     pending: events.filter((e) => e.status === "PENDING").length,
     failed: events.filter((e) => e.status === "FAILED").length,
   };
+  const failedEvents = events.filter((event) => event.status === "FAILED");
+  const pendingEvents = events.filter((event) => event.status === "PENDING");
 
   const handleRefresh = () => {
     fetchEvents();
@@ -115,7 +94,7 @@ export default function WebhooksPage() {
         <div>
             <h1 className="text-3xl font-bold tracking-tight">Webhooks</h1>
             <p className="text-muted-foreground">
-            Webhook delivery status and retry management
+            Webhook delivery visibility, SLA guidance, and bounded operator recommendations
             </p>
         </div>
         <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading}>
@@ -142,6 +121,22 @@ export default function WebhooksPage() {
           <div className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.failed}</div>
         </div>
       </div>
+
+      <Card className="border-blue-200 bg-blue-50/70">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-blue-950">
+            <AlertTriangle className="h-4 w-4" />
+            Webhook SLA guardian
+          </CardTitle>
+          <CardDescription className="text-blue-900/80">
+            {failedEvents.length} failed needs review inside 15 min.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-blue-900/85">
+          <p>Recommend endpoint health review before any replay.</p>
+          <p>{pendingEvents.length} pending remains in the observation lane until the next retry window.</p>
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <div className="flex gap-4">
@@ -180,7 +175,7 @@ export default function WebhooksPage() {
               <th className="px-4 py-3 text-left font-medium">URL</th>
               <th className="px-4 py-3 text-left font-medium">Created</th>
               <th className="px-4 py-3 text-left font-medium">Next Attempt</th>
-              <th className="px-4 py-3 text-left font-medium">Actions</th>
+              <th className="px-4 py-3 text-left font-medium">Recommendation</th>
             </tr>
           </thead>
           <tbody>
@@ -193,14 +188,14 @@ export default function WebhooksPage() {
                         </div>
                     </td>
                 </tr>
-            ) : filteredEvents.length === 0 ? (
+            ) : events.length === 0 ? (
                 <tr>
                     <td colSpan={8} className="h-24 text-center text-muted-foreground">
                         No webhook events found matching the filters.
                     </td>
                 </tr>
             ) : (
-                filteredEvents.map((event) => (
+                events.map((event) => (
               <tr key={event.id} className="border-t hover:bg-muted/30">
                 <td className="px-4 py-3 font-mono text-xs">{event.event_type}</td>
                 <td className="px-4 py-3">
@@ -232,15 +227,12 @@ export default function WebhooksPage() {
                 <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                   {event.next_attempt_at ? formatDate(event.next_attempt_at) : "-"}
                 </td>
-                <td className="px-4 py-3">
-                    {event.status === 'FAILED' && (
-                        <button
-                            className="text-blue-600 dark:text-blue-400 hover:underline text-xs"
-                            onClick={() => handleRetry(event.id)}
-                        >
-                            Retry
-                        </button>
-                    )}
+                <td className="px-4 py-3 text-xs text-muted-foreground">
+                  {event.status === "FAILED"
+                    ? "Review endpoint health and correlate with incidents before replay."
+                    : event.status === "PENDING"
+                      ? "Monitor the next retry window and notify ops if attempts stall."
+                      : "No follow-up needed."}
                 </td>
               </tr>
             )))}

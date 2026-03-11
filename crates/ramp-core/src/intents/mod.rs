@@ -36,26 +36,24 @@
 //! let result = engine.execute(&execution.id).await?;
 //! ```
 
-pub mod spec;
-pub mod solver;
-pub mod unified_balance;
-pub mod execution;
 pub mod backends;
+pub mod execution;
+pub mod solver;
+pub mod spec;
+pub mod unified_balance;
 
 // Re-export primary types for convenient access
-pub use spec::{
-    AssetId, ExecutionPlan, ExecutionStepKind, IntentAction, IntentConstraints, IntentSpec,
-    PlanStep, StepEstimate,
-};
-pub use solver::{IntentSolver, LocalSolver, RouteOption};
-pub use unified_balance::{
-    ChainBalance, ChainConfig, UnifiedBalance, UnifiedBalanceService,
+pub use backends::{
+    AcrossBackend, BackendRegistry, BridgeBackend, BridgeBackendQuote, BridgeTransferStatus,
+    OneInchBackend, ParaSwapBackend, StargateBackend, SwapBackend, SwapBackendQuote,
 };
 pub use execution::{
     ExecutionEngine, ExecutionState, IntentExecution, ProgressEvent, ProgressEventType,
     StepExecutionStatus, StepRecord,
 };
-pub use backends::{
-    AcrossBackend, BackendRegistry, BridgeBackend, BridgeBackendQuote, BridgeTransferStatus,
-    OneInchBackend, ParaSwapBackend, StargateBackend, SwapBackend, SwapBackendQuote,
+pub use solver::{IntentSolver, LocalSolver, RouteOption};
+pub use spec::{
+    AssetId, ExecutionPlan, ExecutionStepKind, IntentAction, IntentConstraints, IntentSpec,
+    PlanStep, StepEstimate,
 };
+pub use unified_balance::{ChainBalance, ChainConfig, UnifiedBalance, UnifiedBalanceService};

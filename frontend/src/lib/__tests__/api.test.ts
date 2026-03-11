@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { ApiError, intentsApi, usersApi, casesApi, healthApi } from '../api'
+import { ApiError, intentsApi, usersApi, casesApi, healthApi, webhooksApi } from '../api'
 
 // Mock global fetch
 const mockFetch = vi.fn()
@@ -209,6 +209,23 @@ describe('API Client', () => {
 
       const result = await healthApi.ready()
       expect(result).toEqual(mockReady)
+    })
+  })
+
+  describe('webhooksApi', () => {
+    it('passes the event_type filter when listing webhook events', async () => {
+      setupMockFetch({ data: [], total: 0, page: 1, per_page: 20, total_pages: 0 })
+
+      await webhooksApi.list({ status: 'FAILED', event_type: 'intent.payout' })
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('status=FAILED'),
+        expect.any(Object)
+      )
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('event_type=intent.payout'),
+        expect.any(Object)
+      )
     })
   })
 

@@ -3,8 +3,8 @@
 //! Fetches on-chain prices from Chainlink price feeds for stablecoins.
 
 use super::{Price, PriceOracle, PriceSource};
-use async_trait::async_trait;
 use alloy::primitives::Address;
+use async_trait::async_trait;
 use ramp_common::{Error, Result};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -125,11 +125,7 @@ impl ChainlinkOracle {
 
     /// Get feed address for a token on a chain
     pub fn get_feed_address(&self, token: Address, chain_id: u64) -> Option<Address> {
-        self.config
-            .feeds
-            .get(&chain_id)?
-            .get(&token)
-            .copied()
+        self.config.feeds.get(&chain_id)?.get(&token).copied()
     }
 
     /// Check if a token is supported on a chain
@@ -173,7 +169,12 @@ impl ChainlinkOracle {
             _ => Decimal::ONE,
         };
 
-        Ok(Price::new(token, chain_id, price_usd, PriceSource::Chainlink))
+        Ok(Price::new(
+            token,
+            chain_id,
+            price_usd,
+            PriceSource::Chainlink,
+        ))
     }
 }
 

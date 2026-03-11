@@ -2,9 +2,9 @@
 //!
 //! Supports USDT, USDC, DAI and other ERC-20 tokens as gas payment.
 
+use alloy::primitives::{Address, Bytes, U256};
 use async_trait::async_trait;
 use chrono::Utc;
-use alloy::primitives::{Address, Bytes, U256};
 use ramp_common::{types::TenantId, Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -384,7 +384,10 @@ impl MultiTokenPaymaster {
         // For now, return a mock status
         let current_allowance = U256::ZERO; // Would be fetched from chain
 
-        let token_address = self.config.supported_tokens.iter()
+        let token_address = self
+            .config
+            .supported_tokens
+            .iter()
             .find(|t| t.token == token && t.chain_id == self.config.chain_id)
             .map(|t| t.token_address)
             .unwrap_or(Address::ZERO);

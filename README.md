@@ -21,7 +21,8 @@
   <a href="#quick-start">Quick Start</a> |
   <a href="#api-overview">API</a> |
   <a href="#smart-contracts">Contracts</a> |
-  <a href="#sdk">SDK</a>
+  <a href="#sdk">SDK</a> |
+  <a href="docs/recent-roadmap-and-security-hardening-2026-03.md">Security & Roadmap</a>
 </p>
 
 ---
@@ -31,6 +32,12 @@
 RampOS is a **production-grade orchestration layer** for crypto/fiat exchanges. It handles the entire transaction lifecycle — from fiat deposit to crypto trading to fiat withdrawal — with built-in compliance, account abstraction, and multi-tenant isolation.
 
 Built with **Rust** for performance and memory safety, **Solidity** for on-chain logic, and **Next.js** for the admin dashboard.
+
+### 🆕 Recent Updates (March 2026)
+- **RFQ Auction Layer**: Bidirectional LP price discovery for VND/USDT (Completed 2026-03-08).
+- **Compliance Hardening**: Landed **Travel Rule Foundation**, **KYC Passport**, and **KYB Graph** (Migrations 037-041).
+- **Security Audit**: Completed deep audit of HMAC signatures, RLS fail-closed policies, and repository sanitization.
+- **[Read Full Roadmap & Security Hardening Report →](docs/recent-roadmap-and-security-hardening-2026-03.md)**
 
 ### Key Principles
 

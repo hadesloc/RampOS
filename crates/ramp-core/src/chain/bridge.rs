@@ -79,10 +79,7 @@ pub trait BridgeAdapter: Send + Sync {
     ) -> Result<BridgeTransferResult>;
 
     /// Check the status of a bridge transfer
-    async fn check_bridge_status(
-        &self,
-        transfer_id: &str,
-    ) -> Result<BridgeStatusResponse>;
+    async fn check_bridge_status(&self, transfer_id: &str) -> Result<BridgeStatusResponse>;
 }
 
 /// Mock bridge adapter simulating a Stargate-like cross-chain bridge.
@@ -115,7 +112,7 @@ impl MockBridgeAdapter {
         // L2 -> L2 is fast, L1 involved is slower
         match (source, dest) {
             (s, d) if s == ChainId::ETHEREUM || d == ChainId::ETHEREUM => 900, // 15 min
-            _ => 120, // 2 min for L2<->L2
+            _ => 120,                                                          // 2 min for L2<->L2
         }
     }
 }
@@ -182,14 +179,9 @@ impl BridgeAdapter for MockBridgeAdapter {
         // Deterministic IDs based on inputs
         let transfer_id = format!(
             "bridge-{}-{}-{}",
-            quote.source_chain.0,
-            quote.dest_chain.0,
-            quote.amount
+            quote.source_chain.0, quote.dest_chain.0, quote.amount
         );
-        let source_tx_hash = format!(
-            "0x{:0>64x}",
-            (quote.amount as u64).wrapping_mul(0xCAFEBABE)
-        );
+        let source_tx_hash = format!("0x{:0>64x}", (quote.amount as u64).wrapping_mul(0xCAFEBABE));
 
         Ok(BridgeTransferResult {
             transfer_id,
@@ -198,19 +190,13 @@ impl BridgeAdapter for MockBridgeAdapter {
         })
     }
 
-    async fn check_bridge_status(
-        &self,
-        transfer_id: &str,
-    ) -> Result<BridgeStatusResponse> {
+    async fn check_bridge_status(&self, transfer_id: &str) -> Result<BridgeStatusResponse> {
         if transfer_id.is_empty() {
             return Err(ChainError::Internal("Transfer ID is empty".into()));
         }
 
         // Mock: always return Completed for valid IDs
-        let dest_tx_hash = format!(
-            "0x{:0>64x}",
-            transfer_id.len() as u64 * 0xBEEFCAFE
-        );
+        let dest_tx_hash = format!("0x{:0>64x}", transfer_id.len() as u64 * 0xBEEFCAFE);
 
         Ok(BridgeStatusResponse {
             transfer_id: transfer_id.to_string(),

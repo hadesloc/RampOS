@@ -24,7 +24,9 @@ use ramp_common::{
 use ramp_core::event::InMemoryEventPublisher;
 use ramp_core::repository::user::UserRow;
 use ramp_core::service::exchange_rate::ExchangeRateService;
-use ramp_core::service::offramp::{OffRampIntent, OffRampIntentStore, OffRampService, OffRampState};
+use ramp_core::service::offramp::{
+    OffRampIntent, OffRampIntentStore, OffRampService, OffRampState,
+};
 use ramp_core::service::offramp_fees::OffRampFeeCalculator;
 use ramp_core::service::payout::{
     ConfirmPayoutRequest, CreatePayoutRequest, PayoutBankStatus, PayoutService,
@@ -136,7 +138,13 @@ fn build_payout_service() -> (
         event_publisher.clone(),
     );
 
-    (service, intent_repo, ledger_repo, user_repo, event_publisher)
+    (
+        service,
+        intent_repo,
+        ledger_repo,
+        user_repo,
+        event_publisher,
+    )
 }
 
 /// Build an OffRampService for testing
@@ -163,14 +171,26 @@ fn test_offramp_quote_creation_btc() {
     assert!(quote.quote_id.starts_with("ofr_"));
     assert_eq!(quote.crypto_asset, CryptoSymbol::BTC);
     assert_eq!(quote.crypto_amount, dec!(0.01));
-    assert!(quote.exchange_rate > Decimal::ZERO, "Exchange rate must be positive");
-    assert!(quote.gross_vnd_amount > Decimal::ZERO, "Gross VND must be positive");
-    assert!(quote.net_vnd_amount > Decimal::ZERO, "Net VND must be positive");
+    assert!(
+        quote.exchange_rate > Decimal::ZERO,
+        "Exchange rate must be positive"
+    );
+    assert!(
+        quote.gross_vnd_amount > Decimal::ZERO,
+        "Gross VND must be positive"
+    );
+    assert!(
+        quote.net_vnd_amount > Decimal::ZERO,
+        "Net VND must be positive"
+    );
     assert!(
         quote.net_vnd_amount < quote.gross_vnd_amount,
         "Net should be less than gross (fees deducted)"
     );
-    assert!(quote.expires_at > Utc::now(), "Quote must not already be expired");
+    assert!(
+        quote.expires_at > Utc::now(),
+        "Quote must not already be expired"
+    );
 }
 
 #[test]
@@ -226,7 +246,10 @@ fn test_offramp_quote_confirms_and_locks_rate() {
     let confirmed = service.confirm_quote(&quote.quote_id).unwrap();
 
     assert_eq!(confirmed.state, OffRampState::CryptoPending);
-    assert!(confirmed.locked_rate_id.is_some(), "Rate should be locked after confirm");
+    assert!(
+        confirmed.locked_rate_id.is_some(),
+        "Rate should be locked after confirm"
+    );
     assert!(
         confirmed.deposit_address.is_some(),
         "Deposit address should be assigned"
@@ -317,7 +340,10 @@ async fn test_payout_idempotency_returns_same_intent() {
     let res1 = service.create_payout(req.clone()).await.unwrap();
     let res2 = service.create_payout(req).await.unwrap();
 
-    assert_eq!(res1.intent_id, res2.intent_id, "Idempotent requests must return same intent");
+    assert_eq!(
+        res1.intent_id, res2.intent_id,
+        "Idempotent requests must return same intent"
+    );
 }
 
 #[tokio::test]
@@ -347,7 +373,10 @@ async fn test_payout_rejects_inactive_user() {
     };
 
     let result = service.create_payout(req).await;
-    assert!(result.is_err(), "Suspended user should not be able to payout");
+    assert!(
+        result.is_err(),
+        "Suspended user should not be able to payout"
+    );
 }
 
 #[tokio::test]
@@ -473,7 +502,11 @@ async fn test_tier2_within_limits_succeeds() {
     };
 
     let res = service.create_payout(req).await.unwrap();
-    assert_eq!(res.status, PayoutState::Submitted, "Tier2 50M payout should pass");
+    assert_eq!(
+        res.status,
+        PayoutState::Submitted,
+        "Tier2 50M payout should pass"
+    );
 }
 
 #[tokio::test]
@@ -601,7 +634,10 @@ async fn test_payout_full_lifecycle_success() {
 
     // Verify events were published
     let events = event_pub.get_events().await;
-    assert!(events.len() >= 2, "At least intent.created and status_changed events");
+    assert!(
+        events.len() >= 2,
+        "At least intent.created and status_changed events"
+    );
 }
 
 #[tokio::test]
@@ -825,11 +861,7 @@ async fn test_concurrent_payouts_all_succeed() {
     let mut ids: Vec<String> = intents.iter().map(|i| i.id.clone()).collect();
     ids.sort();
     ids.dedup();
-    assert_eq!(
-        ids.len(),
-        intents.len(),
-        "All intent IDs should be unique"
-    );
+    assert_eq!(ids.len(), intents.len(), "All intent IDs should be unique");
 }
 
 #[tokio::test]
@@ -977,7 +1009,10 @@ async fn test_payout_reversal_publishes_events() {
         .iter()
         .filter(|e| e.get("type").and_then(|t| t.as_str()) == Some("payout.reversed"))
         .collect();
-    assert!(!reversed_events.is_empty(), "payout.reversed event expected");
+    assert!(
+        !reversed_events.is_empty(),
+        "payout.reversed event expected"
+    );
 }
 
 // ============================================================================
@@ -1098,10 +1133,7 @@ fn test_offramp_cancel_from_converting_fails() {
 
     // Once crypto is received, cancellation is not allowed
     let result = service.cancel(&quote.quote_id);
-    assert!(
-        result.is_err(),
-        "Should not cancel after crypto received"
-    );
+    assert!(result.is_err(), "Should not cancel after crypto received");
 }
 
 #[test]
@@ -1218,10 +1250,7 @@ fn test_fee_swift_bank_charge() {
 fn test_fee_net_equals_gross_minus_total() {
     let calc = OffRampFeeCalculator::new();
     let fees = calc.calculate_fees(dec!(25_000_000), CryptoSymbol::ETH, "domestic");
-    assert_eq!(
-        fees.net_amount_vnd,
-        fees.gross_amount_vnd - fees.total_fee
-    );
+    assert_eq!(fees.net_amount_vnd, fees.gross_amount_vnd - fees.total_fee);
 }
 
 #[test]
@@ -1246,11 +1275,7 @@ fn test_offramp_terminal_states_have_no_transitions() {
     ];
 
     for state in terminals {
-        assert!(
-            state.is_terminal(),
-            "{} should be terminal",
-            state
-        );
+        assert!(state.is_terminal(), "{} should be terminal", state);
         assert!(
             state.allowed_transitions().is_empty(),
             "{} should have no transitions",
@@ -1270,11 +1295,7 @@ fn test_offramp_non_terminal_states_have_transitions() {
     ];
 
     for state in non_terminals {
-        assert!(
-            !state.is_terminal(),
-            "{} should not be terminal",
-            state
-        );
+        assert!(!state.is_terminal(), "{} should not be terminal", state);
         assert!(
             !state.allowed_transitions().is_empty(),
             "{} should have transitions",

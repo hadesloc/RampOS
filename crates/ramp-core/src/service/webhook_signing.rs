@@ -10,7 +10,7 @@
 //! The signed message is: `{timestamp}.{payload_bytes}`
 
 use chrono::Utc;
-use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey, Signature};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use ramp_common::Result;
 use serde::{Deserialize, Serialize};
 
@@ -208,19 +208,12 @@ impl WebhookSigningService {
 
     /// Generate both v1 (HMAC-SHA256) and v2 (Ed25519) signatures
     /// for backward-compatible dual signing.
-    pub fn sign_dual(
-        &self,
-        hmac_secret: &[u8],
-        payload: &[u8],
-    ) -> Result<DualSignatureResult> {
+    pub fn sign_dual(&self, hmac_secret: &[u8], payload: &[u8]) -> Result<DualSignatureResult> {
         let timestamp = Utc::now().timestamp();
 
         // Generate v1 signature (HMAC-SHA256)
-        let v1_header = ramp_common::crypto::generate_webhook_signature(
-            hmac_secret,
-            timestamp,
-            payload,
-        )?;
+        let v1_header =
+            ramp_common::crypto::generate_webhook_signature(hmac_secret, timestamp, payload)?;
 
         // Generate v2 signature (Ed25519)
         let v2_result = self.sign_v2_with_timestamp(payload, timestamp)?;
@@ -270,8 +263,7 @@ fn parse_v2_header(header: &str) -> std::result::Result<(i64, [u8; 64]), Webhook
         .get("ed25519")
         .ok_or(WebhookSignatureV2Error::MissingSignature)?;
 
-    let sig_bytes = hex::decode(sig_hex)
-        .map_err(|_| WebhookSignatureV2Error::InvalidSignature)?;
+    let sig_bytes = hex::decode(sig_hex).map_err(|_| WebhookSignatureV2Error::InvalidSignature)?;
 
     if sig_bytes.len() != 64 {
         return Err(WebhookSignatureV2Error::InvalidSignature);

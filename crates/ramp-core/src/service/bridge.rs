@@ -1,10 +1,8 @@
 //! Bridge Service - Cross-chain transfer orchestration
 
-use crate::bridge::{
-    BridgeQuote, BridgeRegistry, BridgeStatus, ChainId, TxHash,
-};
+use crate::bridge::{BridgeQuote, BridgeRegistry, BridgeStatus, ChainId, TxHash};
 use alloy::primitives::{Address, U256};
-use ramp_common::{Result, Error};
+use ramp_common::{Error, Result};
 use std::sync::Arc;
 
 /// Service for managing cross-chain bridge operations
@@ -32,12 +30,17 @@ impl BridgeService {
         provider: Option<String>,
     ) -> Result<BridgeQuote> {
         if let Some(name) = provider {
-            let bridge = self.registry.get_bridge(&name)
-                .ok_or_else(|| Error::Validation(format!("Bridge provider '{}' not found", name)))?;
+            let bridge = self.registry.get_bridge(&name).ok_or_else(|| {
+                Error::Validation(format!("Bridge provider '{}' not found", name))
+            })?;
 
-            bridge.quote(from_chain, to_chain, token_address, amount, recipient).await
+            bridge
+                .quote(from_chain, to_chain, token_address, amount, recipient)
+                .await
         } else {
-            self.registry.get_best_quote(from_chain, to_chain, token_address, amount, recipient).await
+            self.registry
+                .get_best_quote(from_chain, to_chain, token_address, amount, recipient)
+                .await
         }
     }
 
@@ -50,28 +53,37 @@ impl BridgeService {
         amount: U256,
         recipient: Address,
     ) -> Result<Vec<BridgeQuote>> {
-        Ok(self.registry.get_all_quotes(from_chain, to_chain, token_address, amount, recipient).await)
+        Ok(self
+            .registry
+            .get_all_quotes(from_chain, to_chain, token_address, amount, recipient)
+            .await)
     }
 
     /// Execute a bridge transfer
     pub async fn execute_bridge(&self, quote: BridgeQuote) -> Result<TxHash> {
-        let bridge = self.registry.get_bridge(&quote.bridge_name)
-            .ok_or_else(|| Error::Validation(format!("Bridge provider '{}' not found", quote.bridge_name)))?;
+        let bridge = self
+            .registry
+            .get_bridge(&quote.bridge_name)
+            .ok_or_else(|| {
+                Error::Validation(format!("Bridge provider '{}' not found", quote.bridge_name))
+            })?;
 
         bridge.bridge(quote).await
     }
 
     /// Get status of a bridge transaction
     pub async fn get_status(&self, provider: &str, tx_hash: TxHash) -> Result<BridgeStatus> {
-        let bridge = self.registry.get_bridge(provider)
-            .ok_or_else(|| Error::Validation(format!("Bridge provider '{}' not found", provider)))?;
+        let bridge = self.registry.get_bridge(provider).ok_or_else(|| {
+            Error::Validation(format!("Bridge provider '{}' not found", provider))
+        })?;
 
         bridge.status(tx_hash).await
     }
 
     /// Get supported bridge providers
     pub fn get_providers(&self) -> Vec<String> {
-        self.registry.all_bridges()
+        self.registry
+            .all_bridges()
             .iter()
             .map(|b| b.name().to_string())
             .collect()
@@ -100,17 +112,16 @@ mod tests {
         let amount = U256::from(1_000_000_000u64); // 1000 USDC
 
         // Mock address for USDC on Ethereum
-        let token_address: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".parse().unwrap();
-        let recipient: Address = "0x1234567890123456789012345678901234567890".parse().unwrap();
+        let token_address: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+            .parse()
+            .unwrap();
+        let recipient: Address = "0x1234567890123456789012345678901234567890"
+            .parse()
+            .unwrap();
 
-        let quote_result = service.get_quote(
-            from_chain,
-            to_chain,
-            token_address,
-            amount,
-            recipient,
-            None
-        ).await;
+        let quote_result = service
+            .get_quote(from_chain, to_chain, token_address, amount, recipient, None)
+            .await;
 
         assert!(quote_result.is_ok());
         let quote = quote_result.unwrap();

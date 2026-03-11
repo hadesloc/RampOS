@@ -6,8 +6,7 @@ use axum::{
     Router,
 };
 use ramp_api::middleware::{
-    idempotency_middleware, IdempotencyConfig, IdempotencyHandler, IdempotencyStore,
-    StoredResponse,
+    idempotency_middleware, IdempotencyConfig, IdempotencyHandler, IdempotencyStore, StoredResponse,
 };
 use std::sync::Arc;
 use tower::ServiceExt; // for oneshot
@@ -93,10 +92,7 @@ async fn test_idempotency_lock_error_returns_503() {
         .unwrap();
     let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(payload["error"], "idempotency_lock_unavailable");
-    assert_eq!(
-        payload["message"],
-        "Idempotency lock error; please retry"
-    );
+    assert_eq!(payload["message"], "Idempotency lock error; please retry");
 }
 
 #[tokio::test]

@@ -2,7 +2,7 @@
 //!
 //! Implements EIP-7702 transaction type (0x04) with authorization list.
 
-use alloy::primitives::{Address, Bytes, U256, U64, keccak256};
+use alloy::primitives::{keccak256, Address, Bytes, U256, U64};
 use serde::{Deserialize, Serialize};
 
 use super::authorization::{AuthorizationList, SignedAuthorization};
@@ -236,7 +236,10 @@ impl Eip7702TxBuilder {
 
 /// Trim leading zeros from a byte slice
 fn trim_leading_zeros(bytes: &[u8]) -> &[u8] {
-    let first_nonzero = bytes.iter().position(|&b| b != 0).unwrap_or(bytes.len() - 1);
+    let first_nonzero = bytes
+        .iter()
+        .position(|&b| b != 0)
+        .unwrap_or(bytes.len() - 1);
     &bytes[first_nonzero..]
 }
 

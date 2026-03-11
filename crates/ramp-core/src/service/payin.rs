@@ -278,7 +278,9 @@ impl PayinService {
 
         // Validate state transition
         let current_state = PayinState::from(intent.state.as_str());
-        if current_state != PayinState::InstructionIssued && current_state != PayinState::FundsPending {
+        if current_state != PayinState::InstructionIssued
+            && current_state != PayinState::FundsPending
+        {
             return Err(Error::InvalidStateTransition {
                 from: intent.state.clone(),
                 to: PayinState::FundsConfirmed.to_string(),
@@ -299,7 +301,11 @@ impl PayinService {
 
             // Update to mismatched state
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, &PayinState::MismatchedAmount.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &intent_id,
+                    &PayinState::MismatchedAmount.to_string(),
+                )
                 .await?;
 
             // Still record the bank confirmation
@@ -309,7 +315,11 @@ impl PayinService {
 
             // Publish event for manual review
             self.event_publisher
-                .publish_intent_status_changed(&intent_id, &req.tenant_id, &PayinState::MismatchedAmount.to_string())
+                .publish_intent_status_changed(
+                    &intent_id,
+                    &req.tenant_id,
+                    &PayinState::MismatchedAmount.to_string(),
+                )
                 .await?;
 
             return Ok(intent_id);
@@ -413,7 +423,11 @@ impl PayinService {
                 .await?;
 
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, &PayinState::FundsConfirmed.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &intent_id,
+                    &PayinState::FundsConfirmed.to_string(),
+                )
                 .await?;
 
             let user_id = UserId::new(&intent.user_id);
@@ -427,17 +441,29 @@ impl PayinService {
             self.ledger_repo.record_transaction(ledger_tx).await?;
 
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, &PayinState::VndCredited.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &intent_id,
+                    &PayinState::VndCredited.to_string(),
+                )
                 .await?;
 
             self.intent_repo
-                .update_state(&req.tenant_id, &intent_id, &PayinState::Completed.to_string())
+                .update_state(
+                    &req.tenant_id,
+                    &intent_id,
+                    &PayinState::Completed.to_string(),
+                )
                 .await?;
         }
 
         // Publish events
         self.event_publisher
-            .publish_intent_status_changed(&intent_id, &req.tenant_id, &PayinState::Completed.to_string())
+            .publish_intent_status_changed(
+                &intent_id,
+                &req.tenant_id,
+                &PayinState::Completed.to_string(),
+            )
             .await?;
 
         info!(
