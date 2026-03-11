@@ -57,6 +57,27 @@ Official SDKs are available for:
 
 See the [SDK documentation](../SDK.md) for detailed usage.
 
+## CLI
+
+For operator automation and AI-agent workflows, RampOS also exposes a CLI surface:
+
+- `rampos`
+- `python scripts/rampos-cli.py`
+
+Representative commands:
+
+```bash
+python scripts/rampos-cli.py intents create-payin --help
+python scripts/rampos-cli.py rfq list-open --help
+python scripts/rampos-cli.py lp rfq bid --help
+python scripts/rampos-cli.py bridge routes --help
+```
+
+CLI docs:
+
+- [CLI Overview](../cli/README.md)
+- [CLI for Agents](../cli/agent-usage.md)
+
 ## OpenAPI / Swagger
 
 Interactive API documentation is available at:

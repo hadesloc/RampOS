@@ -797,6 +797,31 @@ client = RampOSClient(api_key="your_api_key")
 payin = client.payins.create(user_id="usr_123", amount_vnd=1000000)
 ```
 
+## CLI
+
+RampOS also exposes an agent-friendly CLI surface for terminal automation.
+
+- Packaged entrypoint: `rampos`
+- Repo shim: `python scripts/rampos-cli.py`
+- Auth modes: `api`, `admin`, `portal`, `lp`
+- Machine-friendly flags: `--body`, `--body-file`, `--body-stdin`, `--output json|jsonl|table`
+
+Representative commands:
+
+```bash
+python scripts/rampos-cli.py intents create-payin --help
+python scripts/rampos-cli.py rfq list-open --help
+python scripts/rampos-cli.py lp rfq bid --help
+python scripts/rampos-cli.py bridge routes --help
+python scripts/rampos-cli.py licensing upload --help
+```
+
+More details:
+
+- [CLI Overview](docs/cli/README.md)
+- [CLI for Agents](docs/cli/agent-usage.md)
+- [CLI Coverage Ledger](docs/cli/coverage-ledger.md)
+
 ---
 
 ## Tech Stack

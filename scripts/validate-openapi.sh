@@ -1,6 +1,6 @@
 #!/bin/bash
-# validate-openapi.sh - Validate OpenAPI spec and check SDK/CLI drift
-# Exits non-zero if contract-facing surfaces are stale
+# validate-openapi.sh - Validate contract-facing SDK/CLI surfaces and drift
+# Exits non-zero if API, SDK, CLI, or coverage artifacts are stale
 set -e
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,6 +14,12 @@ hash_contract_surface() {
             crates/ramp-api/src/openapi.rs \
             'crates/ramp-api/src/dto/**' \
             'crates/ramp-api/src/handlers/**' \
+            'sdk-python/src/rampos/cli/**' \
+            docs/cli/coverage-ledger.md \
+            docs/cli/README.md \
+            docs/cli/agent-usage.md \
+            scripts/build-cli-manifest.py \
+            scripts/test-rampos-cli.sh \
             scripts/validate-openapi.sh \
             .github/workflows/sdk-generate.yml \
             .github/workflows/sdk-ci.yml \
@@ -26,17 +32,15 @@ hash_contract_surface() {
 }
 
 echo "=================================================="
-echo "    RampOS SDK Drift Detection"
+echo "    RampOS Contract Surface Drift Detection"
 echo "=================================================="
 echo "Project Root: $PROJECT_ROOT"
 echo "Date: $(date)"
 echo "=================================================="
 
-# --- 1. Validate OpenAPI Spec ---
 echo ""
-echo "=== [1/5] Validating OpenAPI Spec ==="
+echo "=== [1/6] Validating OpenAPI Spec ==="
 
-# Check if we can generate the spec via cargo
 if command -v cargo &> /dev/null; then
     echo "Running OpenAPI spec unit test..."
     cd "$PROJECT_ROOT"
@@ -50,9 +54,8 @@ else
     echo "WARNING: cargo not found. Skipping OpenAPI spec validation."
 fi
 
-# --- 2. Check contract surface hash for drift detection ---
 echo ""
-echo "=== [2/5] Checking Contract Surface Hash ==="
+echo "=== [2/6] Checking Contract Surface Hash ==="
 
 if [ -f "$PROJECT_ROOT/crates/ramp-api/src/openapi.rs" ]; then
     CURRENT_HASH=$(hash_contract_surface)
@@ -81,9 +84,8 @@ else
     echo "WARNING: openapi.rs not found at expected path."
 fi
 
-# --- 3. TypeScript SDK Tests ---
 echo ""
-echo "=== [3/5] Checking TypeScript SDK ==="
+echo "=== [3/6] Checking TypeScript SDK ==="
 
 if [ -d "$PROJECT_ROOT/sdk" ]; then
     cd "$PROJECT_ROOT/sdk"
@@ -126,9 +128,8 @@ else
     echo "WARNING: sdk/ directory not found."
 fi
 
-# --- 4. Python SDK Tests ---
 echo ""
-echo "=== [4/5] Checking Python SDK ==="
+echo "=== [4/6] Checking Python SDK + CLI ==="
 
 if [ -d "$PROJECT_ROOT/sdk-python" ]; then
     cd "$PROJECT_ROOT/sdk-python"
@@ -137,19 +138,25 @@ if [ -d "$PROJECT_ROOT/sdk-python" ]; then
         PYTHON_CMD="$(command -v python3 2>/dev/null || command -v python 2>/dev/null)"
         echo "Using Python: $("$PYTHON_CMD" --version 2>&1)"
 
-        # Install in editable mode (quiet)
         echo "Installing Python SDK dependencies..."
         "$PYTHON_CMD" -m pip install -e ".[dev]" --quiet 2>&1 || {
             echo "WARNING: pip install failed. Trying without dev deps..."
             "$PYTHON_CMD" -m pip install -e . --quiet 2>&1 || true
         }
 
-        # Run tests
-        echo "Running Python SDK tests..."
+        echo "Running Python SDK + CLI tests..."
         if "$PYTHON_CMD" -m pytest tests/ -q --tb=short 2>&1; then
-            echo "Python SDK tests: PASSED"
+            echo "Python SDK + CLI tests: PASSED"
         else
-            echo "ERROR: Python SDK tests FAILED"
+            echo "ERROR: Python SDK + CLI tests FAILED"
+            FAILED=1
+        fi
+
+        echo "Building CLI manifest..."
+        if "$PYTHON_CMD" "$PROJECT_ROOT/scripts/build-cli-manifest.py" > /dev/null 2>&1; then
+            echo "CLI manifest build: PASSED"
+        else
+            echo "ERROR: CLI manifest build FAILED"
             FAILED=1
         fi
     else
@@ -159,9 +166,8 @@ else
     echo "WARNING: sdk-python/ directory not found."
 fi
 
-# --- 5. Go SDK Tests ---
 echo ""
-echo "=== [5/5] Checking Go SDK ==="
+echo "=== [5/6] Checking Go SDK ==="
 
 if [ -d "$PROJECT_ROOT/sdk-go" ]; then
     cd "$PROJECT_ROOT/sdk-go"
@@ -169,7 +175,6 @@ if [ -d "$PROJECT_ROOT/sdk-go" ]; then
     if command -v go &> /dev/null; then
         echo "Using Go: $(go version)"
 
-        # Run tests
         echo "Running Go SDK tests..."
         if go test ./... -v -count=1 2>&1; then
             echo "Go SDK tests: PASSED"
@@ -178,7 +183,6 @@ if [ -d "$PROJECT_ROOT/sdk-go" ]; then
             FAILED=1
         fi
 
-        # Build check
         echo "Running Go SDK build check..."
         if go build ./... 2>&1; then
             echo "Go SDK build: PASSED"
@@ -193,9 +197,8 @@ else
     echo "WARNING: sdk-go/ directory not found."
 fi
 
-# --- 5. CLI Smoke Tests ---
 echo ""
-echo "=== [5/5] Checking thin rampos-cli surface ==="
+echo "=== [6/6] Checking rampos-cli surface ==="
 
 if [ -f "$PROJECT_ROOT/scripts/test-rampos-cli.sh" ]; then
     if bash "$PROJECT_ROOT/scripts/test-rampos-cli.sh" 2>&1; then
@@ -208,7 +211,6 @@ else
     echo "WARNING: scripts/test-rampos-cli.sh not found."
 fi
 
-# --- Summary ---
 echo ""
 echo "=================================================="
 if [ $FAILED -eq 0 ]; then

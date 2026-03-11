@@ -772,6 +772,31 @@ client = RampOSClient(api_key="your_api_key")
 payin = client.payins.create(user_id="usr_123", amount_vnd=1000000)
 ```
 
+## CLI
+
+RampOS cÅ©ng cÃ³ CLI phÃ¹ há»£p cho terminal automation vÃ  AI agent.
+
+- Entrypoint cÃ i Ä‘áº·t: `rampos`
+- Shim trong repo: `python scripts/rampos-cli.py`
+- Auth modes: `api`, `admin`, `portal`, `lp`
+- Flags machine-friendly: `--body`, `--body-file`, `--body-stdin`, `--output json|jsonl|table`
+
+VÃ­ dá»¥:
+
+```bash
+python scripts/rampos-cli.py intents create-payin --help
+python scripts/rampos-cli.py rfq list-open --help
+python scripts/rampos-cli.py lp rfq bid --help
+python scripts/rampos-cli.py bridge routes --help
+python scripts/rampos-cli.py licensing upload --help
+```
+
+TÃ i liá»‡u liÃªn quan:
+
+- [Tổng quan CLI](docs/cli/README.md)
+- [CLI cho agent](docs/cli/agent-usage.md)
+- [Coverage ledger](docs/cli/coverage-ledger.md)
+
 ---
 
 ## Công nghệ
