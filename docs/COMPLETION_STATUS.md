@@ -1,6 +1,6 @@
 # RampOS Project Completion Status
 
-_Last updated: 2026-03-08_
+_Last updated: 2026-03-11_
 
 ---
 
@@ -15,10 +15,10 @@ Implemented a full bidirectional LP auction market, enabling competitive price d
 | `migrations/033_rfq_auction.sql` | Tables: `rfq_requests`, `rfq_bids` — with RLS, indexes, trigger |
 | `migrations/034_lp_keys.sql` | Table: `registered_lp_keys` — LP credential store with key_hash |
 | `crates/ramp-core/src/repository/rfq.rs` | `RfqRepository` trait + `PgRfqRepository` + `InMemoryRfqRepository` (test) |
-| `crates/ramp-core/src/service/rfq.rs` | `RfqService` with 5 methods + 4 unit tests |
+| `crates/ramp-core/src/service/rfq.rs` | `RfqService` with hardened matching, expiry handling, stale-bid cleanup, and regression tests |
 | `crates/ramp-api/src/handlers/portal/rfq.rs` | Portal: create/get/accept/cancel RFQ |
 | `crates/ramp-api/src/handlers/admin/rfq.rs` | Admin: list open RFQs, manual finalize |
-| `crates/ramp-api/src/handlers/lp/rfq.rs` | LP: submit bid (X-LP-Key auth) |
+| `crates/ramp-api/src/handlers/lp/rfq.rs` | LP: submit bid with DB-backed `registered_lp_keys` auth |
 | `crates/ramp-api/src/handlers/lp/mod.rs` | LP module root |
 
 ### Files Modified
@@ -52,7 +52,9 @@ POST   /v1/admin/rfq/:id/finalize   Manual trigger matching (Admin Key)
 - **Event-driven**: `rfq.created` event via NATS notifies LPs; `rfq.matched` signals completion
 - **Real EventPublisher**: all handlers use `app_state.event_publisher` (NATS in prod, InMemory in dev)
 - **Expiry job**: background tokio task runs every 60s — `UPDATE rfq_requests SET state='EXPIRED' WHERE state='OPEN' AND expires_at <= NOW()`
-- **LP Auth**: `X-LP-Key` header with format `lp_id:tenant_id:secret`; `registered_lp_keys` table for future DB-backed validation
+- **LP Auth**: `X-LP-Key` now validates against `registered_lp_keys` with secret-hash, active/expiry, direction permissions, and optional max-bid caps
+- **Bid validation**: `vnd_amount` must match RFQ economics; ONRAMP bids cannot exceed request budget
+- **Consistency hardening**: detail, portal accept, and admin finalize all use the same best-price rule; stale bids are moved out of `PENDING` during service reads
 - **Tenant isolation**: RLS policies on all new tables
 - **Non-destructive**: Zero changes to existing `/v1/portal/offramp/*` or payin flows
 
@@ -89,18 +91,16 @@ POST   /v1/admin/rfq/:id/finalize   Manual trigger matching (Admin Key)
 | Priority | Task | Est. |
 |----------|------|------|
 | High | Run `sqlx migrate run` to apply migrations 033-034 | 5 min |
-| High | LP auth: lookup `registered_lp_keys` table in DB (currently honor-system) | 2-4h |
 | Medium | Frontend: RFQ auction UI for user portal | 1-2 days |
 | Medium | LP dashboard: view open RFQs, submit bids | 1 day |
 | Low | Integration tests for RFQ flow e2e | 2-4h |
-| Low | Admin dashboard: auction monitoring view | 4-8h |
+| Low | Atomic finalize transaction for RFQ lifecycle | 4-8h |
 
 ## Estimated Project Completion
 
 **Previous (before RFQ): 95%**
-**Current: 97%**
+**Current: 98%**
 
-The remaining 3%:
-- LP key DB validation (1%)
+The remaining 2%:
 - Frontend RFQ UI (1%)
-- E2E integration tests (1%)
+- E2E integration tests / transaction-level hardening (1%)

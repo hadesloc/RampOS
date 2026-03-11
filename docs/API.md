@@ -329,6 +329,13 @@ ON-RAMP:  User creates RFQ → LPs bid (lowest VND wins) → User accepts → MA
 
 #### POST /v1/portal/rfq
 
+Operational guarantees for RFQ:
+- RFQ detail, portal accept, and admin finalize use the same best-price selection rule.
+- LP bids are rejected if `vndAmount != cryptoAmount * exchangeRate`.
+- ONRAMP bids are rejected if they exceed the RFQ `vndAmount` budget.
+- `X-LP-Key` is validated against `registered_lp_keys` with secret-hash, active, expiry, direction-permission, and optional max-bid checks.
+- Stale bids are transitioned from `PENDING` to `EXPIRED` during service read/finalize paths.
+
 Create a new RFQ auction. Auth: Portal JWT.
 
 **Request Body**
@@ -370,6 +377,8 @@ Create a new RFQ auction. Auth: Portal JWT.
 
 Get RFQ with all bids and best rate. Auth: Portal JWT.
 
+`bestRate` follows the exact same best-price rule used by portal accept and admin finalize.
+
 **Response** (200 OK)
 ```json
 {
@@ -403,6 +412,11 @@ LP submits a bid. Auth: `X-LP-Key: lp_id:tenant_id:secret`.
   "validMinutes": 5
 }
 ```
+
+Validation rules:
+- `exchangeRate` and `vndAmount` must be positive.
+- `vndAmount` must equal `cryptoAmount * exchangeRate` for the RFQ being quoted.
+- For `ONRAMP`, `vndAmount` must not exceed the RFQ request budget.
 
 #### GET /v1/admin/rfq/open
 

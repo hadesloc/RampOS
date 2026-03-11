@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Core Services expanded from ~15 to 46 service modules
 - Admin handlers expanded from ~15 to 33 handler files
 - Compliance modules expanded with `travel_rule/`, `kyb/`, `passport.rs`, `rescreening.rs`, `risk_lab.rs`, `risk_graph.rs`
+- RFQ and admin surfaces were hardened after rollout:
+  - RFQ detail, portal accept, and admin finalize now use the same best-price semantics
+  - LP bid auth now validates against `registered_lp_keys` instead of honor-system parsing
+  - RFQ bid validation enforces economic consistency and ONRAMP budget limits
+  - Admin licensing, bridge, and swap surfaces were aligned with real backend routes
 
 ---
 
@@ -47,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Bidirectional RFQ Auction System (Migrations 033-034)
 - **RFQ Request/Bid Tables**: `rfq_requests` and `rfq_bids` with direction-aware matching (OFFRAMP: highest rate wins, ONRAMP: lowest rate wins)
-- **LP Key Authentication**: `lp_keys` table with X-LP-Key header format (`lp_id:tenant_id:api_secret`) for multi-tenant LP access
+- **LP Key Authentication**: `registered_lp_keys` table with hashed-secret validation for multi-tenant LP access
 - **Portal/Admin/LP APIs**: Full auction lifecycle endpoints — create RFQ, submit bid, accept/cancel, admin finalize
 - **Event-Driven**: NATS `rfq.created` and `rfq.matched` events for LP webhook notifications
 

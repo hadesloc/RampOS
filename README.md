@@ -656,6 +656,12 @@ ON-RAMP  (VND → USDT):  User creates RFQ → LPs bid to sell USDT → lowest V
 | `GET`  | `/v1/admin/rfq/open` | Admin Key | List open auctions |
 | `POST` | `/v1/admin/rfq/:id/finalize` | Admin Key | Manual trigger matching |
 
+Operational notes:
+- `GET /v1/portal/rfq/:id`, `POST /v1/portal/rfq/:id/accept`, and `POST /v1/admin/rfq/:id/finalize` use the same winner-selection rule: pure best-price matching.
+- LP bids are validated against the RFQ terms. `vndAmount` must equal `cryptoAmount * exchangeRate`, and ONRAMP bids cannot exceed the RFQ budget.
+- `X-LP-Key` is validated against `registered_lp_keys`, including secret-hash, active/expiry checks, direction permissions, and optional bid caps.
+- Stale bids are moved out of `PENDING` during service reads/finalization, while RFQs still auto-expire every 60 seconds via background job.
+
 ### RFQ Auction Flow
 
 ```

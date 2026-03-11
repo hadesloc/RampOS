@@ -188,7 +188,7 @@ Where:
 | 031_tenant_api_version | API version pinning | `api_version` column |
 | 032_settlements | Settlement engine | `settlements`, `settlement_items` |
 | 033_rfq_auction | RFQ auction marketplace | `rfq_requests`, `rfq_bids` |
-| 034_lp_keys | LP API key auth | `lp_keys` (X-LP-Key header) |
+| 034_lp_keys | LP API key auth | `registered_lp_keys` (X-LP-Key header, secret hash, direction permissions, bid caps) |
 
 ---
 

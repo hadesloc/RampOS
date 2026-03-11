@@ -839,6 +839,13 @@ Xem [LICENSE](LICENSE) để biết nội dung giấy phép đầy đủ.
 
 ---
 
+## Cập nhật RFQ 2026-03-11
+
+- `GET /v1/portal/rfq/:id`, `POST /v1/portal/rfq/:id/accept`, và `POST /v1/admin/rfq/:id/finalize` hiện dùng cùng một quy tắc chọn winner: thuần best-price.
+- Bid LP phải khớp kinh tế của RFQ gốc. `vndAmount` phải bằng `cryptoAmount * exchangeRate`, và bid `ONRAMP` không được vượt budget của request.
+- `X-LP-Key` đã được validate thật với `registered_lp_keys`, gồm secret hash, active/expiry, quyền theo direction, và cap bid nếu có.
+- Bid stale sẽ bị chuyển khỏi `PENDING` khi đọc/finalize; RFQ vẫn auto-expire bằng background job mỗi 60 giây.
+
 <p align="center">
   Xây dựng với Rust 🦀 | Mã nguồn mở
 </p>
