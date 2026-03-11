@@ -85,7 +85,7 @@ mod tests {
         }
     }
 
-    fn seeded_repo() -> Arc<dyn LicensingRepository> {
+    fn seeded_repo() -> Arc<MockLicensingRepository> {
         let repo = Arc::new(MockLicensingRepository::default());
         let now = Utc::now();
         repo.requirements.lock().unwrap().push(LicenseRequirementRow {
@@ -129,13 +129,14 @@ mod tests {
     async fn get_tenant_status_rejects_cross_tenant_reads() {
         std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
         let repo = seeded_repo();
+        let repo_state: Arc<dyn LicensingRepository> = repo.clone();
         let mut headers = HeaderMap::new();
         headers.insert("X-Admin-Key", "admin-secret-key".parse().unwrap());
 
         let err = get_tenant_status(
             headers,
             Extension(tenant_ctx()),
-            State(repo),
+            State(repo_state),
             Path("tenant_other".to_string()),
         )
         .await
@@ -152,6 +153,7 @@ mod tests {
         std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
         std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
         let repo = seeded_repo();
+        let repo_state: Arc<dyn LicensingRepository> = repo.clone();
         let mut headers = HeaderMap::new();
         headers.insert("X-Admin-Key", "admin-secret-key".parse().unwrap());
 
@@ -169,7 +171,7 @@ mod tests {
         let err = submit_license(
             headers,
             Extension(tenant_ctx()),
-            State(repo),
+            State(repo_state),
             Json(request),
         )
         .await
@@ -181,5 +183,37 @@ mod tests {
         }
 
         std::env::remove_var("RAMPOS_ADMIN_ROLE");
+    }
+
+    #[tokio::test]
+    async fn get_current_tenant_status_returns_scoped_overview() {
+        std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
+        let repo = seeded_repo();
+        let now = Utc::now();
+        repo.statuses.lock().unwrap().push(TenantLicenseStatusRow {
+            id: "status_self".to_string(),
+            tenant_id: "tenant_self".to_string(),
+            requirement_id: "req_vasp".to_string(),
+            status: "APPROVED".to_string(),
+            license_number: Some("LIC-SELF".to_string()),
+            issue_date: Some(now),
+            expiry_date: None,
+            last_submission_id: None,
+            notes: None,
+            created_at: now,
+            updated_at: now,
+        });
+        let repo_state: Arc<dyn LicensingRepository> = repo.clone();
+        let mut headers = HeaderMap::new();
+        headers.insert("X-Admin-Key", "admin-secret-key".parse().unwrap());
+
+        let response = get_current_tenant_status(headers, Extension(tenant_ctx()), State(repo_state))
+            .await
+            .unwrap()
+            .0;
+
+        assert_eq!(response.tenant_id, "tenant_self");
+        assert_eq!(response.approved_count, 1);
+        assert_eq!(response.licenses.len(), 1);
     }
 }

@@ -200,6 +200,7 @@ async fn test_e2e_payin_flow() {
             ramp_core::billing::BillingConfig::default(),
             Arc::new(ramp_core::billing::mock::MockBillingDataProvider::new()),
         )),
+        event_publisher: event_publisher.clone(),
         vnst_protocol: Arc::new(
             ramp_core::stablecoin::vnst_protocol::VnstProtocolService::new(
                 ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),
@@ -474,6 +475,7 @@ async fn confirm_payin_requires_internal_secret_header() {
             ramp_core::billing::BillingConfig::default(),
             Arc::new(ramp_core::billing::mock::MockBillingDataProvider::new()),
         )),
+        event_publisher: event_publisher.clone(),
         vnst_protocol: Arc::new(
             ramp_core::stablecoin::vnst_protocol::VnstProtocolService::new(
                 ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),

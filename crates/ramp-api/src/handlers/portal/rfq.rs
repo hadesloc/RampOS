@@ -117,6 +117,23 @@ fn make_rfq_service(pool: sqlx::PgPool, state: &AppState) -> RfqService {
     )
 }
 
+fn sort_bids_for_direction(bids: &mut [ramp_core::repository::RfqBidRow], direction: &str) {
+    bids.sort_by(|left, right| {
+        let price_order = if direction == "ONRAMP" {
+            left.exchange_rate
+                .cmp(&right.exchange_rate)
+                .then_with(|| left.vnd_amount.cmp(&right.vnd_amount))
+        } else {
+            right
+                .exchange_rate
+                .cmp(&left.exchange_rate)
+                .then_with(|| right.vnd_amount.cmp(&left.vnd_amount))
+        };
+
+        price_order.then_with(|| left.created_at.cmp(&right.created_at))
+    });
+}
+
 // ============================================================================
 // Handlers
 // ============================================================================
@@ -199,7 +216,8 @@ pub async fn get_rfq(
 ) -> Result<Json<RfqDetailResponse>, ApiError> {
     let pool = ensure_pool(&app_state)?.clone();
     let tenant_id = TenantId(portal_user.tenant_id.to_string());
-    let repo = PgRfqRepository::new(pool);
+    let repo = PgRfqRepository::new(pool.clone());
+    let svc = make_rfq_service(pool.clone(), &app_state);
 
     let rfq = repo
         .get_request(&tenant_id, &id)
@@ -212,16 +230,23 @@ pub async fn get_rfq(
         return Err(ApiError::NotFound("RFQ not found".to_string()));
     }
 
-    let bids = repo
-        .list_bids_for_request(&tenant_id, &id)
-        .await
-        .map_err(ApiError::from)?;
-
-    let best_rate = repo
-        .get_best_bid(&tenant_id, &id, &rfq.direction)
+    let best_rate = svc
+        .get_best_bid(&tenant_id, &id)
         .await
         .map_err(ApiError::from)?
         .map(|b| b.exchange_rate.to_string());
+
+    let rfq = repo
+        .get_request(&tenant_id, &id)
+        .await
+        .map_err(ApiError::from)?
+        .ok_or_else(|| ApiError::NotFound("RFQ not found".to_string()))?;
+
+    let mut bids = repo
+        .list_bids_for_request(&tenant_id, &id)
+        .await
+        .map_err(ApiError::from)?;
+    sort_bids_for_direction(&mut bids, &rfq.direction);
 
     let bid_count = bids.len();
     let bid_summaries: Vec<BidSummary> = bids

@@ -92,7 +92,7 @@ fn make_rfq_service(pool: sqlx::PgPool, state: &AppState) -> RfqService {
     )
 }
 
-fn map_row(row: &RfqRequestRow) -> AdminRfqResponse {
+fn map_row(row: &RfqRequestRow, bid_count: i64, best_rate: Option<String>) -> AdminRfqResponse {
     AdminRfqResponse {
         id: row.id.clone(),
         user_id: row.user_id.clone(),
@@ -101,8 +101,8 @@ fn map_row(row: &RfqRequestRow) -> AdminRfqResponse {
         crypto_amount: row.crypto_amount.to_string(),
         vnd_amount: row.vnd_amount.map(|v| v.to_string()),
         state: row.state.clone(),
-        bid_count: 0,    // populated separately if needed
-        best_rate: None, // populated separately if needed
+        bid_count,
+        best_rate,
         expires_at: row.expires_at.to_rfc3339(),
         created_at: row.created_at.to_rfc3339(),
     }
@@ -127,7 +127,8 @@ pub async fn list_open_rfqs(
 
     let pool = ensure_pool(&app_state)?.clone();
     let tenant_id = TenantId(tenant_ctx.tenant_id.0.clone());
-    let repo = PgRfqRepository::new(pool);
+    let repo = PgRfqRepository::new(pool.clone());
+    let svc = make_rfq_service(pool, &app_state);
 
     let direction_filter = query.direction.as_deref();
     let rows = repo
@@ -136,7 +137,25 @@ pub async fn list_open_rfqs(
         .map_err(ApiError::from)?;
 
     let total = rows.len() as i64;
-    let data: Vec<AdminRfqResponse> = rows.iter().map(map_row).collect();
+    let mut data = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let best_rate = svc
+            .get_best_bid(&tenant_id, &row.id)
+            .await
+            .map_err(ApiError::from)?
+            .map(|bid| bid.exchange_rate.to_string());
+        let refreshed_row = repo
+            .get_request(&tenant_id, &row.id)
+            .await
+            .map_err(ApiError::from)?
+            .unwrap_or_else(|| row.clone());
+        let bid_count = repo
+            .list_bids_for_request(&tenant_id, &row.id)
+            .await
+            .map_err(ApiError::from)?
+            .len() as i64;
+        data.push(map_row(&refreshed_row, bid_count, best_rate));
+    }
 
     info!(
         tenant = %tenant_ctx.tenant_id.0,

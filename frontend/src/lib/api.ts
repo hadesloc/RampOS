@@ -216,6 +216,186 @@ export interface LicenseDashboardStats {
   overdue_items: number;
 }
 
+interface LicensingRequirementApiRow {
+  id: string;
+  name: string;
+  description: string;
+  licenseType: string;
+  regulatoryBody: string;
+  deadline?: string;
+  renewalPeriodDays?: number;
+  requiredDocuments: string[];
+  isMandatory: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface LicensingRequirementsEnvelope {
+  data: LicensingRequirementApiRow[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+interface TenantLicenseStatusApiRow {
+  requirementId: string;
+  requirementName: string;
+  licenseType: string;
+  status: string;
+  licenseNumber?: string | null;
+  issueDate?: string | null;
+  expiryDate?: string | null;
+  lastSubmissionId?: string | null;
+  notes?: string | null;
+  updatedAt: string;
+}
+
+interface TenantLicenseOverviewApiResponse {
+  tenantId: string;
+  totalRequirements: number;
+  approvedCount: number;
+  pendingCount: number;
+  expiredCount: number;
+  licenses: TenantLicenseStatusApiRow[];
+}
+
+interface LicensingDeadlinesApiResponse {
+  upcoming: Array<{
+    requirementId: string;
+    requirementName: string;
+    licenseType: string;
+    deadline: string;
+    daysRemaining: number;
+    status: string;
+    isOverdue: boolean;
+  }>;
+  overdue: Array<{
+    requirementId: string;
+    requirementName: string;
+    licenseType: string;
+    deadline: string;
+    daysRemaining: number;
+    status: string;
+    isOverdue: boolean;
+  }>;
+}
+
+function mapLicenseRequirementCategory(row: LicensingRequirementApiRow): LicenseRequirement["category"] {
+  return row.requiredDocuments?.length ? "DOCUMENT" : "COMPLIANCE";
+}
+
+function mapLicenseRequirementPriority(row: LicensingRequirementApiRow): LicenseRequirement["priority"] {
+  if (row.isMandatory && row.deadline) {
+    const daysRemaining = Math.ceil((new Date(row.deadline).getTime() - Date.now()) / 86_400_000);
+    if (daysRemaining <= 7) return "CRITICAL";
+    if (daysRemaining <= 30) return "HIGH";
+  }
+  return row.isMandatory ? "HIGH" : "MEDIUM";
+}
+
+function mapTenantStatusToRequirementStatus(status?: string): LicenseRequirement["status"] {
+  switch ((status ?? "PENDING").toUpperCase()) {
+    case "APPROVED":
+      return "APPROVED";
+    case "SUBMITTED":
+      return "SUBMITTED";
+    case "REJECTED":
+      return "REJECTED";
+    case "UNDER_REVIEW":
+      return "IN_PROGRESS";
+    default:
+      return "PENDING";
+  }
+}
+
+function mapRequirement(
+  row: LicensingRequirementApiRow,
+  statusRow?: TenantLicenseStatusApiRow
+): LicenseRequirement {
+  return {
+    id: row.id,
+    license_id: row.licenseType,
+    name: row.name,
+    description: row.description,
+    category: mapLicenseRequirementCategory(row),
+    status: mapTenantStatusToRequirementStatus(statusRow?.status),
+    priority: mapLicenseRequirementPriority(row),
+    deadline: row.deadline,
+    completed_at: statusRow?.updatedAt,
+    notes: statusRow?.notes ?? undefined,
+    created_at: row.createdAt,
+    updated_at: statusRow?.updatedAt ?? row.updatedAt,
+  };
+}
+
+function deriveLicenseSummaries(
+  overview: TenantLicenseOverviewApiResponse,
+  requirementRows: LicensingRequirementApiRow[]
+): LicenseStatus[] {
+  const statusByRequirement = new Map(
+    overview.licenses.map((row) => [row.requirementId, row] as const)
+  );
+  const grouped = new Map<string, LicensingRequirementApiRow[]>();
+  for (const requirement of requirementRows) {
+    const group = grouped.get(requirement.licenseType) ?? [];
+    group.push(requirement);
+    grouped.set(requirement.licenseType, group);
+  }
+
+  return Array.from(grouped.entries()).map(([licenseType, rows]) => {
+    const matchingStatuses = rows
+      .map((row) => statusByRequirement.get(row.id))
+      .filter((value): value is TenantLicenseStatusApiRow => Boolean(value));
+    const requirementsCompleted = matchingStatuses.filter(
+      (row) => row.status.toUpperCase() === "APPROVED"
+    ).length;
+    const hasExpired = matchingStatuses.some((row) => row.status.toUpperCase() === "EXPIRED");
+    const hasPending = matchingStatuses.some((row) =>
+      ["PENDING", "SUBMITTED", "UNDER_REVIEW", "REJECTED"].includes(row.status.toUpperCase())
+    );
+    const latestUpdatedAt = matchingStatuses
+      .map((row) => row.updatedAt)
+      .sort()
+      .at(-1) ?? rows.map((row) => row.updatedAt).sort().at(-1) ?? new Date().toISOString();
+
+    return {
+      id: licenseType,
+      tenant_id: overview.tenantId,
+      license_type: licenseType as LicenseStatus["license_type"],
+      status: (hasExpired
+        ? "EXPIRED"
+        : requirementsCompleted === rows.length && rows.length > 0
+          ? "ACTIVE"
+          : hasPending
+            ? "PENDING"
+            : "SUSPENDED") as LicenseStatus["status"],
+      jurisdiction: rows[0]?.regulatoryBody ?? "Vietnam",
+      issue_date: matchingStatuses.map((row) => row.issueDate).find(Boolean) ?? undefined,
+      expiry_date: matchingStatuses.map((row) => row.expiryDate).find(Boolean) ?? undefined,
+      requirements_completed: requirementsCompleted,
+      requirements_total: rows.length,
+      created_at: rows.map((row) => row.createdAt).sort()[0] ?? latestUpdatedAt,
+      updated_at: latestUpdatedAt,
+    };
+  });
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  const bytes = await file.arrayBuffer();
+  let binary = "";
+  const view = new Uint8Array(bytes);
+  for (const value of view) binary += String.fromCharCode(value);
+  return btoa(binary);
+}
+
+async function getLicensingRequirementsEnvelope(): Promise<LicensingRequirementsEnvelope> {
+  return apiRequest<LicensingRequirementsEnvelope>("/v1/admin/licensing/requirements");
+}
+
+async function getLicensingOverview(): Promise<TenantLicenseOverviewApiResponse> {
+  return apiRequest<TenantLicenseOverviewApiResponse>("/v1/admin/licensing/status");
+}
+
 // Treasury Types
 export type ChainId = 'ethereum' | 'arbitrum' | 'base' | 'optimism';
 export type StablecoinSymbol = 'USDT' | 'USDC' | 'DAI' | 'VNST';
@@ -938,23 +1118,50 @@ export const healthApi = {
 // Licensing API
 export const licensingApi = {
   getStats: async (): Promise<LicenseDashboardStats> => {
-    return apiRequest<LicenseDashboardStats>('/v1/admin/licensing/stats');
+    const [overview, deadlines, requirements] = await Promise.all([
+      getLicensingOverview(),
+      apiRequest<LicensingDeadlinesApiResponse>('/v1/admin/licensing/deadlines'),
+      getLicensingRequirementsEnvelope(),
+    ]);
+    const licenses = deriveLicenseSummaries(overview, requirements.data);
+
+    return {
+      active_licenses: licenses.filter((row) => row.status === 'ACTIVE').length,
+      pending_licenses: licenses.filter((row) => row.status === 'PENDING').length,
+      expired_licenses: licenses.filter((row) => row.status === 'EXPIRED').length,
+      requirements_pending: overview.pendingCount,
+      requirements_completed: overview.approvedCount,
+      upcoming_deadlines: deadlines.upcoming.length,
+      overdue_items: deadlines.overdue.length,
+    };
   },
 
   listLicenses: async (params?: {
     status?: string;
     license_type?: string;
   }): Promise<LicenseStatus[]> => {
-    const searchParams = new URLSearchParams();
-    if (params?.status) searchParams.set('status', params.status);
-    if (params?.license_type) searchParams.set('license_type', params.license_type);
+    const [overview, requirements] = await Promise.all([
+      getLicensingOverview(),
+      getLicensingRequirementsEnvelope(),
+    ]);
 
-    const query = searchParams.toString();
-    return apiRequest<LicenseStatus[]>(`/v1/admin/licensing/licenses${query ? `?${query}` : ''}`);
+    let licenses = deriveLicenseSummaries(overview, requirements.data);
+    if (params?.status) {
+      licenses = licenses.filter((license) => license.status === params.status);
+    }
+    if (params?.license_type) {
+      licenses = licenses.filter((license) => license.license_type === params.license_type);
+    }
+    return licenses;
   },
 
   getLicense: async (id: string): Promise<LicenseStatus> => {
-    return apiRequest<LicenseStatus>(`/v1/admin/licensing/licenses/${id}`);
+    const licenses = await licensingApi.listLicenses();
+    const license = licenses.find((row) => row.id === id);
+    if (!license) {
+      throw new ApiError(404, 'LICENSE_NOT_FOUND', 'License not found');
+    }
+    return license;
   },
 
   listRequirements: async (params?: {
@@ -962,13 +1169,20 @@ export const licensingApi = {
     status?: string;
     category?: string;
   }): Promise<LicenseRequirement[]> => {
-    const searchParams = new URLSearchParams();
-    if (params?.license_id) searchParams.set('license_id', params.license_id);
-    if (params?.status) searchParams.set('status', params.status);
-    if (params?.category) searchParams.set('category', params.category);
+    const [requirements, overview] = await Promise.all([
+      getLicensingRequirementsEnvelope(),
+      getLicensingOverview(),
+    ]);
 
-    const query = searchParams.toString();
-    return apiRequest<LicenseRequirement[]>(`/v1/admin/licensing/requirements${query ? `?${query}` : ''}`);
+    const statusByRequirement = new Map(
+      overview.licenses.map((row) => [row.requirementId, row] as const)
+    );
+
+    let rows = requirements.data.map((row) => mapRequirement(row, statusByRequirement.get(row.id)));
+    if (params?.license_id) rows = rows.filter((row) => row.license_id === params.license_id);
+    if (params?.status) rows = rows.filter((row) => row.status === params.status);
+    if (params?.category) rows = rows.filter((row) => row.category === params.category);
+    return rows;
   },
 
   updateRequirement: async (id: string, data: {
@@ -1002,10 +1216,40 @@ export const licensingApi = {
     document_name: string;
     document_url: string;
   }): Promise<LicenseSubmission> => {
-    return apiRequest<LicenseSubmission>('/v1/admin/licensing/submissions', {
+    const response = await apiRequest<{
+      id: string;
+      tenant_id: string;
+      requirement_id: string;
+      status: string;
+      submitted_by: string;
+      submitted_at: string;
+      documents: Array<{ name: string; file_url: string }>;
+    }>('/v1/admin/licensing/submit', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        requirement_id: data.requirement_id,
+        documents: [
+          {
+            name: data.document_name,
+            file_url: data.document_url,
+            file_hash: '',
+            file_size_bytes: 0,
+          },
+        ],
+      }),
     });
+
+    return {
+      id: response.id,
+      requirement_id: response.requirement_id,
+      requirement_name: data.requirement_id,
+      submitted_by: response.submitted_by,
+      document_url: response.documents[0]?.file_url,
+      document_name: response.documents[0]?.name,
+      status: 'PENDING_REVIEW',
+      submitted_at: response.submitted_at,
+      reviewed_at: undefined,
+    };
   },
 
   listDeadlines: async (params?: {
@@ -1014,48 +1258,31 @@ export const licensingApi = {
   }): Promise<LicenseDeadline[]> => {
     const searchParams = new URLSearchParams();
     if (params?.days_ahead) searchParams.set('days_ahead', params.days_ahead.toString());
-    if (params?.include_overdue !== undefined) searchParams.set('include_overdue', params.include_overdue.toString());
 
     const query = searchParams.toString();
-    return apiRequest<LicenseDeadline[]>(`/v1/admin/licensing/deadlines${query ? `?${query}` : ''}`);
+    const response = await apiRequest<LicensingDeadlinesApiResponse>(`/v1/admin/licensing/deadlines${query ? `?${query}` : ''}`);
+    const merged = [...response.overdue, ...response.upcoming];
+    return merged.map((deadline) => ({
+      id: deadline.requirementId,
+      requirement_id: deadline.requirementId,
+      requirement_name: deadline.requirementName,
+      license_type: deadline.licenseType,
+      deadline: deadline.deadline,
+      days_remaining: deadline.daysRemaining,
+      status: deadline.isOverdue ? 'OVERDUE' : 'PENDING',
+    }));
   },
 
   uploadDocument: async (file: File, requirementId: string): Promise<{ url: string; name: string }> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('requirement_id', requirementId);
-
-    let csrfToken = getCookie(CSRF_COOKIE_NAME);
-    if (!csrfToken && typeof window !== 'undefined') {
-      try {
-        const csrfResponse = await fetch('/api/csrf', { method: 'GET' });
-        if (csrfResponse.ok) {
-          const payload: { token?: string } | null = await csrfResponse.json().catch(() => null);
-          if (payload?.token && typeof payload.token === 'string') {
-            csrfToken = payload.token;
-          }
-        }
-      } catch {
-        // Best effort
-      }
-    }
-
-    const headers: HeadersInit = {
-      ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` }),
-      ...(csrfToken && { 'x-csrf-token': csrfToken }),
-    };
-
-    const response = await fetch(`${API_BASE_URL}/v1/admin/licensing/upload`, {
+    return apiRequest<{ url: string; name: string }>('/v1/admin/licensing/upload', {
       method: 'POST',
-      headers,
-      body: formData,
+      body: JSON.stringify({
+        requirementId,
+        fileName: file.name,
+        contentType: file.type || 'application/octet-stream',
+        fileData: await fileToBase64(file),
+      }),
     });
-
-    if (!response.ok) {
-      throw new ApiError(response.status, 'UPLOAD_FAILED', 'Failed to upload document');
-    }
-
-    return response.json();
   },
 };
 
@@ -1550,6 +1777,34 @@ export interface YieldApyData {
   }[];
 }
 
+export interface AdminRfqSummary {
+  id: string;
+  userId: string;
+  direction: "OFFRAMP" | "ONRAMP";
+  cryptoAsset: string;
+  cryptoAmount: string;
+  vndAmount: string | null;
+  state: "OPEN" | "MATCHED" | "EXPIRED" | "CANCELLED" | string;
+  bidCount: number;
+  bestRate: string | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface AdminRfqListResponse {
+  data: AdminRfqSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface FinalizeRfqResponse {
+  rfqId: string;
+  state: string;
+  winningLpId: string;
+  finalRate: string;
+}
+
 // DeFi Swap API
 export const swapApi = {
   getQuote: async (params: {
@@ -1663,6 +1918,27 @@ export const yieldApi = {
   },
 };
 
+export const rfqApi = {
+  listOpen: async (params?: {
+    direction?: "OFFRAMP" | "ONRAMP";
+    limit?: number;
+    offset?: number;
+  }): Promise<AdminRfqListResponse> => {
+    const searchParams = new URLSearchParams();
+    if (params?.direction) searchParams.set("direction", params.direction);
+    if (typeof params?.limit === "number") searchParams.set("limit", params.limit.toString());
+    if (typeof params?.offset === "number") searchParams.set("offset", params.offset.toString());
+    const query = searchParams.toString();
+    return apiRequest<AdminRfqListResponse>(`/v1/admin/rfq/open${query ? `?${query}` : ""}`);
+  },
+
+  finalize: async (rfqId: string): Promise<FinalizeRfqResponse> => {
+    return apiRequest<FinalizeRfqResponse>(`/v1/admin/rfq/${rfqId}/finalize`, {
+      method: "POST",
+    });
+  },
+};
+
 // Export all APIs
 export const api = {
   dashboard: dashboardApi,
@@ -1685,6 +1961,7 @@ export const api = {
   swap: swapApi,
   bridge: bridgeApi,
   yield: yieldApi,
+  rfq: rfqApi,
 };
 
 export default api;

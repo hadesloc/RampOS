@@ -489,18 +489,46 @@ pub fn create_router(state: AppState) -> Router {
         .route("/users/:user_id/limits", get(handlers::get_user_limits))
         .with_state(state.clone());
 
+    let bridge_routes = Router::new()
+        .route("/bridge/chains", get(handlers::admin::bridge::list_chains))
+        .route("/bridge/routes", get(handlers::admin::bridge::list_routes))
+        .route("/bridge/quote", get(handlers::admin::bridge::get_quote))
+        .route("/bridge/transfer", post(handlers::admin::bridge::initiate_transfer))
+        .route(
+            "/bridge/transfer/:bridge_name/:tx_hash",
+            get(handlers::admin::bridge::get_transfer_status),
+        )
+        .route("/bridge/tokens", get(handlers::admin::bridge::list_tokens))
+        .with_state(handlers::admin::bridge::BridgeState::default());
+
     // Licensing routes (Vietnam regulatory requirements)
     let licensing_routes = if let Some(ref licensing_repo) = state.licensing_repo {
         Router::new()
+            .route(
+                "/licensing/status",
+                get(handlers::admin::get_current_tenant_status),
+            )
             .route(
                 "/licensing/requirements",
                 get(handlers::admin::list_requirements),
             )
             .route(
+                "/licensing/requirements/:id",
+                put(handlers::admin::update_requirement_status),
+            )
+            .route(
                 "/licensing/status/:tenant_id",
                 get(handlers::admin::get_tenant_status),
             )
+            .route(
+                "/licensing/submissions",
+                get(handlers::admin::list_submissions),
+            )
             .route("/licensing/submit", post(handlers::admin::submit_license))
+            .route(
+                "/licensing/upload",
+                post(handlers::admin::upload_license_document),
+            )
             .route("/licensing/deadlines", get(handlers::admin::get_deadlines))
             .with_state(licensing_repo.clone())
     } else {
@@ -543,12 +571,12 @@ pub fn create_router(state: AppState) -> Router {
         .route("/:id/verify-dns", post(handlers::domain::verify_dns))
         .route("/:id/provision-ssl", post(handlers::domain::provision_ssl))
         .with_state(state.clone());
-
     // Combine them
     let admin_routes = Router::new()
         .merge(admin_general_routes)
         .merge(tenant_routes)
         .merge(tier_routes)
+        .merge(bridge_routes)
         .merge(licensing_routes)
         .merge(audit_routes)
         .nest("/reports", report_routes)
@@ -662,6 +690,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/events", event_routes)
         .nest("/balance", balance_routes)
         .merge(user_balance_alias_routes)
+        .nest("/swap", handlers::swap::router())
         .nest("/admin", admin_routes)
         .nest("/yield", yield_routes)
         .nest("/aa", aa_routes)

@@ -14,10 +14,6 @@ use tracing::{info, instrument, warn};
 use crate::event::EventPublisher;
 use crate::repository::rfq::{LpReliabilitySnapshotRow, RfqBidRow, RfqRepository, RfqRequestRow};
 use crate::service::incident_timeline::IncidentTimelineEntry;
-use crate::service::liquidity_policy::{
-    LiquidityPolicyCandidate, LiquidityPolicyConfig, LiquidityPolicyDirection,
-    LiquidityPolicyEvaluator, LiquidityPolicyWeights,
-};
 
 pub fn lp_counterparty_pressure_score(snapshot: &LpReliabilitySnapshotRow) -> Decimal {
     let reliability = snapshot.reliability_score.unwrap_or(Decimal::from(75));
@@ -118,6 +114,16 @@ impl RfqService {
                 "crypto_amount must be positive".to_string(),
             ));
         }
+        if req.direction == "ONRAMP" {
+            match req.vnd_amount {
+                Some(vnd_amount) if vnd_amount > Decimal::ZERO => {}
+                _ => {
+                    return Err(Error::Validation(
+                        "vnd_amount must be positive for ONRAMP".to_string(),
+                    ));
+                }
+            }
+        }
         if req.ttl_minutes < 1 || req.ttl_minutes > 60 {
             return Err(Error::Validation(
                 "ttl_minutes must be between 1 and 60".to_string(),
@@ -200,6 +206,11 @@ impl RfqService {
                 "exchange_rate must be positive".to_string(),
             ));
         }
+        if req.vnd_amount <= Decimal::ZERO {
+            return Err(Error::Validation("vnd_amount must be positive".to_string()));
+        }
+
+        validate_bid_amounts(&rfq, &req)?;
 
         let now = Utc::now();
         let bid_id = format!("bid_{}", uuid::Uuid::now_v7());
@@ -218,8 +229,17 @@ impl RfqService {
         };
 
         self.rfq_repo.create_bid(&bid).await?;
-        self.ingest_quote_outcome(&req.tenant_id, &rfq.direction, &bid)
-            .await?;
+        if let Err(error) = self
+            .ingest_quote_outcome(&req.tenant_id, &rfq.direction, &bid)
+            .await
+        {
+            warn!(
+                bid_id = %bid.id,
+                lp_id = %bid.lp_id,
+                error = %error,
+                "Failed to ingest RFQ quote reliability outcome"
+            );
+        }
 
         info!(
             bid_id = %bid_id,
@@ -239,11 +259,18 @@ impl RfqService {
         tenant_id: &TenantId,
         rfq_id: &str,
     ) -> Result<Option<RfqBidRow>> {
-        let rfq = self
+        let mut rfq = self
             .rfq_repo
             .get_request(tenant_id, rfq_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("RFQ {} not found", rfq_id)))?;
+
+        if rfq.state == "OPEN" && Utc::now() >= rfq.expires_at {
+            expire_request(&mut rfq);
+            self.rfq_repo.update_request(&rfq).await?;
+            self.expire_stale_pending_bids(tenant_id, &rfq.id).await?;
+            return Ok(None);
+        }
 
         self.select_best_bid(tenant_id, &rfq).await
     }
@@ -312,6 +339,13 @@ impl RfqService {
             )));
         }
 
+        if Utc::now() >= rfq.expires_at {
+            expire_request(&mut rfq);
+            self.rfq_repo.update_request(&rfq).await?;
+            self.expire_stale_pending_bids(tenant_id, rfq_id).await?;
+            return Err(Error::Gone(format!("RFQ {} has expired", rfq_id)));
+        }
+
         // Select best bid based on direction
         let best_bid = self
             .select_best_bid(tenant_id, &rfq)
@@ -367,7 +401,14 @@ impl RfqService {
         rfq.final_rate = Some(best_bid.exchange_rate);
         rfq.updated_at = Utc::now();
         self.rfq_repo.update_request(&rfq).await?;
-        self.ingest_fill_outcome(tenant_id, &rfq, &best_bid).await?;
+        if let Err(error) = self.ingest_fill_outcome(tenant_id, &rfq, &best_bid).await {
+            warn!(
+                bid_id = %best_bid.id,
+                lp_id = %best_bid.lp_id,
+                error = %error,
+                "Failed to ingest RFQ fill reliability outcome"
+            );
+        }
 
         // Publish matched event
         if let Err(e) = self
@@ -563,6 +604,7 @@ impl RfqService {
         tenant_id: &TenantId,
         rfq: &RfqRequestRow,
     ) -> Result<Option<RfqBidRow>> {
+        self.expire_stale_pending_bids(tenant_id, &rfq.id).await?;
         let now = Utc::now();
         let pending_bids: Vec<RfqBidRow> = self
             .rfq_repo
@@ -576,38 +618,26 @@ impl RfqService {
             return Ok(None);
         }
 
-        let policy = default_liquidity_policy(&rfq.direction);
-        let mut policy_candidates = Vec::with_capacity(pending_bids.len());
-        for bid in &pending_bids {
-            let snapshot = self
-                .rfq_repo
-                .get_latest_reliability_snapshot(
-                    tenant_id,
-                    &bid.lp_id,
-                    &rfq.direction,
-                    &policy.reliability_window_kind,
-                )
+        Ok(pending_bids.into_iter().reduce(best_price_bid(&rfq.direction)))
+    }
+
+    async fn expire_stale_pending_bids(&self, tenant_id: &TenantId, rfq_id: &str) -> Result<()> {
+        let now = Utc::now();
+        let stale_bids: Vec<_> = self
+            .rfq_repo
+            .list_bids_for_request(tenant_id, rfq_id)
+            .await?
+            .into_iter()
+            .filter(|bid| bid.state == "PENDING" && bid.valid_until <= now)
+            .collect();
+
+        for bid in stale_bids {
+            self.rfq_repo
+                .update_bid_state(tenant_id, &bid.id, "EXPIRED")
                 .await?;
-            policy_candidates.push(policy_candidate_from_bid(bid, snapshot.as_ref()));
         }
 
-        let decision = LiquidityPolicyEvaluator::evaluate(&policy_candidates, Some(&policy));
-        let selected_candidate_id = decision
-            .as_ref()
-            .map(|value| value.selected_candidate_id.as_str());
-
-        Ok(selected_candidate_id
-            .and_then(|selected_id| {
-                pending_bids
-                    .iter()
-                    .find(|bid| bid.id == selected_id)
-                    .cloned()
-            })
-            .or_else(|| {
-                pending_bids
-                    .into_iter()
-                    .reduce(best_price_bid(&rfq.direction))
-            }))
+        Ok(())
     }
 }
 
@@ -635,45 +665,30 @@ fn weighted_average(
     weighted_total / Decimal::from(total_count)
 }
 
-fn default_liquidity_policy(direction: &str) -> LiquidityPolicyConfig {
-    LiquidityPolicyConfig {
-        version: "liquidity-policy-default-v1".to_string(),
-        direction: if direction == "ONRAMP" {
-            LiquidityPolicyDirection::Onramp
-        } else {
-            LiquidityPolicyDirection::Offramp
-        },
-        reliability_window_kind: "ROLLING_30D".to_string(),
-        min_reliability_observations: 3,
-        weights: LiquidityPolicyWeights {
-            price_weight: Decimal::new(20, 2),
-            reliability_weight: Decimal::new(40, 2),
-            fill_rate_weight: Decimal::new(20, 2),
-            reject_rate_weight: Decimal::new(10, 2),
-            dispute_rate_weight: Decimal::new(5, 2),
-            slippage_weight: Decimal::new(3, 2),
-            settlement_latency_weight: Decimal::new(2, 2),
-        },
+fn validate_bid_amounts(rfq: &RfqRequestRow, req: &SubmitBidRequest) -> Result<()> {
+    let expected_vnd_amount = rfq.crypto_amount * req.exchange_rate;
+    if req.vnd_amount != expected_vnd_amount {
+        return Err(Error::Validation(format!(
+            "vnd_amount must equal crypto_amount * exchange_rate (expected {})",
+            expected_vnd_amount
+        )));
     }
+
+    if let Some(budget) = rfq.vnd_amount {
+        if req.vnd_amount > budget {
+            return Err(Error::Validation(format!(
+                "vnd_amount exceeds RFQ budget of {}",
+                budget
+            )));
+        }
+    }
+
+    Ok(())
 }
 
-fn policy_candidate_from_bid(
-    bid: &RfqBidRow,
-    snapshot: Option<&LpReliabilitySnapshotRow>,
-) -> LiquidityPolicyCandidate {
-    LiquidityPolicyCandidate {
-        candidate_id: bid.id.clone(),
-        lp_id: bid.lp_id.clone(),
-        quoted_rate: bid.exchange_rate,
-        quoted_vnd_amount: bid.vnd_amount,
-        quote_count: snapshot.map(|value| value.quote_count).unwrap_or(0),
-        reliability_score: snapshot.and_then(|value| value.reliability_score),
-        fill_rate: snapshot.map(|value| value.fill_rate),
-        reject_rate: snapshot.map(|value| value.reject_rate),
-        dispute_rate: snapshot.map(|value| value.dispute_rate),
-        avg_slippage_bps: snapshot.map(|value| value.avg_slippage_bps),
-        p95_settlement_latency_seconds: snapshot.map(|value| value.p95_settlement_latency_seconds),
-    }
+fn expire_request(rfq: &mut RfqRequestRow) {
+    rfq.state = "EXPIRED".to_string();
+    rfq.updated_at = Utc::now();
 }
 
 fn best_price_bid(direction: &str) -> impl FnMut(RfqBidRow, RfqBidRow) -> RfqBidRow + '_ {
@@ -712,6 +727,12 @@ mod tests {
             Arc::new(InMemoryRfqRepository::new()),
             Arc::new(InMemoryEventPublisher::new()),
         )
+    }
+
+    fn make_service_with_repo() -> (Arc<InMemoryRfqRepository>, RfqService) {
+        let repo = Arc::new(InMemoryRfqRepository::new());
+        let svc = RfqService::new(repo.clone(), Arc::new(InMemoryEventPublisher::new()));
+        (repo, svc)
     }
 
     fn tenant() -> TenantId {
@@ -1013,9 +1034,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_best_bid_uses_policy_when_reliability_data_exists() {
-        let repo = Arc::new(InMemoryRfqRepository::new());
-        let svc = RfqService::new(repo.clone(), Arc::new(InMemoryEventPublisher::new()));
+    async fn test_get_best_bid_prefers_best_price_even_with_reliability_data() {
+        let (repo, svc) = make_service_with_repo();
 
         let rfq = svc
             .create_rfq(CreateRfqRequest {
@@ -1090,6 +1110,169 @@ mod tests {
             .unwrap();
 
         let best = svc.get_best_bid(&tenant(), &rfq.id).await.unwrap().unwrap();
-        assert_eq!(best.id, stronger.id);
+        assert_eq!(best.id, weaker.id);
+    }
+
+    #[tokio::test]
+    async fn test_submit_bid_rejects_inconsistent_vnd_amount() {
+        let svc = make_service();
+        let rfq = svc
+            .create_rfq(CreateRfqRequest {
+                tenant_id: tenant(),
+                user_id: "user_amount_check".to_string(),
+                direction: "OFFRAMP".to_string(),
+                offramp_id: None,
+                crypto_asset: "USDT".to_string(),
+                crypto_amount: Decimal::new(100, 0),
+                vnd_amount: None,
+                ttl_minutes: 5,
+            })
+            .await
+            .unwrap();
+
+        let error = svc
+            .submit_bid(SubmitBidRequest {
+                tenant_id: tenant(),
+                rfq_id: rfq.id,
+                lp_id: "lp_amount_check".to_string(),
+                lp_name: None,
+                exchange_rate: Decimal::new(26_000, 0),
+                vnd_amount: Decimal::new(2_500_000, 0),
+                valid_minutes: 5,
+            })
+            .await
+            .expect_err("bid should be rejected when total VND mismatches rate * crypto amount");
+
+        assert!(matches!(error, Error::Validation(_)));
+    }
+
+    #[tokio::test]
+    async fn test_submit_bid_rejects_onramp_budget_overrun() {
+        let svc = make_service();
+        let rfq = svc
+            .create_rfq(CreateRfqRequest {
+                tenant_id: tenant(),
+                user_id: "user_budget_check".to_string(),
+                direction: "ONRAMP".to_string(),
+                offramp_id: None,
+                crypto_asset: "USDT".to_string(),
+                crypto_amount: Decimal::new(100, 0),
+                vnd_amount: Some(Decimal::new(2_580_000, 0)),
+                ttl_minutes: 5,
+            })
+            .await
+            .unwrap();
+
+        let error = svc
+            .submit_bid(SubmitBidRequest {
+                tenant_id: tenant(),
+                rfq_id: rfq.id,
+                lp_id: "lp_budget_check".to_string(),
+                lp_name: None,
+                exchange_rate: Decimal::new(26_000, 0),
+                vnd_amount: Decimal::new(2_600_000, 0),
+                valid_minutes: 5,
+            })
+            .await
+            .expect_err("ONRAMP bid should not exceed the request budget");
+
+        assert!(matches!(error, Error::Validation(_)));
+    }
+
+    #[tokio::test]
+    async fn test_finalize_rfq_marks_request_expired_once_ttl_has_elapsed() {
+        let (repo, svc) = make_service_with_repo();
+        let now = Utc::now();
+        let rfq = crate::repository::rfq::RfqRequestRow {
+            id: "rfq_expired_finalize".to_string(),
+            tenant_id: tenant().0.clone(),
+            user_id: "user_expired".to_string(),
+            direction: "OFFRAMP".to_string(),
+            offramp_id: None,
+            crypto_asset: "USDT".to_string(),
+            crypto_amount: Decimal::new(100, 0),
+            vnd_amount: None,
+            state: "OPEN".to_string(),
+            winning_bid_id: None,
+            winning_lp_id: None,
+            final_rate: None,
+            expires_at: now - chrono::Duration::seconds(1),
+            created_at: now - chrono::Duration::minutes(5),
+            updated_at: now - chrono::Duration::minutes(5),
+        };
+        repo.create_request(&rfq).await.unwrap();
+        repo.create_bid(&crate::repository::rfq::RfqBidRow {
+            id: "bid_expired_finalize".to_string(),
+            rfq_id: rfq.id.clone(),
+            tenant_id: tenant().0.clone(),
+            lp_id: "lp_expired".to_string(),
+            lp_name: None,
+            exchange_rate: Decimal::new(26_000, 0),
+            vnd_amount: Decimal::new(2_600_000, 0),
+            valid_until: now + chrono::Duration::minutes(1),
+            state: "PENDING".to_string(),
+            created_at: now - chrono::Duration::minutes(1),
+        })
+        .await
+        .unwrap();
+
+        let error = match svc.finalize_rfq(&tenant(), &rfq.id).await {
+            Ok(_) => panic!("expired RFQ should not finalize"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, Error::Gone(_) | Error::Conflict(_)));
+
+        let stored = repo
+            .get_request(&tenant(), &rfq.id)
+            .await
+            .unwrap()
+            .expect("rfq should exist");
+        assert_eq!(stored.state, "EXPIRED");
+    }
+
+    #[tokio::test]
+    async fn test_get_best_bid_expires_stale_pending_bids() {
+        let (repo, svc) = make_service_with_repo();
+        let now = Utc::now();
+        let rfq = crate::repository::rfq::RfqRequestRow {
+            id: "rfq_stale_bid".to_string(),
+            tenant_id: tenant().0.clone(),
+            user_id: "user_stale".to_string(),
+            direction: "OFFRAMP".to_string(),
+            offramp_id: None,
+            crypto_asset: "USDT".to_string(),
+            crypto_amount: Decimal::new(100, 0),
+            vnd_amount: None,
+            state: "OPEN".to_string(),
+            winning_bid_id: None,
+            winning_lp_id: None,
+            final_rate: None,
+            expires_at: now + chrono::Duration::minutes(5),
+            created_at: now - chrono::Duration::minutes(5),
+            updated_at: now - chrono::Duration::minutes(5),
+        };
+        repo.create_request(&rfq).await.unwrap();
+        repo.create_bid(&crate::repository::rfq::RfqBidRow {
+            id: "bid_stale".to_string(),
+            rfq_id: rfq.id.clone(),
+            tenant_id: tenant().0.clone(),
+            lp_id: "lp_stale".to_string(),
+            lp_name: None,
+            exchange_rate: Decimal::new(25_000, 0),
+            vnd_amount: Decimal::new(2_500_000, 0),
+            valid_until: now - chrono::Duration::seconds(1),
+            state: "PENDING".to_string(),
+            created_at: now - chrono::Duration::minutes(1),
+        })
+        .await
+        .unwrap();
+
+        let best = svc.get_best_bid(&tenant(), &rfq.id).await.unwrap();
+        assert!(best.is_none());
+
+        let bids = repo.list_bids_for_request(&tenant(), &rfq.id).await.unwrap();
+        assert_eq!(bids.len(), 1);
+        assert_eq!(bids[0].state, "EXPIRED");
     }
 }

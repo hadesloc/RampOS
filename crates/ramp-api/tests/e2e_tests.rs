@@ -242,6 +242,7 @@ async fn setup_test_app() -> TestContext {
             ramp_core::billing::BillingConfig::default(),
             Arc::new(ramp_core::billing::mock::MockBillingDataProvider::new()),
         )),
+        event_publisher: event_publisher.clone(),
         vnst_protocol: Arc::new(
             ramp_core::stablecoin::vnst_protocol::VnstProtocolService::new(
                 ramp_core::stablecoin::vnst_protocol::VnstProtocolConfig::default(),

@@ -15,6 +15,7 @@ pub mod payin;
 pub mod payout;
 pub mod portal;
 pub mod stablecoin;
+pub mod swap;
 pub mod trade;
 pub mod ws;
 
