@@ -35,7 +35,8 @@ Built with **Rust** for performance and memory safety, **Solidity** for on-chain
 
 ### 🆕 Recent Updates (March 2026)
 - **RFQ Auction Layer**: Bidirectional LP price discovery for VND/USDT (Completed 2026-03-08).
-- **Compliance Hardening**: Landed **Travel Rule Foundation**, **KYC Passport**, and **KYB Graph** (Migrations 037-041).
+- **Compliance Hardening**: Landed **Travel Rule Foundation**, **KYC Passport**, **KYB Graph**, **Risk Lab Replay**, and **Continuous Rescreening** (Migrations 037-041).
+- **Operational Excellence**: Added **Sandbox Presets**, **LP Reliability Scoring**, **Treasury**, and **SLA Guardian** services.
 - **Security Audit**: Completed deep audit of HMAC signatures, RLS fail-closed policies, and repository sanitization.
 - **[Read Full Roadmap & Security Hardening Report →](docs/recent-roadmap-and-security-hardening-2026-03.md)**
 
@@ -148,6 +149,7 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 | **RFQ Auction** | Bidirectional LP auction market for competitive pricing (USDT↔VND) |
 | **Escrow** | Funds locked in escrow during processing; auto-release or rollback |
 | **Settlement** | End-of-day settlement between rails providers |
+| **Net Settlement** | Net settlement calculation across multiple providers |
 | **Reconciliation** | Automatic daily reconciliation between ledger and bank statements |
 | **Exchange Rate** | Real-time rate engine with configurable spread and rate sources |
 | **Withdraw** | Full withdrawal flow with policy engine and per-tenant limits |
@@ -158,13 +160,24 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 | **License** | Per-tenant license management: tier, expiry, feature flags |
 | **Onboarding** | Streamlined user onboarding with KYC tier progression |
 | **Metrics** | Internal metrics collection for Prometheus export |
+| **Sandbox** | Programmable replay environments with presets for testing & drills |
+| **Treasury** | Treasury operations and reserve management |
+| **Liquidity Policy** | LP ranking, reliability scoring, and allocation policies |
+| **SLA Guardian** | SLA monitoring and automated alerting |
+| **Incident Timeline** | Incident tracking and timeline reconstruction |
 
 ### 🏦 Compliance Engine (`ramp-compliance`)
 - **KYC Tiering** — Tier 1/2/3 with configurable limits; integrations with Onfido and eKYC providers
 - **AML Rules Engine** — Velocity checks, structuring detection, device anomaly analysis
 - **Fraud Scoring** — ML-ready feature extraction, risk scoring, and decision engine
+- **Risk Lab** — AML rule versioning (DRAFT/ACTIVE/SHADOW/ARCHIVED), shadow scoring, replay, and explainability
 - **Sanctions Screening** — OpenSanctions integration with configurable providers
 - **Case Management** — Full workflow with notes, status tracking, and resolution
+- **Travel Rule (FATF R.16)** — Policy-driven disclosures, VASP registry, transport attempts, exception queue
+- **Continuous Rescreening** — Scheduled, watchlist-delta, and document-expiry triggered KYC/PEP rescreening
+- **KYC Passport** — Cross-tenant KYC portability with consent grants and acceptance policies
+- **KYB Corporate Graph** — Entity and ownership-edge graph for corporate due diligence
+- **Risk Graph** — Transaction graph analysis for network-level risk detection
 - **Regulatory Reporting** — Automated SAR/CTR generation in SBV (State Bank of Vietnam) format
 - **SBV Scheduler** — Automated report scheduling for Vietnam's central bank
 - **Fuzz Testing** — Dedicated fuzz targets for compliance rule edge cases
@@ -209,7 +222,18 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 - User management with KYC status overview
 - Compliance case review and resolution workflow
 - Double-entry ledger explorer
-- System settings: branding, domains, API keys, roles
+- **RFQ Auction** — LP auction management, bid monitoring, manual finalization
+- **Sandbox Control** — Preset management, scenario replay, deterministic testing
+- **Risk Lab** — AML rule versioning, shadow scoring, explainability panels
+- **Travel Rule** — VASP registry, disclosure queue, exception management
+- **Liquidity Brain** — LP scorecards, reliability metrics, policy comparison
+- **Incident Timeline** — Cross-service correlation, AI recommendations
+- **Reconciliation Workbench** — Break queues, matching, evidence export
+- **Treasury Dashboard** — Float visibility, forecast, stress alerts
+- **Rescreening** — Continuous KYC/PEP monitoring, alert management
+- **KYC Passport** — Cross-tenant trust management, consent grants
+- **KYB Graph** — Corporate ownership visualization, UBO analysis
+- System settings: branding, domains, API keys, roles, config bundles, extensions
 - **Internationalization** — English and Vietnamese (next-intl)
 - **E2E Tests** — Playwright test suite
 
@@ -221,6 +245,7 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 
 #### Embeddable Widget
 - Drop-in on-ramp/off-ramp widget for any dApp
+- Headless mode and server-driven configuration
 - CDN-ready distribution
 
 ---
@@ -476,10 +501,10 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 
 | Crate | Description | Key Dependencies |
 |-------|-------------|-----------------|
-| `ramp-api` | REST API Gateway | Axum 0.7, Tower, OpenTelemetry |
-| `ramp-core` | Business logic, state machine, 119 modules | Tokio, SQLx, async-nats |
+| `ramp-api` | REST API Gateway — 33 admin + 9 portal + 2 LP handlers | Axum 0.7, Tower, OpenTelemetry |
+| `ramp-core` | Business logic, state machine, 133 modules | Tokio, SQLx, async-nats |
 | `ramp-ledger` | Double-entry accounting | rust_decimal |
-| `ramp-compliance` | KYC/AML/KYT, 64 modules | Fuzz testing, report generation |
+| `ramp-compliance` | KYC/AML/KYT/Travel Rule, 75 modules | Fuzz testing, report generation |
 | `ramp-aa` | Account Abstraction (ERC-4337) | Alloy |
 | `ramp-adapter` | Bank/PSP integration SDK | Pluggable provider trait |
 | `ramp-common` | Shared types & errors | serde, thiserror |
@@ -489,23 +514,36 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 ```
 rampos/
 ├── crates/                # 7 Rust workspace crates
-│   ├── ramp-api/           # HTTP API (Axum) — 101 files
-│   ├── ramp-core/          # Business logic — 126 files
+│   ├── ramp-api/           # HTTP API (Axum) — 33 admin + 9 portal + 2 LP handlers
+│   ├── ramp-core/          # Business logic — 133 modules
 │   │   ├── billing/         # Metering, Stripe
 │   │   ├── bridge/          # Across, Stargate
 │   │   ├── chain/           # EVM, Solana, TON, swaps
 │   │   ├── crosschain/      # Executor, relayer
 │   │   ├── custody/         # MPC keys, signing, policies
+│   │   ├── domain/          # DNS, SSL custom domains
 │   │   ├── intents/         # Solver, execution, unified balance
+│   │   ├── jobs/            # Compliance alerts, timeout, webhook retry
 │   │   ├── oracle/          # Chainlink, fallback
-│   │   └── ...
-│   ├── ramp-compliance/    # KYC/AML engine — 75 files
+│   │   ├── repository/      # 16 data access modules
+│   │   ├── service/         # 46 service modules
+│   │   ├── sso/             # Enterprise SSO
+│   │   ├── stablecoin/      # Multi-stablecoin
+│   │   ├── swap/            # DEX aggregation
+│   │   ├── workflows/       # Durable workflow definitions
+│   │   └── yield/           # Yield strategy service
+│   ├── ramp-compliance/    # KYC/AML engine — 75 modules
 │   │   ├── aml/             # Device anomaly detection
 │   │   ├── fraud/           # Scoring, analytics, features
+│   │   ├── kyb/             # KYB corporate graph
 │   │   ├── kyc/             # Onfido, eKYC, tiering
 │   │   ├── kyt/             # Chainalysis integration
-│   │   ├── sanctions/       # OpenSanctions
-│   │   └── reports/         # SAR/CTR, SBV format
+│   │   ├── reports/         # SAR/CTR, SBV format
+│   │   ├── travel_rule/     # FATF R.16 policy + disclosure
+│   │   ├── passport.rs      # Cross-tenant KYC portability
+│   │   ├── rescreening.rs   # Continuous KYC/PEP checks
+│   │   ├── risk_lab.rs      # AML rule versioning & replay
+│   │   └── risk_graph.rs    # Transaction graph analysis
 │   ├── ramp-ledger/        # Double-entry ledger
 │   ├── ramp-aa/            # Account Abstraction
 │   ├── ramp-adapter/       # Rails adapter SDK
@@ -520,10 +558,10 @@ rampos/
 ├── sdk/                    # TypeScript SDK
 ├── sdk-go/                 # Go SDK
 ├── sdk-python/             # Python SDK
-├── packages/widget/        # Embeddable widget
+├── packages/widget/        # Embeddable widget (headless + server-driven)
 ├── frontend/               # Admin Dashboard (Next.js 15)
 ├── frontend-landing/       # Marketing site
-├── migrations/             # 67 PostgreSQL migrations
+├── migrations/             # 42 up + 32 down PostgreSQL migrations
 ├── k8s/                    # Kubernetes (Kustomize)
 │   ├── base/               # Core manifests, HA Postgres, PgBouncer
 │   ├── jobs/               # Backup jobs (Postgres, Redis, NATS → S3)
@@ -531,7 +569,7 @@ rampos/
 │   └── overlays/           # Staging/Production configs
 ├── monitoring/             # Grafana dashboards, Prometheus rules
 ├── argocd/                 # GitOps deployment
-└── docs/                   # Documentation
+└── docs/                   # Documentation (16 standalone + 17 directories)
 ```
 
 ---
@@ -760,7 +798,7 @@ payin = client.payins.create(user_id="usr_123", amount_vnd=1000000)
 | Layer | Technology |
 |-------|------------|
 | **Backend** | Rust, Tokio, Axum, SQLx |
-| **Database** | PostgreSQL 16 (35 migrations) |
+| **Database** | PostgreSQL 16 (42 migrations) |
 | **Cache** | Redis 7 |
 | **Messaging** | NATS JetStream |
 | **Analytics** | ClickHouse |

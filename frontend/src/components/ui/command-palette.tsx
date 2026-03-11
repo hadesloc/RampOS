@@ -15,7 +15,13 @@ import {
   LogOut,
   Moon,
   Sun,
-  Laptop
+  Laptop,
+  Gavel,
+  FileText,
+  AlertTriangle,
+  FileCheck2,
+  Banknote,
+  Radio,
 } from "lucide-react";
 
 import {
@@ -73,6 +79,30 @@ export function CommandPalette() {
           <CommandItem onSelect={() => runCommand(() => router.push('/ledger'))}>
             <BookOpen className="mr-2 h-4 w-4" />
             <span>Ledger</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => router.push('/rfq'))}>
+            <Gavel className="mr-2 h-4 w-4" />
+            <span>RFQ Auctions</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => router.push('/fraud'))}>
+            <AlertTriangle className="mr-2 h-4 w-4" />
+            <span>Fraud Detection</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => router.push('/reports'))}>
+            <FileText className="mr-2 h-4 w-4" />
+            <span>Compliance Reports</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => router.push('/documents'))}>
+            <FileCheck2 className="mr-2 h-4 w-4" />
+            <span>Documents</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => router.push('/limits'))}>
+            <Banknote className="mr-2 h-4 w-4" />
+            <span>Transaction Limits</span>
+          </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => router.push('/events'))}>
+            <Radio className="mr-2 h-4 w-4" />
+            <span>Event Catalog</span>
           </CommandItem>
         </CommandGroup>
         <CommandSeparator />

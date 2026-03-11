@@ -27,7 +27,7 @@ export default async function AdminLayout({
   const cookieStore = await cookies();
   const token = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
   if (!isAdminSessionTokenValid(token, adminKey)) {
-    redirect(`/${locale}/admin-login`);
+    redirect("/admin-login");
   }
 
   return (

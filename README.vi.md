@@ -141,6 +141,8 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 | **RFQ Auction** | Thị trường đấu giá LP hai chiều cho tỷ giá tốt nhất (USDT↔VND) |
 | **Escrow** | Khóa tiền trong escrow khi xử lý; tự giải phóng hoặc rollback |
 | **Settlement** | Quyết toán cuối ngày giữa các nhà cung cấp rails |
+
+| **Net Settlement** | Tính toán quyết toán ròng xuyên nhà cung cấp |
 | **Reconciliation** | Đối soát hàng ngày tự động giữa sổ cái và sao kê ngân hàng |
 | **Exchange Rate** | Engine tỷ giá thời gian thực với spread cấu hình được |
 | **Withdraw** | Luồng rút tiền đầy đủ với policy engine và giới hạn per-tenant |
@@ -151,6 +153,18 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 | **License** | Quản lý license per-tenant: tier, hết hạn, feature flags |
 | **Onboarding** | Onboarding người dùng tối giản với tiến trình tier KYC |
 | **Metrics** | Thu thập metrics nội bộ cho Prometheus export |
+| **Sandbox** | Môi trường replay lập trình được với preset cho testing & drill |
+| **Treasury** | Quản lý kho bạc và dự trữ |
+| **Liquidity Policy** | Xếp hạng LP, chấm điểm độ tin cậy, và phân bổ thanh khoản |
+| **SLA Guardian** | Giám sát SLA và cảnh báo tự động |
+| **Incident Timeline** | Theo dõi sự cố và tái dựng timeline |
+| **Event Catalog** | Danh mục sự kiện typed với phiên bản và schema registry |
+| **Reconciliation Export** | Xuất bảng chứng đối soát cho tài chính và kiểm toán |
+| **Rescreening Actions** | Hành động tự động cho rescreening (freeze/restrict/notify) |
+| **Config Bundle** | Xuất/nhập cấu hình tenant dạng gói |
+| **Net Settlement** | Tính toán quyết toán ròng xuyên nhà cung cấp |
+| **Liquidity Reliability** | Chấm điểm độ tin cậy LP theo thời gian thực |
+| **Replay** | Tái dựng và replay luồng giao dịch để debugging |
 
 ### 🏦 Compliance Engine (`ramp-compliance`)
 - **Phân tầng KYC** — Tier 1/2/3 với giới hạn cấu hình; tích hợp Onfido và eKYC
@@ -160,6 +174,12 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 - **Quản lý vụ việc** — Quy trình đầy đủ với ghi chú, theo dõi trạng thái và giải quyết
 - **Báo cáo quy định** — Tạo SAR/CTR tự động theo định dạng SBV (Ngân hàng Nhà nước Việt Nam)
 - **SBV Scheduler** — Lập lịch báo cáo tự động cho Ngân hàng Nhà nước Việt Nam
+- **Risk Lab** — Phiên bản hóa quy tắc AML (DRAFT/ACTIVE/SHADOW/ARCHIVED), chấm điểm shadow, replay và giải thích
+- **Travel Rule (FATF R.16)** — Disclosure theo chính sách, đăng ký VASP, transport attempts, hàng đợi ngoại lệ
+- **Rescreening liên tục** — Quét KYC/PEP theo lịch, watchlist-delta và document-expiry
+- **KYC Passport** — Khả chuyển KYC xuyên tenant với consent grant và chính sách chấp nhận
+- **KYB Corporate Graph** — Đồ thị thực thể và quyền sở hữu cho due diligence doanh nghiệp
+- **Risk Graph** — Phân tích đồ thị giao dịch để phát hiện rủi ro cấp mạng lưới
 - **Fuzz Testing** — Các mục tiêu fuzz chuyên biệt cho edge case của quy tắc compliance
 
 
@@ -214,6 +234,7 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 
 #### Widget nhúng
 - Widget on-ramp/off-ramp nhúng được cho bất kỳ dApp nào
+- Chế độ headless và cấu hình server-driven
 - Phân phối sẵn sàng CDN
 
 ---
@@ -466,10 +487,10 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 
 | Crate | Mô tả | Phụ thuộc chính |
 |-------|-------------|-----------------|
-| `ramp-api` | API Gateway REST | Axum 0.7, Tower, OpenTelemetry |
-| `ramp-core` | Logic nghiệp vụ, state machine, 119 modules | Tokio, SQLx, async-nats |
+| `ramp-api` | API Gateway REST — 33 admin + 9 portal + 2 LP handlers | Axum 0.7, Tower, OpenTelemetry |
+| `ramp-core` | Logic nghiệp vụ, state machine, 133 modules | Tokio, SQLx, async-nats |
 | `ramp-ledger` | Kế toán sổ cái kép | rust_decimal |
-| `ramp-compliance` | KYC/AML/KYT, 64 modules | Fuzz testing, tạo báo cáo |
+| `ramp-compliance` | KYC/AML/KYT/Travel Rule, 75 modules | Fuzz testing, tạo báo cáo |
 | `ramp-aa` | Account Abstraction (ERC-4337) | Alloy |
 | `ramp-adapter` | SDK tích hợp Ngân hàng/PSP | Pluggable provider trait |
 | `ramp-common` | Kiểu dùng chung & lỗi | serde, thiserror |
@@ -479,23 +500,35 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 ```
 rampos/
 ├── crates/                # 7 Rust workspace crates
-│   ├── ramp-api/           # HTTP API (Axum) — 101 files
-│   ├── ramp-core/          # Logic nghiệp vụ — 126 files
+│   ├── ramp-api/           # HTTP API (Axum) — 33 admin + 9 portal + 2 LP handlers
+│   ├── ramp-core/          # Logic nghiệp vụ — 133 modules
 │   │   ├── billing/         # Đo lường, Stripe
 │   │   ├── bridge/          # Across, Stargate
 │   │   ├── chain/           # EVM, Solana, TON, swaps
 │   │   ├── crosschain/      # Executor, relayer
 │   │   ├── custody/         # Khóa MPC, ký, policies
+│   │   ├── domain/          # DNS, SSL custom domains
 │   │   ├── intents/         # Solver, thực thi, số dư thống nhất
+│   │   ├── jobs/            # Compliance alerts, timeout, webhook retry
 │   │   ├── oracle/          # Chainlink, fallback
-│   │   └── ...
-│   ├── ramp-compliance/    # KYC/AML engine — 75 files
+│   │   ├── repository/      # 16 data access modules
+│   │   ├── service/         # 46 service modules
+│   │   ├── sso/             # Enterprise SSO
+│   │   ├── stablecoin/      # Multi-stablecoin
+│   │   ├── swap/            # DEX aggregation
+│   │   ├── workflows/       # Durable workflow definitions
+│   │   └── yield/           # Yield strategy service
+│   ├── ramp-compliance/    # KYC/AML engine — 75 modules
 │   │   ├── aml/             # Phát hiện device anomaly
 │   │   ├── fraud/           # Chấm điểm, phân tích, đặc trưng
 │   │   ├── kyc/             # Onfido, eKYC, phân tầng
 │   │   ├── kyt/             # Tích hợp Chainalysis
-│   │   ├── sanctions/       # OpenSanctions
-│   │   └── reports/         # SAR/CTR, định dạng SBV
+│   │   ├── reports/         # SAR/CTR, định dạng SBV
+│   │   ├── travel_rule/     # FATF R.16 policy + disclosure
+│   │   ├── passport.rs      # KYC xuyên tenant
+│   │   ├── rescreening.rs   # Kiểm tra KYC/PEP liên tục
+│   │   ├── risk_lab.rs      # Phiên bản hóa quy tắc AML & replay
+│   │   └── risk_graph.rs    # Phân tích đồ thị giao dịch
 │   ├── ramp-ledger/        # Sổ cái kép
 │   ├── ramp-aa/            # Account Abstraction
 │   ├── ramp-adapter/       # SDK Rails adapter
@@ -513,7 +546,7 @@ rampos/
 ├── packages/widget/        # Widget nhúng
 ├── frontend/               # Dashboard Admin (Next.js 15)
 ├── frontend-landing/       # Trang marketing
-├── migrations/             # 67 migration PostgreSQL
+├── migrations/             # 42 up + 32 down PostgreSQL migrations
 ├── k8s/                    # Kubernetes (Kustomize)
 │   ├── base/               # Manifests lõi, Postgres HA, PgBouncer
 │   ├── jobs/               # Backup jobs (Postgres, Redis, NATS → S3)
@@ -521,7 +554,7 @@ rampos/
 │   └── overlays/           # Cấu hình Staging/Production
 ├── monitoring/             # Grafana dashboards, Prometheus rules
 ├── argocd/                 # Triển khai GitOps
-└── docs/                   # Tài liệu
+└── docs/                   # Tài liệu (16 standalone + 17 directories)
 ```
 
 ---
@@ -746,7 +779,7 @@ payin = client.payins.create(user_id="usr_123", amount_vnd=1000000)
 | Tầng | Công nghệ |
 |-------|------------|
 | **Backend** | Rust, Tokio, Axum, SQLx |
-| **Cơ sở dữ liệu** | PostgreSQL 16 (35 migrations) |
+| **Cơ sở dữ liệu** | PostgreSQL 16 (42 migrations) |
 | **Cache** | Redis 7 |
 | **Messaging** | NATS JetStream |
 | **Phân tích** | ClickHouse |

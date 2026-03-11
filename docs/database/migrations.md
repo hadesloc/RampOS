@@ -1,7 +1,8 @@
 # RampOS Database Migrations
 
-**Database**: PostgreSQL 15+
-**Last Updated**: 2026-02-02
+**Database**: PostgreSQL 16+
+**Last Updated**: 2026-03-11
+**Total Migrations**: 42 up + 32 down
 
 ---
 
@@ -24,16 +25,49 @@ RampOS uses a numbered migration system where each SQL file represents a databas
 
 ```
 migrations/
-  001_initial_schema.sql      # Core tables and functions
-  002_seed_data.sql           # Development seed data
-  003_rule_versions.sql       # AML rule versioning
-  004_score_history.sql       # Risk score tracking
-  005_case_notes.sql          # AML case notes
-  006_enable_rls.sql          # Row Level Security
-  007_compliance_transactions.sql  # Compliance tracking
-  008_add_missing_rls.sql     # Additional RLS policies
-  009_add_webhook_secret.sql  # Webhook security fix
-  999_seed_data.sql           # Extended test data
+  001_initial_schema.sql          # Core tables and functions
+  002_seed_data.sql               # Development seed data
+  003_rule_versions.sql           # AML rule versioning
+  004_score_history.sql           # Risk score tracking
+  005_case_notes.sql              # AML case notes
+  006_enable_rls.sql              # Row Level Security
+  007_compliance_transactions.sql # Compliance tracking
+  008_add_missing_rls.sql         # Additional RLS policies
+  009_add_webhook_secret.sql      # Webhook security fix
+  010_smart_accounts.sql          # ERC-4337 smart accounts
+  011_add_api_secret.sql          # API key management
+  012_bank_confirmations.sql      # Bank confirmation tracking
+  013_compliance_integrity.sql    # Compliance data integrity
+  014_rls_fail_closed.sql         # RLS fail-closed policies
+  015_license_management.sql      # Tenant license management
+  016_multi_stablecoin.sql        # Multi-stablecoin support
+  017_custom_domains.sql          # Custom domain management
+  018_enterprise_sso.sql          # Enterprise SSO
+  019_usage_billing.sql           # Usage metering & billing
+  020_compliance_audit_trail.sql  # Compliance audit trail
+  021_vnd_transaction_limits.sql  # VND transaction limits
+  022_licensing_requirements.sql  # Licensing requirements
+  023_encrypt_secrets_nonce.sql   # Encryption nonce column
+  024_webauthn_credentials.sql    # WebAuthn/Passkey support
+  025_portal_kyc_cases.sql        # Portal KYC case management
+  026_webhook_configs.sql         # Webhook configuration
+  027_offramp_intents.sql         # Off-ramp intent support
+  028_magic_link_tokens.sql       # Magic link auth tokens
+  029_refresh_tokens.sql          # JWT refresh tokens
+  030_tenant_rate_limits.sql      # Per-tenant rate limiting
+  031_tenant_api_version.sql      # Per-tenant API versioning
+  032_settlements.sql             # Settlement engine
+  033_rfq_auction.sql             # RFQ auction tables
+  034_lp_keys.sql                 # LP API key management
+  035_sandbox_presets.sql         # Sandbox preset system (W1)
+  036_lp_reliability_snapshots.sql # LP reliability scoring (W4)
+  037_travel_rule.sql             # Travel Rule FATF (W5)
+  038_risk_lab_replay_metadata.sql # Risk Lab replay (W6)
+  039_rescreening_runs.sql        # Continuous rescreening (W12)
+  040_kyc_passport.sql            # KYC passport portability (W13)
+  041_kyb_graph.sql               # KYB corporate graph (W14)
+  999_seed_data.sql               # Extended test data
+  down/                           # 32 rollback scripts
 ```
 
 ### Naming Convention
@@ -98,183 +132,81 @@ Where:
 
 ---
 
-### 003_rule_versions.sql
+### 003–009: Foundation Migrations
 
-**Purpose**: Adds AML rule versioning capability.
-
-**Changes**:
-- Creates `aml_rule_versions` table
-- Supports multiple rule versions per tenant
-- Only one version can be active at a time
-
-**New Table**:
-```sql
-CREATE TABLE aml_rule_versions (
-    id UUID PRIMARY KEY,
-    tenant_id VARCHAR(64) NOT NULL REFERENCES tenants(id),
-    version_number INT NOT NULL,
-    rules_json JSONB NOT NULL,
-    is_active BOOLEAN DEFAULT false,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by VARCHAR(255),
-    activated_at TIMESTAMPTZ,
-    UNIQUE (tenant_id, version_number)
-);
-```
-
-**Dependencies**: 001_initial_schema.sql
+| Migration | Purpose | Key Tables/Columns |
+|-----------|---------|-------------------|
+| 003_rule_versions | AML rule versioning | `aml_rule_versions` |
+| 004_score_history | Risk score tracking | `risk_score_history` |
+| 005_case_notes | AML case notes | `case_notes` |
+| 006_enable_rls | Row Level Security on 11 tables | RLS policies |
+| 007_compliance_transactions | Velocity check tracking | `compliance_transactions` |
+| 008_add_missing_rls | Security fix: RLS gaps + `rampos_system` role | Additional RLS |
+| 009_add_webhook_secret | HMAC webhook signing | `webhook_secret_encrypted` column |
 
 ---
 
-### 004_score_history.sql
+### 010–019: Platform Infrastructure
 
-**Purpose**: Tracks risk score changes over time.
-
-**Changes**:
-- Creates `risk_score_history` table
-- Enables historical risk analysis
-- Links scores to triggering intents
-
-**New Table**:
-```sql
-CREATE TABLE risk_score_history (
-    id UUID PRIMARY KEY,
-    user_id VARCHAR(255) NOT NULL,
-    intent_id VARCHAR(255),
-    score DECIMAL(5,2) NOT NULL,
-    triggered_rules JSONB,
-    action_taken VARCHAR(50),
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-**Dependencies**: 001_initial_schema.sql
+| Migration | Purpose | Key Tables/Columns |
+|-----------|---------|-------------------|
+| 010_smart_accounts | ERC-4337 smart account tracking | `smart_accounts`, `smart_account_ops` |
+| 011_add_api_secret | Tenant API key management | `api_secret` column |
+| 012_bank_confirmations | Bank callback tracking | `bank_confirmations` |
+| 013_compliance_integrity | Data integrity constraints | Additional constraints |
+| 014_rls_fail_closed | Fail-closed RLS default | `default_deny` policies |
+| 015_license_management | Tenant licensing | `licenses`, `license_features` |
+| 016_multi_stablecoin | Multi-stablecoin support | Stablecoin columns |
+| 017_custom_domains | White-label domains | `custom_domains`, `domain_ssl_certs` |
+| 018_enterprise_sso | SAML/OIDC SSO | `sso_configurations` |
+| 019_usage_billing | Metering & billing | `usage_records`, `billing_events` |
 
 ---
 
-### 005_case_notes.sql
+### 020–029: Compliance & Authentication
 
-**Purpose**: Adds notes capability to AML cases.
-
-**Changes**:
-- Creates `case_notes` table
-- Supports internal and external notes
-- Links to AML cases
-
-**New Table**:
-```sql
-CREATE TABLE case_notes (
-    id UUID PRIMARY KEY,
-    case_id VARCHAR(255) NOT NULL,
-    author_id VARCHAR(255),
-    content TEXT NOT NULL,
-    note_type VARCHAR(50) NOT NULL,
-    is_internal BOOLEAN DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-**Dependencies**: 001_initial_schema.sql
+| Migration | Purpose | Key Tables/Columns |
+|-----------|---------|-------------------|
+| 020_compliance_audit_trail | Append-only compliance audit | `compliance_audit_events` |
+| 021_vnd_transaction_limits | VND-specific limits | `vnd_transaction_limits` |
+| 022_licensing_requirements | License requirement registry | `licensing_requirements` |
+| 023_encrypt_secrets_nonce | Encryption nonce management | `nonce` column on secrets |
+| 024_webauthn_credentials | Passkey/WebAuthn auth | `webauthn_credentials` |
+| 025_portal_kyc_cases | Portal KYC case workflow | `portal_kyc_cases` |
+| 026_webhook_configs | Webhook configuration | `webhook_configs`, retry settings |
+| 027_offramp_intents | Off-ramp intent tracking | `offramp_intents`, escrow fields |
+| 028_magic_link_tokens | Passwordless auth | `magic_link_tokens` |
+| 029_refresh_tokens | JWT refresh tokens | `refresh_tokens` |
 
 ---
 
-### 006_enable_rls.sql
+### 030–034: Rate Limiting, Versioning, RFQ
 
-**Purpose**: Enables Row Level Security for multi-tenant isolation.
-
-**Changes**:
-- Enables RLS on 11 tables
-- Creates tenant isolation policies using `app.current_tenant` session variable
-
-**Tables with RLS**:
-1. `users`
-2. `intents`
-3. `ledger_entries`
-4. `account_balances`
-5. `webhook_events`
-6. `rails_adapters`
-7. `virtual_accounts`
-8. `kyc_records`
-9. `aml_cases`
-10. `audit_log`
-11. `recon_batches`
-
-**Policy Pattern**:
-```sql
-CREATE POLICY tenant_isolation_{table} ON {table}
-    USING (tenant_id = current_setting('app.current_tenant')::VARCHAR);
-```
-
-**Dependencies**: 001_initial_schema.sql
+| Migration | Purpose | Key Tables/Columns |
+|-----------|---------|-------------------|
+| 030_tenant_rate_limits | Per-tenant rate limit overrides | `tenant_rate_limits` |
+| 031_tenant_api_version | API version pinning | `api_version` column |
+| 032_settlements | Settlement engine | `settlements`, `settlement_items` |
+| 033_rfq_auction | RFQ auction marketplace | `rfq_requests`, `rfq_bids` |
+| 034_lp_keys | LP API key auth | `lp_keys` (X-LP-Key header) |
 
 ---
 
-### 007_compliance_transactions.sql
+### 035–041: World-Class Roadmap (W1-W16)
 
-**Purpose**: Adds compliance transaction tracking for velocity checks.
+These migrations implement the W1-W16 World-Class Roadmap features:
 
-**Changes**:
-- Creates `compliance_transactions` table
-- Optimized for time-series queries
-- Supports transaction type filtering
+| Migration | Workstream | Purpose | Key Tables |
+|-----------|------------|---------|------------|
+| 035_sandbox_presets | W1 | Programmable sandbox environments | `sandbox_presets`, `sandbox_preset_scenarios` (3 presets, 8 scenarios) |
+| 036_lp_reliability_snapshots | W4 | LP reliability scoring | `lp_reliability_snapshots` (fill_rate, reject_rate, dispute_rate, slippage, latency, rolling windows) |
+| 037_travel_rule | W5 | FATF R.16 Travel Rule | `travel_rule_policies`, `travel_rule_vasps`, `travel_rule_disclosures`, `travel_rule_transport_attempts`, `travel_rule_exception_queue` |
+| 038_risk_lab_replay_metadata | W6 | AML replay & explainability | Extends `aml_rule_versions` (version_state, shadow), extends `risk_score_history` (feature_vector, score_explanation, decision_snapshot) |
+| 039_rescreening_runs | W12 | Continuous KYC/PEP rescreening | `compliance_rescreening_runs` (SCHEDULED, WATCHLIST_DELTA, DOCUMENT_EXPIRY triggers) |
+| 040_kyc_passport | W13 | Cross-tenant KYC portability | `kyc_passport_vault`, `kyc_passport_consent_grants`, `kyc_passport_acceptance_policies` |
+| 041_kyb_graph | W14 | Corporate ownership graph | `kyb_entities`, `kyb_ownership_edges` (ownership_pct, jurisdiction) |
 
-**New Table**:
-```sql
-CREATE TABLE compliance_transactions (
-    id UUID PRIMARY KEY,
-    tenant_id VARCHAR(64) NOT NULL,
-    user_id VARCHAR(64) NOT NULL,
-    intent_id VARCHAR(64) NOT NULL,
-    transaction_type VARCHAR(32) NOT NULL,
-    amount_vnd DECIMAL(30, 8) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-```
-
-**Dependencies**: 001_initial_schema.sql
-
----
-
-### 008_add_missing_rls.sql
-
-**Purpose**: Security fix - adds RLS to tables that were missing it.
-
-**Changes**:
-- Adds `tenant_id` column to `risk_score_history` (if missing)
-- Adds `tenant_id` column to `case_notes` (if missing)
-- Enables RLS on:
-  - `aml_rule_versions`
-  - `risk_score_history`
-  - `case_notes`
-  - `compliance_transactions`
-- Creates `rampos_system` role for background workers (BYPASSRLS)
-- Adds policy comments for documentation
-
-**Security Roles**:
-```sql
-CREATE ROLE rampos_system WITH BYPASSRLS NOLOGIN;
-GRANT rampos_system TO rampos;
-```
-
-**Dependencies**: 003, 004, 005, 006, 007
-
----
-
-### 009_add_webhook_secret.sql
-
-**Purpose**: Security fix for proper webhook HMAC signing.
-
-**Changes**:
-- Adds `webhook_secret_encrypted` column to `tenants`
-- Allows storing encrypted webhook secret (not just hash)
-- Adds documentation comments
-
-**Column Added**:
-```sql
-ALTER TABLE tenants ADD COLUMN IF NOT EXISTS webhook_secret_encrypted BYTEA;
-```
-
-**Dependencies**: 001_initial_schema.sql
+All W1-W16 migrations include RLS policies and tenant isolation.
 
 ---
 

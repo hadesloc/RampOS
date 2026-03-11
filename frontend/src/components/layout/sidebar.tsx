@@ -20,6 +20,19 @@ import {
   Network,
   TrendingUp,
   KeyRound,
+  Gavel,
+  Droplets,
+  FlaskConical,
+  Banknote,
+  FileText,
+  FileCheck2,
+  ShieldCheck,
+  Landmark,
+  Radio,
+  AlertTriangle,
+  Activity,
+  Scale,
+  UserCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -44,76 +57,65 @@ export default function Sidebar() {
     {
       title: "Overview",
       items: [
-        {
-          title: t('dashboard'),
-          href: "/",
-          icon: LayoutDashboard,
-        },
+        { title: t('dashboard'), href: "/", icon: LayoutDashboard },
       ],
     },
     {
       title: "Operations",
       items: [
-        {
-          title: "Intents",
-          href: "/intents",
-          icon: ArrowLeftRight,
-        },
-        {
-          title: t('users'),
-          href: "/users",
-          icon: Users,
-        },
-        {
-          title: t('compliance'),
-          href: "/compliance",
-          icon: ShieldAlert,
-        },
-        {
-          title: "Ledger",
-          href: "/ledger",
-          icon: BookOpen,
-        },
+        { title: "Intents", href: "/intents", icon: ArrowLeftRight },
+        { title: t('users'), href: "/users", icon: Users },
+        { title: "Offramp", href: "/offramp", icon: Banknote },
+        { title: "Onboarding", href: "/onboarding", icon: UserCheck },
+        { title: "Settlement", href: "/settlement", icon: Scale },
+      ],
+    },
+    {
+      title: "Compliance",
+      items: [
+        { title: t('compliance'), href: "/compliance", icon: ShieldAlert },
+        { title: "Risk Lab", href: "/risk-lab", icon: FlaskConical },
+        { title: "Risk", href: "/risk", icon: Activity },
+        { title: "Fraud", href: "/fraud", icon: AlertTriangle },
+        { title: "Reports", href: "/reports", icon: FileText },
+        { title: "Documents", href: "/documents", icon: FileCheck2 },
+      ],
+    },
+    {
+      title: "Finance",
+      items: [
+        { title: "Ledger", href: "/ledger", icon: BookOpen },
+        { title: "Reconciliation", href: "/reconciliation", icon: ShieldCheck },
+        { title: "Treasury", href: "/treasury", icon: Landmark },
+        { title: "Limits", href: "/limits", icon: Banknote },
+      ],
+    },
+    {
+      title: "Marketplace",
+      items: [
+        { title: "RFQ Auctions", href: "/rfq", icon: Gavel },
+        { title: "Liquidity", href: "/liquidity", icon: Droplets },
+        { title: "Sandbox", href: "/sandbox", icon: FlaskConical },
       ],
     },
     {
       title: "DeFi",
       items: [
-        {
-          title: "Swap",
-          href: "/swap",
-          icon: RefreshCw,
-        },
-        {
-          title: "Bridge",
-          href: "/bridge",
-          icon: Network,
-        },
-        {
-          title: "Yield",
-          href: "/yield",
-          icon: TrendingUp,
-        },
-        {
-          title: "Custody",
-          href: "/custody",
-          icon: KeyRound,
-        },
+        { title: "Swap", href: "/swap", icon: RefreshCw },
+        { title: "Bridge", href: "/bridge", icon: Network },
+        { title: "Yield", href: "/yield", icon: TrendingUp },
+        { title: "Custody", href: "/custody", icon: KeyRound },
       ],
     },
     {
       title: "System",
       items: [
-        {
-          title: "Webhooks",
-          href: "/webhooks",
-          icon: Webhook,
-        },
-        {
-          title: t('settings'),
-          href: "/settings",
-          icon: Settings,
-        },
+        { title: "Webhooks", href: "/webhooks", icon: Webhook },
+        { title: "Events", href: "/events", icon: Radio },
+        { title: "Incidents", href: "/incidents", icon: AlertTriangle },
+        { title: "Monitoring", href: "/monitoring", icon: Activity },
+        { title: "Licensing", href: "/licensing", icon: KeyRound },
+        { title: t('settings'), href: "/settings", icon: Settings },
       ],
     },
   ];
