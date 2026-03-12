@@ -11,6 +11,9 @@ type BundleResponse = {
     tenantName: string;
     actionMode: string;
     sections: string[];
+    approvalStatus?: string;
+    source?: string;
+    rolloutScope?: Record<string, unknown>;
   };
 };
 
@@ -52,6 +55,11 @@ export default function ConfigBundleWorkbench() {
               <div>Tenant: {data?.bundle.tenantName}</div>
               <div>Mode: {data?.bundle.actionMode}</div>
               <div>Sections: {data?.bundle.sections.join(", ")}</div>
+              <div>Approval: {data?.bundle.approvalStatus ?? "n/a"}</div>
+              <div>Source: {data?.bundle.source ?? "unknown"}</div>
+              {data?.bundle.rolloutScope ? (
+                <div>Rollout scope: {JSON.stringify(data.bundle.rolloutScope)}</div>
+              ) : null}
             </>
           )}
         </CardContent>

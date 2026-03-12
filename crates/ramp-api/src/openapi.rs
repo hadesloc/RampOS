@@ -288,6 +288,7 @@ fn attach_manual_reconciliation_paths(openapi: &mut utoipa::openapi::OpenApi) {
         json!({
             "get": {
                 "tags": ["admin"],
+                "operationId": "getReconciliationWorkbench",
                 "summary": "Load reconciliation workbench",
                 "description": "Returns the bounded reconciliation workbench snapshot used by the thin CLI and admin UI.",
                 "parameters": [
@@ -319,6 +320,7 @@ fn attach_manual_reconciliation_paths(openapi: &mut utoipa::openapi::OpenApi) {
         json!({
             "get": {
                 "tags": ["admin"],
+                "operationId": "exportReconciliationWorkbench",
                 "summary": "Export reconciliation workbench",
                 "description": "Exports the bounded reconciliation queue snapshot as JSON or CSV.",
                 "parameters": [
@@ -360,6 +362,7 @@ fn attach_manual_reconciliation_paths(openapi: &mut utoipa::openapi::OpenApi) {
         json!({
             "get": {
                 "tags": ["admin"],
+                "operationId": "getReconciliationEvidence",
                 "summary": "Load reconciliation evidence pack",
                 "description": "Returns the linked evidence pack for one reconciliation discrepancy.",
                 "parameters": [
@@ -398,6 +401,7 @@ fn attach_manual_reconciliation_paths(openapi: &mut utoipa::openapi::OpenApi) {
         json!({
             "get": {
                 "tags": ["admin"],
+                "operationId": "exportReconciliationEvidence",
                 "summary": "Export reconciliation evidence pack",
                 "description": "Exports one reconciliation evidence pack as JSON.",
                 "parameters": [
@@ -438,6 +442,7 @@ fn attach_manual_treasury_paths(openapi: &mut utoipa::openapi::OpenApi) {
         json!({
             "get": {
                 "tags": ["admin"],
+                "operationId": "getTreasuryWorkbench",
                 "summary": "Load treasury workbench",
                 "description": "Returns the bounded recommendation-only treasury snapshot used by the admin UI.",
                 "parameters": [
@@ -469,6 +474,7 @@ fn attach_manual_treasury_paths(openapi: &mut utoipa::openapi::OpenApi) {
         json!({
             "get": {
                 "tags": ["admin"],
+                "operationId": "exportTreasuryWorkbench",
                 "summary": "Export treasury workbench",
                 "description": "Exports the bounded treasury recommendation set as JSON or CSV.",
                 "parameters": [
@@ -512,6 +518,7 @@ fn attach_manual_settlement_paths(openapi: &mut utoipa::openapi::OpenApi) {
         json!({
             "get": {
                 "tags": ["admin"],
+                "operationId": "getSettlementWorkbench",
                 "summary": "Load bilateral settlement workbench",
                 "description": "Returns the bounded bilateral, approval-gated settlement proposal snapshot used by the admin UI.",
                 "parameters": [
@@ -541,6 +548,7 @@ fn attach_manual_settlement_paths(openapi: &mut utoipa::openapi::OpenApi) {
         json!({
             "get": {
                 "tags": ["admin"],
+                "operationId": "exportSettlementWorkbench",
                 "summary": "Export bilateral settlement workbench",
                 "description": "Exports the bounded bilateral settlement proposal queue as JSON or CSV.",
                 "parameters": [
@@ -580,6 +588,7 @@ fn attach_manual_passport_paths(openapi: &mut utoipa::openapi::OpenApi) {
         json!({
             "get": {
                 "tags": ["admin"],
+                "operationId": "listPassportQueue",
                 "summary": "List passport vault queue",
                 "description": "Returns the bounded shared-vault passport queue used for consent and review workflows.",
                 "parameters": [
@@ -609,6 +618,7 @@ fn attach_manual_passport_paths(openapi: &mut utoipa::openapi::OpenApi) {
         json!({
             "get": {
                 "tags": ["admin"],
+                "operationId": "getPassportPackage",
                 "summary": "Load passport package detail",
                 "description": "Returns one bounded passport package detail including consent, freshness, and acceptance status.",
                 "parameters": [
@@ -647,6 +657,7 @@ fn attach_manual_kyb_paths(openapi: &mut utoipa::openapi::OpenApi) {
         json!({
             "get": {
                 "tags": ["admin"],
+                "operationId": "listKybReviews",
                 "summary": "List KYB ownership reviews",
                 "description": "Returns the bounded KYB review queue built from relational ownership edges.",
                 "parameters": [
@@ -676,6 +687,7 @@ fn attach_manual_kyb_paths(openapi: &mut utoipa::openapi::OpenApi) {
         json!({
             "get": {
                 "tags": ["admin"],
+                "operationId": "getKybGraph",
                 "summary": "Load KYB graph review detail",
                 "description": "Returns one relational ownership graph review item for a business entity.",
                 "parameters": [
@@ -714,8 +726,9 @@ fn attach_manual_config_bundle_paths(openapi: &mut utoipa::openapi::OpenApi) {
         json!({
             "get": {
                 "tags": ["admin"],
+                "operationId": "exportConfigBundle",
                 "summary": "Export whitelisted config bundle",
-                "description": "Returns the bounded config bundle export used by admin settings tooling. Only whitelisted sections and actions are included.",
+                "description": "Returns the bounded config bundle export used by admin settings tooling. When governance data is available it is sourced from persisted registry-backed records; otherwise an explicit fallback artifact is returned.",
                 "responses": {
                     "200": {
                         "description": "Config bundle export artifact",
@@ -734,8 +747,9 @@ fn attach_manual_config_bundle_paths(openapi: &mut utoipa::openapi::OpenApi) {
         json!({
             "get": {
                 "tags": ["admin"],
+                "operationId": "listWhitelistedExtensionActions",
                 "summary": "List whitelisted extension actions",
-                "description": "Returns the bounded registry of allowed extension actions. No arbitrary extension execution is exposed.",
+                "description": "Returns the bounded registry of allowed extension actions. When governance data is available it is sourced from persisted registry-backed records; otherwise an explicit fallback action registry is returned. No arbitrary extension execution is exposed.",
                 "responses": {
                     "200": {
                         "description": "Whitelisted extension action registry",

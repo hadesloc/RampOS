@@ -301,6 +301,43 @@ Get intent details.
 
 List all tenants (admin only).
 
+#### GET /v1/admin/config-bundles/export
+
+Export the current governed config bundle for the authenticated tenant.
+
+Operational behavior:
+- The endpoint prefers the latest active `approved` registry-backed bundle for the tenant.
+- If no approved persisted bundle is active, RampOS returns an explicit fallback artifact with `source = "fallback"` and `approvalStatus = "fallback"`.
+- Response metadata now includes approval state, rollout scope, provenance, and source so operators and automation can tell whether they are looking at governed or fallback data.
+
+Representative response fields:
+```json
+{
+  "bundle": {
+    "bundleId": "cfg_bundle_demo_001",
+    "tenantName": "RampOS Demo Tenant",
+    "actionMode": "whitelisted_only",
+    "sections": ["branding", "domains"],
+    "approvalStatus": "approved",
+    "source": "registry",
+    "rolloutScope": {
+      "scope": "tenant"
+    },
+    "provenance": {
+      "mode": "registry"
+    }
+  }
+}
+```
+
+#### GET /v1/admin/extensions
+
+List governed extension actions on the existing admin control surface.
+
+Operational behavior:
+- Response remains whitelisted-only; no arbitrary extension runtime is exposed.
+- Each action may include `approvalRequired`, `rolloutScope`, and `source` to distinguish governed registry-backed actions from explicit fallback actions.
+
 #### GET /v1/admin/intents
 
 List intents with filters.

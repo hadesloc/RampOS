@@ -64,6 +64,10 @@ fn build_signed_admin_request(
 }
 
 async fn setup_app(tenant_id: &str) -> TestApp {
+    setup_app_with_pool(tenant_id, None).await
+}
+
+async fn setup_app_with_pool(tenant_id: &str, db_pool: Option<PgPool>) -> TestApp {
     let intent_repo = Arc::new(MockIntentRepository::new());
     let ledger_repo = Arc::new(MockLedgerRepository::new());
     let user_repo = Arc::new(MockUserRepository::new());
@@ -118,10 +122,12 @@ async fn setup_app(tenant_id: &str) -> TestApp {
         user_repo,
         event_publisher.clone(),
     ));
-    let pool = PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
-        .expect("Failed to create lazy pool");
+    let report_pool = db_pool.clone().unwrap_or_else(|| {
+        PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
+            .expect("Failed to create lazy pool")
+    });
     let report_generator = Arc::new(ReportGenerator::new(
-        pool,
+        report_pool,
         Arc::new(MockDocumentStorage::new()),
     ));
     let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
@@ -163,7 +169,7 @@ async fn setup_app(tenant_id: &str) -> TestApp {
             ramp_core::stablecoin::VnstProtocolConfig::default(),
             Arc::new(ramp_core::stablecoin::MockVnstProtocolDataProvider::new()),
         )),
-        db_pool: None,
+        db_pool,
         ctr_service: None,
         ws_state: None,
         metrics_registry: Arc::new(ramp_core::service::MetricsRegistry::new()),
@@ -198,6 +204,8 @@ async fn config_bundle_export_returns_whitelisted_bundle() {
     let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(payload["bundle"]["actionMode"], "whitelisted_only");
     assert!(payload["bundle"]["sections"].as_array().unwrap().len() >= 1);
+    assert_eq!(payload["bundle"]["source"], "fallback");
+    assert_eq!(payload["bundle"]["approvalStatus"], "fallback");
 }
 
 #[tokio::test]
@@ -221,4 +229,90 @@ async fn extensions_registry_lists_whitelisted_actions() {
     let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(payload["actionMode"], "whitelisted_only");
     assert!(payload["actions"].as_array().unwrap().len() >= 1);
+    assert_eq!(payload["actions"][0]["source"], "fallback");
+    assert_eq!(payload["actions"][0]["approvalRequired"], true);
+}
+
+#[tokio::test]
+async fn config_bundle_export_prefers_approved_registry_bundle() {
+    let database_url = match std::env::var("DATABASE_URL") {
+        Ok(url) => url,
+        Err(_) => return,
+    };
+
+    let pool = PgPool::connect(&database_url)
+        .await
+        .expect("database connection should succeed");
+
+    sqlx::migrate!("../../migrations")
+        .run(&pool)
+        .await
+        .expect("migrations should succeed");
+
+    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    let app = setup_app_with_pool("tenant_registry_bundle", Some(pool.clone())).await;
+
+    sqlx::query(
+        r#"
+        INSERT INTO config_bundle_exports (
+            id,
+            tenant_id,
+            tenant_name,
+            action_mode,
+            sections,
+            payload,
+            approval_status,
+            rollout_scope,
+            provenance,
+            is_active
+        ) VALUES
+            (
+                'cfg_bundle_pending',
+                $1,
+                'Config Bundle Test Tenant',
+                'whitelisted_only',
+                '["branding"]'::jsonb,
+                '{"branding":{"wordmark":"Pending"}}'::jsonb,
+                'pending',
+                '{"scope":"tenant"}'::jsonb,
+                '{"mode":"registry"}'::jsonb,
+                TRUE
+            ),
+            (
+                'cfg_bundle_approved',
+                $1,
+                'Config Bundle Test Tenant',
+                'whitelisted_only',
+                '["branding","domains"]'::jsonb,
+                '{"branding":{"wordmark":"Approved"}}'::jsonb,
+                'approved',
+                '{"scope":"tenant"}'::jsonb,
+                '{"mode":"registry"}'::jsonb,
+                TRUE
+            )
+        "#,
+    )
+    .bind("tenant_registry_bundle")
+    .execute(&pool)
+    .await
+    .expect("insert registry bundles");
+
+    let request = build_signed_admin_request(
+        "GET",
+        "/v1/admin/config-bundles/export",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        TEST_ADMIN_KEY,
+    );
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(payload["bundle"]["bundleId"], "cfg_bundle_approved");
+    assert_eq!(payload["bundle"]["source"], "registry");
+    assert_eq!(payload["bundle"]["approvalStatus"], "approved");
 }

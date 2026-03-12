@@ -23,6 +23,9 @@ describe("ExtensionsPage", () => {
             label: "Apply branding bundle",
             description: "Imports approved branding fields from a config bundle.",
             enabled: true,
+            approvalRequired: true,
+            source: "fallback",
+            rolloutScope: { scope: "tenant" },
           },
         ],
       }),
@@ -32,5 +35,29 @@ describe("ExtensionsPage", () => {
 
     expect(await screen.findByText(/apply branding bundle/i)).toBeInTheDocument();
     expect(screen.getByText(/enabled: yes/i)).toBeInTheDocument();
+    expect(screen.getByText(/approval required: yes/i)).toBeInTheDocument();
+    expect(screen.getByText(/source: fallback/i)).toBeInTheDocument();
+  });
+
+  it("renders unknown approval state when the backend omits the field", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        actionMode: "whitelisted_only",
+        actions: [
+          {
+            actionId: "webhooks.sync",
+            label: "Sync webhook preferences",
+            description: "Imports approved webhook event selections only.",
+            enabled: true,
+          },
+        ],
+      }),
+    });
+
+    render(<ExtensionsPage />);
+
+    expect(await screen.findByText(/sync webhook preferences/i)).toBeInTheDocument();
+    expect(screen.getByText(/approval required: unknown/i)).toBeInTheDocument();
   });
 });

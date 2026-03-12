@@ -1,0 +1,6 @@
+DROP TRIGGER IF EXISTS trigger_whitelisted_extension_actions_updated_at ON whitelisted_extension_actions;
+DROP TRIGGER IF EXISTS trigger_config_bundle_exports_updated_at ON config_bundle_exports;
+DROP INDEX IF EXISTS idx_config_bundle_exports_one_active_approved_default;
+DROP INDEX IF EXISTS idx_config_bundle_exports_one_active_approved_per_tenant;
+DROP TABLE IF EXISTS whitelisted_extension_actions;
+DROP TABLE IF EXISTS config_bundle_exports;

@@ -36,6 +36,7 @@ Built with **Rust** for performance and memory safety, **Solidity** for on-chain
 ### 🆕 Recent Updates (March 2026)
 - **RFQ Auction Layer**: Bidirectional LP price discovery for VND/USDT (Completed 2026-03-08).
 - **Compliance Hardening**: Landed **Travel Rule Foundation**, **KYC Passport**, **KYB Graph**, **Risk Lab Replay**, and **Continuous Rescreening** (Migrations 037-041).
+- **Governed Config Bundles**: Admin config-bundle export and extensions registry now surface registry-backed approval, rollout, provenance, and source metadata, with explicit fallback artifacts when no approved record is active.
 - **Operational Excellence**: Added **Sandbox Presets**, **LP Reliability Scoring**, **Treasury**, and **SLA Guardian** services.
 - **Security Audit**: Completed deep audit of HMAC signatures, RLS fail-closed policies, and repository sanitization.
 - **[Read Full Roadmap & Security Hardening Report →](docs/recent-roadmap-and-security-hardening-2026-03.md)**
@@ -234,6 +235,7 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 - **KYC Passport** — Cross-tenant trust management, consent grants
 - **KYB Graph** — Corporate ownership visualization, UBO analysis
 - System settings: branding, domains, API keys, roles, config bundles, extensions
+- Config-bundle export and extensions registry stay on the existing admin shell and surface governance metadata such as approval state, approval requirement, rollout scope, provenance, and source.
 - **Internationalization** — English and Vietnamese (next-intl)
 - **E2E Tests** — Playwright test suite
 

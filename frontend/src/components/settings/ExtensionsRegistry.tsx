@@ -12,6 +12,9 @@ type ExtensionsResponse = {
     label: string;
     description: string;
     enabled: boolean;
+    approvalRequired?: boolean;
+    source?: string;
+    rolloutScope?: Record<string, unknown>;
   }>;
 };
 
@@ -38,7 +41,7 @@ export default function ExtensionsRegistry() {
             Extensions Registry
           </CardTitle>
           <CardDescription>
-            Review whitelisted extension actions only. This is not a plugin runtime.
+            Review governed extension actions only. This remains a whitelisted control surface, not a plugin runtime.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -53,6 +56,18 @@ export default function ExtensionsRegistry() {
                 <div className="font-medium">{action.label}</div>
                 <div>{action.description}</div>
                 <div>Enabled: {action.enabled ? "yes" : "no"}</div>
+                <div>
+                  Approval required:{" "}
+                  {action.approvalRequired === undefined
+                    ? "unknown"
+                    : action.approvalRequired
+                      ? "yes"
+                      : "no"}
+                </div>
+                <div>Source: {action.source ?? "unknown"}</div>
+                {action.rolloutScope ? (
+                  <div>Rollout scope: {JSON.stringify(action.rolloutScope)}</div>
+                ) : null}
               </div>
             ))
           )}
