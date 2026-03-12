@@ -3,59 +3,143 @@
 import { motion } from 'framer-motion'
 import { Check, Copy } from 'lucide-react'
 import { useState } from 'react'
-import { cn } from '@/lib/utils'
 
-const codeSnippet = `// Initialize RampOS Client
-const client = new RampClient({
-  apiKey: 'pk_live_...',
-  environment: 'production'
+const tabs = [
+  {
+    lang: 'TypeScript',
+    file: 'example.ts',
+    code: `import { RampOSClient } from '@rampos/sdk';
+
+const client = new RampOSClient({
+  apiKey: 'your_api_key',
+  baseUrl: 'https://api.rampos.io'
 });
 
-// Create a Payment Intent
+// Create a Pay-in Intent (Fiat → Crypto)
+const payin = await client.payins.create({
+  userId: 'usr_123',
+  amountVnd: 10_000_000,
+  railsProvider: 'VIETCOMBANK'
+});
+
+// Submit a cross-chain swap intent
 const intent = await client.intents.create({
+  action: 'Swap',
+  from: { chain: 'ethereum', token: 'USDC' },
+  to:   { chain: 'arbitrum',  token: 'USDT' },
   amount: 1000,
-  currency: 'USD',
-  user: {
-    id: 'user_123',
-    email: 'user@example.com'
-  }
+  constraints: { maxSlippageBps: 50 }
 });
 
-console.log('Payment Intent Created:', intent.id);`
+console.log(intent.executionPlan);`,
+  },
+  {
+    lang: 'Go',
+    file: 'main.go',
+    code: `import "github.com/hadesloc/rampos-go"
+
+client := rampos.NewClient("your_api_key")
+
+payin, err := client.Payins.Create(ctx,
+  &rampos.CreatePayinRequest{
+    UserID:    "usr_123",
+    AmountVND: 10_000_000,
+    Provider:  "VIETCOMBANK",
+  })
+
+intent, err := client.Intents.Create(ctx,
+  &rampos.IntentSpec{
+    Action: rampos.Swap,
+    From:   rampos.Asset{Chain: "ethereum", Token: "USDC"},
+    To:     rampos.Asset{Chain: "arbitrum", Token: "USDT"},
+    Amount: 1000,
+  })`,
+  },
+  {
+    lang: 'Python',
+    file: 'app.py',
+    code: `from rampos import RampOSClient
+
+client = RampOSClient(api_key="your_api_key")
+
+payin = client.payins.create(
+    user_id="usr_123",
+    amount_vnd=10_000_000,
+    rails_provider="VIETCOMBANK"
+)
+
+intent = client.intents.create(
+    action="Swap",
+    from_asset={"chain": "ethereum", "token": "USDC"},
+    to_asset={"chain": "arbitrum", "token": "USDT"},
+    amount=1000,
+    constraints={"max_slippage_bps": 50}
+)`,
+  },
+  {
+    lang: 'cURL',
+    file: 'terminal',
+    code: `curl -X POST https://api.rampos.io/v1/intents/payin \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -H "Idempotency-Key: unique-key-123" \\
+  -d '{
+    "user_id": "usr_123",
+    "amount_vnd": 10000000,
+    "rails_provider": "VIETCOMBANK"
+  }'`,
+  },
+]
+
+const features = [
+  'Typed SDKs — TypeScript, Go, Python',
+  'Guaranteed webhook delivery with HMAC',
+  'Idempotency keys for safe retries',
+  'OpenTelemetry tracing built-in',
+  'Rate limiting per tenant',
+  'Sandbox environment for testing',
+]
 
 export default function ApiSection() {
   const [copied, setCopied] = useState(false)
+  const [activeTab, setActiveTab] = useState(0)
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(codeSnippet)
+    navigator.clipboard.writeText(tabs[activeTab].code)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   return (
-    <section className="w-full py-24 bg-zinc-950">
-      <div className="container mx-auto px-4 max-w-6xl">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+    <section className="w-full py-24 bg-black relative">
+      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-900/10 blur-[120px] rounded-full pointer-events-none" />
+      
+      <div className="container mx-auto px-4 max-w-7xl relative z-10">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.8 }}
           >
-            <h2 className="text-3xl md:text-5xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
-              Developer-First API
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 mb-6 backdrop-blur-md text-sm font-medium text-blue-400 tracking-wider uppercase">
+              Developer Experience
+            </div>
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight">
+              One API.<br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">Every Language.</span>
             </h2>
-            <p className="text-xl text-gray-400 mb-8 leading-relaxed">
-              Built by developers, for developers. Our API is designed to be intuitive,
-              predictable, and easy to integrate. Get started in minutes with our SDKs.
+            <p className="text-xl text-gray-400 mb-8 leading-relaxed font-light">
+              Integrate fiat on-ramp, cross-chain trading, and compliance in one unified API. SDKs for every major language with full type safety.
             </p>
-            <ul className="space-y-4 mb-8">
-              {['Type-safe SDKs for all major languages', 'Comprehensive documentation & examples', 'Webhooks for real-time updates', 'Sandbox environment for testing'].map((item, index) => (
+
+            <ul className="space-y-3 mb-8">
+              {features.map((item, index) => (
                 <li key={index} className="flex items-center gap-3 text-gray-300">
-                  <div className="w-6 h-6 rounded-full bg-blue-500/10 flex items-center justify-center">
-                    <Check className="w-4 h-4 text-blue-500" />
+                  <div className="w-6 h-6 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0 border border-blue-500/20">
+                    <Check className="w-3.5 h-3.5 text-blue-400" />
                   </div>
-                  {item}
+                  <span className="font-light">{item}</span>
                 </li>
               ))}
             </ul>
@@ -68,51 +152,34 @@ export default function ApiSection() {
             transition={{ duration: 0.8 }}
             className="relative"
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl blur-3xl opacity-10" />
-            <div className="relative rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl overflow-hidden shadow-2xl">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-white/5">
-                <div className="flex gap-2">
-                  <div className="w-3 h-3 rounded-full bg-red-500/20 border border-red-500/50" />
-                  <div className="w-3 h-3 rounded-full bg-yellow-500/20 border border-yellow-500/50" />
-                  <div className="w-3 h-3 rounded-full bg-green-500/20 border border-green-500/50" />
+            <div className="absolute -inset-1 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 rounded-3xl blur opacity-50" />
+            <div className="relative rounded-2xl border border-white/10 bg-black/60 backdrop-blur-2xl overflow-hidden shadow-2xl">
+              {/* Tabs */}
+              <div className="flex items-center border-b border-white/10 bg-white/5 overflow-x-auto">
+                {tabs.map((tab, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveTab(i)}
+                    className={`px-4 py-3 text-xs font-mono tracking-wider transition-colors whitespace-nowrap ${
+                      i === activeTab
+                        ? 'text-white bg-white/5 border-b-2 border-blue-400'
+                        : 'text-gray-500 hover:text-gray-300'
+                    }`}
+                  >
+                    {tab.lang}
+                  </button>
+                ))}
+                <div className="ml-auto pr-3">
+                  <button onClick={handleCopy} className="p-1.5 rounded-md hover:bg-white/10 transition-colors">
+                    {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-gray-400" />}
+                  </button>
                 </div>
-                <div className="text-xs text-gray-500 font-mono">example.ts</div>
-                <button
-                  onClick={handleCopy}
-                  className="p-1.5 rounded-md hover:bg-white/10 transition-colors"
-                >
-                  {copied ? (
-                    <Check className="w-4 h-4 text-green-500" />
-                  ) : (
-                    <Copy className="w-4 h-4 text-gray-400" />
-                  )}
-                </button>
               </div>
-              <div className="p-6 overflow-x-auto">
+
+              {/* Code */}
+              <div className="p-6 overflow-x-auto max-h-[420px] overflow-y-auto">
                 <pre className="text-sm font-mono leading-relaxed">
-                  <code className="text-gray-300">
-                    <span className="text-purple-400">{'// Initialize RampOS Client'}</span>
-                    {'\n'}
-                    <span className="text-blue-400">const</span> client = <span className="text-blue-400">new</span> <span className="text-yellow-400">RampClient</span>({'{'}
-                    {'\n'}  apiKey: <span className="text-green-400">&apos;pk_live_...&apos;</span>,
-                    {'\n'}  environment: <span className="text-green-400">&apos;production&apos;</span>
-                    {'\n'}{'}'});
-                    {'\n'}
-                    {'\n'}
-                    <span className="text-purple-400">{'// Create a Payment Intent'}</span>
-                    {'\n'}
-                    <span className="text-blue-400">const</span> intent = <span className="text-blue-400">await</span> client.intents.<span className="text-yellow-400">create</span>({'{'}
-                    {'\n'}  amount: <span className="text-orange-400">1000</span>,
-                    {'\n'}  currency: <span className="text-green-400">&apos;USD&apos;</span>,
-                    {'\n'}  user: {'{'}
-                    {'\n'}    id: <span className="text-green-400">&apos;user_123&apos;</span>,
-                    {'\n'}    email: <span className="text-green-400">&apos;user@example.com&apos;</span>
-                    {'\n'}  {'}'}
-                    {'\n'}{'}'});
-                    {'\n'}
-                    {'\n'}
-                    console.<span className="text-yellow-400">log</span>(<span className="text-green-400">&apos;Payment Intent Created:&apos;</span>, intent.id);
-                  </code>
+                  <code className="text-gray-300 whitespace-pre">{tabs[activeTab].code}</code>
                 </pre>
               </div>
             </div>
