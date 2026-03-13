@@ -218,6 +218,13 @@ async fn reconciliation_workbench_returns_queue_snapshot() {
         .unwrap()
         .iter()
         .any(|item| item["rootCause"] == "offchain_recording_gap"));
+    assert!(payload["gatedActions"].as_array().unwrap().len() >= 1);
+    assert_eq!(payload["gatedActions"][0]["actionMode"], "operator_assisted");
+    assert_eq!(payload["gatedActions"][0]["approvalRequired"], true);
+    assert_eq!(
+        payload["gatedActions"][0]["auditScope"],
+        "reconciliation_discrepancy_resolution"
+    );
 }
 
 #[tokio::test]
@@ -251,6 +258,54 @@ async fn reconciliation_workbench_export_returns_csv_attachment() {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let csv = String::from_utf8(body.to_vec()).unwrap();
     assert!(csv.contains("discrepancy_id,report_id"));
+}
+
+#[tokio::test]
+async fn reconciliation_evidence_detail_includes_lineage_context() {
+    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    let app = setup_app("tenant_reconciliation_evidence_detail").await;
+
+    let workbench_request = build_signed_admin_request(
+        "GET",
+        "/v1/admin/reconciliation/workbench",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        TEST_ADMIN_KEY,
+    );
+
+    let workbench_response = app.router.clone().oneshot(workbench_request).await.unwrap();
+    assert_eq!(workbench_response.status(), StatusCode::OK);
+    let workbench_body = to_bytes(workbench_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let workbench_payload: serde_json::Value = serde_json::from_slice(&workbench_body).unwrap();
+
+    let discrepancy_id = workbench_payload["snapshot"]["queue"][0]["discrepancyId"]
+        .as_str()
+        .unwrap();
+
+    let detail_request = build_signed_admin_request(
+        "GET",
+        &format!("/v1/admin/reconciliation/evidence/{discrepancy_id}"),
+        "",
+        &app.api_key,
+        &app.api_secret,
+        TEST_ADMIN_KEY,
+    );
+
+    let detail_response = app.router.oneshot(detail_request).await.unwrap();
+    assert_eq!(detail_response.status(), StatusCode::OK);
+
+    let detail_body = to_bytes(detail_response.into_body(), usize::MAX).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&detail_body).unwrap();
+
+    assert!(payload["evidenceSources"].as_array().unwrap().len() >= 1);
+    assert!(payload["lineageRecords"].as_array().unwrap().len() >= 1);
+    assert_eq!(
+        payload["lineageRecords"][0]["operatorReviewState"],
+        "review_required"
+    );
 }
 
 #[tokio::test]
@@ -311,6 +366,16 @@ async fn reconciliation_evidence_export_returns_json_attachment_for_selected_dis
         .unwrap()
         .iter()
         .any(|entry| entry["referenceId"] == discrepancy_id));
+    assert!(payload["evidenceSources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["corridorCode"] == "USDT_VN_OFFRAMP"));
+    assert!(payload["lineageRecords"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["parentReferenceId"] == discrepancy_id));
 }
 
 #[tokio::test]

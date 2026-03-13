@@ -103,19 +103,25 @@ pub async fn export_settlement_workbench(
 
 fn export_csv(snapshot: &NetSettlementWorkbenchSnapshot) -> String {
     let mut rows = vec![
-        "proposal_id,counterparty_id,asset,net_amount,direction,status,approval_required"
+        "proposal_id,counterparty_id,asset,net_amount,direction,status,approval_required,maker_checker_state,maker_user_id,checker_user_id,delegated_approver_id,delegation_expires_at,approval_reference_id"
             .to_string(),
     ];
     for proposal in &snapshot.proposals {
         rows.push(format!(
-            "{},{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{}",
             proposal.id,
             proposal.counterparty_id,
             proposal.asset,
             proposal.net_amount,
             proposal.direction,
             proposal.status,
-            proposal.approval_required
+            proposal.approval_required,
+            proposal.maker_checker_state,
+            proposal.maker_user_id.as_deref().unwrap_or(""),
+            proposal.checker_user_id.as_deref().unwrap_or(""),
+            proposal.delegated_approver_id.as_deref().unwrap_or(""),
+            proposal.delegation_expires_at.as_deref().unwrap_or(""),
+            proposal.approval_reference_id.as_deref().unwrap_or("")
         ));
     }
     rows.join("\n")

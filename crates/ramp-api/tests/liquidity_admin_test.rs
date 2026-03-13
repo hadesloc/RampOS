@@ -242,6 +242,7 @@ async fn liquidity_policy_compare_returns_catalog_for_requested_direction() {
 #[tokio::test]
 async fn liquidity_policy_activation_updates_active_version_for_tenant_direction() {
     std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
     let app = setup_app("tenant_liquidity_activate").await;
     let activate_body = serde_json::json!({
         "version": "liquidity-policy-price-bias-v1",
@@ -255,7 +256,7 @@ async fn liquidity_policy_activation_updates_active_version_for_tenant_direction
         &activate_body,
         &app.api_key,
         &app.api_secret,
-        &format!("{TEST_ADMIN_KEY}:operator"),
+        TEST_ADMIN_KEY,
     );
 
     let activate_response = app.router.clone().oneshot(activate_request).await.unwrap();
@@ -280,4 +281,35 @@ async fn liquidity_policy_activation_updates_active_version_for_tenant_direction
 
     assert_eq!(payload["activeVersion"], "liquidity-policy-price-bias-v1");
     assert_eq!(payload["requestedDirection"], "OFFRAMP");
+    std::env::remove_var("RAMPOS_ADMIN_ROLE");
+}
+
+#[tokio::test]
+async fn liquidity_explainability_returns_winning_and_rejected_lane_rationale() {
+    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    let app = setup_app("tenant_liquidity_explain").await;
+
+    let request = build_signed_admin_request(
+        "GET",
+        "/v1/admin/liquidity/explain?direction=OFFRAMP",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        TEST_ADMIN_KEY,
+    );
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(payload["selectedCandidateId"], "1");
+    assert_eq!(payload["policyVersion"], "liquidity-policy-default-v1");
+    assert_eq!(
+        payload["candidates"][0]["complianceStatus"],
+        "review_required"
+    );
+    assert_eq!(payload["candidates"][1]["partnerId"], "lp_beta");
+    assert_eq!(payload["candidates"][1]["selected"], true);
 }

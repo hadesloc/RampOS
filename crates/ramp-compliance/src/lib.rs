@@ -12,6 +12,7 @@ pub mod kyt;
 pub mod kyb;
 pub mod limits;
 pub mod passport;
+pub mod provider_routing;
 pub mod providers;
 pub mod reconciliation;
 pub mod reports;
@@ -55,6 +56,7 @@ pub use passport::{
     passport_summary_from_flags, PassportPackageDetail, PassportPortalSummary, PassportQueueItem,
     PassportService,
 };
+pub use provider_routing::*;
 pub use reconciliation::{Discrepancy, ReconBatch, ReconConfig, ReconEngine, ReconMatch};
 pub use reports::{AmlReport, DailyReport, KycReport, ReportGenerator, ReportType, SarReport};
 pub use rescreening::{

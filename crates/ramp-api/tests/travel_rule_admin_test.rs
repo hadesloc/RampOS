@@ -74,6 +74,10 @@ fn build_signed_admin_request(
 }
 
 async fn setup_app(tenant_id: &str) -> TestApp {
+    setup_app_with_pool(tenant_id, None).await
+}
+
+async fn setup_app_with_pool(tenant_id: &str, db_pool: Option<PgPool>) -> TestApp {
     let intent_repo = Arc::new(MockIntentRepository::new());
     let ledger_repo = Arc::new(MockLedgerRepository::new());
     let user_repo = Arc::new(MockUserRepository::new());
@@ -128,8 +132,10 @@ async fn setup_app(tenant_id: &str) -> TestApp {
         user_repo,
         event_publisher.clone(),
     ));
-    let pool = PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
-        .expect("Failed to create lazy pool");
+    let pool = db_pool.clone().unwrap_or_else(|| {
+        PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
+            .expect("Failed to create lazy pool")
+    });
     let report_generator = Arc::new(ReportGenerator::new(
         pool,
         Arc::new(MockDocumentStorage::new()),
@@ -176,7 +182,7 @@ async fn setup_app(tenant_id: &str) -> TestApp {
             ramp_core::stablecoin::VnstProtocolConfig::default(),
             Arc::new(ramp_core::stablecoin::MockVnstProtocolDataProvider::new()),
         )),
-        db_pool: None,
+        db_pool,
         ctr_service: None,
         ws_state: None,
         metrics_registry: Arc::new(ramp_core::service::MetricsRegistry::new()),
@@ -193,6 +199,7 @@ async fn setup_app(tenant_id: &str) -> TestApp {
 #[tokio::test]
 async fn travel_rule_registry_can_create_and_list_vasp_records() {
     std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
     let app = setup_app("tenant_travel_rule_registry").await;
     let body = serde_json::json!({
         "vaspCode": "vasp-sg-1",
@@ -241,6 +248,7 @@ async fn travel_rule_registry_can_create_and_list_vasp_records() {
 #[tokio::test]
 async fn travel_rule_retry_flow_can_open_and_resolve_exception_queue() {
     std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
     let app = setup_app("tenant_travel_rule_queue").await;
     let disclosure_body = serde_json::json!({
         "disclosureId": "trd_test_001",
@@ -307,4 +315,293 @@ async fn travel_rule_retry_flow_can_open_and_resolve_exception_queue() {
     let body = to_bytes(resolve_response.into_body(), usize::MAX).await.unwrap();
     let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(payload["status"], "RESOLVED");
+}
+
+#[tokio::test]
+async fn travel_rule_registry_reads_db_backed_records_when_pool_is_available() {
+    let database_url = match std::env::var("DATABASE_URL") {
+        Ok(url) => url,
+        Err(_) => return,
+    };
+
+    let pool = PgPool::connect(&database_url)
+        .await
+        .expect("database connection should succeed");
+
+    sqlx::migrate!("../../migrations")
+        .run(&pool)
+        .await
+        .expect("migrations should succeed");
+
+    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
+    let app = setup_app_with_pool("tenant_travel_rule_db", Some(pool.clone())).await;
+
+    sqlx::query(
+        r#"
+        INSERT INTO travel_rule_vasps (
+            id,
+            tenant_id,
+            vasp_code,
+            legal_name,
+            display_name,
+            jurisdiction_code,
+            travel_rule_profile,
+            transport_profile,
+            endpoint_uri,
+            review_status,
+            interoperability_status,
+            supports_inbound,
+            supports_outbound,
+            metadata
+        ) VALUES (
+            'trv_db_001',
+            $1,
+            'vasp-db-001',
+            'Persisted VASP Ltd',
+            'Persisted VASP',
+            'SG',
+            'trp-db',
+            'trp-db',
+            'https://vasp-db.example/travel-rule',
+            'APPROVED',
+            'READY',
+            TRUE,
+            TRUE,
+            '{"source":"db"}'::jsonb
+        )
+        "#,
+    )
+    .bind("tenant_travel_rule_db")
+    .execute(&pool)
+    .await
+    .expect("insert travel rule vasp");
+
+    let request = build_signed_admin_request(
+        "GET",
+        "/v1/admin/travel-rule/registry",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        TEST_ADMIN_KEY,
+    );
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(payload.as_array().unwrap().len(), 1);
+    assert_eq!(payload[0]["vaspCode"], "vasp-db-001");
+    assert_eq!(payload[0]["review"]["status"], "APPROVED");
+    assert_eq!(payload[0]["interoperability"]["status"], "READY");
+}
+
+
+#[tokio::test]
+async fn travel_rule_registry_writes_db_backed_review_and_interoperability_updates() {
+    let database_url = match std::env::var("DATABASE_URL") {
+        Ok(url) => url,
+        Err(_) => return,
+    };
+
+    let pool = PgPool::connect(&database_url)
+        .await
+        .expect("database connection should succeed");
+
+    sqlx::migrate!("../../migrations")
+        .run(&pool)
+        .await
+        .expect("migrations should succeed");
+
+    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
+    let app = setup_app_with_pool("tenant_travel_rule_db_write", Some(pool.clone())).await;
+
+    let create_body = serde_json::json!({
+        "vaspCode": "vasp-db-write-001",
+        "legalName": "Persisted Review VASP Ltd",
+        "displayName": "Persisted Review VASP",
+        "jurisdictionCode": "SG",
+        "travelRuleProfile": "trp-db",
+        "transportProfile": "trp-db",
+        "endpointUri": "https://persisted.example/travel-rule",
+        "supportsInbound": true,
+        "supportsOutbound": true,
+        "metadata": {"source": "db"}
+    })
+    .to_string();
+
+    let create_request = build_signed_admin_request(
+        "POST",
+        "/v1/admin/travel-rule/registry",
+        &create_body,
+        &app.api_key,
+        &app.api_secret,
+        &format!("{TEST_ADMIN_KEY}:operator"),
+    );
+    let create_response = app.router.clone().oneshot(create_request).await.unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+
+    let review_body = serde_json::json!({
+        "status": "APPROVED",
+        "reviewedBy": "ops-reviewer",
+        "notes": "db-backed approval"
+    })
+    .to_string();
+
+    let review_request = build_signed_admin_request(
+        "POST",
+        "/v1/admin/travel-rule/registry/vasp-db-write-001/review",
+        &review_body,
+        &app.api_key,
+        &app.api_secret,
+        &format!("{TEST_ADMIN_KEY}:operator"),
+    );
+    let review_response = app.router.clone().oneshot(review_request).await.unwrap();
+    assert_eq!(review_response.status(), StatusCode::OK);
+
+    let interoperability_body = serde_json::json!({
+        "status": "READY",
+        "transportProfile": "trp-live",
+        "endpointUri": "https://persisted.example/live",
+        "notes": "connectivity verified"
+    })
+    .to_string();
+
+    let interoperability_request = build_signed_admin_request(
+        "POST",
+        "/v1/admin/travel-rule/registry/vasp-db-write-001/interoperability",
+        &interoperability_body,
+        &app.api_key,
+        &app.api_secret,
+        &format!("{TEST_ADMIN_KEY}:operator"),
+    );
+    let interoperability_response = app
+        .router
+        .clone()
+        .oneshot(interoperability_request)
+        .await
+        .unwrap();
+    assert_eq!(interoperability_response.status(), StatusCode::OK);
+
+    let list_request = build_signed_admin_request(
+        "GET",
+        "/v1/admin/travel-rule/registry?reviewStatus=APPROVED",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        TEST_ADMIN_KEY,
+    );
+    let list_response = app.router.oneshot(list_request).await.unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+
+    let body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(payload.as_array().unwrap().len(), 1);
+    assert_eq!(payload[0]["review"]["status"], "APPROVED");
+    assert_eq!(payload[0]["review"]["reviewedBy"], "ops-reviewer");
+    assert_eq!(payload[0]["interoperability"]["status"], "READY");
+    assert_eq!(payload[0]["interoperability"]["notes"], "connectivity verified");
+    assert_eq!(payload[0]["endpointUri"], "https://persisted.example/live");
+}
+
+#[tokio::test]
+async fn travel_rule_retry_flow_persists_exceptions_when_pool_is_available() {
+    let database_url = match std::env::var("DATABASE_URL") {
+        Ok(url) => url,
+        Err(_) => return,
+    };
+
+    let pool = PgPool::connect(&database_url)
+        .await
+        .expect("database connection should succeed");
+
+    sqlx::migrate!("../../migrations")
+        .run(&pool)
+        .await
+        .expect("migrations should succeed");
+
+    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
+    let app = setup_app_with_pool("tenant_travel_rule_db_retry", Some(pool.clone())).await;
+
+    let disclosure_body = serde_json::json!({
+        "disclosureId": "trd_db_001",
+        "direction": "OUTBOUND",
+        "transportProfile": "trp-bridge",
+        "matchedPolicyCode": "fatf-default",
+        "action": "DISCLOSE_BEFORE_SETTLEMENT",
+        "maxFailuresBeforeException": 1,
+        "metadata": {"source": "db"}
+    })
+    .to_string();
+
+    let create_disclosure = build_signed_admin_request(
+        "POST",
+        "/v1/admin/travel-rule/disclosures",
+        &disclosure_body,
+        &app.api_key,
+        &app.api_secret,
+        &format!("{TEST_ADMIN_KEY}:operator"),
+    );
+    let create_response = app.router.clone().oneshot(create_disclosure).await.unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+
+    let retry_body = serde_json::json!({ "simulatedStatus": "TIMEOUT" }).to_string();
+    let retry_request = build_signed_admin_request(
+        "POST",
+        "/v1/admin/travel-rule/disclosures/trd_db_001/retry",
+        &retry_body,
+        &app.api_key,
+        &app.api_secret,
+        &format!("{TEST_ADMIN_KEY}:operator"),
+    );
+    let retry_response = app.router.clone().oneshot(retry_request).await.unwrap();
+    assert_eq!(retry_response.status(), StatusCode::OK);
+
+    let retry_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(retry_response.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    assert_eq!(retry_payload["stage"], "EXCEPTION");
+    assert_eq!(retry_payload["queueStatus"], "OPEN");
+
+    let exceptions_request = build_signed_admin_request(
+        "GET",
+        "/v1/admin/travel-rule/exceptions?status=OPEN",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        TEST_ADMIN_KEY,
+    );
+    let exceptions_response = app.router.clone().oneshot(exceptions_request).await.unwrap();
+    assert_eq!(exceptions_response.status(), StatusCode::OK);
+
+    let exceptions_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(exceptions_response.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    assert_eq!(exceptions_payload.as_array().unwrap().len(), 1);
+    assert_eq!(exceptions_payload[0]["exceptionId"], "tre_trd_db_001");
+    assert_eq!(exceptions_payload[0]["status"], "OPEN");
+
+    let resolve_body = serde_json::json!({ "resolutionNote": "manual db resolution" }).to_string();
+    let resolve_request = build_signed_admin_request(
+        "POST",
+        "/v1/admin/travel-rule/exceptions/tre_trd_db_001/resolve",
+        &resolve_body,
+        &app.api_key,
+        &app.api_secret,
+        &format!("{TEST_ADMIN_KEY}:operator"),
+    );
+    let resolve_response = app.router.clone().oneshot(resolve_request).await.unwrap();
+    assert_eq!(resolve_response.status(), StatusCode::OK);
+
+    let resolve_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(resolve_response.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    assert_eq!(resolve_payload["status"], "RESOLVED");
+    assert_eq!(resolve_payload["resolutionNote"], "manual db resolution");
 }

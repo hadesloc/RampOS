@@ -275,9 +275,12 @@ impl utoipa::Modify for SecurityAddon {
         attach_manual_reconciliation_paths(openapi);
         attach_manual_treasury_paths(openapi);
         attach_manual_settlement_paths(openapi);
+        attach_manual_liquidity_paths(openapi);
+        attach_manual_audit_paths(openapi);
         attach_manual_passport_paths(openapi);
         attach_manual_kyb_paths(openapi);
         attach_manual_config_bundle_paths(openapi);
+        attach_manual_partner_registry_paths(openapi);
     }
 }
 
@@ -290,7 +293,7 @@ fn attach_manual_reconciliation_paths(openapi: &mut utoipa::openapi::OpenApi) {
                 "tags": ["admin"],
                 "operationId": "getReconciliationWorkbench",
                 "summary": "Load reconciliation workbench",
-                "description": "Returns the bounded reconciliation workbench snapshot used by the thin CLI and admin UI.",
+                "description": "Returns the bounded reconciliation workbench snapshot used by the thin CLI and admin UI, plus operator-assisted gated actions that remain approval-linked and audit-linked on the current admin seam.",
                 "parameters": [
                     {
                         "name": "scenario",
@@ -364,7 +367,7 @@ fn attach_manual_reconciliation_paths(openapi: &mut utoipa::openapi::OpenApi) {
                 "tags": ["admin"],
                 "operationId": "getReconciliationEvidence",
                 "summary": "Load reconciliation evidence pack",
-                "description": "Returns the linked evidence pack for one reconciliation discrepancy.",
+                "description": "Returns the linked evidence pack for one reconciliation discrepancy, including additive evidence-source and lineage context on the current admin seam.",
                 "parameters": [
                     {
                         "name": "id",
@@ -403,7 +406,7 @@ fn attach_manual_reconciliation_paths(openapi: &mut utoipa::openapi::OpenApi) {
                 "tags": ["admin"],
                 "operationId": "exportReconciliationEvidence",
                 "summary": "Export reconciliation evidence pack",
-                "description": "Exports one reconciliation evidence pack as JSON.",
+                "description": "Exports one reconciliation evidence pack as JSON, including additive evidence-source and lineage context.",
                 "parameters": [
                     {
                         "name": "id",
@@ -444,7 +447,7 @@ fn attach_manual_treasury_paths(openapi: &mut utoipa::openapi::OpenApi) {
                 "tags": ["admin"],
                 "operationId": "getTreasuryWorkbench",
                 "summary": "Load treasury workbench",
-                "description": "Returns the bounded recommendation-only treasury snapshot used by the admin UI.",
+                "description": "Returns the bounded recommendation-only treasury snapshot used by the admin UI, including additive safeguarding, client-money, and reserve overlays tied to evidence context.",
                 "parameters": [
                     {
                         "name": "scenario",
@@ -476,7 +479,7 @@ fn attach_manual_treasury_paths(openapi: &mut utoipa::openapi::OpenApi) {
                 "tags": ["admin"],
                 "operationId": "exportTreasuryWorkbench",
                 "summary": "Export treasury workbench",
-                "description": "Exports the bounded treasury recommendation set as JSON or CSV.",
+                "description": "Exports the bounded treasury recommendation set as JSON or CSV, including additive safeguarding, client-money, and reserve overlays in the JSON artifact.",
                 "parameters": [
                     {
                         "name": "scenario",
@@ -573,6 +576,67 @@ fn attach_manual_settlement_paths(openapi: &mut utoipa::openapi::OpenApi) {
                         "content": {
                             "application/json": { "schema": { "type": "object" } },
                             "text/csv": { "schema": { "type": "string" } }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+}
+
+fn attach_manual_liquidity_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    insert_manual_path(
+        openapi,
+        "/v1/admin/liquidity/explain",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "getLiquidityRouteExplainability",
+                "summary": "Load route explainability",
+                "description": "Returns a bounded route explainability artifact on the current admin liquidity surface, including winning-lane and rejected-lane rationale with treasury, partner, corridor, and compliance constraints.",
+                "parameters": [
+                    {
+                        "name": "direction",
+                        "in": "query",
+                        "required": false,
+                        "description": "Liquidity direction such as OFFRAMP or ONRAMP.",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Liquidity route explainability artifact",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+}
+
+fn attach_manual_audit_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    insert_manual_path(
+        openapi,
+        "/v1/admin/audit/break-glass/export",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "exportBreakGlassAuditLog",
+                "summary": "Export break-glass audit bundle",
+                "description": "Exports an immutable break-glass audit bundle on the current admin audit surface, including actor attribution, emergency scope, evidence reference, rollback context, compatibility impact, and the underlying audit export.",
+                "parameters": [
+                    { "name": "emergencyScope", "in": "query", "required": true, "schema": { "type": "string" } },
+                    { "name": "evidenceRef", "in": "query", "required": true, "schema": { "type": "string" } },
+                    { "name": "rollbackContext", "in": "query", "required": true, "schema": { "type": "string" } },
+                    { "name": "compatibilityImpact", "in": "query", "required": true, "schema": { "type": "string" } }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Immutable break-glass audit export",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } }
                         }
                     }
                 }
@@ -709,6 +773,157 @@ fn attach_manual_kyb_paths(openapi: &mut utoipa::openapi::OpenApi) {
                 "responses": {
                     "200": {
                         "description": "KYB graph review detail",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/kyb/evidence",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "listKybEvidencePackages",
+                "summary": "List KYB evidence packages",
+                "description": "Returns persisted institutional KYB evidence packages with provider-routing, corridor, review, and export context on the existing admin KYB surface.",
+                "parameters": [
+                    {
+                        "name": "institutionEntityId",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional institution entity identifier filter.",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "corridorCode",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional corridor code filter.",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "reviewStatus",
+                        "in": "query",
+                        "required": false,
+                        "description": "Optional review status filter.",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "KYB evidence package list",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/kyb/evidence/{id}",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "getKybEvidencePackage",
+                "summary": "Load KYB evidence package detail",
+                "description": "Returns one persisted KYB evidence package including evidence-source and UBO-link context.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "description": "Evidence package identifier.",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "KYB evidence package detail",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/kyb/evidence/{id}/export",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "exportKybEvidencePackage",
+                "summary": "Export KYB evidence package",
+                "description": "Exports one KYB evidence package as JSON from the existing admin KYB surface.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "description": "Evidence package identifier.",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "KYB evidence package export artifact",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+}
+
+
+fn attach_manual_partner_registry_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    insert_manual_path(
+        openapi,
+        "/v1/admin/partners",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "listPartnerRegistry",
+                "summary": "List governed partner registry entries",
+                "description": "Returns the bounded partner and connector registry used to govern rails, providers, rollout scopes, health signals, and credential references. Secret material is not returned; only auditable credential metadata is exposed.",
+                "responses": {
+                    "200": {
+                        "description": "Partner registry snapshot",
+                        "content": {
+                            "application/json": { "schema": { "type": "object" } }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": ["admin"],
+                "operationId": "upsertPartnerRegistry",
+                "summary": "Upsert governed partner registry entry",
+                "description": "Creates or updates a governed partner registry record together with approval references, capabilities, rollout scopes, health signals, and credential references through one additive snapshot payload.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "type": "object" }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Partner registry snapshot after upsert",
                         "content": {
                             "application/json": { "schema": { "type": "object" } }
                         }

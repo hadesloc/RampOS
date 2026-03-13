@@ -8,10 +8,13 @@ pub mod audit;
 pub mod bank_confirmation;
 pub mod compliance;
 pub mod compliance_audit;
+pub mod corridor_pack;
 pub mod intent;
+pub mod payment_method_capability;
 pub mod ledger;
 pub mod license;
 pub mod licensing;
+pub mod partner_registry;
 pub mod offramp;
 pub mod rfq;
 pub mod settlement;
@@ -31,6 +34,18 @@ pub use compliance_audit::{
     ComplianceAuditRepository, ComplianceEventType, CreateComplianceAuditRequest,
     PgComplianceAuditRepository,
 };
+pub use corridor_pack::{
+    CorridorComplianceHookRecord, CorridorCutoffPolicyRecord, CorridorEligibilityRuleRecord,
+    CorridorEndpointRecord, CorridorFeeProfileRecord, CorridorPackRecord, CorridorPackRepository,
+    CorridorRolloutScopeRecord, PgCorridorPackRepository, UpsertCorridorComplianceHookRequest,
+    UpsertCorridorCutoffPolicyRequest, UpsertCorridorEligibilityRuleRequest,
+    UpsertCorridorEndpointRequest, UpsertCorridorFeeProfileRequest, UpsertCorridorPackRequest,
+    UpsertCorridorRolloutScopeRequest,
+};
+pub use payment_method_capability::{
+    PaymentMethodCapabilityRecord, PaymentMethodCapabilityRepository,
+    PgPaymentMethodCapabilityRepository, UpsertPaymentMethodCapabilityRequest,
+};
 pub use intent::IntentRepository;
 pub use ledger::LedgerRepository;
 pub use license::{
@@ -39,6 +54,13 @@ pub use license::{
     TenantLicenseDocumentRow, TenantLicenseRow,
 };
 pub use licensing::{LicensingRepository, PgLicensingRepository};
+pub use partner_registry::{
+    ApprovalReferenceRecord, CredentialReferenceRecord, PartnerCapabilityRecord, PartnerHealthSignalRecord,
+    PartnerRegistryRecord, PartnerRegistryRepository, PartnerRolloutScopeRecord,
+    PgPartnerRegistryRepository, UpsertApprovalReferenceRequest, UpsertCredentialReferenceRequest,
+    UpsertPartnerCapabilityRequest, UpsertPartnerHealthSignalRequest, UpsertPartnerRequest,
+    UpsertPartnerRolloutScopeRequest,
+};
 pub use offramp::{OfframpIntentRepository, OfframpIntentRow, PgOfframpIntentRepository};
 pub use rfq::{
     LpReliabilitySnapshotRow, PgRfqRepository, RfqBidRow, RfqDirection, RfqRepository,

@@ -184,6 +184,7 @@ async fn setup_app() -> TestApp {
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
+        event_publisher: event_publisher.clone(),
     };
 
     let router = create_router(app_state);

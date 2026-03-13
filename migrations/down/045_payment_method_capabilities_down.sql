@@ -1,0 +1,2 @@
+DROP TRIGGER IF EXISTS trigger_payment_method_capabilities_updated_at ON payment_method_capabilities;
+DROP TABLE IF EXISTS payment_method_capabilities;

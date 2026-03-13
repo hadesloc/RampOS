@@ -38,6 +38,19 @@ pub struct ReconciliationWorkbenchResponse {
     pub action_mode: String,
     pub export_formats: Vec<String>,
     pub incident_link_hint: String,
+    pub gated_actions: Vec<ReconciliationGatedAction>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconciliationGatedAction {
+    pub discrepancy_id: String,
+    pub action_code: String,
+    pub action_mode: String,
+    pub approval_required: bool,
+    pub approval_reference_id: String,
+    pub audit_scope: String,
+    pub operator_assist_reason: String,
 }
 
 pub async fn get_reconciliation_workbench(
@@ -47,6 +60,7 @@ pub async fn get_reconciliation_workbench(
     super::tier::check_admin_key(&headers)?;
 
     let (snapshot, _) = build_workbench(query.scenario.as_deref());
+    let gated_actions = build_gated_actions(&snapshot);
     info!("Admin: loading reconciliation workbench");
 
     Ok(Json(ReconciliationWorkbenchResponse {
@@ -54,6 +68,7 @@ pub async fn get_reconciliation_workbench(
         action_mode: "recommendation_only".to_string(),
         export_formats: vec!["json".to_string(), "csv".to_string()],
         incident_link_hint: "/v1/admin/incidents/timeline".to_string(),
+        gated_actions,
     }))
 }
 
@@ -165,6 +180,25 @@ fn build_workbench(
         ReconciliationExportService::build_snapshot(&service, &on_chain_txs, &settlement_records);
     stabilize_snapshot_ids(&mut snapshot, scenario.unwrap_or("active"));
     (snapshot, settlements)
+}
+
+fn build_gated_actions(snapshot: &ReconciliationWorkbenchSnapshot) -> Vec<ReconciliationGatedAction> {
+    snapshot
+        .queue
+        .iter()
+        .take(3)
+        .map(|item| ReconciliationGatedAction {
+            discrepancy_id: item.discrepancy_id.clone(),
+            action_code: "resolve_discrepancy".to_string(),
+            action_mode: "operator_assisted".to_string(),
+            approval_required: true,
+            approval_reference_id: format!("approval_recon_{}", item.discrepancy_id),
+            audit_scope: "reconciliation_discrepancy_resolution".to_string(),
+            operator_assist_reason:
+                "Mutable reconciliation actions stay operator-assisted and audit-linked."
+                    .to_string(),
+        })
+        .collect()
 }
 
 fn stabilize_snapshot_ids(snapshot: &mut ReconciliationWorkbenchSnapshot, scenario: &str) {

@@ -336,6 +336,10 @@ pub fn create_router(state: AppState) -> Router {
             get(handlers::admin::compare_liquidity_policies),
         )
         .route(
+            "/liquidity/explain",
+            get(handlers::admin::get_liquidity_route_explainability),
+        )
+        .route(
             "/liquidity/policies/activate",
             post(handlers::admin::activate_liquidity_policy),
         )
@@ -383,10 +387,17 @@ pub fn create_router(state: AppState) -> Router {
             "/passport/packages/:id",
             get(handlers::admin::get_passport_package),
         )
-        // KYB graph
+        // KYB graph + evidence packages
         .route("/kyb/reviews", get(handlers::admin::list_kyb_reviews))
         .route("/kyb/graph/:id", get(handlers::admin::get_kyb_graph))
-        // Config bundles and extensions
+        .route("/kyb/evidence", get(handlers::admin::list_kyb_evidence_packages))
+        .route("/kyb/evidence/:id", get(handlers::admin::get_kyb_evidence_package))
+        .route("/kyb/evidence/:id/export", get(handlers::admin::export_kyb_evidence_package))
+        // Partner registry, config bundles, and extensions
+        .route(
+            "/partners",
+            get(handlers::admin::list_partner_registry).post(handlers::admin::upsert_partner_registry),
+        )
         .route(
             "/config-bundles/export",
             get(handlers::admin::export_config_bundle),
@@ -552,6 +563,14 @@ pub fn create_router(state: AppState) -> Router {
             .route(
                 "/audit/export",
                 get(handlers::admin::audit::export_audit_log),
+            )
+            .route(
+                "/audit/break-glass",
+                get(handlers::admin::audit::list_break_glass_actions),
+            )
+            .route(
+                "/audit/break-glass/export",
+                get(handlers::admin::audit::export_break_glass_audit_log),
             )
             .with_state(audit_state)
     } else {

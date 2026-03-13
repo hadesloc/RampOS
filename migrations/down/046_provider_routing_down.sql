@@ -1,0 +1,2 @@
+DROP TRIGGER IF EXISTS trigger_provider_routing_policies_updated_at ON provider_routing_policies;
+DROP TABLE IF EXISTS provider_routing_policies;

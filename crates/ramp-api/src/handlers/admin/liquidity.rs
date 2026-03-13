@@ -13,6 +13,9 @@ use tracing::info;
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
 use crate::router::AppState;
+use ramp_core::chain::solver::{
+    RouteCandidateBreakdown, RouteComplianceStatus, RouteSelectionExplanation,
+};
 use ramp_core::service::{LiquidityPolicyConfig, LiquidityPolicyDirection, LiquidityPolicyWeights};
 
 static ACTIVE_POLICY_REGISTRY: OnceLock<RwLock<HashMap<String, String>>> = OnceLock::new();
@@ -30,6 +33,12 @@ pub struct LiquidityScorecardQuery {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LiquidityPolicyCompareQuery {
+    pub direction: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiquidityExplainabilityQuery {
     pub direction: Option<String>,
 }
 
@@ -99,6 +108,31 @@ pub struct ActivateLiquidityPolicyResponse {
     pub version: String,
     pub direction: String,
     pub fallback_behavior: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteExplainabilityCandidateResponse {
+    pub candidate_id: String,
+    pub partner_id: Option<String>,
+    pub corridor_code: Option<String>,
+    pub base_output: u128,
+    pub adjusted_output: u128,
+    pub treasury_penalty_bps: u32,
+    pub partner_quality_penalty_bps: u32,
+    pub corridor_eligible: bool,
+    pub compliance_status: String,
+    pub rejection_reasons: Vec<String>,
+    pub selected: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteExplainabilityResponse {
+    pub policy_version: Option<String>,
+    pub selected_candidate_id: String,
+    pub winning_reason: String,
+    pub candidates: Vec<RouteExplainabilityCandidateResponse>,
 }
 
 fn default_limit() -> i64 {
@@ -189,6 +223,91 @@ fn map_policy(policy: &LiquidityPolicyConfig) -> LiquidityPolicyDescriptor {
         min_reliability_observations: policy.min_reliability_observations,
         weights: map_weights(&policy.weights),
         fallback_behavior: "BEST_PRICE_IF_POLICY_DATA_ABSENT".to_string(),
+    }
+}
+
+fn map_compliance_status(status: &RouteComplianceStatus) -> String {
+    match status {
+        RouteComplianceStatus::Clear => "clear".to_string(),
+        RouteComplianceStatus::ReviewRequired => "review_required".to_string(),
+        RouteComplianceStatus::Blocked => "blocked".to_string(),
+    }
+}
+
+fn map_route_candidate_breakdown(
+    candidate: &RouteCandidateBreakdown,
+) -> RouteExplainabilityCandidateResponse {
+    RouteExplainabilityCandidateResponse {
+        candidate_id: candidate.candidate_id.clone(),
+        partner_id: candidate.partner_id.clone(),
+        corridor_code: candidate.corridor_code.clone(),
+        base_output: candidate.base_output,
+        adjusted_output: candidate.adjusted_output,
+        treasury_penalty_bps: candidate.treasury_penalty_bps,
+        partner_quality_penalty_bps: candidate.partner_quality_penalty_bps,
+        corridor_eligible: candidate.corridor_eligible,
+        compliance_status: map_compliance_status(&candidate.compliance_status),
+        rejection_reasons: candidate.rejection_reasons.clone(),
+        selected: candidate.selected,
+    }
+}
+
+fn map_route_selection_explanation(
+    explanation: &RouteSelectionExplanation,
+) -> RouteExplainabilityResponse {
+    RouteExplainabilityResponse {
+        policy_version: explanation.policy_version.clone(),
+        selected_candidate_id: explanation.selected_candidate_id.clone(),
+        winning_reason: explanation.winning_reason.clone(),
+        candidates: explanation
+            .candidate_breakdowns
+            .iter()
+            .map(map_route_candidate_breakdown)
+            .collect(),
+    }
+}
+
+fn sample_route_selection_explanation(
+    direction: LiquidityPolicyDirection,
+) -> RouteSelectionExplanation {
+    let corridor_code = match direction {
+        LiquidityPolicyDirection::Offramp => "US_VN_OFFRAMP",
+        LiquidityPolicyDirection::Onramp => "VN_US_ONRAMP",
+    };
+
+    RouteSelectionExplanation {
+        policy_version: Some("liquidity-policy-default-v1".to_string()),
+        selected_candidate_id: "1".to_string(),
+        winning_reason: "Selected route balanced treasury, partner, and compliance constraints."
+            .to_string(),
+        candidate_breakdowns: vec![
+            RouteCandidateBreakdown {
+                candidate_id: "0".to_string(),
+                partner_id: Some("lp_alpha".to_string()),
+                corridor_code: Some(corridor_code.to_string()),
+                base_output: 995,
+                adjusted_output: 962,
+                treasury_penalty_bps: 220,
+                partner_quality_penalty_bps: 225,
+                corridor_eligible: true,
+                compliance_status: RouteComplianceStatus::ReviewRequired,
+                rejection_reasons: vec!["manual_compliance_review".to_string()],
+                selected: false,
+            },
+            RouteCandidateBreakdown {
+                candidate_id: "1".to_string(),
+                partner_id: Some("lp_beta".to_string()),
+                corridor_code: Some(corridor_code.to_string()),
+                base_output: 990,
+                adjusted_output: 984,
+                treasury_penalty_bps: 25,
+                partner_quality_penalty_bps: 40,
+                corridor_eligible: true,
+                compliance_status: RouteComplianceStatus::Clear,
+                rejection_reasons: Vec::new(),
+                selected: true,
+            },
+        ],
     }
 }
 
@@ -314,6 +433,18 @@ pub async fn compare_liquidity_policies(
     }))
 }
 
+pub async fn get_liquidity_route_explainability(
+    headers: HeaderMap,
+    Query(query): Query<LiquidityExplainabilityQuery>,
+) -> Result<Json<RouteExplainabilityResponse>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
+
+    let direction = parse_direction(query.direction.as_deref())?;
+    Ok(Json(map_route_selection_explanation(
+        &sample_route_selection_explanation(direction),
+    )))
+}
+
 pub async fn activate_liquidity_policy(
     headers: HeaderMap,
     Extension(tenant_ctx): Extension<TenantContext>,
@@ -352,4 +483,59 @@ pub async fn activate_liquidity_policy(
         direction: request.direction,
         fallback_behavior: "BEST_PRICE_IF_POLICY_DATA_ABSENT".to_string(),
     }))
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_map_route_selection_explanation_exposes_constraint_rationale() {
+        let response = map_route_selection_explanation(&RouteSelectionExplanation {
+            policy_version: Some("liquidity-policy-default-v1".to_string()),
+            selected_candidate_id: "1".to_string(),
+            winning_reason: "Selected route balanced treasury, partner, and compliance constraints."
+                .to_string(),
+            candidate_breakdowns: vec![
+                RouteCandidateBreakdown {
+                    candidate_id: "0".to_string(),
+                    partner_id: Some("lp_alpha".to_string()),
+                    corridor_code: Some("US_VN_OFFRAMP".to_string()),
+                    base_output: 995,
+                    adjusted_output: 962,
+                    treasury_penalty_bps: 220,
+                    partner_quality_penalty_bps: 225,
+                    corridor_eligible: true,
+                    compliance_status: RouteComplianceStatus::ReviewRequired,
+                    rejection_reasons: vec!["manual_compliance_review".to_string()],
+                    selected: false,
+                },
+                RouteCandidateBreakdown {
+                    candidate_id: "1".to_string(),
+                    partner_id: Some("lp_beta".to_string()),
+                    corridor_code: Some("US_VN_OFFRAMP".to_string()),
+                    base_output: 990,
+                    adjusted_output: 984,
+                    treasury_penalty_bps: 25,
+                    partner_quality_penalty_bps: 40,
+                    corridor_eligible: true,
+                    compliance_status: RouteComplianceStatus::Clear,
+                    rejection_reasons: Vec::new(),
+                    selected: true,
+                },
+            ],
+        });
+
+        assert_eq!(response.selected_candidate_id, "1");
+        assert_eq!(response.policy_version.as_deref(), Some("liquidity-policy-default-v1"));
+        assert_eq!(response.candidates.len(), 2);
+        assert_eq!(response.candidates[0].compliance_status, "review_required");
+        assert!(response.candidates[0]
+            .rejection_reasons
+            .iter()
+            .any(|reason| reason == "manual_compliance_review"));
+        assert_eq!(response.candidates[1].partner_id.as_deref(), Some("lp_beta"));
+        assert!(response.candidates[1].selected);
+    }
 }

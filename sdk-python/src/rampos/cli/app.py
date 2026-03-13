@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import argparse
 import re
+import json
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from rampos.cli.config import DEFAULT_BASE_URL, DEFAULT_PROFILE, build_cli_context, load_config, save_config
 from rampos.cli.manifest import ManifestOperation, load_manifest
 from rampos.cli.output import print_output
 from rampos.cli.request import append_query, load_body, request_json
+
+REQUIRED_COMPATIBILITY_SURFACES = ("openapi", "sdk-python", "cli")
 
 
 def _add_common_runtime_args(parser: argparse.ArgumentParser) -> None:
@@ -138,6 +143,93 @@ def cmd_treasury_workbench(args: argparse.Namespace) -> int:
     print_output(result, output=ctx.output, compact=ctx.compact)
     return 0
 
+
+
+def evaluate_compatibility_gate(
+    compatibility_evidence: list[str],
+    *,
+    generated_at: str,
+) -> dict[str, Any]:
+    generated_date = datetime.fromisoformat(generated_at).date().isoformat()
+    evidence_by_surface: dict[str, str] = {}
+    for item in compatibility_evidence:
+        if "@" not in item:
+            continue
+        surface, stamp = item.split("@", 1)
+        evidence_by_surface[surface] = stamp
+
+    missing = [
+        surface for surface in REQUIRED_COMPATIBILITY_SURFACES if surface not in evidence_by_surface
+    ]
+    stale = [
+        surface
+        for surface, stamp in evidence_by_surface.items()
+        if surface in REQUIRED_COMPATIBILITY_SURFACES and stamp < generated_date
+    ]
+    return {
+        "status": "blocked" if missing or stale else "passed",
+        "requiredSurfaces": list(REQUIRED_COMPATIBILITY_SURFACES),
+        "missingSurfaces": missing,
+        "staleSurfaces": stale,
+        "evaluatedAt": generated_at,
+    }
+
+
+def build_certification_artifact(
+    args: argparse.Namespace,
+    *,
+    generated_at: str | None = None,
+) -> dict[str, Any]:
+    timestamp = generated_at or datetime.now(timezone.utc).isoformat()
+    compatibility_gate = evaluate_compatibility_gate(
+        list(args.compatibility_evidence),
+        generated_at=timestamp,
+    )
+    return {
+        "artifactType": "corridor_rollout_certification",
+        "corridorCode": args.corridor_code,
+        "partnerId": args.partner_id,
+        "rolloutScope": args.rollout_scope,
+        "simulatorCode": args.simulator_code,
+        "certificationStatus": args.status,
+        "distributionSurface": "rampos-cli",
+        "releaseChannel": "current_distribution_surface",
+        "generatedAt": timestamp,
+        "checks": list(args.checks),
+        "compatibilityEvidence": list(args.compatibility_evidence),
+        "compatibilityGate": compatibility_gate,
+        "governance": {
+            "profile": args.profile,
+            "authMode": args.auth_mode or "admin",
+        },
+    }
+
+
+def cmd_certification_artifact(args: argparse.Namespace) -> int:
+    artifact = build_certification_artifact(args)
+    if artifact["compatibilityGate"]["status"] != "passed":
+        print_output(
+            {
+                "error": "COMPATIBILITY_GATE_BLOCKED",
+                "artifact": artifact,
+                "outputFile": args.output_file,
+            },
+            output=args.output,
+            compact=args.compact,
+        )
+        return 1
+    if args.output_file:
+        output_path = Path(args.output_file)
+        output_path.write_text(json.dumps(artifact, indent=2, sort_keys=True), encoding="utf-8")
+    print_output(
+        {
+            "artifact": artifact,
+            "outputFile": args.output_file,
+        },
+        output=args.output,
+        compact=args.compact,
+    )
+    return 0
 
 PATH_PARAM_RE = re.compile(r":([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
@@ -284,6 +376,34 @@ def build_parser() -> argparse.ArgumentParser:
     treasury_workbench.add_argument("--format", default="json", choices=["json", "csv"])
     treasury_workbench.set_defaults(func=cmd_treasury_workbench)
 
+
+    certification = subparsers.add_parser("certification", help="Certification artifact commands.")
+    _add_common_runtime_args(certification)
+    certification.set_defaults(func=lambda parsed: certification.print_help() or 0)
+    certification_subparsers = certification.add_subparsers(dest="certification_command")
+
+    artifact = certification_subparsers.add_parser(
+        "artifact",
+        help="Generate a bounded corridor or partner rollout certification artifact.",
+    )
+    artifact.add_argument("--corridor-code", required=True)
+    artifact.add_argument("--partner-id", required=True)
+    artifact.add_argument("--rollout-scope", required=True)
+    artifact.add_argument("--simulator-code", required=True)
+    artifact.add_argument(
+        "--status",
+        default="simulated",
+        choices=["simulated", "certified", "blocked"],
+    )
+    artifact.add_argument("--check", dest="checks", action="append", default=[])
+    artifact.add_argument(
+        "--compatibility-evidence",
+        dest="compatibility_evidence",
+        action="append",
+        default=[],
+    )
+    artifact.add_argument("--output-file")
+    artifact.set_defaults(func=cmd_certification_artifact)
     _register_manifest_commands(subparsers)
 
     return parser

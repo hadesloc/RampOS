@@ -1,0 +1,2 @@
+DROP TRIGGER IF EXISTS trigger_treasury_evidence_imports_updated_at ON treasury_evidence_imports;
+DROP TABLE IF EXISTS treasury_evidence_imports;

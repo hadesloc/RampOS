@@ -7,6 +7,7 @@
 use chrono::Utc;
 use ramp_common::{types::TenantId, Error, Result};
 use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
 use tracing::{info, instrument, warn};
@@ -73,6 +74,62 @@ pub struct CounterpartyExposureSignal {
     pub quote_count: i32,
     pub reliability_score: Option<Decimal>,
     pub dispute_rate: Option<Decimal>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SettlementQualityStatus {
+    Pending,
+    Settled,
+    Cancelled,
+    Disputed,
+}
+
+impl SettlementQualityStatus {
+    fn as_str(&self) -> &'static str {
+        match self {
+            SettlementQualityStatus::Pending => "pending",
+            SettlementQualityStatus::Settled => "settled",
+            SettlementQualityStatus::Cancelled => "cancelled",
+            SettlementQualityStatus::Disputed => "disputed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiquidityGovernanceContext {
+    pub partner_id: String,
+    pub partner_class: String,
+    pub corridor_code: Option<String>,
+    pub capability_family: Option<String>,
+    pub approval_reference: Option<String>,
+    pub policy_controlled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NormalizedLiquiditySignal {
+    pub signal_kind: String,
+    pub partner_id: String,
+    pub partner_class: String,
+    pub lp_id: String,
+    pub direction: String,
+    pub asset: String,
+    pub corridor_code: Option<String>,
+    pub capability_family: Option<String>,
+    pub approval_reference: Option<String>,
+    pub policy_controlled: bool,
+    pub rfq_id: Option<String>,
+    pub bid_id: Option<String>,
+    pub quoted_rate: Decimal,
+    pub quoted_vnd_amount: Decimal,
+    pub status: String,
+    pub cancel_reason: Option<String>,
+    pub settlement_latency_seconds: Option<i32>,
+    pub has_dispute: bool,
+    pub avg_slippage_bps: Option<Decimal>,
+    pub quality_tier: String,
 }
 
 // ============================================================================
@@ -230,7 +287,7 @@ impl RfqService {
 
         self.rfq_repo.create_bid(&bid).await?;
         if let Err(error) = self
-            .ingest_quote_outcome(&req.tenant_id, &rfq.direction, &bid)
+            .ingest_quote_outcome(&req.tenant_id, &rfq, &bid)
             .await
         {
             warn!(
@@ -371,22 +428,7 @@ impl RfqService {
                 {
                     warn!(bid_id = %bid.id, error = %e, "Failed to reject losing bid");
                 } else if let Err(e) = self
-                    .ingest_reliability_delta(
-                        tenant_id,
-                        &bid.lp_id,
-                        &rfq.direction,
-                        0,
-                        0,
-                        1,
-                        0,
-                        0,
-                        None,
-                        json!({
-                            "lastOutcome": "rfq_rejected",
-                            "rfqId": rfq_id,
-                            "bidId": bid.id,
-                        }),
-                    )
+                    .ingest_cancel_outcome(tenant_id, &rfq, bid, "rfq_rejected")
                     .await
                 {
                     warn!(bid_id = %bid.id, error = %e, "Failed to ingest reliability reject outcome");
@@ -481,13 +523,15 @@ impl RfqService {
     async fn ingest_quote_outcome(
         &self,
         tenant_id: &TenantId,
-        direction: &str,
+        rfq: &RfqRequestRow,
         bid: &RfqBidRow,
     ) -> Result<()> {
+        let governance = default_liquidity_governance_context(rfq, bid);
+        let signal = normalize_quote_signal(rfq, bid, &governance);
         self.ingest_reliability_delta(
             tenant_id,
             &bid.lp_id,
-            direction,
+            &rfq.direction,
             1,
             0,
             0,
@@ -498,6 +542,7 @@ impl RfqService {
                 "lastOutcome": "rfq_quote_submitted",
                 "rfqId": bid.rfq_id,
                 "bidId": bid.id,
+                "normalizedSignal": normalized_signal_to_json(&signal),
             }),
         )
         .await
@@ -509,6 +554,19 @@ impl RfqService {
         rfq: &RfqRequestRow,
         winning_bid: &RfqBidRow,
     ) -> Result<()> {
+        let governance = default_liquidity_governance_context(rfq, winning_bid);
+        let fill_signal =
+            normalize_fill_signal(rfq, winning_bid, &governance, Some(Decimal::ZERO));
+        let settlement_quality_signal = normalize_settlement_quality_signal(
+            &winning_bid.lp_id,
+            &rfq.direction,
+            &rfq.crypto_asset,
+            &governance,
+            SettlementQualityStatus::Pending,
+            0,
+            false,
+            Some(Decimal::ZERO),
+        );
         self.ingest_reliability_delta(
             tenant_id,
             &winning_bid.lp_id,
@@ -523,6 +581,37 @@ impl RfqService {
                 "lastOutcome": "rfq_matched",
                 "rfqId": rfq.id,
                 "winningBidId": winning_bid.id,
+                "normalizedSignal": normalized_signal_to_json(&fill_signal),
+                "settlementQualitySignal": normalized_signal_to_json(&settlement_quality_signal),
+            }),
+        )
+        .await
+    }
+
+    async fn ingest_cancel_outcome(
+        &self,
+        tenant_id: &TenantId,
+        rfq: &RfqRequestRow,
+        bid: &RfqBidRow,
+        reason: &str,
+    ) -> Result<()> {
+        let governance = default_liquidity_governance_context(rfq, bid);
+        let signal = normalize_cancel_signal(rfq, bid, &governance, reason);
+        self.ingest_reliability_delta(
+            tenant_id,
+            &bid.lp_id,
+            &rfq.direction,
+            0,
+            0,
+            1,
+            0,
+            0,
+            None,
+            json!({
+                "lastOutcome": reason,
+                "rfqId": rfq.id,
+                "bidId": bid.id,
+                "normalizedSignal": normalized_signal_to_json(&signal),
             }),
         )
         .await
@@ -663,6 +752,203 @@ fn weighted_average(
     let weighted_total = (previous_average * Decimal::from(previous_count.max(0)))
         + (sample_average * Decimal::from(sample_count.max(0)));
     weighted_total / Decimal::from(total_count)
+}
+
+fn default_liquidity_governance_context(
+    rfq: &RfqRequestRow,
+    bid: &RfqBidRow,
+) -> LiquidityGovernanceContext {
+    LiquidityGovernanceContext {
+        partner_id: format!("partner_{}", bid.lp_id),
+        partner_class: "liquidity_provider".to_string(),
+        corridor_code: default_corridor_code(&rfq.direction, &rfq.crypto_asset),
+        capability_family: Some("otc_desk".to_string()),
+        approval_reference: None,
+        policy_controlled: true,
+    }
+}
+
+fn default_corridor_code(direction: &str, asset: &str) -> Option<String> {
+    let asset = asset.to_ascii_uppercase();
+    match direction {
+        "OFFRAMP" => Some(format!("{}_VN_OFFRAMP", asset)),
+        "ONRAMP" => Some(format!("VN_{}_ONRAMP", asset)),
+        _ => None,
+    }
+}
+
+fn normalize_quote_signal(
+    rfq: &RfqRequestRow,
+    bid: &RfqBidRow,
+    governance: &LiquidityGovernanceContext,
+) -> NormalizedLiquiditySignal {
+    NormalizedLiquiditySignal {
+        signal_kind: "quote".to_string(),
+        partner_id: governance.partner_id.clone(),
+        partner_class: governance.partner_class.clone(),
+        lp_id: bid.lp_id.clone(),
+        direction: rfq.direction.clone(),
+        asset: rfq.crypto_asset.clone(),
+        corridor_code: governance.corridor_code.clone(),
+        capability_family: governance.capability_family.clone(),
+        approval_reference: governance.approval_reference.clone(),
+        policy_controlled: governance.policy_controlled,
+        rfq_id: Some(rfq.id.clone()),
+        bid_id: Some(bid.id.clone()),
+        quoted_rate: bid.exchange_rate,
+        quoted_vnd_amount: bid.vnd_amount,
+        status: "submitted".to_string(),
+        cancel_reason: None,
+        settlement_latency_seconds: None,
+        has_dispute: false,
+        avg_slippage_bps: None,
+        quality_tier: "unscored".to_string(),
+    }
+}
+
+fn normalize_fill_signal(
+    rfq: &RfqRequestRow,
+    bid: &RfqBidRow,
+    governance: &LiquidityGovernanceContext,
+    avg_slippage_bps: Option<Decimal>,
+) -> NormalizedLiquiditySignal {
+    NormalizedLiquiditySignal {
+        signal_kind: "fill".to_string(),
+        partner_id: governance.partner_id.clone(),
+        partner_class: governance.partner_class.clone(),
+        lp_id: bid.lp_id.clone(),
+        direction: rfq.direction.clone(),
+        asset: rfq.crypto_asset.clone(),
+        corridor_code: governance.corridor_code.clone(),
+        capability_family: governance.capability_family.clone(),
+        approval_reference: governance.approval_reference.clone(),
+        policy_controlled: governance.policy_controlled,
+        rfq_id: Some(rfq.id.clone()),
+        bid_id: Some(bid.id.clone()),
+        quoted_rate: bid.exchange_rate,
+        quoted_vnd_amount: bid.vnd_amount,
+        status: "matched".to_string(),
+        cancel_reason: None,
+        settlement_latency_seconds: None,
+        has_dispute: false,
+        avg_slippage_bps,
+        quality_tier: "pending".to_string(),
+    }
+}
+
+fn normalize_cancel_signal(
+    rfq: &RfqRequestRow,
+    bid: &RfqBidRow,
+    governance: &LiquidityGovernanceContext,
+    reason: &str,
+) -> NormalizedLiquiditySignal {
+    NormalizedLiquiditySignal {
+        signal_kind: "cancel".to_string(),
+        partner_id: governance.partner_id.clone(),
+        partner_class: governance.partner_class.clone(),
+        lp_id: bid.lp_id.clone(),
+        direction: rfq.direction.clone(),
+        asset: rfq.crypto_asset.clone(),
+        corridor_code: governance.corridor_code.clone(),
+        capability_family: governance.capability_family.clone(),
+        approval_reference: governance.approval_reference.clone(),
+        policy_controlled: governance.policy_controlled,
+        rfq_id: Some(rfq.id.clone()),
+        bid_id: Some(bid.id.clone()),
+        quoted_rate: bid.exchange_rate,
+        quoted_vnd_amount: bid.vnd_amount,
+        status: "cancelled".to_string(),
+        cancel_reason: Some(reason.to_string()),
+        settlement_latency_seconds: None,
+        has_dispute: false,
+        avg_slippage_bps: None,
+        quality_tier: "not_applicable".to_string(),
+    }
+}
+
+fn normalize_settlement_quality_signal(
+    lp_id: &str,
+    direction: &str,
+    asset: &str,
+    governance: &LiquidityGovernanceContext,
+    status: SettlementQualityStatus,
+    settlement_latency_seconds: i32,
+    has_dispute: bool,
+    avg_slippage_bps: Option<Decimal>,
+) -> NormalizedLiquiditySignal {
+    let quality_tier = settlement_quality_tier(
+        &status,
+        settlement_latency_seconds,
+        has_dispute,
+        avg_slippage_bps,
+    );
+    NormalizedLiquiditySignal {
+        signal_kind: "settlement_quality".to_string(),
+        partner_id: governance.partner_id.clone(),
+        partner_class: governance.partner_class.clone(),
+        lp_id: lp_id.to_string(),
+        direction: direction.to_string(),
+        asset: asset.to_string(),
+        corridor_code: governance.corridor_code.clone(),
+        capability_family: governance.capability_family.clone(),
+        approval_reference: governance.approval_reference.clone(),
+        policy_controlled: governance.policy_controlled,
+        rfq_id: None,
+        bid_id: None,
+        quoted_rate: Decimal::ZERO,
+        quoted_vnd_amount: Decimal::ZERO,
+        status: status.as_str().to_string(),
+        cancel_reason: None,
+        settlement_latency_seconds: Some(settlement_latency_seconds),
+        has_dispute,
+        avg_slippage_bps,
+        quality_tier: quality_tier.to_string(),
+    }
+}
+
+fn settlement_quality_tier(
+    status: &SettlementQualityStatus,
+    settlement_latency_seconds: i32,
+    has_dispute: bool,
+    avg_slippage_bps: Option<Decimal>,
+) -> &'static str {
+    if *status == SettlementQualityStatus::Disputed {
+        "critical"
+    } else if has_dispute
+        || settlement_latency_seconds >= 300
+        || avg_slippage_bps.unwrap_or(Decimal::ZERO) >= Decimal::from(10)
+    {
+        "watch"
+    } else if *status == SettlementQualityStatus::Pending {
+        "monitor"
+    } else {
+        "healthy"
+    }
+}
+
+fn normalized_signal_to_json(signal: &NormalizedLiquiditySignal) -> serde_json::Value {
+    json!({
+        "signalKind": signal.signal_kind,
+        "partnerId": signal.partner_id,
+        "partnerClass": signal.partner_class,
+        "lpId": signal.lp_id,
+        "direction": signal.direction,
+        "asset": signal.asset,
+        "corridorCode": signal.corridor_code,
+        "capabilityFamily": signal.capability_family,
+        "approvalReference": signal.approval_reference,
+        "policyControlled": signal.policy_controlled,
+        "rfqId": signal.rfq_id,
+        "bidId": signal.bid_id,
+        "quotedRate": signal.quoted_rate.to_string(),
+        "quotedVndAmount": signal.quoted_vnd_amount.to_string(),
+        "status": signal.status,
+        "cancelReason": signal.cancel_reason,
+        "settlementLatencySeconds": signal.settlement_latency_seconds,
+        "hasDispute": signal.has_dispute,
+        "avgSlippageBps": signal.avg_slippage_bps.map(|value| value.to_string()),
+        "qualityTier": signal.quality_tier,
+    })
 }
 
 fn validate_bid_amounts(rfq: &RfqRequestRow, req: &SubmitBidRequest) -> Result<()> {
@@ -1274,5 +1560,163 @@ mod tests {
         let bids = repo.list_bids_for_request(&tenant(), &rfq.id).await.unwrap();
         assert_eq!(bids.len(), 1);
         assert_eq!(bids[0].state, "EXPIRED");
+    }
+
+    #[test]
+    fn test_normalize_quote_signal_captures_governance_and_amounts() {
+        let now = Utc::now();
+        let rfq = crate::repository::rfq::RfqRequestRow {
+            id: "rfq_norm_quote".to_string(),
+            tenant_id: tenant().0.clone(),
+            user_id: "user_quote".to_string(),
+            direction: "OFFRAMP".to_string(),
+            offramp_id: Some("ofr_quote".to_string()),
+            crypto_asset: "USDT".to_string(),
+            crypto_amount: Decimal::new(125, 0),
+            vnd_amount: None,
+            state: "OPEN".to_string(),
+            winning_bid_id: None,
+            winning_lp_id: None,
+            final_rate: None,
+            expires_at: now + chrono::Duration::minutes(5),
+            created_at: now,
+            updated_at: now,
+        };
+        let bid = crate::repository::rfq::RfqBidRow {
+            id: "bid_norm_quote".to_string(),
+            rfq_id: rfq.id.clone(),
+            tenant_id: tenant().0.clone(),
+            lp_id: "lp_norm".to_string(),
+            lp_name: Some("LP Normalized".to_string()),
+            exchange_rate: Decimal::new(26_100, 0),
+            vnd_amount: Decimal::new(3_262_500, 0),
+            valid_until: now + chrono::Duration::minutes(5),
+            state: "PENDING".to_string(),
+            created_at: now,
+        };
+        let governance = LiquidityGovernanceContext {
+            partner_id: "partner_lp_norm".to_string(),
+            partner_class: "liquidity_provider".to_string(),
+            corridor_code: Some("USDT_VN_OFFRAMP".to_string()),
+            capability_family: Some("otc_desk".to_string()),
+            approval_reference: Some("apr_lp_norm_001".to_string()),
+            policy_controlled: true,
+        };
+
+        let signal = normalize_quote_signal(&rfq, &bid, &governance);
+
+        assert_eq!(signal.signal_kind, "quote");
+        assert_eq!(signal.partner_id, "partner_lp_norm");
+        assert_eq!(signal.partner_class, "liquidity_provider");
+        assert_eq!(signal.corridor_code.as_deref(), Some("USDT_VN_OFFRAMP"));
+        assert_eq!(signal.capability_family.as_deref(), Some("otc_desk"));
+        assert_eq!(signal.approval_reference.as_deref(), Some("apr_lp_norm_001"));
+        assert_eq!(signal.asset, "USDT");
+        assert_eq!(signal.quoted_vnd_amount, Decimal::new(3_262_500, 0));
+        assert_eq!(signal.quoted_rate, Decimal::new(26_100, 0));
+    }
+
+    #[test]
+    fn test_normalize_settlement_quality_signal_includes_status_latency_and_dispute_flags() {
+        let governance = LiquidityGovernanceContext {
+            partner_id: "partner_lp_norm".to_string(),
+            partner_class: "liquidity_provider".to_string(),
+            corridor_code: Some("USDT_VN_OFFRAMP".to_string()),
+            capability_family: Some("otc_desk".to_string()),
+            approval_reference: None,
+            policy_controlled: true,
+        };
+
+        let signal = normalize_settlement_quality_signal(
+            "lp_norm",
+            "OFFRAMP",
+            "USDT",
+            &governance,
+            SettlementQualityStatus::Settled,
+            480,
+            true,
+            Some(dec!(18.5)),
+        );
+
+        assert_eq!(signal.signal_kind, "settlement_quality");
+        assert_eq!(signal.status, "settled");
+        assert_eq!(signal.settlement_latency_seconds, Some(480));
+        assert_eq!(signal.quality_tier, "watch");
+        assert!(signal.has_dispute);
+        assert_eq!(signal.avg_slippage_bps, Some(dec!(18.5)));
+    }
+
+    #[tokio::test]
+    async fn test_finalize_rfq_records_normalized_fill_and_cancel_metadata() {
+        let (repo, svc) = make_service_with_repo();
+        let rfq = svc
+            .create_rfq(CreateRfqRequest {
+                tenant_id: tenant(),
+                user_id: "user_norm_flow".to_string(),
+                direction: "OFFRAMP".to_string(),
+                offramp_id: None,
+                crypto_asset: "USDT".to_string(),
+                crypto_amount: Decimal::new(100, 0),
+                vnd_amount: None,
+                ttl_minutes: 5,
+            })
+            .await
+            .unwrap();
+
+        let winning_bid = svc
+            .submit_bid(SubmitBidRequest {
+                tenant_id: tenant(),
+                rfq_id: rfq.id.clone(),
+                lp_id: "lp_win".to_string(),
+                lp_name: Some("Winning LP".to_string()),
+                exchange_rate: Decimal::new(26_000, 0),
+                vnd_amount: Decimal::new(2_600_000, 0),
+                valid_minutes: 5,
+            })
+            .await
+            .unwrap();
+
+        let losing_bid = svc
+            .submit_bid(SubmitBidRequest {
+                tenant_id: tenant(),
+                rfq_id: rfq.id.clone(),
+                lp_id: "lp_lose".to_string(),
+                lp_name: Some("Losing LP".to_string()),
+                exchange_rate: Decimal::new(25_900, 0),
+                vnd_amount: Decimal::new(2_590_000, 0),
+                valid_minutes: 5,
+            })
+            .await
+            .unwrap();
+
+        let result = svc.finalize_rfq(&tenant(), &rfq.id).await.unwrap();
+        assert_eq!(result.winning_bid.id, winning_bid.id);
+
+        let winner_snapshot = repo
+            .get_latest_reliability_snapshot(&tenant(), &winning_bid.lp_id, "OFFRAMP", "ROLLING_30D")
+            .await
+            .unwrap()
+            .unwrap();
+        let loser_snapshot = repo
+            .get_latest_reliability_snapshot(&tenant(), &losing_bid.lp_id, "OFFRAMP", "ROLLING_30D")
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(winner_snapshot.metadata["normalizedSignal"]["signalKind"], "fill");
+        assert_eq!(
+            winner_snapshot.metadata["normalizedSignal"]["partnerClass"],
+            "liquidity_provider"
+        );
+        assert_eq!(winner_snapshot.metadata["normalizedSignal"]["quotedRate"], "26000");
+        assert_eq!(loser_snapshot.metadata["normalizedSignal"]["signalKind"], "cancel");
+        assert_eq!(
+            loser_snapshot.metadata["normalizedSignal"]["cancelReason"],
+            "rfq_rejected"
+        );
+        assert_eq!(
+            loser_snapshot.metadata["normalizedSignal"]["partnerClass"],
+            "liquidity_provider"
+        );
     }
 }

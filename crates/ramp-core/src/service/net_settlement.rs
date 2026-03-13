@@ -28,6 +28,12 @@ pub struct NetSettlementProposal {
     pub direction: String,
     pub status: String,
     pub approval_required: bool,
+    pub maker_checker_state: String,
+    pub maker_user_id: Option<String>,
+    pub checker_user_id: Option<String>,
+    pub delegated_approver_id: Option<String>,
+    pub delegation_expires_at: Option<String>,
+    pub approval_reference_id: Option<String>,
     pub summary: String,
 }
 
@@ -115,6 +121,12 @@ impl NetSettlementService {
             },
             status: proposal_status_label(NetSettlementProposalStatus::PendingApproval),
             approval_required: true,
+            maker_checker_state: "awaiting_checker".to_string(),
+            maker_user_id: Some("ops_maker_demo".to_string()),
+            checker_user_id: None,
+            delegated_approver_id: Some("treasury_delegate_demo".to_string()),
+            delegation_expires_at: Some((Utc::now() + Duration::hours(4)).to_rfc3339()),
+            approval_reference_id: Some(format!("approval_{}_{}", counterparty_id, asset.to_ascii_lowercase())),
             summary: format!(
                 "Bilateral net settlement against {} leaves a {} {} position awaiting approval.",
                 counterparty_id,
@@ -145,6 +157,12 @@ fn sample_proposals(scenario: Option<&str>) -> Vec<NetSettlementProposal> {
             direction: "receive".to_string(),
             status: proposal_status_label(NetSettlementProposalStatus::Draft),
             approval_required: true,
+            maker_checker_state: "draft".to_string(),
+            maker_user_id: Some("ops_maker_demo".to_string()),
+            checker_user_id: None,
+            delegated_approver_id: None,
+            delegation_expires_at: None,
+            approval_reference_id: Some("approval_clean_lp_beta".to_string()),
             summary:
                 "Counterparty exposure is nearly flat; no bilateral settlement action is urgent."
                     .to_string(),
@@ -168,6 +186,12 @@ fn sample_proposals(scenario: Option<&str>) -> Vec<NetSettlementProposal> {
             direction: "pay".to_string(),
             status: proposal_status_label(NetSettlementProposalStatus::PendingApproval),
             approval_required: true,
+            maker_checker_state: "awaiting_checker".to_string(),
+            maker_user_id: Some("ops_maker_demo".to_string()),
+            checker_user_id: None,
+            delegated_approver_id: Some("treasury_delegate_demo".to_string()),
+            delegation_expires_at: Some((Utc::now() + Duration::hours(2)).to_rfc3339()),
+            approval_reference_id: Some("approval_pending_lp_alpha".to_string()),
             summary:
                 "Approval queue is holding a bilateral payout recommendation for lp_alpha."
                     .to_string(),
@@ -191,6 +215,12 @@ fn sample_proposals(scenario: Option<&str>) -> Vec<NetSettlementProposal> {
             direction: "pay".to_string(),
             status: proposal_status_label(NetSettlementProposalStatus::PendingApproval),
             approval_required: true,
+            maker_checker_state: "awaiting_checker".to_string(),
+            maker_user_id: Some("ops_maker_demo".to_string()),
+            checker_user_id: None,
+            delegated_approver_id: Some("treasury_delegate_demo".to_string()),
+            delegation_expires_at: Some((Utc::now() + Duration::hours(2)).to_rfc3339()),
+            approval_reference_id: Some("approval_active_lp_alpha".to_string()),
             summary:
                 "lp_alpha owes a net payout after bilateral compression of same-window settlements."
                     .to_string(),
@@ -207,6 +237,12 @@ fn sample_proposals(scenario: Option<&str>) -> Vec<NetSettlementProposal> {
             direction: "receive".to_string(),
             status: proposal_status_label(NetSettlementProposalStatus::Draft),
             approval_required: true,
+            maker_checker_state: "draft".to_string(),
+            maker_user_id: Some("ops_maker_demo".to_string()),
+            checker_user_id: None,
+            delegated_approver_id: None,
+            delegation_expires_at: None,
+            approval_reference_id: Some("approval_active_bank_vcb".to_string()),
             summary:
                 "bank_vcb remains net receivable; keep this bilateral package approval-gated."
                     .to_string(),

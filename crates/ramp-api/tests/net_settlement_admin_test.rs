@@ -204,6 +204,24 @@ async fn settlement_workbench_returns_approval_gated_snapshot() {
         .unwrap()
         .iter()
         .any(|item| item["status"] == "pending_approval"));
+    assert_eq!(
+        payload["snapshot"]["proposals"][0]["makerCheckerState"],
+        "awaiting_checker"
+    );
+    assert_eq!(
+        payload["snapshot"]["proposals"][0]["makerUserId"],
+        "ops_maker_demo"
+    );
+    assert_eq!(
+        payload["snapshot"]["proposals"][0]["delegatedApproverId"],
+        "treasury_delegate_demo"
+    );
+    assert!(
+        payload["snapshot"]["proposals"][0]["approvalReferenceId"]
+            .as_str()
+            .unwrap()
+            .starts_with("approval_")
+    );
 }
 
 #[tokio::test]
@@ -230,4 +248,6 @@ async fn settlement_workbench_export_returns_csv_attachment() {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let csv = String::from_utf8(body.to_vec()).unwrap();
     assert!(csv.contains("proposal_id,counterparty_id,asset"));
+    assert!(csv.contains("maker_checker_state"));
+    assert!(csv.contains("treasury_delegate_demo"));
 }

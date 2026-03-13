@@ -19,6 +19,10 @@ use tracing::{info, instrument, warn};
 
 use crate::error::ApiError;
 use ramp_core::repository::{BankConfirmationRepository, CreateBankConfirmationRequest};
+use ramp_core::service::{
+    map_generic_bank_status, map_napas_status, map_vietqr_status, CanonicalPaymentDirection,
+    CanonicalPaymentInput, CanonicalPaymentParty, CanonicalPaymentRecord,
+};
 
 /// State for bank webhook handlers
 #[derive(Clone)]
@@ -379,6 +383,110 @@ fn verify_hmac_sha512(secret: &[u8], data: &[u8], signature: &str) -> Result<boo
     Ok(false)
 }
 
+fn canonicalize_vietqr_payment(
+    tenant_id: &str,
+    payload: &VietQrWebhookPayload,
+) -> CanonicalPaymentRecord {
+    CanonicalPaymentRecord::from_input(
+        CanonicalPaymentInput {
+            provider: "vietqr".to_string(),
+            provider_reference: payload.transaction_id.clone(),
+            reference_code: payload.reference_code.clone(),
+            tenant_id: tenant_id.to_string(),
+            direction: CanonicalPaymentDirection::Inbound,
+            amount: Decimal::from(payload.amount),
+            currency: payload.currency.clone(),
+            raw_status: Some(payload.status.clone()),
+            payer: CanonicalPaymentParty {
+                account_id: payload.sender_account.clone(),
+                bank_identifier: payload.sender_bank_code.clone(),
+                display_name: payload.sender_name.clone(),
+            },
+            beneficiary: CanonicalPaymentParty {
+                account_id: payload.receiver_account.clone(),
+                bank_identifier: payload.receiver_bank_code.clone(),
+                display_name: payload.receiver_name.clone(),
+            },
+            occurred_at: payload.transaction_time,
+            metadata: serde_json::json!({
+                "description": payload.description,
+            }),
+        },
+        map_vietqr_status(&payload.status),
+    )
+}
+
+fn canonicalize_napas_payment(
+    tenant_id: &str,
+    payload: &NapasWebhookPayload,
+    amount: Decimal,
+    tx_time: Option<DateTime<Utc>>,
+) -> CanonicalPaymentRecord {
+    CanonicalPaymentRecord::from_input(
+        CanonicalPaymentInput {
+            provider: "napas".to_string(),
+            provider_reference: payload.trans_id.clone(),
+            reference_code: payload.ref_no.clone(),
+            tenant_id: tenant_id.to_string(),
+            direction: CanonicalPaymentDirection::Inbound,
+            amount,
+            currency: payload.currency.clone(),
+            raw_status: Some(payload.status_code.clone()),
+            payer: CanonicalPaymentParty {
+                account_id: payload.debtor_account.clone(),
+                bank_identifier: payload.debtor_bic.clone(),
+                display_name: payload.debtor_name.clone(),
+            },
+            beneficiary: CanonicalPaymentParty {
+                account_id: payload.creditor_account.clone(),
+                bank_identifier: payload.creditor_bic.clone(),
+                display_name: payload.creditor_name.clone(),
+            },
+            occurred_at: tx_time,
+            metadata: serde_json::json!({}),
+        },
+        map_napas_status(&payload.status_code),
+    )
+}
+
+fn canonicalize_generic_bank_payment(
+    tenant_id: &str,
+    provider: &str,
+    payload: &GenericBankWebhookPayload,
+) -> CanonicalPaymentRecord {
+    let raw_status = payload
+        .metadata
+        .get("status")
+        .and_then(|value| value.as_str())
+        .map(ToString::to_string);
+
+    CanonicalPaymentRecord::from_input(
+        CanonicalPaymentInput {
+            provider: provider.to_string(),
+            provider_reference: payload.bank_tx_id.clone(),
+            reference_code: payload.reference_code.clone(),
+            tenant_id: tenant_id.to_string(),
+            direction: CanonicalPaymentDirection::Inbound,
+            amount: payload.amount,
+            currency: payload.currency.clone(),
+            raw_status: raw_status.clone(),
+            payer: CanonicalPaymentParty {
+                account_id: payload.sender_account.clone(),
+                bank_identifier: None,
+                display_name: payload.sender_name.clone(),
+            },
+            beneficiary: CanonicalPaymentParty {
+                account_id: payload.receiver_account.clone(),
+                bank_identifier: None,
+                display_name: None,
+            },
+            occurred_at: payload.transaction_time,
+            metadata: payload.metadata.clone(),
+        },
+        map_generic_bank_status(raw_status.as_deref(), &payload.metadata),
+    )
+}
+
 // ============================================================================
 // Provider-specific handlers
 // ============================================================================
@@ -395,7 +503,6 @@ async fn handle_vietqr_webhook(
         "Processing VietQR webhook"
     );
 
-    // Check for duplicate
     if state
         .confirmation_repo
         .check_duplicate("vietqr", &payload.transaction_id)
@@ -409,19 +516,23 @@ async fn handle_vietqr_webhook(
         });
     }
 
-    // Track if signature was verified before consuming verified_tenant
     let signature_verified = verified_tenant.is_some();
 
-    // Determine tenant from reference code or verified signature
     let tenant_id = verified_tenant
         .or_else(|| extract_tenant_from_reference(&payload.reference_code))
         .ok_or_else(|| ApiError::BadRequest("Unknown tenant".to_string()))?;
 
-    // Serialize payload before moving fields
+    let canonical_payment = canonicalize_vietqr_payment(&tenant_id, &payload);
+    info!(
+        provider = "vietqr",
+        reference_code = %canonical_payment.reference_code,
+        status_family = canonical_payment.status_family.as_str(),
+        "Normalized canonical payment from VietQR webhook"
+    );
+
     let raw_payload = serde_json::to_value(&payload)
         .map_err(|_| ApiError::Internal("Serialization failed".to_string()))?;
 
-    // Store confirmation
     let req = CreateBankConfirmationRequest {
         tenant_id: tenant_id.clone(),
         provider: "vietqr".to_string(),
@@ -469,7 +580,6 @@ async fn handle_napas_webhook(
         "Processing Napas webhook"
     );
 
-    // Check for duplicate
     if state
         .confirmation_repo
         .check_duplicate("napas", &payload.trans_id)
@@ -482,32 +592,34 @@ async fn handle_napas_webhook(
         });
     }
 
-    // Parse amount
     let amount: Decimal = payload
         .amount
         .parse()
         .map_err(|_| ApiError::BadRequest("Invalid amount format".to_string()))?;
 
-    // Parse transaction time
     let tx_time = payload.tx_datetime.as_ref().and_then(|s| {
         DateTime::parse_from_rfc3339(s)
             .ok()
             .map(|dt| dt.with_timezone(&Utc))
     });
 
-    // Track if signature was verified before consuming verified_tenant
     let signature_verified = verified_tenant.is_some();
 
-    // Determine tenant
     let tenant_id = verified_tenant
         .or_else(|| extract_tenant_from_reference(&payload.ref_no))
         .ok_or_else(|| ApiError::BadRequest("Unknown tenant".to_string()))?;
 
-    // Serialize payload before moving fields
+    let canonical_payment = canonicalize_napas_payment(&tenant_id, &payload, amount, tx_time);
+    info!(
+        provider = "napas",
+        reference_code = %canonical_payment.reference_code,
+        status_family = canonical_payment.status_family.as_str(),
+        "Normalized canonical payment from Napas webhook"
+    );
+
     let raw_payload = serde_json::to_value(&payload)
         .map_err(|_| ApiError::Internal("Serialization failed".to_string()))?;
 
-    // Store confirmation
     let req = CreateBankConfirmationRequest {
         tenant_id: tenant_id.clone(),
         provider: "napas".to_string(),
@@ -556,7 +668,6 @@ async fn handle_generic_webhook(
         "Processing generic bank webhook"
     );
 
-    // Check for duplicate
     if state
         .confirmation_repo
         .check_duplicate(provider, &payload.bank_tx_id)
@@ -570,19 +681,23 @@ async fn handle_generic_webhook(
         });
     }
 
-    // Track if signature was verified before consuming verified_tenant
     let signature_verified = verified_tenant.is_some();
 
-    // Determine tenant
     let tenant_id = verified_tenant
         .or_else(|| extract_tenant_from_reference(&payload.reference_code))
         .ok_or_else(|| ApiError::BadRequest("Unknown tenant".to_string()))?;
 
-    // Serialize payload before moving fields
+    let canonical_payment = canonicalize_generic_bank_payment(&tenant_id, provider, &payload);
+    info!(
+        provider = %provider,
+        reference_code = %canonical_payment.reference_code,
+        status_family = canonical_payment.status_family.as_str(),
+        "Normalized canonical payment from generic bank webhook"
+    );
+
     let raw_payload = serde_json::to_value(&payload)
         .map_err(|_| ApiError::Internal("Serialization failed".to_string()))?;
 
-    // Store confirmation
     let req = CreateBankConfirmationRequest {
         tenant_id: tenant_id.clone(),
         provider: provider.to_string(),
@@ -693,5 +808,79 @@ mod tests {
             serde_json::from_str(json).expect("deserialization failed");
         assert_eq!(payload.trans_id, "NAPAS123456");
         assert_eq!(payload.ref_no, "TENANT1-REF-001");
+    }
+
+    #[test]
+    fn test_canonicalize_vietqr_success_maps_to_settled() {
+        let payload = VietQrWebhookPayload {
+            transaction_id: "VQR123".to_string(),
+            reference_code: "TENANT1_REF001".to_string(),
+            amount: 1000000,
+            currency: "VND".to_string(),
+            sender_bank_code: Some("VCB".to_string()),
+            sender_account: Some("1234567890".to_string()),
+            sender_name: Some("NGUYEN VAN A".to_string()),
+            receiver_bank_code: Some("TCB".to_string()),
+            receiver_account: Some("99887766".to_string()),
+            receiver_name: Some("RampOS".to_string()),
+            description: Some("invoice".to_string()),
+            transaction_time: None,
+            status: "SUCCESS".to_string(),
+        };
+
+        let record = canonicalize_vietqr_payment("TENANT1", &payload);
+        assert_eq!(record.provider, "vietqr");
+        assert_eq!(record.status_family.as_str(), "settled");
+        assert_eq!(record.direction, CanonicalPaymentDirection::Inbound);
+    }
+
+    #[test]
+    fn test_canonicalize_napas_review_status_family() {
+        let payload = NapasWebhookPayload {
+            trans_id: "NAPAS123".to_string(),
+            ref_no: "TENANT1-REF-001".to_string(),
+            amount: "1000000.00".to_string(),
+            currency: "VND".to_string(),
+            debtor_bic: Some("VCBVVNVX".to_string()),
+            debtor_account: Some("1234567890".to_string()),
+            debtor_name: Some("NGUYEN VAN A".to_string()),
+            creditor_bic: Some("TCBVVNVX".to_string()),
+            creditor_account: Some("99887766".to_string()),
+            creditor_name: Some("RampOS".to_string()),
+            tx_datetime: None,
+            status_code: "94".to_string(),
+        };
+
+        let record = canonicalize_napas_payment(
+            "TENANT1",
+            &payload,
+            Decimal::from(1_000_000_i64),
+            None,
+        );
+        assert_eq!(record.provider, "napas");
+        assert_eq!(record.status_family.as_str(), "review");
+    }
+
+    #[test]
+    fn test_canonicalize_generic_payload_uses_metadata_status() {
+        let payload = GenericBankWebhookPayload {
+            bank_tx_id: "GEN123".to_string(),
+            reference_code: "TENANT1_REF001".to_string(),
+            amount: Decimal::from(500000_i64),
+            currency: "VND".to_string(),
+            sender_account: Some("111222".to_string()),
+            sender_name: Some("A".to_string()),
+            receiver_account: Some("333444".to_string()),
+            transaction_time: None,
+            metadata: serde_json::json!({
+                "status": "returned",
+                "channel": "manual_import"
+            }),
+        };
+
+        let record = canonicalize_generic_bank_payment("TENANT1", "custom-bank", &payload);
+        assert_eq!(record.provider, "custom-bank");
+        assert_eq!(record.status_family.as_str(), "returned");
+        assert_eq!(record.metadata["channel"], "manual_import");
     }
 }

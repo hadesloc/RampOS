@@ -18,6 +18,7 @@ use crate::repository::ledger::LedgerRepository;
 use crate::repository::tenant::TenantRepository;
 use crate::repository::webhook::WebhookRepository;
 use crate::repository::BankConfirmationRepository;
+use crate::service::{CorridorPackService, PaymentMethodCapabilityService};
 use crate::service::webhook::{WebhookEventType, WebhookService};
 use chrono::Utc;
 use ramp_adapter::{
@@ -61,6 +62,10 @@ pub struct ActivityContext {
     pub bank_confirmations: Arc<RwLock<HashMap<String, BankConfirmation>>>,
     /// Bank confirmation repository for database-backed polling
     pub bank_confirmation_repo: Option<Arc<dyn BankConfirmationRepository>>,
+    /// Optional corridor-pack service for bounded pilot corridor resolution.
+    pub corridor_pack_service: Option<Arc<CorridorPackService>>,
+    /// Optional payment-method capability service for bounded pilot corridor resolution.
+    pub payment_method_capability_service: Option<Arc<PaymentMethodCapabilityService>>,
 }
 
 impl ActivityContext {
@@ -78,6 +83,8 @@ impl ActivityContext {
             rails_adapters: Arc::new(RwLock::new(HashMap::new())),
             bank_confirmations: Arc::new(RwLock::new(HashMap::new())),
             bank_confirmation_repo: None,
+            corridor_pack_service: None,
+            payment_method_capability_service: None,
         }
     }
 
@@ -97,6 +104,8 @@ impl ActivityContext {
             rails_adapters: Arc::new(RwLock::new(adapters)),
             bank_confirmations: Arc::new(RwLock::new(HashMap::new())),
             bank_confirmation_repo: None,
+            corridor_pack_service: None,
+            payment_method_capability_service: None,
         }
     }
 
@@ -106,6 +115,17 @@ impl ActivityContext {
         repo: Arc<dyn BankConfirmationRepository>,
     ) -> Self {
         self.bank_confirmation_repo = Some(repo);
+        self
+    }
+
+    /// Configure bounded pilot corridor services without changing default routing behavior.
+    pub fn with_pilot_corridor_services(
+        mut self,
+        corridor_pack_service: Arc<CorridorPackService>,
+        payment_method_capability_service: Arc<PaymentMethodCapabilityService>,
+    ) -> Self {
+        self.corridor_pack_service = Some(corridor_pack_service);
+        self.payment_method_capability_service = Some(payment_method_capability_service);
         self
     }
 
@@ -249,6 +269,81 @@ pub async fn init_activity_context_full(
 /// Get the activity context
 fn get_context() -> Option<&'static ActivityContext> {
     ACTIVITY_CONTEXT.get()
+}
+
+fn parse_pilot_corridor_code(provider: &str) -> Option<&str> {
+    provider.strip_prefix("corridor:")
+}
+
+async fn resolve_pilot_corridor_provider(
+    ctx: &ActivityContext,
+    tenant_id: &str,
+    requested_provider: &str,
+    settlement_direction: &str,
+    method_family: &str,
+) -> String {
+    let Some(corridor_code) = parse_pilot_corridor_code(requested_provider) else {
+        return requested_provider.to_string();
+    };
+
+    let (Some(corridor_pack_service), Some(payment_method_capability_service)) = (
+        ctx.corridor_pack_service.as_ref(),
+        ctx.payment_method_capability_service.as_ref(),
+    ) else {
+        return requested_provider.to_string();
+    };
+
+    let Ok(Some(corridor)) = corridor_pack_service
+        .get_corridor_pack(Some(tenant_id), corridor_code)
+        .await
+    else {
+        return requested_provider.to_string();
+    };
+
+    let Ok(capabilities) = payment_method_capability_service
+        .list_capabilities(Some(&corridor.corridor_pack_id), None)
+        .await
+    else {
+        return requested_provider.to_string();
+    };
+
+    let supports_method = capabilities.capabilities.iter().any(|capability| {
+        capability
+            .settlement_direction
+            .eq_ignore_ascii_case(settlement_direction)
+            && capability.method_family.eq_ignore_ascii_case(method_family)
+    });
+
+    if !supports_method {
+        return requested_provider.to_string();
+    }
+
+    corridor
+        .endpoints
+        .iter()
+        .find(|endpoint| {
+            endpoint
+                .endpoint_role
+                .eq_ignore_ascii_case(if settlement_direction.eq_ignore_ascii_case("payout") {
+                    "destination"
+                } else {
+                    "source"
+                })
+                && endpoint
+                    .method_family
+                    .as_deref()
+                    .map(|value| value.eq_ignore_ascii_case(method_family))
+                    .unwrap_or(true)
+        })
+        .and_then(|endpoint| {
+            endpoint
+                .adapter_key
+                .clone()
+                .or_else(|| endpoint.provider_key.clone())
+                .or_else(|| endpoint.partner_id.clone())
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| requested_provider.to_string())
 }
 
 /// Payin workflow activities
@@ -1058,7 +1153,16 @@ pub mod payout_activities {
         let ctx = get_context();
 
         if let Some(ctx) = ctx {
-            if let Some(adapter) = ctx.get_adapter(&request.rails_provider).await {
+            let resolved_provider = resolve_pilot_corridor_provider(
+                ctx,
+                &request.tenant_id,
+                &request.rails_provider,
+                "payout",
+                "push_transfer",
+            )
+            .await;
+
+            if let Some(adapter) = ctx.get_adapter(&resolved_provider).await {
                 let adapter_request = AdapterPayoutRequest {
                     reference_code: request.reference_code.clone(),
                     amount_vnd: Decimal::from(request.amount_vnd),
@@ -1236,6 +1340,211 @@ pub mod payout_activities {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::repository::{
+        CorridorComplianceHookRecord, CorridorCutoffPolicyRecord, CorridorEligibilityRuleRecord,
+        CorridorEndpointRecord, CorridorFeeProfileRecord, CorridorPackRecord,
+        CorridorPackRepository, CorridorRolloutScopeRecord, PaymentMethodCapabilityRecord,
+        PaymentMethodCapabilityRepository,
+    };
+    use crate::test_utils::{MockLedgerRepository, MockTenantRepository, MockWebhookRepository};
+    use async_trait::async_trait;
+    use ramp_compliance::{case::CaseManager, InMemoryCaseStore};
+    use std::sync::{Arc, Mutex, Once};
+
+    #[derive(Default)]
+    struct MockPilotCorridorRepository {
+        corridor: Mutex<Option<CorridorPackRecord>>,
+    }
+
+    #[async_trait]
+    impl CorridorPackRepository for MockPilotCorridorRepository {
+        async fn upsert_corridor_pack(&self, _request: &crate::repository::UpsertCorridorPackRequest) -> ramp_common::Result<()> {
+            Ok(())
+        }
+        async fn upsert_endpoint(&self, _request: &crate::repository::UpsertCorridorEndpointRequest) -> ramp_common::Result<()> {
+            Ok(())
+        }
+        async fn upsert_fee_profile(&self, _request: &crate::repository::UpsertCorridorFeeProfileRequest) -> ramp_common::Result<()> {
+            Ok(())
+        }
+        async fn upsert_cutoff_policy(&self, _request: &crate::repository::UpsertCorridorCutoffPolicyRequest) -> ramp_common::Result<()> {
+            Ok(())
+        }
+        async fn upsert_compliance_hook(&self, _request: &crate::repository::UpsertCorridorComplianceHookRequest) -> ramp_common::Result<()> {
+            Ok(())
+        }
+        async fn upsert_rollout_scope(&self, _request: &crate::repository::UpsertCorridorRolloutScopeRequest) -> ramp_common::Result<()> {
+            Ok(())
+        }
+        async fn upsert_eligibility_rule(&self, _request: &crate::repository::UpsertCorridorEligibilityRuleRequest) -> ramp_common::Result<()> {
+            Ok(())
+        }
+        async fn list_corridor_packs(&self, tenant_id: Option<&str>) -> ramp_common::Result<Vec<CorridorPackRecord>> {
+            Ok(self
+                .corridor
+                .lock()
+                .expect("corridor lock")
+                .clone()
+                .into_iter()
+                .filter(|record| tenant_id.map(|v| record.tenant_id.as_deref() == Some(v)).unwrap_or(true))
+                .collect())
+        }
+        async fn get_corridor_pack(&self, tenant_id: Option<&str>, corridor_code: &str) -> ramp_common::Result<Option<CorridorPackRecord>> {
+            Ok(self
+                .corridor
+                .lock()
+                .expect("corridor lock")
+                .clone()
+                .filter(|record| {
+                    record.corridor_code == corridor_code
+                        && tenant_id.map(|v| record.tenant_id.as_deref() == Some(v)).unwrap_or(true)
+                }))
+        }
+    }
+
+    #[derive(Default)]
+    struct MockPilotPaymentMethodRepository {
+        capabilities: Mutex<Vec<PaymentMethodCapabilityRecord>>,
+    }
+
+    #[async_trait]
+    impl PaymentMethodCapabilityRepository for MockPilotPaymentMethodRepository {
+        async fn upsert_payment_method_capability(
+            &self,
+            _request: &crate::repository::UpsertPaymentMethodCapabilityRequest,
+        ) -> ramp_common::Result<()> {
+            Ok(())
+        }
+
+        async fn list_payment_method_capabilities(
+            &self,
+            corridor_pack_id: Option<&str>,
+            _partner_capability_id: Option<&str>,
+        ) -> ramp_common::Result<Vec<PaymentMethodCapabilityRecord>> {
+            Ok(self
+                .capabilities
+                .lock()
+                .expect("capabilities lock")
+                .iter()
+                .filter(|record| corridor_pack_id.map(|v| record.corridor_pack_id == v).unwrap_or(true))
+                .cloned()
+                .collect())
+        }
+    }
+
+    fn ensure_pilot_test_activity_context() {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            let corridor_repo = Arc::new(MockPilotCorridorRepository {
+                corridor: Mutex::new(Some(CorridorPackRecord {
+                    corridor_pack_id: "corridor_vn_hk".to_string(),
+                    tenant_id: Some("tenant_pilot".to_string()),
+                    corridor_code: "VN_HK_PAYOUT".to_string(),
+                    source_market: "VN".to_string(),
+                    destination_market: "HK".to_string(),
+                    source_currency: "VND".to_string(),
+                    destination_currency: "HKD".to_string(),
+                    settlement_direction: "PAYOUT".to_string(),
+                    fee_model: "shared".to_string(),
+                    lifecycle_state: "pilot".to_string(),
+                    rollout_state: "approved".to_string(),
+                    eligibility_state: "active".to_string(),
+                    metadata: serde_json::json!({}),
+                    endpoints: vec![CorridorEndpointRecord {
+                        endpoint_id: "endpoint_hk_destination".to_string(),
+                        endpoint_role: "destination".to_string(),
+                        partner_id: None,
+                        provider_key: None,
+                        adapter_key: Some("mock".to_string()),
+                        entity_type: "individual".to_string(),
+                        rail: "fps".to_string(),
+                        method_family: Some("push_transfer".to_string()),
+                        settlement_mode: Some("same_day".to_string()),
+                        instrument_family: Some("bank_transfer".to_string()),
+                        metadata: serde_json::json!({}),
+                    }],
+                    fee_profiles: vec![CorridorFeeProfileRecord {
+                        fee_profile_id: "fee_hk".to_string(),
+                        fee_currency: "HKD".to_string(),
+                        base_fee: Some("25.00".to_string()),
+                        fx_spread_bps: Some(15),
+                        liquidity_cost_bps: None,
+                        surcharge_bps: None,
+                        metadata: serde_json::json!({}),
+                    }],
+                    cutoff_policies: vec![CorridorCutoffPolicyRecord {
+                        cutoff_policy_id: "cutoff_hk".to_string(),
+                        timezone: "Asia/Hong_Kong".to_string(),
+                        cutoff_windows: serde_json::json!([{"day":"weekday","cutoff":"17:00"}]),
+                        holiday_calendar: Some("HK".to_string()),
+                        retry_rule: Some("next_business_day".to_string()),
+                        exception_policy: None,
+                        metadata: serde_json::json!({}),
+                    }],
+                    compliance_hooks: vec![CorridorComplianceHookRecord {
+                        compliance_hook_id: "hook_hk".to_string(),
+                        hook_kind: "travel_rule".to_string(),
+                        provider_key: Some("travel_rule_provider".to_string()),
+                        required: true,
+                        config: serde_json::json!({}),
+                        metadata: serde_json::json!({}),
+                    }],
+                    rollout_scopes: vec![CorridorRolloutScopeRecord {
+                        rollout_scope_id: "rollout_hk".to_string(),
+                        tenant_id: Some("tenant_pilot".to_string()),
+                        environment: "production".to_string(),
+                        geography: Some("HK".to_string()),
+                        method_family: Some("push_transfer".to_string()),
+                        rollout_state: "approved".to_string(),
+                        approval_reference: None,
+                        metadata: serde_json::json!({}),
+                    }],
+                    eligibility_rules: vec![CorridorEligibilityRuleRecord {
+                        eligibility_rule_id: "eligibility_hk".to_string(),
+                        partner_id: None,
+                        entity_type: Some("individual".to_string()),
+                        method_family: Some("push_transfer".to_string()),
+                        amount_bounds: serde_json::json!({"min":"100","max":"10000"}),
+                        compliance_requirements: serde_json::json!({"travelRule":true}),
+                        metadata: serde_json::json!({}),
+                    }],
+                })),
+            });
+
+            let payment_repo = Arc::new(MockPilotPaymentMethodRepository {
+                capabilities: Mutex::new(vec![PaymentMethodCapabilityRecord {
+                    payment_method_capability_id: "pmc_hk_push_transfer".to_string(),
+                    corridor_pack_id: "corridor_vn_hk".to_string(),
+                    partner_capability_id: None,
+                    method_family: "push_transfer".to_string(),
+                    funding_source: Some("bank_account".to_string()),
+                    settlement_direction: "payout".to_string(),
+                    presentment_model: Some("server_driven".to_string()),
+                    card_funding_enabled: false,
+                    policy_flags: serde_json::json!({}),
+                    metadata: serde_json::json!({}),
+                }]),
+            });
+
+            let ctx = ActivityContext::new(
+                Arc::new(MockLedgerRepository::new()),
+                Arc::new(MockWebhookRepository::new()),
+                Arc::new(MockTenantRepository::new()),
+                Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new()))),
+            )
+            .with_pilot_corridor_services(
+                Arc::new(CorridorPackService::with_repository(corridor_repo)),
+                Arc::new(PaymentMethodCapabilityService::with_repository(payment_repo)),
+            );
+
+            let adapters = ramp_adapter::create_test_adapters();
+            let ctx = ActivityContext {
+                rails_adapters: Arc::new(RwLock::new(adapters)),
+                ..ctx
+            };
+            init_activity_context(ctx);
+        });
+    }
 
     #[tokio::test]
     async fn test_issue_instruction_simulation() {
@@ -1323,5 +1632,51 @@ mod tests {
 
         let result = trade_activities::settle_in_ledger(&input).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_pilot_corridor_payout_uses_configured_adapter() {
+        ensure_pilot_test_activity_context();
+
+        let request = payout_activities::PayoutRequest {
+            tenant_id: "tenant_pilot".to_string(),
+            user_id: "user_pilot".to_string(),
+            intent_id: "intent_pilot".to_string(),
+            reference_code: "REF_PILOT_001".to_string(),
+            amount_vnd: 500_000,
+            rails_provider: "corridor:VN_HK_PAYOUT".to_string(),
+            recipient_bank_code: "004".to_string(),
+            recipient_account_number: "123456789".to_string(),
+            recipient_account_name: "Pilot User".to_string(),
+            description: "pilot corridor payout".to_string(),
+        };
+
+        let result = payout_activities::initiate_bank_transfer(&request)
+            .await
+            .expect("pilot corridor payout should use configured adapter");
+        assert!(result.provider_tx_id.starts_with("MOCK_"));
+    }
+
+    #[tokio::test]
+    async fn test_unknown_pilot_corridor_keeps_simulation_fallback() {
+        ensure_pilot_test_activity_context();
+
+        let request = payout_activities::PayoutRequest {
+            tenant_id: "tenant_pilot".to_string(),
+            user_id: "user_pilot".to_string(),
+            intent_id: "intent_pilot_unknown".to_string(),
+            reference_code: "REF_PILOT_002".to_string(),
+            amount_vnd: 500_000,
+            rails_provider: "corridor:UNKNOWN".to_string(),
+            recipient_bank_code: "004".to_string(),
+            recipient_account_number: "123456789".to_string(),
+            recipient_account_name: "Pilot User".to_string(),
+            description: "unknown pilot corridor payout".to_string(),
+        };
+
+        let result = payout_activities::initiate_bank_transfer(&request)
+            .await
+            .expect("unknown pilot corridor should keep fallback behavior");
+        assert!(result.provider_tx_id.starts_with("SIM_"));
     }
 }

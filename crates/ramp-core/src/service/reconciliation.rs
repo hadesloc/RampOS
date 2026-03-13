@@ -135,9 +135,34 @@ pub struct ReconciliationQueueItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ReconciliationEvidenceSource {
+    pub evidence_source_id: String,
+    pub source_family: String,
+    pub source_ref: String,
+    pub snapshot_at: DateTime<Utc>,
+    pub entity_scope: String,
+    pub corridor_code: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconciliationLineageRecord {
+    pub lineage_id: String,
+    pub lineage_kind: String,
+    pub reference_id: String,
+    pub parent_reference_id: Option<String>,
+    pub entity_scope: String,
+    pub corridor_code: Option<String>,
+    pub operator_review_state: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReconciliationEvidencePack {
     pub queue_item: ReconciliationQueueItem,
     pub settlement_ids: Vec<String>,
+    pub evidence_sources: Vec<ReconciliationEvidenceSource>,
+    pub lineage_records: Vec<ReconciliationLineageRecord>,
     pub replay_entries: Vec<ReplayTimelineEntry>,
     pub incident_entries: Vec<IncidentTimelineEntry>,
     pub generated_at: DateTime<Utc>,
@@ -485,13 +510,111 @@ impl ReconciliationService {
         );
         self.sort_incident_entries(&mut incident_entries);
 
+        let corridor_code = self
+            .corridor_code_for_evidence(discrepancy, &linked_settlements)
+            .map(str::to_string);
+        let evidence_sources =
+            self.build_evidence_sources(discrepancy, &linked_settlements, corridor_code.clone());
+        let lineage_records = self.build_lineage_records(
+            &queue_item,
+            &evidence_sources,
+            corridor_code,
+        );
+
         Ok(ReconciliationEvidencePack {
             queue_item,
             settlement_ids,
+            evidence_sources,
+            lineage_records,
             replay_entries,
             incident_entries,
             generated_at: Utc::now(),
         })
+    }
+
+    fn build_evidence_sources(
+        &self,
+        discrepancy: &Discrepancy,
+        settlements: &[crate::service::settlement::Settlement],
+        corridor_code: Option<String>,
+    ) -> Vec<ReconciliationEvidenceSource> {
+        let mut sources = Vec::new();
+
+        for settlement in settlements {
+            sources.push(ReconciliationEvidenceSource {
+                evidence_source_id: format!("evidence_settlement_{}", settlement.id),
+                source_family: "settlement".to_string(),
+                source_ref: format!("settlement://{}", settlement.id),
+                snapshot_at: settlement.updated_at,
+                entity_scope: "treasury:offramp_settlement".to_string(),
+                corridor_code: corridor_code.clone(),
+            });
+        }
+
+        if let Some(tx_hash) = &discrepancy.on_chain_tx {
+            sources.push(ReconciliationEvidenceSource {
+                evidence_source_id: format!("evidence_chain_{}", tx_hash),
+                source_family: "chain".to_string(),
+                source_ref: format!("chain://ethereum/{}", tx_hash),
+                snapshot_at: discrepancy.detected_at,
+                entity_scope: "treasury:onchain_confirmation".to_string(),
+                corridor_code: corridor_code.clone(),
+            });
+        }
+
+        if sources.is_empty() {
+            sources.push(ReconciliationEvidenceSource {
+                evidence_source_id: format!("evidence_discrepancy_{}", discrepancy.id),
+                source_family: "operator_review".to_string(),
+                source_ref: format!("reconciliation://{}", discrepancy.id),
+                snapshot_at: discrepancy.detected_at,
+                entity_scope: "operator_queue:reconciliation".to_string(),
+                corridor_code: Some("USDT_VN_OFFRAMP".to_string()),
+            });
+        }
+
+        sources
+    }
+
+    fn build_lineage_records(
+        &self,
+        queue_item: &ReconciliationQueueItem,
+        evidence_sources: &[ReconciliationEvidenceSource],
+        corridor_code: Option<String>,
+    ) -> Vec<ReconciliationLineageRecord> {
+        let mut records = vec![ReconciliationLineageRecord {
+            lineage_id: format!("lineage_discrepancy_{}", queue_item.discrepancy_id),
+            lineage_kind: "discrepancy".to_string(),
+            reference_id: queue_item.discrepancy_id.clone(),
+            parent_reference_id: None,
+            entity_scope: "operator_queue:reconciliation".to_string(),
+            corridor_code: corridor_code.clone(),
+            operator_review_state: "review_required".to_string(),
+        }];
+
+        records.extend(evidence_sources.iter().map(|source| ReconciliationLineageRecord {
+            lineage_id: format!("lineage_source_{}", source.evidence_source_id),
+            lineage_kind: "evidence_source".to_string(),
+            reference_id: source.evidence_source_id.clone(),
+            parent_reference_id: Some(queue_item.discrepancy_id.clone()),
+            entity_scope: source.entity_scope.clone(),
+            corridor_code: source.corridor_code.clone(),
+            operator_review_state: "review_required".to_string(),
+        }));
+
+        records
+    }
+
+    fn corridor_code_for_evidence(
+        &self,
+        discrepancy: &Discrepancy,
+        settlements: &[crate::service::settlement::Settlement],
+    ) -> Option<&'static str> {
+        if discrepancy.on_chain_tx.is_some() || !settlements.is_empty() {
+            Some("USDT_VN_OFFRAMP")
+        } else {
+            None
+        }
     }
 
     /// Check for amount mismatches between a matched settlement and on-chain tx.

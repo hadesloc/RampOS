@@ -1,8 +1,10 @@
 //! Service layer - Business logic
 
 pub mod bridge;
+pub mod canonical_payment;
 pub mod compliance_audit;
 pub mod config_bundle;
+pub mod corridor_pack;
 pub mod crypto;
 pub mod deposit;
 pub mod escrow;
@@ -22,8 +24,10 @@ pub mod offramp_fees;
 mod offramp_tests;
 pub mod onboarding;
 pub mod passkey;
+pub mod partner_registry;
 pub mod payin;
 pub mod payout;
+pub mod payment_method_capability;
 #[cfg(test)]
 mod payout_compliance_tests;
 pub mod reconciliation;
@@ -36,6 +40,7 @@ pub mod settlement;
 pub mod sla_guardian;
 pub mod timeout;
 pub mod treasury;
+pub mod treasury_evidence;
 pub mod trade;
 pub mod user;
 pub mod webhook;
@@ -50,8 +55,14 @@ pub mod withdraw;
 pub mod withdraw_policy_provider;
 
 pub use bridge::BridgeService;
+pub use canonical_payment::{
+    map_generic_bank_status, map_napas_status, map_vietqr_status, CanonicalPaymentDirection,
+    CanonicalPaymentInput, CanonicalPaymentParty, CanonicalPaymentRecord,
+    CanonicalPaymentStatusFamily,
+};
 pub use compliance_audit::{AuditContext, AuditLogExport, ComplianceAuditService, ExportFormat};
 pub use config_bundle::{ConfigBundleArtifact, ConfigBundleService, WhitelistedExtensionAction};
+pub use corridor_pack::{CorridorPackService, CorridorPackSnapshot, UpsertCorridorPackBundle};
 pub use crypto::CryptoService;
 pub use deposit::DepositService;
 pub use event_catalog::{
@@ -81,8 +92,15 @@ pub use net_settlement::{
 };
 pub use onboarding::OnboardingService;
 pub use passkey::PasskeyService;
+pub use partner_registry::{
+    PartnerRegistryService, PartnerRegistrySnapshot, UpsertPartnerCapabilityBundle,
+    UpsertPartnerRegistryRecordRequest,
+};
 pub use payin::PayinService;
 pub use payout::PayoutService;
+pub use payment_method_capability::{
+    PaymentMethodCapabilityService, PaymentMethodCapabilitySnapshot,
+};
 pub use reconciliation::{
     Discrepancy, DiscrepancyKind, OnChainTransaction, ReconciliationAgeBucket,
     ReconciliationEvidencePack, ReconciliationMatchConfidence, ReconciliationOwnerLane,
@@ -113,6 +131,10 @@ pub use treasury::{
     TreasuryActionMode, TreasuryControlTowerSnapshot, TreasuryExposureSummary,
     TreasuryFloatSlice, TreasuryLiquidityForecast, TreasuryRecommendation, TreasuryService,
     TreasuryStressAlert, TreasuryYieldAllocation,
+};
+pub use treasury_evidence::{
+    normalize_treasury_balances, TreasuryEvidenceImportQuery, TreasuryEvidenceImportRecord,
+    TreasuryEvidenceImportStore, UpsertTreasuryEvidenceImportRequest,
 };
 pub use trade::TradeService;
 pub use user::UserService;

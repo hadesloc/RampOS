@@ -245,6 +245,79 @@ async fn treasury_workbench_supports_stable_fixture_scenario() {
 }
 
 #[tokio::test]
+async fn treasury_workbench_includes_safeguarding_and_reserve_overlays() {
+    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    let app = setup_app("tenant_treasury_overlays").await;
+
+    let request = build_signed_admin_request(
+        "GET",
+        "/v1/admin/treasury/workbench",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        TEST_ADMIN_KEY,
+    );
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert!(payload["snapshot"]["safeguardingOverlays"].as_array().unwrap().len() >= 1);
+    assert_eq!(
+        payload["snapshot"]["safeguardingOverlays"][0]["ledgerMode"],
+        "overlay_only"
+    );
+    assert_eq!(
+        payload["snapshot"]["safeguardingOverlays"][0]["evidenceRef"]["evidenceImportId"],
+        "tei_bank_vcb_001"
+    );
+    assert_eq!(
+        payload["snapshot"]["reservePositions"][0]["corridorCode"],
+        "VN_SG_PAYOUT"
+    );
+    assert_eq!(
+        payload["snapshot"]["reservePositions"][0]["status"],
+        "breached"
+    );
+}
+
+#[tokio::test]
+async fn treasury_export_json_includes_overlay_context() {
+    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    let app = setup_app("tenant_treasury_export_json").await;
+
+    let request = build_signed_admin_request(
+        "GET",
+        "/v1/admin/treasury/export?format=json",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        TEST_ADMIN_KEY,
+    );
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get(header::CONTENT_TYPE).unwrap(),
+        "application/json"
+    );
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(
+        payload["safeguardingOverlays"][0]["entityScope"],
+        "tenant_demo:client_money_vn"
+    );
+    assert_eq!(
+        payload["reservePositions"][0]["evidenceRef"]["sourceRef"],
+        "bank://vcb/main"
+    );
+}
+
+#[tokio::test]
 async fn treasury_workbench_export_returns_csv_attachment() {
     std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
     let app = setup_app("tenant_treasury_export").await;
@@ -276,4 +349,6 @@ async fn treasury_workbench_export_returns_csv_attachment() {
     let csv = String::from_utf8(body.to_vec()).unwrap();
     assert!(csv.contains("recommendation_id,category,asset,amount"));
     assert!(csv.contains("treasury_prefund_bank_vnd"));
+    assert!(csv.contains("overlay_id,overlay_type,entity_scope"));
+    assert!(csv.contains("reserve_id,reserve_kind,entity_scope"));
 }

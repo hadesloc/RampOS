@@ -47,6 +47,52 @@ pub struct ExecutionRoute {
     pub price_impact_bps: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RouteComplianceStatus {
+    Clear,
+    ReviewRequired,
+    Blocked,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteConstraintSignal {
+    pub candidate_id: String,
+    pub partner_id: Option<String>,
+    pub corridor_code: Option<String>,
+    pub treasury_penalty_bps: u32,
+    pub partner_quality_penalty_bps: u32,
+    pub corridor_eligible: bool,
+    pub compliance_status: RouteComplianceStatus,
+    pub rejection_reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteCandidateBreakdown {
+    pub candidate_id: String,
+    pub partner_id: Option<String>,
+    pub corridor_code: Option<String>,
+    pub base_output: u128,
+    pub adjusted_output: u128,
+    pub treasury_penalty_bps: u32,
+    pub partner_quality_penalty_bps: u32,
+    pub corridor_eligible: bool,
+    pub compliance_status: RouteComplianceStatus,
+    pub rejection_reasons: Vec<String>,
+    pub selected: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteSelectionExplanation {
+    pub policy_version: Option<String>,
+    pub selected_candidate_id: String,
+    pub winning_reason: String,
+    pub candidate_breakdowns: Vec<RouteCandidateBreakdown>,
+}
+
 /// Cached route entry
 struct CachedRoute {
     route: ExecutionRoute,
@@ -132,6 +178,91 @@ impl IntentSolver {
 
         self.cache_route(&key, &best);
         Ok(best)
+    }
+
+    pub fn select_route_with_constraints(
+        &self,
+        candidates: Vec<ExecutionRoute>,
+        policy: Option<&LiquidityPolicyConfig>,
+        constraint_signals: &[RouteConstraintSignal],
+    ) -> Option<(ExecutionRoute, RouteSelectionExplanation)> {
+        if candidates.is_empty() {
+            return None;
+        }
+
+        let mut breakdowns: Vec<RouteCandidateBreakdown> = candidates
+            .iter()
+            .enumerate()
+            .map(|(index, route)| {
+                let candidate_id = index.to_string();
+                let signal = constraint_signals
+                    .iter()
+                    .find(|value| value.candidate_id == candidate_id);
+
+                let treasury_penalty_bps = signal.map(|value| value.treasury_penalty_bps).unwrap_or(0);
+                let partner_quality_penalty_bps = signal
+                    .map(|value| value.partner_quality_penalty_bps)
+                    .unwrap_or(0);
+                let corridor_eligible = signal.map(|value| value.corridor_eligible).unwrap_or(true);
+                let compliance_status = signal
+                    .map(|value| value.compliance_status.clone())
+                    .unwrap_or(RouteComplianceStatus::Clear);
+                let rejection_reasons = signal
+                    .map(|value| value.rejection_reasons.clone())
+                    .unwrap_or_default();
+                let adjusted_output = adjusted_output_for_constraints(
+                    route.total_output,
+                    treasury_penalty_bps,
+                    partner_quality_penalty_bps,
+                    corridor_eligible,
+                    &compliance_status,
+                );
+
+                RouteCandidateBreakdown {
+                    candidate_id,
+                    partner_id: signal.and_then(|value| value.partner_id.clone()),
+                    corridor_code: signal.and_then(|value| value.corridor_code.clone()),
+                    base_output: route.total_output,
+                    adjusted_output,
+                    treasury_penalty_bps,
+                    partner_quality_penalty_bps,
+                    corridor_eligible,
+                    compliance_status,
+                    rejection_reasons,
+                    selected: false,
+                }
+            })
+            .collect();
+
+        let winning_index = breakdowns
+            .iter()
+            .enumerate()
+            .filter(|(_, breakdown)| {
+                breakdown.corridor_eligible
+                    && breakdown.compliance_status != RouteComplianceStatus::Blocked
+            })
+            .max_by(|(_, left), (_, right)| {
+                left.adjusted_output
+                    .cmp(&right.adjusted_output)
+                    .then_with(|| compliance_rank(&left.compliance_status).cmp(&compliance_rank(&right.compliance_status)))
+            })
+            .map(|(index, _)| index)?;
+
+        breakdowns[winning_index].selected = true;
+        let winning_candidate = breakdowns[winning_index].clone();
+
+        Some((
+            candidates.get(winning_index)?.clone(),
+            RouteSelectionExplanation {
+                policy_version: policy.map(|value| value.version.clone()),
+                selected_candidate_id: winning_candidate.candidate_id.clone(),
+                winning_reason: format!(
+                    "Selected route balanced treasury, partner, corridor, and compliance constraints with adjusted output {}.",
+                    winning_candidate.adjusted_output
+                ),
+                candidate_breakdowns: breakdowns,
+            },
+        ))
     }
 
     /// Find cheapest direct route (swap only, same chain)
@@ -381,6 +512,32 @@ impl IntentSolver {
 
 fn decimal_from_u128(value: u128) -> Decimal {
     Decimal::from_str_exact(&value.to_string()).unwrap_or(Decimal::ZERO)
+}
+
+fn adjusted_output_for_constraints(
+    base_output: u128,
+    treasury_penalty_bps: u32,
+    partner_quality_penalty_bps: u32,
+    corridor_eligible: bool,
+    compliance_status: &RouteComplianceStatus,
+) -> u128 {
+    if !corridor_eligible || *compliance_status == RouteComplianceStatus::Blocked {
+        return 0;
+    }
+
+    let total_penalty_bps = treasury_penalty_bps
+        .saturating_add(partner_quality_penalty_bps)
+        .min(10_000);
+    let penalty = base_output.saturating_mul(total_penalty_bps as u128) / 10_000;
+    base_output.saturating_sub(penalty)
+}
+
+fn compliance_rank(status: &RouteComplianceStatus) -> u8 {
+    match status {
+        RouteComplianceStatus::Blocked => 0,
+        RouteComplianceStatus::ReviewRequired => 1,
+        RouteComplianceStatus::Clear => 2,
+    }
 }
 
 impl Default for IntentSolver {
@@ -685,5 +842,123 @@ mod tests {
 
         assert_ne!(no_policy, v1);
         assert_ne!(v1, v2);
+    }
+
+    #[test]
+    fn test_select_route_with_constraints_prefers_adjusted_output() {
+        let solver = IntentSolver::new();
+        let policy = crate::service::liquidity_policy::LiquidityPolicyConfig {
+            version: "liquidity-policy-default-v1".to_string(),
+            direction: crate::service::liquidity_policy::LiquidityPolicyDirection::Offramp,
+            reliability_window_kind: "ROLLING_30D".to_string(),
+            min_reliability_observations: 3,
+            weights: crate::service::liquidity_policy::LiquidityPolicyWeights::default(),
+        };
+        let candidates = vec![
+            ExecutionRoute {
+                steps: Vec::new(),
+                total_input: 1000,
+                total_output: 995,
+                total_fee: 5,
+                estimated_time_secs: 120,
+                price_impact_bps: 20,
+            },
+            ExecutionRoute {
+                steps: Vec::new(),
+                total_input: 1000,
+                total_output: 990,
+                total_fee: 10,
+                estimated_time_secs: 90,
+                price_impact_bps: 10,
+            },
+        ];
+        let constraints = vec![
+            RouteConstraintSignal {
+                candidate_id: "0".to_string(),
+                partner_id: Some("lp_alpha".to_string()),
+                corridor_code: Some("US_VN_OFFRAMP".to_string()),
+                treasury_penalty_bps: 220,
+                partner_quality_penalty_bps: 225,
+                corridor_eligible: true,
+                compliance_status: RouteComplianceStatus::ReviewRequired,
+                rejection_reasons: vec!["manual_compliance_review".to_string()],
+            },
+            RouteConstraintSignal {
+                candidate_id: "1".to_string(),
+                partner_id: Some("lp_beta".to_string()),
+                corridor_code: Some("US_VN_OFFRAMP".to_string()),
+                treasury_penalty_bps: 25,
+                partner_quality_penalty_bps: 40,
+                corridor_eligible: true,
+                compliance_status: RouteComplianceStatus::Clear,
+                rejection_reasons: Vec::new(),
+            },
+        ];
+
+        let (selected, explanation) = solver
+            .select_route_with_constraints(candidates, Some(&policy), &constraints)
+            .expect("route should be selected");
+
+        assert_eq!(selected.total_output, 990);
+        assert_eq!(explanation.selected_candidate_id, "1");
+        assert_eq!(explanation.candidate_breakdowns.len(), 2);
+        assert_eq!(
+            explanation.candidate_breakdowns[0].compliance_status,
+            RouteComplianceStatus::ReviewRequired
+        );
+        assert!(explanation.winning_reason.contains("treasury"));
+    }
+
+    #[test]
+    fn test_select_route_with_constraints_rejects_blocked_or_ineligible_candidates() {
+        let solver = IntentSolver::new();
+        let candidates = vec![
+            ExecutionRoute {
+                steps: Vec::new(),
+                total_input: 1000,
+                total_output: 998,
+                total_fee: 2,
+                estimated_time_secs: 60,
+                price_impact_bps: 5,
+            },
+            ExecutionRoute {
+                steps: Vec::new(),
+                total_input: 1000,
+                total_output: 991,
+                total_fee: 9,
+                estimated_time_secs: 80,
+                price_impact_bps: 8,
+            },
+        ];
+        let constraints = vec![
+            RouteConstraintSignal {
+                candidate_id: "0".to_string(),
+                partner_id: Some("lp_alpha".to_string()),
+                corridor_code: Some("US_VN_OFFRAMP".to_string()),
+                treasury_penalty_bps: 0,
+                partner_quality_penalty_bps: 0,
+                corridor_eligible: false,
+                compliance_status: RouteComplianceStatus::Blocked,
+                rejection_reasons: vec!["corridor_ineligible".to_string()],
+            },
+            RouteConstraintSignal {
+                candidate_id: "1".to_string(),
+                partner_id: Some("lp_beta".to_string()),
+                corridor_code: Some("US_VN_OFFRAMP".to_string()),
+                treasury_penalty_bps: 10,
+                partner_quality_penalty_bps: 10,
+                corridor_eligible: true,
+                compliance_status: RouteComplianceStatus::Clear,
+                rejection_reasons: Vec::new(),
+            },
+        ];
+
+        let (selected, explanation) = solver
+            .select_route_with_constraints(candidates, None, &constraints)
+            .expect("second route should remain eligible");
+
+        assert_eq!(selected.total_output, 991);
+        assert_eq!(explanation.selected_candidate_id, "1");
+        assert_eq!(explanation.candidate_breakdowns[0].adjusted_output, 0);
     }
 }

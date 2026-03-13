@@ -77,6 +77,46 @@ pub struct TreasuryRecommendation {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TreasuryEvidenceReference {
+    pub evidence_import_id: String,
+    pub source_family: String,
+    pub source_ref: String,
+    pub snapshot_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TreasurySafeguardingOverlay {
+    pub overlay_id: String,
+    pub overlay_type: String,
+    pub entity_scope: String,
+    pub corridor_code: Option<String>,
+    pub asset: String,
+    pub ledger_mode: String,
+    pub gross_balance: String,
+    pub safeguarded_balance: String,
+    pub shortfall_amount: String,
+    pub coverage_ratio: String,
+    pub evidence_ref: TreasuryEvidenceReference,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TreasuryReservePosition {
+    pub reserve_id: String,
+    pub reserve_kind: String,
+    pub entity_scope: String,
+    pub corridor_code: Option<String>,
+    pub asset: String,
+    pub required_balance: String,
+    pub available_balance: String,
+    pub excess_or_shortfall: String,
+    pub status: String,
+    pub evidence_ref: TreasuryEvidenceReference,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TreasuryYieldAllocation {
     pub protocol: String,
     pub principal_amount: String,
@@ -99,6 +139,8 @@ pub struct TreasuryControlTowerSnapshot {
     pub exposures: Vec<TreasuryExposureSummary>,
     pub alerts: Vec<TreasuryStressAlert>,
     pub recommendations: Vec<TreasuryRecommendation>,
+    pub safeguarding_overlays: Vec<TreasurySafeguardingOverlay>,
+    pub reserve_positions: Vec<TreasuryReservePosition>,
     pub yield_allocations: Vec<TreasuryYieldAllocation>,
 }
 
@@ -119,6 +161,8 @@ impl TreasuryService {
         let float_slices = sample_float_slices(scenario);
         let settlements = sample_settlements(scenario);
         let exposures = sample_exposures(scenario);
+        let safeguarding_overlays = sample_safeguarding_overlays(scenario);
+        let reserve_positions = sample_reserve_positions(scenario);
         let yield_allocations = sample_yield_allocations(scenario);
         let forecasts = build_forecasts(&float_slices, &settlements);
         let recommendations =
@@ -150,6 +194,8 @@ impl TreasuryService {
                 .collect(),
             alerts,
             recommendations,
+            safeguarding_overlays,
+            reserve_positions,
             yield_allocations,
         }
     }
@@ -517,6 +563,135 @@ fn sample_exposures(scenario: Option<&str>) -> Vec<LpReliabilitySnapshotRow> {
             metadata: json!({ "counterparty": "lp_beta" }),
             created_at: now,
             updated_at: now,
+        },
+    ]
+}
+
+fn sample_safeguarding_overlays(
+    scenario: Option<&str>,
+) -> Vec<TreasurySafeguardingOverlay> {
+    let now = Utc::now().to_rfc3339();
+
+    if matches!(scenario, Some("stable")) {
+        return vec![TreasurySafeguardingOverlay {
+            overlay_id: "sg_overlay_stable_001".to_string(),
+            overlay_type: "client_money".to_string(),
+            entity_scope: "tenant_demo:client_money_vn".to_string(),
+            corridor_code: Some("VN_SG_PAYOUT".to_string()),
+            asset: "VND".to_string(),
+            ledger_mode: "overlay_only".to_string(),
+            gross_balance: decimal_to_string(Decimal::from(650)),
+            safeguarded_balance: decimal_to_string(Decimal::from(650)),
+            shortfall_amount: decimal_to_string(Decimal::ZERO),
+            coverage_ratio: decimal_to_string(Decimal::from(100)),
+            evidence_ref: TreasuryEvidenceReference {
+                evidence_import_id: "tei_bank_vcb_001".to_string(),
+                source_family: "bank".to_string(),
+                source_ref: "bank://vcb/main".to_string(),
+                snapshot_at: now,
+            },
+        }];
+    }
+
+    vec![
+        TreasurySafeguardingOverlay {
+            overlay_id: "sg_overlay_active_001".to_string(),
+            overlay_type: "client_money".to_string(),
+            entity_scope: "tenant_demo:client_money_vn".to_string(),
+            corridor_code: Some("VN_SG_PAYOUT".to_string()),
+            asset: "VND".to_string(),
+            ledger_mode: "overlay_only".to_string(),
+            gross_balance: decimal_to_string(Decimal::from(540)),
+            safeguarded_balance: decimal_to_string(Decimal::from(525)),
+            shortfall_amount: decimal_to_string(Decimal::from(15)),
+            coverage_ratio: decimal_to_string(Decimal::new(9722, 2)),
+            evidence_ref: TreasuryEvidenceReference {
+                evidence_import_id: "tei_bank_vcb_001".to_string(),
+                source_family: "bank".to_string(),
+                source_ref: "bank://vcb/main".to_string(),
+                snapshot_at: now.clone(),
+            },
+        },
+        TreasurySafeguardingOverlay {
+            overlay_id: "sg_overlay_active_002".to_string(),
+            overlay_type: "reserve_ringfence".to_string(),
+            entity_scope: "tenant_demo:omnibus_usdt".to_string(),
+            corridor_code: Some("USDT_VN_OFFRAMP".to_string()),
+            asset: "USDT".to_string(),
+            ledger_mode: "overlay_only".to_string(),
+            gross_balance: decimal_to_string(Decimal::from(340)),
+            safeguarded_balance: decimal_to_string(Decimal::from(340)),
+            shortfall_amount: decimal_to_string(Decimal::ZERO),
+            coverage_ratio: decimal_to_string(Decimal::from(100)),
+            evidence_ref: TreasuryEvidenceReference {
+                evidence_import_id: "tei_chain_usdt_001".to_string(),
+                source_family: "chain".to_string(),
+                source_ref: "chain://ethereum/treasury_usdt".to_string(),
+                snapshot_at: now,
+            },
+        },
+    ]
+}
+
+fn sample_reserve_positions(
+    scenario: Option<&str>,
+) -> Vec<TreasuryReservePosition> {
+    let now = Utc::now().to_rfc3339();
+
+    if matches!(scenario, Some("stable")) {
+        return vec![TreasuryReservePosition {
+            reserve_id: "reserve_stable_001".to_string(),
+            reserve_kind: "corridor_prefund".to_string(),
+            entity_scope: "tenant_demo:bank_vcb".to_string(),
+            corridor_code: Some("VN_SG_PAYOUT".to_string()),
+            asset: "VND".to_string(),
+            required_balance: decimal_to_string(Decimal::from(250)),
+            available_balance: decimal_to_string(Decimal::from(290)),
+            excess_or_shortfall: decimal_to_string(Decimal::from(40)),
+            status: "healthy".to_string(),
+            evidence_ref: TreasuryEvidenceReference {
+                evidence_import_id: "tei_bank_vcb_001".to_string(),
+                source_family: "bank".to_string(),
+                source_ref: "bank://vcb/main".to_string(),
+                snapshot_at: now,
+            },
+        }];
+    }
+
+    vec![
+        TreasuryReservePosition {
+            reserve_id: "reserve_active_001".to_string(),
+            reserve_kind: "corridor_prefund".to_string(),
+            entity_scope: "tenant_demo:bank_vcb".to_string(),
+            corridor_code: Some("VN_SG_PAYOUT".to_string()),
+            asset: "VND".to_string(),
+            required_balance: decimal_to_string(Decimal::from(250)),
+            available_balance: decimal_to_string(Decimal::from(210)),
+            excess_or_shortfall: decimal_to_string(Decimal::from(-40)),
+            status: "breached".to_string(),
+            evidence_ref: TreasuryEvidenceReference {
+                evidence_import_id: "tei_bank_vcb_001".to_string(),
+                source_family: "bank".to_string(),
+                source_ref: "bank://vcb/main".to_string(),
+                snapshot_at: now.clone(),
+            },
+        },
+        TreasuryReservePosition {
+            reserve_id: "reserve_active_002".to_string(),
+            reserve_kind: "operational_buffer".to_string(),
+            entity_scope: "tenant_demo:client_money_vn".to_string(),
+            corridor_code: Some("USDT_VN_OFFRAMP".to_string()),
+            asset: "USDT".to_string(),
+            required_balance: decimal_to_string(Decimal::from(120)),
+            available_balance: decimal_to_string(Decimal::from(145)),
+            excess_or_shortfall: decimal_to_string(Decimal::from(25)),
+            status: "healthy".to_string(),
+            evidence_ref: TreasuryEvidenceReference {
+                evidence_import_id: "tei_chain_usdt_001".to_string(),
+                source_family: "chain".to_string(),
+                source_ref: "chain://ethereum/treasury_usdt".to_string(),
+                snapshot_at: now,
+            },
         },
     ]
 }

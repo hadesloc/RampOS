@@ -120,5 +120,46 @@ fn export_csv(snapshot: &TreasuryControlTowerSnapshot) -> String {
         ));
     }
 
+    rows.push(String::new());
+    rows.push("overlay_id,overlay_type,entity_scope,corridor_code,asset,ledger_mode,gross_balance,safeguarded_balance,shortfall_amount,coverage_ratio,evidence_import_id,source_family,source_ref".to_string());
+    for overlay in &snapshot.safeguarding_overlays {
+        rows.push(format!(
+            "{},{},{},{},{},{},{},{},{},{},{},{},{}",
+            overlay.overlay_id,
+            overlay.overlay_type,
+            overlay.entity_scope,
+            overlay.corridor_code.as_deref().unwrap_or(""),
+            overlay.asset,
+            overlay.ledger_mode,
+            overlay.gross_balance,
+            overlay.safeguarded_balance,
+            overlay.shortfall_amount,
+            overlay.coverage_ratio,
+            overlay.evidence_ref.evidence_import_id,
+            overlay.evidence_ref.source_family,
+            overlay.evidence_ref.source_ref,
+        ));
+    }
+
+    rows.push(String::new());
+    rows.push("reserve_id,reserve_kind,entity_scope,corridor_code,asset,required_balance,available_balance,excess_or_shortfall,status,evidence_import_id,source_family,source_ref".to_string());
+    for reserve in &snapshot.reserve_positions {
+        rows.push(format!(
+            "{},{},{},{},{},{},{},{},{},{},{},{}",
+            reserve.reserve_id,
+            reserve.reserve_kind,
+            reserve.entity_scope,
+            reserve.corridor_code.as_deref().unwrap_or(""),
+            reserve.asset,
+            reserve.required_balance,
+            reserve.available_balance,
+            reserve.excess_or_shortfall,
+            reserve.status,
+            reserve.evidence_ref.evidence_import_id,
+            reserve.evidence_ref.source_family,
+            reserve.evidence_ref.source_ref,
+        ));
+    }
+
     rows.join("\n")
 }

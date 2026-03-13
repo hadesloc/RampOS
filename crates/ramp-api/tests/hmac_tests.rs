@@ -166,6 +166,7 @@ async fn setup_app_with_hmac() -> TestAppWithHmac {
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
+        event_publisher,
     };
 
     let router = create_router(app_state);
