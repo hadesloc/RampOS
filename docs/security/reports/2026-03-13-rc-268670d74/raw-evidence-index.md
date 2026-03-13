@@ -22,6 +22,7 @@ Release candidate: `268670d74`
 - `docs/security/reports/2026-03-13-rc-268670d74/npm-audit.json`
 - `docs/security/reports/2026-03-13-rc-268670d74/semgrep-current.json`
 - `docs/security/reports/2026-03-13-rc-268670d74/semgrep-summary.md`
+- `docs/security/reports/2026-03-13-rc-268670d74/trivy-blocker.md`
 
 ## Fresh targeted verification outputs
 

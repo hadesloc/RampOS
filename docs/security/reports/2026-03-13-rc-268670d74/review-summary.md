@@ -36,6 +36,7 @@ This package is the current RC security evidence bundle for bank-grade signoff p
 - `docs/security/reports/2026-03-13-rc-268670d74/npm-audit.json`
 - `docs/security/reports/2026-03-13-rc-268670d74/semgrep-current.json`
 - `docs/security/reports/2026-03-13-rc-268670d74/semgrep-summary.md`
+- `docs/security/reports/2026-03-13-rc-268670d74/trivy-blocker.md`
 
 ### Inherited raw security reports already present in the repo
 
@@ -67,7 +68,7 @@ The remaining blocking issues are:
 - an `rsa` advisory still reported from the lockfile through ancillary SQLx dependency support, even though the active Napas runtime path no longer depends on `rsa`,
 - no independent external security review output for RC `268670d74`,
 - no completed staging validation from a host with working DNS or kubeconfig,
-- no fresh Trivy output on the current validation host.
+- no fresh Trivy output on the current validation host, only a host-blocker artifact.
 
 ## What Was Verified In This Session
 
@@ -76,6 +77,7 @@ The remaining blocking issues are:
 - `cargo audit --json` was re-run successfully for this RC after lockfile updates and now reports `1` remaining vulnerability instead of `6`.
 - `npm audit --json` was re-run successfully for this RC and reports `0` JS vulnerabilities.
 - Semgrep was re-run successfully for this RC and produced `10` findings total, of which `3` are on non-doc files and none is currently treated as a signoff-blocking code-execution issue by itself.
+- Trivy was not runnable on the current validation host, and that gap is now explicitly captured in `trivy-blocker.md` instead of being left implicit.
 - `cargo test -p ramp-adapter --test adapter_tests -- --nocapture` passed after replacing Napas runtime RSA usage with `ring`.
 - `cargo test -p ramp-aa --lib -- --nocapture` passed after localizing ABI encoding and removing `DynSolValue`.
 - The current host cannot complete staging-security convergence because:
@@ -108,7 +110,6 @@ These two items are recorded as staging and signoff blockers, not as passed chec
    - closure evidence
    - exception register
 2. Remediate or explicitly risk-accept the remaining Rust advisories for:
-   - `alloy-dyn-abi`
    - `rsa` as reported through lockfile-only ancillary dependency support
 3. Re-run Trivy or equivalent filesystem, secrets, and config scan for this RC in a tool-capable environment and attach the outputs.
 4. Complete staging validation from a host with:

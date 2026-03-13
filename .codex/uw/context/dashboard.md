@@ -26,6 +26,8 @@
 - QA checkpoint: staging blocker evidence recorded instead of leaving signoff state implicit
 - QA checkpoint: dependency remediation reduced open Rust advisories from `6` to `1`
 - QA checkpoint: fresh Semgrep evidence attached for RC `268670d74`
+- QA checkpoint: `alloy-dyn-abi` and `validator -> idna` are closed for the current RC
+- QA checkpoint: Trivy gap is now explicit and attributable via a blocker artifact
 
 ## Session History (Recent 20)
 - Archive: `.codex/uw/context/dashboard-history.json`

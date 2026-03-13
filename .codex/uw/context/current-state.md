@@ -8,6 +8,7 @@
 - `T-027` through `T-035` are implemented as concrete hardening artifacts, not planning placeholders.
 - No implementation wave remains active for the current approved plan.
 - Bank-grade signoff is still blocked by staging-environment execution and independent security closure, not by missing feature work.
+- Dependency and evidence hardening has reduced the in-repo Rust advisory set to one residual lockfile report.
 
 ## QA Checkpoint
 - Full local non-destructive release matrix passed at `docs/operations/evidence/rc-m6-full-local-3/`.
@@ -29,7 +30,7 @@
 - The only remaining Rust advisory is a residual `rsa` package still reported from `Cargo.lock`.
 - No independent external security review outputs exist yet for RC `268670d74`.
 - Fresh Semgrep output is now attached for the current RC.
-- Fresh Trivy output is still not reproducible on this host.
+- Fresh Trivy output is still not reproducible on this host, and the blocker is recorded in `docs/security/reports/2026-03-13-rc-268670d74/trivy-blocker.md`.
 
 ## Verification Completed In Parent Session
 - Existing local release, migration, admin, audit, and DR evidence from `2026-03-13` remains the latest attributable proof.
@@ -38,7 +39,9 @@
 - `cargo audit --json` and `cargo audit` were re-run for RC `268670d74`.
 - `npm audit --json` was re-run for RC `268670d74` and returned `0` vulnerabilities.
 - Semgrep was re-run for RC `268670d74`, and the current artifact is `docs/security/reports/2026-03-13-rc-268670d74/semgrep-current.json`.
+- Trivy gap was converted into an explicit blocker artifact at `docs/security/reports/2026-03-13-rc-268670d74/trivy-blocker.md`.
 - `cargo test -p ramp-aa --lib -- --nocapture`
+- `cargo generate-lockfile`
 - `cargo update -p bytes --precise 1.11.1`
 - `cargo update -p time --precise 0.3.47`
 - `cargo update -p quinn-proto --precise 0.11.14`
