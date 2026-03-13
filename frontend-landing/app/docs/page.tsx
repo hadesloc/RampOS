@@ -27,7 +27,11 @@ import {
   ChevronDown,
   ChevronRight,
   Search,
+  Globe,
 } from 'lucide-react'
+
+/* ─── Types ─── */
+type Lang = 'en' | 'vi'
 
 const GITHUB_BASE = 'https://github.com/hadesloc/RampOS/blob/main'
 
@@ -46,7 +50,55 @@ interface DocSection {
   docs: DocLink[]
 }
 
-const docSections: DocSection[] = [
+/* ─── i18n Strings ─── */
+const i18n: Record<Lang, {
+  pageTitle: string
+  pageDesc: string
+  searchPlaceholder: string
+  docsLabel: string
+  footerNote: string
+  footerLink: string
+  quickLinks: { href: string; label: string }[]
+}> = {
+  en: {
+    pageTitle: 'Documentation',
+    pageDesc: 'Everything you need to integrate, deploy, and operate RampOS — from first API call to production at scale.',
+    searchPlaceholder: 'Search docs...',
+    docsLabel: 'docs',
+    footerNote: 'All documentation is open source.',
+    footerLink: 'View on GitHub →',
+    quickLinks: [
+      { href: '#getting-started', label: 'Quick Start' },
+      { href: '#api-reference', label: 'API Reference' },
+      { href: '#sdks', label: 'SDKs' },
+      { href: '#deployment', label: 'Deployment' },
+      { href: '#security', label: 'Security' },
+    ],
+  },
+  vi: {
+    pageTitle: 'Tài liệu',
+    pageDesc: 'Mọi thứ bạn cần để tích hợp, triển khai và vận hành RampOS — từ lệnh API đầu tiên đến production quy mô lớn.',
+    searchPlaceholder: 'Tìm kiếm tài liệu...',
+    docsLabel: 'tài liệu',
+    footerNote: 'Toàn bộ tài liệu là mã nguồn mở.',
+    footerLink: 'Xem trên GitHub →',
+    quickLinks: [
+      { href: '#getting-started', label: 'Bắt đầu' },
+      { href: '#api-reference', label: 'API' },
+      { href: '#sdks', label: 'SDKs' },
+      { href: '#deployment', label: 'Triển khai' },
+      { href: '#security', label: 'Bảo mật' },
+    ],
+  },
+}
+
+/* ─── Sections (bilingual) ─── */
+function getSections(lang: Lang): DocSection[] {
+  if (lang === 'vi') return sectionsVi
+  return sectionsEn
+}
+
+const sectionsEn: DocSection[] = [
   {
     id: 'getting-started',
     title: 'Getting Started',
@@ -264,7 +316,226 @@ const docSections: DocSection[] = [
   },
 ]
 
-const container = {
+const sectionsVi: DocSection[] = [
+  {
+    id: 'getting-started',
+    title: 'Bắt đầu',
+    description: 'Hướng dẫn khởi động nhanh, khái niệm cốt lõi và các bước đầu tiên với RampOS.',
+    icon: BookOpen,
+    color: 'text-emerald-400',
+    docs: [
+      { title: 'Hướng dẫn nhanh', path: 'docs/getting-started/README.md', description: 'Cài đặt, thiết lập và lệnh API đầu tiên' },
+      { title: 'Khái niệm cốt lõi', path: 'docs/getting-started/concepts.md', description: 'Intents, tenants, sổ cái, nền tảng compliance' },
+      { title: 'Whitepaper', path: 'docs/whitepaper.md', description: 'Whitepaper kỹ thuật đầy đủ và lý do thiết kế hệ thống' },
+    ],
+  },
+  {
+    id: 'architecture',
+    title: 'Kiến trúc',
+    description: 'Thiết kế hệ thống, máy trạng thái, mô hình sổ cái và nội bộ engine compliance.',
+    icon: Layers,
+    color: 'text-cyan-400',
+    docs: [
+      { title: 'Tổng quan hệ thống', path: 'docs/architecture/overview.md', description: 'Kiến trúc tổng thể, cấu trúc crate, luồng dữ liệu' },
+      { title: 'Máy trạng thái', path: 'docs/architecture/state-machine.md', description: 'Chuyển trạng thái pay-in, pay-out, trade và RFQ' },
+      { title: 'Sổ cái kép', path: 'docs/architecture/ledger.md', description: 'Mô hình kế toán, bút toán, đối soát' },
+      { title: 'Engine Compliance', path: 'docs/architecture/compliance.md', description: 'Pipeline KYC/AML, chấm điểm rủi ro, quản lý vụ việc' },
+      { title: 'Tóm tắt kiến trúc', path: 'docs/architecture.md', description: 'Thẻ tham chiếu kiến trúc ngắn gọn' },
+    ],
+  },
+  {
+    id: 'api-reference',
+    title: 'Tham chiếu API',
+    description: 'Endpoint REST API, xác thực, giới hạn tốc độ, webhooks và danh mục sự kiện.',
+    icon: Server,
+    color: 'text-blue-400',
+    docs: [
+      { title: 'Tổng quan API', path: 'docs/api/README.md', description: 'URL cơ sở, xác thực, headers, phiên bản' },
+      { title: 'Tài liệu API đầy đủ', path: 'docs/API.md', description: 'Tham chiếu endpoint đầy đủ với ví dụ request/response' },
+      { title: 'Tham chiếu Endpoints', path: 'docs/api/endpoints.md', description: 'Tất cả admin, portal và LP endpoints' },
+      { title: 'Xác thực', path: 'docs/api/authentication.md', description: 'JWT, API keys, LP keys, admin auth' },
+      { title: 'Giới hạn tốc độ', path: 'docs/api/rate-limiting.md', description: 'Giới hạn per-tenant, cửa sổ trượt, cấu hình ghi đè' },
+      { title: 'Webhooks', path: 'docs/api/webhooks.md', description: 'Loại sự kiện, ký HMAC, chính sách retry, DLQ' },
+    ],
+  },
+  {
+    id: 'database',
+    title: 'Cơ sở dữ liệu',
+    description: 'Thiết kế schema PostgreSQL, hệ thống migration và chính sách bảo mật cấp hàng.',
+    icon: Database,
+    color: 'text-amber-400',
+    docs: [
+      { title: 'Tham chiếu Schema', path: 'docs/database/schema.md', description: '49 bảng, indexes, ràng buộc và quan hệ' },
+      { title: 'Hướng dẫn Migrations', path: 'docs/database/migrations.md', description: 'Hệ thống migration, thứ tự, script up/down' },
+      { title: 'Row-Level Security', path: 'docs/database/rls.md', description: 'Chính sách phân lập tenant, thiết kế fail-closed' },
+    ],
+  },
+  {
+    id: 'smart-contracts',
+    title: 'Hợp đồng thông minh',
+    description: 'Hợp đồng Solidity cho account abstraction, paymaster, passkey và ZK KYC.',
+    icon: FileCode2,
+    color: 'text-fuchsia-400',
+    docs: [
+      { title: 'Tổng quan Contracts', path: 'docs/contracts/overview.md', description: '10 contracts, Foundry toolchain, triển khai' },
+      { title: 'Smart Account (ERC-4337)', path: 'docs/contracts/account.md', description: 'RampOSAccount, factory, batch execution, UUPS' },
+      { title: 'Paymaster', path: 'docs/contracts/paymaster.md', description: 'Tài trợ gas, quản lý ngân sách, bảo vệ nonce' },
+      { title: 'Bảo mật Contracts', path: 'docs/contracts/security.md', description: 'Kết quả audit, kiểm soát truy cập, an toàn nâng cấp' },
+    ],
+  },
+  {
+    id: 'sdks',
+    title: 'SDKs',
+    description: 'Thư viện client cho TypeScript, Go và Python với type safety đầy đủ.',
+    icon: Package,
+    color: 'text-indigo-400',
+    docs: [
+      { title: 'Tổng quan SDK', path: 'docs/SDK.md', description: 'Cài đặt, cấu hình, khởi động nhanh cho tất cả SDKs' },
+      { title: 'TypeScript SDK', path: 'sdk/README.md', description: '@rampos/sdk — React Query hooks, type-safe client' },
+      { title: 'Go SDK', path: 'sdk-go/README.md', description: 'rampos-go — Go client chuẩn mực với hỗ trợ context' },
+      { title: 'Python SDK', path: 'sdk-python/README.md', description: 'rampos — async/sync client với Pydantic models' },
+    ],
+  },
+  {
+    id: 'cli',
+    title: 'CLI',
+    description: 'Giao diện dòng lệnh cho tự động hóa, scripting và tích hợp AI agent.',
+    icon: Terminal,
+    color: 'text-lime-400',
+    docs: [
+      { title: 'Tổng quan CLI', path: 'docs/cli/README.md', description: 'Cài đặt, chế độ auth, định dạng output' },
+      { title: 'Sử dụng với Agent', path: 'docs/cli/agent-usage.md', description: 'Flags thân thiện máy cho quy trình AI agent' },
+      { title: 'Coverage Ledger', path: 'docs/cli/coverage-ledger.md', description: 'Theo dõi và xác thực coverage endpoint' },
+    ],
+  },
+  {
+    id: 'integrations',
+    title: 'Tích hợp',
+    description: 'Kết nối với ngân hàng, nhà cung cấp KYC, engine compliance và ví.',
+    icon: Plug,
+    color: 'text-orange-400',
+    docs: [
+      { title: 'Bank Adapter', path: 'docs/integrations/bank-adapter.md', description: 'Tích hợp ngân hàng/PSP pluggable với Rails trait' },
+      { title: 'Nhà cung cấp KYC', path: 'docs/integrations/kyc-provider.md', description: 'Onfido, eKYC, tích hợp nhà cung cấp tùy chỉnh' },
+      { title: 'Quy tắc Compliance', path: 'docs/integrations/compliance-rules.md', description: 'AML velocity, trừng phạt, cấu hình chấm điểm gian lận' },
+      { title: 'Tích hợp Ví', path: 'docs/integrations/wallet-integration.md', description: 'Account abstraction, passkey, delegation EOA' },
+    ],
+  },
+  {
+    id: 'deployment',
+    title: 'Triển khai',
+    description: 'Phát triển local, Docker, Kubernetes và cấu hình CI/CD pipeline.',
+    icon: Cloud,
+    color: 'text-sky-400',
+    docs: [
+      { title: 'Phát triển Local', path: 'docs/deployment/local.md', description: 'Docker Compose, thiết lập môi trường, hot reload' },
+      { title: 'Kubernetes', path: 'docs/deployment/kubernetes.md', description: 'Kustomize, HPA, PDB, network policies' },
+      { title: 'CI/CD Pipeline', path: 'docs/deployment/ci-cd.md', description: 'GitHub Actions, ArgoCD, phát hiện drift' },
+      { title: 'Hướng dẫn triển khai', path: 'docs/DEPLOY.md', description: 'Triển khai production từng bước' },
+      { title: 'Checklist triển khai', path: 'docs/DEPLOYMENT_CHECKLIST.md', description: 'Danh sách kiểm tra trước khi ra mắt' },
+    ],
+  },
+  {
+    id: 'enterprise',
+    title: 'Doanh nghiệp',
+    description: 'Vận hành multi-tenant, SSO, giới hạn API và cấu hình doanh nghiệp.',
+    icon: Building2,
+    color: 'text-violet-400',
+    docs: [
+      { title: 'Tổng quan Enterprise', path: 'docs/enterprise/README.md', description: 'Tính năng doanh nghiệp và tùy chọn triển khai' },
+      { title: 'Thiết lập SSO', path: 'docs/enterprise/sso-setup.md', description: 'Tích hợp OIDC/SAML, cấu hình nhà cung cấp' },
+      { title: 'Giới hạn API', path: 'docs/enterprise/api-limits.md', description: 'Rate limits tùy chỉnh, quản lý tier' },
+      { title: 'Cấu hình', path: 'docs/enterprise/configuration.md', description: 'Config bundles, cài đặt nhận biết môi trường' },
+      { title: 'Hướng dẫn vận hành', path: 'docs/enterprise/operations.md', description: 'Giám sát, cảnh báo, xử lý sự cố' },
+      { title: 'Triển khai Enterprise', path: 'docs/enterprise/deployment.md', description: 'Thiết lập HA, mở rộng, khôi phục thảm họa' },
+    ],
+  },
+  {
+    id: 'testing',
+    title: 'Kiểm thử',
+    description: 'Unit tests, integration tests, load tests và bộ kiểm thử smart contract.',
+    icon: TestTubes,
+    color: 'text-teal-400',
+    docs: [
+      { title: 'Hướng dẫn kiểm thử', path: 'docs/TESTING-GUIDE.md', description: 'Chiến lược và best practices kiểm thử' },
+      { title: 'Unit Tests', path: 'docs/testing/unit-tests.md', description: 'Rust unit tests, mocking, coverage' },
+      { title: 'Integration Tests', path: 'docs/testing/integration-tests.md', description: 'Kiểm thử tích hợp API, test fixtures' },
+      { title: 'Load Tests', path: 'docs/testing/load-tests.md', description: 'Benchmark hiệu năng, stress testing' },
+      { title: 'Contract Tests', path: 'docs/testing/contract-tests.md', description: 'Foundry tests, fuzz testing, invariants' },
+    ],
+  },
+  {
+    id: 'security',
+    title: 'Bảo mật',
+    description: 'Threat model, audit bảo mật, hướng dẫn hardening và báo cáo khắc phục.',
+    icon: Shield,
+    color: 'text-red-400',
+    docs: [
+      { title: 'Tổng quan bảo mật', path: 'docs/SECURITY.md', description: 'Kiến trúc và thực hành bảo mật' },
+      { title: 'Threat Model', path: 'docs/security/threat-model.md', description: 'Vectơ tấn công, đánh giá rủi ro, giảm thiểu' },
+      { title: 'Hardening bảo mật', path: 'docs/security/hardening.md', description: 'Hướng dẫn hardening hạ tầng và ứng dụng' },
+      { title: 'Báo cáo Audit', path: 'docs/security/audit-report.md', description: 'Kết quả audit bảo mật toàn diện' },
+      { title: 'Kế hoạch khắc phục', path: 'docs/security/remediation-plan.md', description: 'Theo dõi vấn đề và timeline sửa chữa' },
+      { title: 'Roadmap & Hardening', path: 'docs/recent-roadmap-and-security-hardening-2026-03.md', description: 'Báo cáo hardening bảo mật tháng 3/2026' },
+    ],
+  },
+  {
+    id: 'operations',
+    title: 'Vận hành',
+    description: 'Runbooks, giám sát, khôi phục thảm họa và quản lý phát hành.',
+    icon: Settings,
+    color: 'text-gray-400',
+    docs: [
+      { title: 'Hướng dẫn giám sát', path: 'docs/operations/monitoring.md', description: 'Prometheus, Grafana, quy tắc cảnh báo' },
+      { title: 'Runbook', path: 'docs/operations/runbook-skeleton.md', description: 'Quy trình vận hành cho các tình huống phổ biến' },
+      { title: 'Khôi phục thảm họa', path: 'docs/operations/disaster-recovery-plan.md', description: 'Quy trình backup, restore và failover' },
+      { title: 'Checklist phát hành', path: 'docs/operations/release-checklist.md', description: 'Các bước xác minh trước phát hành' },
+      { title: 'Xác thực Staging', path: 'docs/operations/staging-validation-plan.md', description: 'Ma trận QA cho môi trường staging' },
+      { title: 'Signoff cấp Ngân hàng', path: 'docs/operations/bank-grade-signoff-ledger.md', description: 'Yêu cầu chấp thuận từ tổ chức tài chính' },
+    ],
+  },
+  {
+    id: 'licensing',
+    title: 'Giấy phép',
+    description: 'Quản lý license, hướng dẫn quota API và best practices compliance.',
+    icon: Scale,
+    color: 'text-yellow-400',
+    docs: [
+      { title: 'Tổng quan License', path: 'docs/licensing/README.md', description: 'Tier license, feature flags, quản lý hết hạn' },
+      { title: 'Yêu cầu', path: 'docs/licensing/requirements.md', description: 'Yêu cầu licensing per-tenant' },
+      { title: 'Hướng dẫn API', path: 'docs/licensing/api-guide.md', description: 'Endpoint quản lý license' },
+      { title: 'Thực hành Compliance', path: 'docs/licensing/compliance-best-practices.md', description: 'Best practices tuân thủ quy định' },
+    ],
+  },
+  {
+    id: 'examples',
+    title: 'Ví dụ & Hướng dẫn',
+    description: 'Ví dụ cURL, bộ sưu tập Postman, hướng dẫn use case.',
+    icon: Code2,
+    color: 'text-pink-400',
+    docs: [
+      { title: 'Tổng quan ví dụ', path: 'docs/examples/README.md', description: 'Các ví dụ có sẵn và cách sử dụng' },
+      { title: 'Ví dụ cURL', path: 'docs/examples/curl-examples.md', description: 'Lệnh cURL sẵn sàng chạy cho mọi endpoint' },
+      { title: 'Bộ sưu tập Postman', path: 'docs/examples/postman.json', description: 'Import vào Postman để test tương tác' },
+      { title: 'Use Cases', path: 'docs/examples/use-cases.md', description: 'Hướng dẫn kịch bản end-to-end' },
+    ],
+  },
+  {
+    id: 'changelog',
+    title: 'Nhật ký thay đổi',
+    description: 'Lịch sử phiên bản, ghi chú phát hành và tính năng sắp tới.',
+    icon: Scroll,
+    color: 'text-emerald-300',
+    docs: [
+      { title: 'Nhật ký thay đổi', path: 'CHANGELOG.md', description: 'Lịch sử phiên bản đầy đủ với tất cả thay đổi' },
+      { title: 'Ghi chú phát hành', path: 'RELEASE_NOTES.md', description: 'Điểm nổi bật phiên bản mới nhất' },
+      { title: 'Đóng góp', path: 'CONTRIBUTING.md', description: 'Cách đóng góp cho RampOS' },
+    ],
+  },
+]
+
+/* ─── Animations ─── */
+const containerVariants = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
@@ -272,15 +543,22 @@ const container = {
   },
 }
 
-const item = {
+const itemVariants = {
   hidden: { opacity: 0, y: 20 },
   show: { opacity: 1, y: 0 },
 }
 
+/* ─── Main Page ─── */
 export default function DocsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(docSections.map(s => s.id)))
+  const [lang, setLang] = useState<Lang>('en')
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(
+    new Set(sectionsEn.map(s => s.id))
+  )
   const [searchQuery, setSearchQuery] = useState('')
+
+  const t = i18n[lang]
+  const sections = getSections(lang)
 
   const toggleSection = (id: string) => {
     setExpandedSections(prev => {
@@ -292,7 +570,7 @@ export default function DocsPage() {
   }
 
   const filteredSections = searchQuery.trim()
-    ? docSections.filter(s =>
+    ? sections.filter(s =>
         s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.docs.some(d =>
@@ -300,7 +578,7 @@ export default function DocsPage() {
           (d.description || '').toLowerCase().includes(searchQuery.toLowerCase())
         )
       )
-    : docSections
+    : sections
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -329,12 +607,39 @@ export default function DocsPage() {
               </span>
             </Link>
           </div>
-          <div className="hidden md:flex items-center gap-3">
+
+          <div className="flex items-center gap-4">
+            {/* Language Toggle */}
+            <div className="flex items-center bg-white/5 rounded-full border border-white/10 p-0.5">
+              <button
+                onClick={() => setLang('en')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${
+                  lang === 'en'
+                    ? 'bg-white/10 text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                <span className="text-base leading-none">🇬🇧</span>
+                <span className="hidden sm:inline">EN</span>
+              </button>
+              <button
+                onClick={() => setLang('vi')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${
+                  lang === 'vi'
+                    ? 'bg-white/10 text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                <span className="text-base leading-none">🇻🇳</span>
+                <span className="hidden sm:inline">VI</span>
+              </button>
+            </div>
+
             <a
               href="https://github.com/hadesloc/RampOS"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-2"
+              className="hidden md:flex text-sm text-gray-400 hover:text-white transition-colors items-center gap-2"
             >
               <Code2 className="w-4 h-4" /> GitHub
             </a>
@@ -357,14 +662,14 @@ export default function DocsPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <input
                   type="text"
-                  placeholder="Search docs..."
+                  placeholder={t.searchPlaceholder}
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 transition-all"
                 />
               </div>
             </div>
-            {docSections.map(section => {
+            {sections.map(section => {
               const Icon = section.icon
               return (
                 <a
@@ -396,30 +701,31 @@ export default function DocsPage() {
         <div className="flex-1 min-w-0 px-4 lg:px-12 py-12">
           {/* Hero */}
           <motion.div
+            key={lang}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
             className="mb-16"
           >
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-200 to-gray-400">
-                Documentation
+                {t.pageTitle}
               </span>
             </h1>
             <p className="text-lg text-gray-400 max-w-2xl leading-relaxed">
-              Everything you need to integrate, deploy, and operate RampOS — from first API call to production at scale.
+              {t.pageDesc}
             </p>
             <div className="flex flex-wrap gap-3 mt-6">
-              <QuickLink href="#getting-started" label="Quick Start" />
-              <QuickLink href="#api-reference" label="API Reference" />
-              <QuickLink href="#sdks" label="SDKs" />
-              <QuickLink href="#deployment" label="Deployment" />
-              <QuickLink href="#security" label="Security" />
+              {t.quickLinks.map(ql => (
+                <QuickLink key={ql.href} href={ql.href} label={ql.label} />
+              ))}
             </div>
           </motion.div>
 
           {/* Sections */}
           <motion.div
-            variants={container}
+            key={`sections-${lang}`}
+            variants={containerVariants}
             initial="hidden"
             animate="show"
             className="space-y-8"
@@ -428,13 +734,14 @@ export default function DocsPage() {
               <motion.section
                 key={section.id}
                 id={section.id}
-                variants={item}
+                variants={itemVariants}
                 className="scroll-mt-24"
               >
                 <SectionCard
                   section={section}
                   expanded={expandedSections.has(section.id)}
                   onToggle={() => toggleSection(section.id)}
+                  docsLabel={t.docsLabel}
                 />
               </motion.section>
             ))}
@@ -443,14 +750,14 @@ export default function DocsPage() {
           {/* Footer note */}
           <div className="mt-20 pt-8 border-t border-white/10 text-center">
             <p className="text-sm text-gray-500">
-              All documentation is open source.{' '}
+              {t.footerNote}{' '}
               <a
                 href="https://github.com/hadesloc/RampOS/tree/main/docs"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-cyan-400 hover:text-cyan-300 transition-colors"
               >
-                View on GitHub →
+                {t.footerLink}
               </a>
             </p>
           </div>
@@ -459,6 +766,8 @@ export default function DocsPage() {
     </main>
   )
 }
+
+/* ─── Sub-components ─── */
 
 function QuickLink({ href, label }: { href: string; label: string }) {
   return (
@@ -475,10 +784,12 @@ function SectionCard({
   section,
   expanded,
   onToggle,
+  docsLabel,
 }: {
   section: DocSection
   expanded: boolean
   onToggle: () => void
+  docsLabel: string
 }) {
   const Icon = section.icon
 
@@ -489,7 +800,7 @@ function SectionCard({
         onClick={onToggle}
         className="w-full flex items-center gap-4 p-6 text-left hover:bg-white/[0.02] transition-colors"
       >
-        <div className={`p-3 rounded-xl bg-white/5 ring-1 ring-white/10 shrink-0`}>
+        <div className="p-3 rounded-xl bg-white/5 ring-1 ring-white/10 shrink-0">
           <Icon className={`w-6 h-6 ${section.color}`} />
         </div>
         <div className="flex-1 min-w-0">
@@ -498,7 +809,7 @@ function SectionCard({
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <span className="text-xs font-mono text-gray-500 bg-white/5 px-2.5 py-1 rounded-full">
-            {section.docs.length} docs
+            {section.docs.length} {docsLabel}
           </span>
           {expanded ? (
             <ChevronDown className="w-5 h-5 text-gray-500" />
