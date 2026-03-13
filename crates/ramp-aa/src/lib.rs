@@ -2,6 +2,12 @@
 //!
 //! Also includes EIP-7702 for EOA smart account delegation.
 
+extern crate self as alloy;
+
+pub mod primitives {
+    pub use alloy_primitives::*;
+}
+
 pub mod bundler;
 pub mod custody_signer;
 pub mod eip7702;

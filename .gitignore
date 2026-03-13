@@ -105,7 +105,12 @@ audit_results/
 security-reports/
 bundle/
 docs/plans/
-docs/security/
+docs/security/*
+!docs/security/independent-security-review-plan.md
+!docs/security/reports/
+docs/security/reports/*
+!docs/security/reports/2026-03-13-rc-268670d74/
+!docs/security/reports/2026-03-13-rc-268670d74/**
 docs/AUDIT_NOTES.md
 BAO_CAO_AUDIT_TONG_HOP.md
 FINAL_STATUS_REPORT.md

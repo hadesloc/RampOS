@@ -1,5 +1,11 @@
 //! RampOS API Server
 
+extern crate self as alloy;
+
+pub mod primitives {
+    pub use alloy_primitives::*;
+}
+
 pub mod dto;
 pub mod error;
 pub mod extract;

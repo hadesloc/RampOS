@@ -17,7 +17,7 @@ ramp-core = { path = "../ramp-core" }
 ramp-compliance = { path = "../ramp-compliance" }
 ramp-aa = { path = "../ramp-aa" }
 
-alloy = { workspace = true }
+alloy-primitives = { workspace = true }
 tokio = { workspace = true }
 axum = { workspace = true }
 axum-extra = { workspace = true }

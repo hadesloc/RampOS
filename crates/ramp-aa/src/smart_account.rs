@@ -1,4 +1,3 @@
-use alloy::dyn_abi::DynSolValue;
 use alloy::primitives::{keccak256, Address, Bytes, U256};
 use async_trait::async_trait;
 use ramp_common::{
@@ -41,6 +40,106 @@ pub struct SmartAccountService {
 }
 
 impl SmartAccountService {
+    fn abi_encode_address(addr: Address) -> [u8; 32] {
+        let mut word = [0u8; 32];
+        word[12..32].copy_from_slice(addr.as_slice());
+        word
+    }
+
+    fn abi_encode_uint(value: U256) -> [u8; 32] {
+        value.to_be_bytes::<32>()
+    }
+
+    fn abi_encode_bytes(data: &[u8]) -> Vec<u8> {
+        let mut encoded = Vec::with_capacity(32 + data.len().div_ceil(32) * 32);
+        encoded.extend_from_slice(&U256::from(data.len()).to_be_bytes::<32>());
+        encoded.extend_from_slice(data);
+        let padding = (32 - (data.len() % 32)) % 32;
+        if padding > 0 {
+            encoded.resize(encoded.len() + padding, 0);
+        }
+        encoded
+    }
+
+    fn encode_create_account_args(owner: Address, salt: U256) -> Vec<u8> {
+        let mut encoded = Vec::with_capacity(64);
+        encoded.extend_from_slice(&Self::abi_encode_address(owner));
+        encoded.extend_from_slice(&Self::abi_encode_uint(salt));
+        encoded
+    }
+
+    fn encode_execute_args(to: Address, value: U256, data: &[u8]) -> Vec<u8> {
+        let bytes_tail = Self::abi_encode_bytes(data);
+        let mut encoded = Vec::with_capacity(96 + bytes_tail.len());
+        encoded.extend_from_slice(&Self::abi_encode_address(to));
+        encoded.extend_from_slice(&Self::abi_encode_uint(value));
+        encoded.extend_from_slice(&Self::abi_encode_uint(U256::from(96u64)));
+        encoded.extend_from_slice(&bytes_tail);
+        encoded
+    }
+
+    fn encode_address_array(values: &[Address]) -> Vec<u8> {
+        let mut encoded = Vec::with_capacity(32 + values.len() * 32);
+        encoded.extend_from_slice(&U256::from(values.len()).to_be_bytes::<32>());
+        for value in values {
+            encoded.extend_from_slice(&Self::abi_encode_address(*value));
+        }
+        encoded
+    }
+
+    fn encode_uint_array(values: &[U256]) -> Vec<u8> {
+        let mut encoded = Vec::with_capacity(32 + values.len() * 32);
+        encoded.extend_from_slice(&U256::from(values.len()).to_be_bytes::<32>());
+        for value in values {
+            encoded.extend_from_slice(&Self::abi_encode_uint(*value));
+        }
+        encoded
+    }
+
+    fn encode_bytes_array(values: &[Bytes]) -> Vec<u8> {
+        let mut head = Vec::with_capacity(32 + values.len() * 32);
+        head.extend_from_slice(&U256::from(values.len()).to_be_bytes::<32>());
+
+        let mut tail = Vec::new();
+        let initial_offset = 32 + values.len() * 32;
+        let mut current_offset = initial_offset;
+
+        for value in values {
+            head.extend_from_slice(&U256::from(current_offset).to_be_bytes::<32>());
+            let encoded = Self::abi_encode_bytes(value.as_ref());
+            current_offset += encoded.len();
+            tail.extend_from_slice(&encoded);
+        }
+
+        head.extend_from_slice(&tail);
+        head
+    }
+
+    fn encode_execute_batch_args(calls: &[(Address, U256, Bytes)]) -> Vec<u8> {
+        let targets: Vec<Address> = calls.iter().map(|(target, _, _)| *target).collect();
+        let values: Vec<U256> = calls.iter().map(|(_, value, _)| *value).collect();
+        let datas: Vec<Bytes> = calls.iter().map(|(_, _, data)| data.clone()).collect();
+
+        let targets_tail = Self::encode_address_array(&targets);
+        let values_tail = Self::encode_uint_array(&values);
+        let datas_tail = Self::encode_bytes_array(&datas);
+
+        let targets_offset = 96u64;
+        let values_offset = targets_offset + targets_tail.len() as u64;
+        let datas_offset = values_offset + values_tail.len() as u64;
+
+        let mut encoded = Vec::with_capacity(
+            96 + targets_tail.len() + values_tail.len() + datas_tail.len(),
+        );
+        encoded.extend_from_slice(&Self::abi_encode_uint(U256::from(targets_offset)));
+        encoded.extend_from_slice(&Self::abi_encode_uint(U256::from(values_offset)));
+        encoded.extend_from_slice(&Self::abi_encode_uint(U256::from(datas_offset)));
+        encoded.extend_from_slice(&targets_tail);
+        encoded.extend_from_slice(&values_tail);
+        encoded.extend_from_slice(&datas_tail);
+        encoded
+    }
+
     pub fn new(chain_id: u64, factory_address: Address, entry_point: Address) -> Self {
         Self {
             _chain_id: chain_id,
@@ -137,11 +236,7 @@ impl SmartAccountService {
         data.extend_from_slice(&selector);
 
         // Encode parameters using alloy DynSolValue
-        let params = DynSolValue::Tuple(vec![
-            DynSolValue::Address(owner),
-            DynSolValue::Uint(salt, 256),
-        ])
-        .abi_encode();
+        let params = Self::encode_create_account_args(owner, salt);
         data.extend_from_slice(&params);
 
         Ok(Bytes::from(data))
@@ -161,12 +256,7 @@ impl SmartAccountService {
         let mut call_data = Vec::new();
         call_data.extend_from_slice(&selector);
 
-        let params = DynSolValue::Tuple(vec![
-            DynSolValue::Address(to),
-            DynSolValue::Uint(value, 256),
-            DynSolValue::Bytes(data.unwrap_or_default().to_vec()),
-        ])
-        .abi_encode();
+        let params = Self::encode_execute_args(to, value, data.unwrap_or_default().as_ref());
         call_data.extend_from_slice(&params);
 
         Ok(UserOperation::new(
@@ -185,28 +275,9 @@ impl SmartAccountService {
         // Build executeBatch(address[],uint256[],bytes[]) call
         let selector = [0x34, 0xfc, 0xd5, 0xbe]; // keccak256("executeBatch(address[],uint256[],bytes[])")[:4]
 
-        let targets: Vec<DynSolValue> = calls
-            .iter()
-            .map(|(t, _, _)| DynSolValue::Address(*t))
-            .collect();
-        let values: Vec<DynSolValue> = calls
-            .iter()
-            .map(|(_, v, _)| DynSolValue::Uint(*v, 256))
-            .collect();
-        let datas: Vec<DynSolValue> = calls
-            .iter()
-            .map(|(_, _, d)| DynSolValue::Bytes(d.to_vec()))
-            .collect();
-
         let mut call_data = Vec::new();
         call_data.extend_from_slice(&selector);
-
-        let params = DynSolValue::Tuple(vec![
-            DynSolValue::Array(targets),
-            DynSolValue::Array(values),
-            DynSolValue::Array(datas),
-        ])
-        .abi_encode();
+        let params = Self::encode_execute_batch_args(&calls);
         call_data.extend_from_slice(&params);
 
         Ok(UserOperation::new(

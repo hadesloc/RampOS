@@ -12,15 +12,13 @@ use async_trait::async_trait;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use chrono::{Duration, Utc};
+use pem::parse;
 use ramp_common::{Error, Result};
 use reqwest::Client;
-use rsa::pkcs1v15::{SigningKey, VerifyingKey};
-use rsa::pkcs8::{DecodePrivateKey, DecodePublicKey};
-use rsa::signature::{SignatureEncoding, Signer, Verifier};
-use rsa::{RsaPrivateKey, RsaPublicKey};
+use ring::rand::SystemRandom;
+use ring::signature;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
 use std::time::Duration as StdDuration;
 use tracing::{debug, error, info, instrument, warn};
 
@@ -121,6 +119,12 @@ pub struct NapasAdapter {
 }
 
 impl NapasAdapter {
+    fn decode_pem_contents(pem_value: &str, label: &str) -> std::result::Result<Vec<u8>, Error> {
+        parse(pem_value)
+            .map(|pem| pem.into_contents())
+            .map_err(|e| Error::Internal(format!("Invalid {} PEM: {}", label, e)))
+    }
+
     /// Create a new Napas adapter with minimal config (backwards compatible)
     ///
     /// # Errors
@@ -239,11 +243,20 @@ impl NapasAdapter {
     /// is configured. In development/test mode, falls back to HMAC signing.
     fn sign_request(&self, payload: &str) -> std::result::Result<String, Error> {
         if let Some(pem) = &self.config.private_key_pem {
-            let private_key = RsaPrivateKey::from_pkcs8_pem(pem)
+            let private_key_der = Self::decode_pem_contents(pem, "RSA private key")?;
+            let private_key = signature::RsaKeyPair::from_pkcs8(&private_key_der)
                 .map_err(|e| Error::Internal(format!("Invalid RSA private key: {}", e)))?;
-            let signing_key = SigningKey::<Sha256>::new(private_key);
-            let signature = signing_key.sign(payload.as_bytes());
-            Ok(BASE64.encode(signature.to_bytes()))
+            let rng = SystemRandom::new();
+            let mut signature_bytes = vec![0; private_key.public().modulus_len()];
+            private_key
+                .sign(
+                    &signature::RSA_PKCS1_SHA256,
+                    &rng,
+                    payload.as_bytes(),
+                    &mut signature_bytes,
+                )
+                .map_err(|e| Error::Internal(format!("RSA signing failed: {}", e)))?;
+            Ok(BASE64.encode(signature_bytes))
         } else if self.config.enable_real_api {
             Err(Error::Internal(
                 "RSA private key is required for production Napas API requests".to_string(),
@@ -276,8 +289,8 @@ impl NapasAdapter {
             return true;
         };
 
-        let public_key = match RsaPublicKey::from_public_key_pem(pem) {
-            Ok(k) => k,
+        let public_key_der = match Self::decode_pem_contents(pem, "Napas public key") {
+            Ok(der) => der,
             Err(e) => {
                 error!(error = %e, "Invalid Napas public key PEM");
                 return false;
@@ -292,16 +305,12 @@ impl NapasAdapter {
             }
         };
 
-        let signature = match rsa::pkcs1v15::Signature::try_from(sig_bytes.as_slice()) {
-            Ok(s) => s,
-            Err(e) => {
-                error!(error = %e, "Invalid RSA signature format");
-                return false;
-            }
-        };
-
-        let verifying_key = VerifyingKey::<Sha256>::new(public_key);
-        verifying_key.verify(payload.as_bytes(), &signature).is_ok()
+        signature::UnparsedPublicKey::new(
+            &signature::RSA_PKCS1_2048_8192_SHA256,
+            public_key_der,
+        )
+        .verify(payload.as_bytes(), &sig_bytes)
+        .is_ok()
     }
 
     /// Convert Napas status string to PayoutStatus
@@ -634,7 +643,7 @@ impl RailsAdapter for NapasAdapter {
     fn verify_webhook_signature(&self, payload: &[u8], signature: &str) -> bool {
         // In production mode with RSA public key, use RSA verification
         if self.config.enable_real_api {
-            if let Some(ref pem) = self.config.napas_public_key_pem {
+            if self.config.napas_public_key_pem.is_some() {
                 let payload_str = String::from_utf8_lossy(payload);
                 return self.verify_response_signature(&payload_str, signature);
             }
@@ -771,23 +780,14 @@ mod tests {
         assert_eq!(confirmation.status, PayoutStatus::Completed);
     }
 
-    /// Helper: generate a test RSA keypair and return (private_pem, public_pem)
     fn generate_test_keypair() -> (String, String) {
-        use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey};
+        const TEST_PRIVATE_KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDoLa8U995hpWkd\ncGW9+rMUfTHJDaGpvzvT6G8euhMpAvmPEbPDrpEdDPm423Oi2Pj3FfBlM4g/D/l7\nDYlejmzRnTNykgHBsckrFO/6NF2og2JcVIiFOdf976BVAjwRkkhfuimt73iqBRVv\n2lk+2ApAdo52VMzSShneBv5tBWzZgMXT3BNOXX4WtADglLQVsS/i/vs5KjGC35C0\nAA/7GP2wODC9dotSTiJ5UfO+z6tLlovqcKe8UHiclNr114OO5W5JDs3grWKh42jc\nBgfQYZ5P69sVpiOhpM83zZbP/h0JqWhIztgQrQ7OsSFb/K0r+U6WCK4mJVIHgSx+\nQtarGu4HAgMBAAECggEAcIqMXlaTpbM/E3UC7CaUHW9d7X29CgHXJy14h2VcmjmF\n7DKBd22ri3BZr6A4GgygCWzJ/NQQy7ibjmkOWBYjayuO348kaNYbk9VvSVGOwHsG\n94hGMIXMS5uWlP4jTcUhbb1YLKZyT79tF624Kr0fowWUookSSzB9/2BWfVPu4jIb\nxrH71qeN9PkaHxrjKljNZk8Ohz/dYakxOPgIGxT288VV6inZdNGe+qUFvJsZF9Xk\n3NEqoKiJjLRmiShVBJm5Xl1C5la9yZrjTtPXQ/yzYML8gabnclrNQlw+lsp6lcj9\nmNx5Mbql3RV2PUbrvDO61Nxli7yi7sUocjk8zwSRsQKBgQD5x09cvmRvkCERF/nO\nZ5qblKvyFa/HU6grfcdLRxfUNo4un6fRisnrAILNjVtxxOCooMsnlX5Rg2pKEjRe\n+I8UbBnf0Q+ATxX2jH81esv9g78QMOOwfXAJcTwfnKmjNKIhiKkjoBRBVVb4loxw\n4bayjqYZQeSYMV/LQTd1fmZVnwKBgQDt9iYCUR6+A+bsZbV7B5R/ibBfY108vtFA\nqAY7V5IpWTOQeh0PIakDpPiA1QW130R00lh44EYfnB7EIT0moGu5Dz7yXhhTnAra\nto4+L1q5a9B+joEVxYGyHHYr2gHOlUeW74P/vQ0DFR+w4mh3gyaUxXJ4VKEu0iw/\nztg2/EL+mQKBgQDHNPpKkV4wy9ZTd7e3slFQO+ZWkI08f6/j39CObQjIKyqCbLq/\nF92qGyI3JcIEnmw+kN71lvjDsfeXU6WJCNu0AfMw2d9vCaQOmkbqNCF08xnyo8sz\n+xbbsP+uhpeUnmmgLQoYa5c79AAFCqy/aoT3K2W1RyQ1bUtlI4JDpqefKQKBgQCP\njLELLsJ74EC7FPQwvrbfZUFnmbqSPY5gEbyIqeA7X1tS6ceD7EtYLnnWxisGtyRF\n0OqcKLdEtFp++Io6NgYmAkN31DmanoSRwhT3AHwbZSXGYtMOPjJqLu8+runuJHGm\nZODdMr+Zv3F5tGtOxWhN0PqoCm2doB4fc/lM2krT6QKBgQClwSkXJpL0rAdFGqXR\nk85Z9yiw7C68N4QfaWopqsrrWVngpWZdzdW7sHgVU0yhFOEYiS+a4XAMDb3shmg+\n0I/kPJYq9By90UeYcjxYmiF/s/ZbfzWm6VdNVHU/1RbygiBjQT8ywd0k35Ve+Svf\nnoGyn1k9KarnfNcukqJ23LuoMg==\n-----END PRIVATE KEY-----\n";
+        const TEST_PUBLIC_KEY_PEM: &str = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6C2vFPfeYaVpHXBlvfqz\nFH0xyQ2hqb870+hvHroTKQL5jxGzw66RHQz5uNtzotj49xXwZTOIPw/5ew2JXo5s\n0Z0zcpIBwbHJKxTv+jRdqINiXFSIhTnX/e+gVQI8EZJIX7opre94qgUVb9pZPtgK\nQHaOdlTM0koZ3gb+bQVs2YDF09wTTl1+FrQA4JS0FbEv4v77OSoxgt+QtAAP+xj9\nsDgwvXaLUk4ieVHzvs+rS5aL6nCnvFB4nJTa9deDjuVuSQ7N4K1ioeNo3AYH0GGe\nT+vbFaYjoaTPN82Wz/4dCaloSM7YEK0OzrEhW/ytK/lOlgiuJiVSB4EsfkLWqxru\nBwIDAQAB\n-----END PUBLIC KEY-----\n";
 
-        let mut rng = rand::thread_rng();
-        let private_key = RsaPrivateKey::new(&mut rng, 2048).expect("keygen failed");
-        let public_key = RsaPublicKey::from(&private_key);
-
-        let private_pem = private_key
-            .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
-            .expect("private pem failed")
-            .to_string();
-        let public_pem = public_key
-            .to_public_key_pem(rsa::pkcs8::LineEnding::LF)
-            .expect("public pem failed");
-
-        (private_pem, public_pem)
+        (
+            TEST_PRIVATE_KEY_PEM.to_string(),
+            TEST_PUBLIC_KEY_PEM.to_string(),
+        )
     }
 
     #[test]

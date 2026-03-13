@@ -22,6 +22,25 @@ Primary repo seams:
 - A rollback checkpoint exists before the staging rollout starts.
 - Operator, reviewer, and evidence storage location are assigned.
 
+## Current RC Snapshot
+
+For release candidate `268670d74`, the repo currently contains local production-like evidence but not staging-environment evidence.
+
+Attached local evidence:
+
+- `docs/operations/evidence/rc-m6-local-compose-health/`
+- `docs/operations/evidence/rc-m6-local-admin-flows/`
+- `docs/operations/evidence/rc-m6-local-audit-flows/`
+- `docs/operations/evidence/rc-m6-local-rich-flows/`
+- `docs/operations/evidence/rc-m6-local-partner-write/`
+
+Still required before final signoff:
+
+- one attributable staging run based on this plan
+- rollout status and health evidence from the staging environment
+- rollback checkpoint ID tied to the staging run
+- named operator and reviewer identities for that run
+
 ## Environment Contract
 
 | Surface | Production-like requirement | Repo anchor | Evidence required |

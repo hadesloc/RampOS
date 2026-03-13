@@ -10,15 +10,25 @@ Fill this section before an external review starts.
 
 | Field | Value |
 | --- | --- |
-| Release candidate SHA | `TBD` |
-| Review window start | `TBD` |
+| Release candidate SHA | `268670d74` |
+| Review window start | `2026-03-13` |
 | Review window end | `TBD` |
 | Review coordinator | `TBD` |
 | Engineering owner | `TBD` |
 | Security owner | `TBD` |
-| Auditor / firm | `TBD` |
-| Artifact root | `docs/security/reports/<yyyy-mm-dd-rc>/` |
+| Auditor / firm | `pending external reviewer` |
+| Artifact root | `docs/security/reports/2026-03-13-rc-268670d74/` |
 | Signoff ledger | `docs/operations/bank-grade-signoff-ledger.md` |
+
+## Current RC Prep Package
+
+The current repo contains an internal pre-signoff evidence package for RC `268670d74` under `docs/security/reports/2026-03-13-rc-268670d74/`.
+
+This package is not the external review itself. It exists to pin:
+
+- the current RC,
+- the inherited raw security reports already present in the repo,
+- the remaining blockers that still keep the bank-grade gate closed.
 
 ## In-Scope Surfaces
 
@@ -39,7 +49,7 @@ The external review must stay grounded in the implemented M0-M6 control-plane se
 
 These areas may still be inspected opportunistically, but they are not part of the required M6 closure package unless a finding crosses into an in-scope seam:
 
-- marketing/landing content
+- marketing or landing content
 - unrelated smart-contract work outside the active control plane
 - historical security reports that predate the current release candidate unless still unresolved
 
@@ -67,7 +77,7 @@ Every finding must be recorded with the full schema below. Do not treat screensh
 | CWE / category | Yes | Use a concrete weakness or security category |
 | Affected seam | Yes | Must map to one row in the in-scope table above |
 | Affected files / surfaces | Yes | File paths, endpoints, commands, or workflow names |
-| Exploit preconditions | Yes | What attacker/operator position is required |
+| Exploit preconditions | Yes | What attacker or operator position is required |
 | Impact | Yes | Concrete blast radius, not generic wording |
 | Reproduction / evidence | Yes | Steps, commands, payloads, or report reference |
 | Suggested remediation | Yes | Specific fix or compensating control |
@@ -123,7 +133,7 @@ Examples of acceptable closure evidence:
 
 Examples of unacceptable closure evidence:
 
-- "looks good now"
+- `looks good now`
 - a chat acknowledgement without commands or artifacts
 - a stale run from a different commit SHA
 

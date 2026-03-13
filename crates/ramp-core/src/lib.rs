@@ -16,6 +16,28 @@
 //! - Cross-chain intent execution
 //! - Chain abstraction protocol (intent-based)
 
+extern crate self as alloy;
+
+pub mod primitives {
+    pub use alloy_primitives::*;
+}
+
+pub mod providers {
+    pub use alloy_provider::*;
+}
+
+pub mod rpc {
+    pub mod types {
+        pub use alloy_rpc_types_eth::*;
+    }
+}
+
+pub mod transports {
+    pub mod http {
+        pub use alloy_transport_http::*;
+    }
+}
+
 pub mod billing;
 pub mod bridge;
 pub mod chain;

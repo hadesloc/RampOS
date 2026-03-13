@@ -30,7 +30,10 @@ hex = { workspace = true }
 aes-gcm = { workspace = true }
 
 # Ethereum/EVM support
-alloy = { workspace = true }
+alloy-primitives = { workspace = true }
+alloy-provider = { workspace = true }
+alloy-rpc-types-eth = { workspace = true }
+alloy-transport-http = { workspace = true }
 
 sqlx = { workspace = true }
 redis = { workspace = true }

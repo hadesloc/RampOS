@@ -1,0 +1,7 @@
+﻿kubectl : error: current-context is not set
+At line:2 char:106
++ ... mpt-268670d74 | Out-Null; kubectl config current-context *>&1 | Out-F ...
++                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (error: current-context is not set:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

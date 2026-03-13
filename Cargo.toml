@@ -35,7 +35,7 @@ serde = { version = ">=1.0, <1.0.228", features = ["derive"] }
 serde_json = "1.0"
 
 # Database (TLS handled by external proxy in production)
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "uuid", "chrono", "rust_decimal", "macros", "migrate"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "uuid", "chrono", "rust_decimal", "derive", "migrate"] }
 redis = { version = "0.25", default-features = false, features = ["tokio-comp", "connection-manager", "script"] }
 
 # Crypto & Security
@@ -49,7 +49,10 @@ base64 = "0.22"
 aes-gcm = "0.10"
 
 # Ethereum/AA
-alloy = { version = "0.1", default-features = false, features = ["full", "reqwest"] }
+alloy-primitives = "0.7.7"
+alloy-provider = "0.1.4"
+alloy-rpc-types-eth = "0.1.4"
+alloy-transport-http = "0.1.4"
 
 # NATS (without TLS for development, production uses external TLS termination)
 async-nats = { version = "0.33", default-features = false }
@@ -71,7 +74,7 @@ anyhow = "1.0"
 async-trait = "0.1"
 config = "0.14"
 dotenvy = "0.15"
-validator = { version = "0.16", features = ["derive"] }
+validator = { version = "0.20", features = ["derive"] }
 aws-sdk-s3 = "1.13"
 aws-config = "1.1"
 hickory-resolver = { version = "0.24", features = ["tokio-runtime", "dns-over-https-rustls"] }
