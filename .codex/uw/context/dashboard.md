@@ -1,6 +1,6 @@
 # Project Dashboard
 
-**Last Updated**: 2026-03-13T16:10:00+07:00
+**Last Updated**: 2026-03-13T18:21:46+07:00
 **Phase**: QA
 **Progress**: 100%
 **Plan Approved**: True
@@ -27,7 +27,9 @@
 - QA checkpoint: dependency remediation reduced open Rust advisories from `6` to `1`
 - QA checkpoint: fresh Semgrep evidence attached for RC `268670d74`
 - QA checkpoint: `alloy-dyn-abi` and `validator -> idna` are closed for the current RC
-- QA checkpoint: Trivy gap is now explicit and attributable via a blocker artifact
+- QA checkpoint: `frontend` and `sdk` npm audit are now clean
+- QA checkpoint: `jsonwebtoken` was upgraded to `10.3.0` and `sqlx` macro support was restored in workspace dependencies
+- QA checkpoint: Trivy is now runnable locally, but its latest report must be refreshed after the current dependency-remediation batch
 
 ## Session History (Recent 20)
 - Archive: `.codex/uw/context/dashboard-history.json`
@@ -41,4 +43,4 @@
 - What we are building: a bank-grade additive control plane for RampOS with hardening artifacts implemented in-repo.
 - MVP scope: `M0` to `M6` repo implementation and local QA evidence are complete.
 - Current focus: close the last external blockers for official bank-grade signoff.
-- Blocking items now recorded explicitly: residual `rsa` report in `Cargo.lock`, staging ingress or DNS access, kubeconfig-backed staging execution, independent external security review, fresh Trivy evidence, and named approver signoff.
+- Blocking items now recorded explicitly: residual `rsa` report in `Cargo.lock`, staging ingress or DNS access, kubeconfig-backed staging execution, independent external security review, refreshed Trivy evidence for the updated RC, and named approver signoff.

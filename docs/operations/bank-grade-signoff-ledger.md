@@ -86,4 +86,4 @@ The candidate is eligible for the `bank-grade` label only if all conditions belo
 | Decision date | `2026-03-13` |
 | Signed by | `TBD` |
 | Next review date | `Before expiry or after staging and external security closure` |
-| Notes | `Bank-grade label remains blocked by the residual Cargo.lock rsa report through ancillary SQLx support, missing staging-environment proof, missing independent external security review outputs, missing Trivy evidence, and unassigned approvers.` |
+| Notes | `Bank-grade label remains blocked by the residual Cargo.lock rsa report through ancillary SQLx support, missing staging-environment proof, missing independent external security review outputs, the need to refresh Trivy evidence after the current dependency-remediation batch, and unassigned approvers.` |

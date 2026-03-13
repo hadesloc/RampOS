@@ -8,7 +8,7 @@ Release candidate: `268670d74`
 | `RC-2026-03-F02` | `medium` | `rsa 0.9.10` remains in `Cargo.lock` through ancillary SQLx support even though active Napas runtime code no longer depends on it | Security workflow and dependency health | `triaged` | `Engineering lead` | `Before bank-grade signoff` | `docs/security/reports/2026-03-13-rc-268670d74/cargo-audit.json` |
 | `RC-2026-03-F03` | `medium` | `validator -> idna 0.4.0` advisory has been remediated for the current RC | Release and certification controls | `closed` | `Engineering lead` | `2026-03-13` | `docs/security/reports/2026-03-13-rc-268670d74/cargo-audit.json` |
 | `RC-2026-03-F04` | `medium` | Independent external security review has not been executed for RC `268670d74` | Security workflow and dependency health | `open` | `Security owner` | `Before bank-grade signoff` | `docs/security/reports/2026-03-13-rc-268670d74/review-summary.md` |
-| `RC-2026-03-F05` | `medium` | Fresh Trivy output is still unavailable on the current validation host | Security workflow and dependency health | `triaged` | `Security owner` | `Before bank-grade signoff` | `docs/security/reports/trivy-fs-report.txt` |
+| `RC-2026-03-F05` | `medium` | Trivy is now runnable, but the latest successful Trivy report predates the current dependency-remediation batch | Security workflow and dependency health | `triaged` | `Security owner` | `Before bank-grade signoff` | `docs/security/reports/2026-03-13-rc-268670d74/trivy-current.json` |
 | `RC-2026-03-F06` | `medium` | Staging validation is blocked by missing DNS reachability and kubeconfig on the current host | Release and certification controls | `open` | `Operations or SRE owner` | `Before bank-grade signoff` | `docs/operations/evidence/rc-m6-staging-attempt-268670d74/summary.md` |
 | `RC-2026-03-F07` | `informational` | Fresh Semgrep run produced audit-level code findings that still need owner triage | Security workflow and dependency health | `triaged` | `Security owner` | `Next security sweep` | `docs/security/reports/2026-03-13-rc-268670d74/semgrep-summary.md` |
 
@@ -104,7 +104,7 @@ Release candidate: `268670d74`
 
 ### `RC-2026-03-F05`
 
-- Title: Fresh Trivy output is still unavailable on the current validation host
+- Title: Trivy is now runnable, but the latest successful Trivy report predates the current dependency-remediation batch
 - Severity: `medium`
 - CWE / category: `static analysis and secrets assurance gap`
 - Affected seam: `Security workflow and dependency health`
@@ -114,11 +114,12 @@ Release candidate: `268670d74`
 - Exploit preconditions:
   - code or config regressions would not be re-detected during this session
 - Impact:
-  - filesystem, secrets, and config scan evidence for this RC is still inherited rather than freshly reproduced
+  - filesystem, secrets, and config scan evidence now exists, but it is stale relative to the current dependency-remediation batch
 - Reproduction or evidence:
-  - `docs/security/reports/trivy-fs-report.txt` records tool absence
+  - `docs/security/reports/2026-03-13-rc-268670d74/trivy-current.json` was captured successfully on this host
+  - the report includes dependency findings that were remediated in the current worktree, so the scan must be rerun against the updated RC state
 - Suggested remediation:
-  - re-run Trivy in CI or on a tool-capable validation host and attach outputs to the RC package
+  - rerun Trivy against the updated RC state and attach the refreshed output to the RC package
 - Target milestone: `must close before bank-grade signoff`
 
 ### `RC-2026-03-F06`

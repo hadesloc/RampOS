@@ -1,25 +1,4 @@
-[0m[0m[1m[31mCrate:    [0m alloy-dyn-abi
-[0m[0m[1m[31mVersion:  [0m 0.7.7
-[0m[0m[1m[31mTitle:    [0m DoS vulnerability on `alloy_dyn_abi::TypedData` hashing
-[0m[0m[1m[31mDate:     [0m 2025-10-15
-[0m[0m[1m[31mID:       [0m RUSTSEC-2025-0073
-[0m[0m[1m[31mURL:      [0m https://rustsec.org/advisories/RUSTSEC-2025-0073
-[0m[0m[1m[31mSeverity: [0m 7.5 (high)
-[0m[0m[1m[31mSolution: [0m Upgrade to >=0.8.26, <1.0.0 OR >=1.4.1
-[0m[0m[1m[31mDependency tree:
-[0malloy-dyn-abi 0.7.7
-â”œâ”€â”€ alloy-core 0.7.7
-â”‚   â””â”€â”€ alloy 0.1.4
-â”‚       â”œâ”€â”€ ramp-core 0.1.0
-â”‚       â”‚   â”œâ”€â”€ ramp-api 0.1.0
-â”‚       â”‚   â””â”€â”€ ramp-aa 0.1.0
-â”‚       â”‚       â””â”€â”€ ramp-api 0.1.0
-â”‚       â”œâ”€â”€ ramp-api 0.1.0
-â”‚       â””â”€â”€ ramp-aa 0.1.0
-â””â”€â”€ alloy-contract 0.1.4
-    â””â”€â”€ alloy 0.1.4
-
-[0m[0m[1m[31mCrate:    [0m rsa
+﻿[0m[0m[1m[31mCrate:    [0m rsa
 [0m[0m[1m[31mVersion:  [0m 0.9.10
 [0m[0m[1m[31mTitle:    [0m Marvin Attack: potential key recovery through timing sidechannels
 [0m[0m[1m[31mDate:     [0m 2023-11-22
@@ -29,30 +8,30 @@
 [0m[0m[1m[31mSolution: [0m No fixed upgrade is available!
 [0m[0m[1m[31mDependency tree:
 [0mrsa 0.9.10
-â””â”€â”€ sqlx-mysql 0.8.6
-    â”œâ”€â”€ sqlx-macros-core 0.8.6
-    â”‚   â””â”€â”€ sqlx-macros 0.8.6
-    â”‚       â””â”€â”€ sqlx 0.8.6
-    â”‚           â”œâ”€â”€ ramp-ledger 0.1.0
-    â”‚           â”‚   â””â”€â”€ ramp-core 0.1.0
-    â”‚           â”‚       â”œâ”€â”€ ramp-api 0.1.0
-    â”‚           â”‚       â””â”€â”€ ramp-aa 0.1.0
-    â”‚           â”‚           â””â”€â”€ ramp-api 0.1.0
-    â”‚           â”œâ”€â”€ ramp-core 0.1.0
-    â”‚           â”œâ”€â”€ ramp-compliance 0.1.0
-    â”‚           â”‚   â”œâ”€â”€ ramp-core 0.1.0
-    â”‚           â”‚   â””â”€â”€ ramp-api 0.1.0
-    â”‚           â”œâ”€â”€ ramp-common 0.1.0
-    â”‚           â”‚   â”œâ”€â”€ ramp-ledger 0.1.0
-    â”‚           â”‚   â”œâ”€â”€ ramp-core 0.1.0
-    â”‚           â”‚   â”œâ”€â”€ ramp-compliance 0.1.0
-    â”‚           â”‚   â”œâ”€â”€ ramp-api 0.1.0
-    â”‚           â”‚   â”œâ”€â”€ ramp-adapter 0.1.0
-    â”‚           â”‚   â”‚   â”œâ”€â”€ ramp-core 0.1.0
-    â”‚           â”‚   â”‚   â””â”€â”€ ramp-compliance 0.1.0
-    â”‚           â”‚   â””â”€â”€ ramp-aa 0.1.0
-    â”‚           â””â”€â”€ ramp-api 0.1.0
-    â””â”€â”€ sqlx 0.8.6
+└── sqlx-mysql 0.8.6
+    ├── sqlx-macros-core 0.8.6
+    │   └── sqlx-macros 0.8.6
+    │       └── sqlx 0.8.6
+    │           ├── ramp-ledger 0.1.0
+    │           │   └── ramp-core 0.1.0
+    │           │       ├── ramp-api 0.1.0
+    │           │       └── ramp-aa 0.1.0
+    │           │           └── ramp-api 0.1.0
+    │           ├── ramp-core 0.1.0
+    │           ├── ramp-compliance 0.1.0
+    │           │   ├── ramp-core 0.1.0
+    │           │   └── ramp-api 0.1.0
+    │           ├── ramp-common 0.1.0
+    │           │   ├── ramp-ledger 0.1.0
+    │           │   ├── ramp-core 0.1.0
+    │           │   ├── ramp-compliance 0.1.0
+    │           │   ├── ramp-api 0.1.0
+    │           │   ├── ramp-adapter 0.1.0
+    │           │   │   ├── ramp-core 0.1.0
+    │           │   │   └── ramp-compliance 0.1.0
+    │           │   └── ramp-aa 0.1.0
+    │           └── ramp-api 0.1.0
+    └── sqlx 0.8.6
 
 [0m[0m[1m[33mCrate:    [0m backoff
 [0m[0m[1m[33mVersion:  [0m 0.4.0
@@ -63,14 +42,14 @@
 [0m[0m[1m[33mURL:      [0m https://rustsec.org/advisories/RUSTSEC-2025-0012
 [0m[0m[1m[33mDependency tree:
 [0mbackoff 0.4.0
-â””â”€â”€ ramp-adapter 0.1.0
-    â”œâ”€â”€ ramp-core 0.1.0
-    â”‚   â”œâ”€â”€ ramp-api 0.1.0
-    â”‚   â””â”€â”€ ramp-aa 0.1.0
-    â”‚       â””â”€â”€ ramp-api 0.1.0
-    â””â”€â”€ ramp-compliance 0.1.0
-        â”œâ”€â”€ ramp-core 0.1.0
-        â””â”€â”€ ramp-api 0.1.0
+└── ramp-adapter 0.1.0
+    ├── ramp-core 0.1.0
+    │   ├── ramp-api 0.1.0
+    │   └── ramp-aa 0.1.0
+    │       └── ramp-api 0.1.0
+    └── ramp-compliance 0.1.0
+        ├── ramp-core 0.1.0
+        └── ramp-api 0.1.0
 
 [0m[0m[1m[33mCrate:    [0m derivative
 [0m[0m[1m[33mVersion:  [0m 2.2.0
@@ -81,123 +60,60 @@
 [0m[0m[1m[33mURL:      [0m https://rustsec.org/advisories/RUSTSEC-2024-0388
 [0m[0m[1m[33mDependency tree:
 [0mderivative 2.2.0
-â”œâ”€â”€ ark-ff 0.4.2
-â”‚   â””â”€â”€ ruint 1.17.2
-â”‚       â”œâ”€â”€ alloy-primitives 0.8.26
-â”‚       â”‚   â””â”€â”€ alloy-chains 0.1.69
-â”‚       â”‚       â””â”€â”€ alloy-provider 0.1.4
-â”‚       â”‚           â”œâ”€â”€ alloy-contract 0.1.4
-â”‚       â”‚           â”‚   â””â”€â”€ alloy 0.1.4
-â”‚       â”‚           â”‚       â”œâ”€â”€ ramp-core 0.1.0
-â”‚       â”‚           â”‚       â”‚   â”œâ”€â”€ ramp-api 0.1.0
-â”‚       â”‚           â”‚       â”‚   â””â”€â”€ ramp-aa 0.1.0
-â”‚       â”‚           â”‚       â”‚       â””â”€â”€ ramp-api 0.1.0
-â”‚       â”‚           â”‚       â”œâ”€â”€ ramp-api 0.1.0
-â”‚       â”‚           â”‚       â””â”€â”€ ramp-aa 0.1.0
-â”‚       â”‚           â””â”€â”€ alloy 0.1.4
-â”‚       â””â”€â”€ alloy-primitives 0.7.7
-â”‚           â”œâ”€â”€ alloy-sol-types 0.7.7
-â”‚           â”‚   â”œâ”€â”€ alloy-rpc-types-eth 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-rpc-types-engine 0.1.4
-â”‚           â”‚   â”‚   â”‚   â””â”€â”€ alloy-rpc-types 0.1.4
-â”‚           â”‚   â”‚   â”‚       â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-rpc-types 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-network 0.1.4
-â”‚           â”‚   â”‚   â”‚   â”œâ”€â”€ alloy-signer-local 0.1.4
-â”‚           â”‚   â”‚   â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â”‚   â”œâ”€â”€ alloy-contract 0.1.4
-â”‚           â”‚   â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy-contract 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-network 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-dyn-abi 0.7.7
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-core 0.7.7
-â”‚           â”‚   â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy-contract 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-core 0.7.7
-â”‚           â”‚   â””â”€â”€ alloy-contract 0.1.4
-â”‚           â”œâ”€â”€ alloy-signer-local 0.1.4
-â”‚           â”œâ”€â”€ alloy-signer 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-signer-local 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-network 0.1.4
-â”‚           â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”œâ”€â”€ alloy-serde 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-rpc-types-eth 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-rpc-types-engine 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-rpc-types 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-network 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-eips 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-rpc-types-eth 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-rpc-types-engine 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-network 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-consensus 0.1.4
-â”‚           â”‚   â”‚   â”‚   â”œâ”€â”€ alloy-signer-local 0.1.4
-â”‚           â”‚   â”‚   â”‚   â”œâ”€â”€ alloy-rpc-types-eth 0.1.4
-â”‚           â”‚   â”‚   â”‚   â”œâ”€â”€ alloy-rpc-types-engine 0.1.4
-â”‚           â”‚   â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â”‚   â”œâ”€â”€ alloy-network 0.1.4
-â”‚           â”‚   â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â””â”€â”€ alloy-consensus 0.1.4
-â”‚           â”œâ”€â”€ alloy-rpc-types-eth 0.1.4
-â”‚           â”œâ”€â”€ alloy-rpc-types-engine 0.1.4
-â”‚           â”œâ”€â”€ alloy-rpc-client 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”œâ”€â”€ alloy-pubsub 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-transport-ws 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-rpc-client 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-transport-ipc 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-rpc-client 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-rpc-client 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-contract 0.1.4
-â”‚           â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”œâ”€â”€ alloy-network 0.1.4
-â”‚           â”œâ”€â”€ alloy-json-rpc 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-transport-ipc 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-transport-http 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-rpc-client 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-transport 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-transport-ws 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-transport-ipc 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-transport-http 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-rpc-client 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-pubsub 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-contract 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-rpc-client 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-pubsub 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â””â”€â”€ alloy-network 0.1.4
-â”‚           â”œâ”€â”€ alloy-json-abi 0.7.7
-â”‚           â”‚   â”œâ”€â”€ alloy-sol-types 0.7.7
-â”‚           â”‚   â”œâ”€â”€ alloy-sol-macro-input 0.7.7
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-sol-macro-expander 0.7.7
-â”‚           â”‚   â”‚   â”‚   â””â”€â”€ alloy-sol-macro 0.7.7
-â”‚           â”‚   â”‚   â”‚       â””â”€â”€ alloy-sol-types 0.7.7
-â”‚           â”‚   â”‚   â””â”€â”€ alloy-sol-macro 0.7.7
-â”‚           â”‚   â”œâ”€â”€ alloy-sol-macro-expander 0.7.7
-â”‚           â”‚   â”œâ”€â”€ alloy-dyn-abi 0.7.7
-â”‚           â”‚   â”œâ”€â”€ alloy-core 0.7.7
-â”‚           â”‚   â””â”€â”€ alloy-contract 0.1.4
-â”‚           â”œâ”€â”€ alloy-eips 0.1.4
-â”‚           â”œâ”€â”€ alloy-dyn-abi 0.7.7
-â”‚           â”œâ”€â”€ alloy-core 0.7.7
-â”‚           â”œâ”€â”€ alloy-contract 0.1.4
-â”‚           â””â”€â”€ alloy-consensus 0.1.4
-â””â”€â”€ ark-ff 0.3.0
-    â””â”€â”€ ruint 1.17.2
+├── ark-ff 0.4.2
+│   └── ruint 1.17.2
+│       ├── alloy-primitives 0.8.26
+│       │   └── alloy-chains 0.1.69
+│       │       └── alloy-provider 0.1.4
+│       │           └── ramp-core 0.1.0
+│       │               ├── ramp-api 0.1.0
+│       │               └── ramp-aa 0.1.0
+│       │                   └── ramp-api 0.1.0
+│       └── alloy-primitives 0.7.7
+│           ├── ramp-core 0.1.0
+│           ├── ramp-api 0.1.0
+│           ├── ramp-aa 0.1.0
+│           ├── alloy-sol-types 0.7.7
+│           │   ├── alloy-rpc-types-eth 0.1.4
+│           │   │   ├── ramp-core 0.1.0
+│           │   │   ├── alloy-provider 0.1.4
+│           │   │   └── alloy-network 0.1.4
+│           │   │       └── alloy-provider 0.1.4
+│           │   └── alloy-network 0.1.4
+│           ├── alloy-signer 0.1.4
+│           │   └── alloy-network 0.1.4
+│           ├── alloy-serde 0.1.4
+│           │   ├── alloy-rpc-types-eth 0.1.4
+│           │   ├── alloy-network 0.1.4
+│           │   ├── alloy-eips 0.1.4
+│           │   │   ├── alloy-rpc-types-eth 0.1.4
+│           │   │   ├── alloy-provider 0.1.4
+│           │   │   ├── alloy-network 0.1.4
+│           │   │   └── alloy-consensus 0.1.4
+│           │   │       ├── alloy-rpc-types-eth 0.1.4
+│           │   │       ├── alloy-provider 0.1.4
+│           │   │       └── alloy-network 0.1.4
+│           │   └── alloy-consensus 0.1.4
+│           ├── alloy-rpc-types-eth 0.1.4
+│           ├── alloy-provider 0.1.4
+│           ├── alloy-network 0.1.4
+│           ├── alloy-json-rpc 0.1.4
+│           │   ├── alloy-transport-http 0.1.4
+│           │   │   ├── ramp-core 0.1.0
+│           │   │   ├── alloy-rpc-client 0.1.4
+│           │   │   │   └── alloy-provider 0.1.4
+│           │   │   └── alloy-provider 0.1.4
+│           │   ├── alloy-transport 0.1.4
+│           │   │   ├── alloy-transport-http 0.1.4
+│           │   │   ├── alloy-rpc-client 0.1.4
+│           │   │   └── alloy-provider 0.1.4
+│           │   ├── alloy-rpc-client 0.1.4
+│           │   ├── alloy-provider 0.1.4
+│           │   └── alloy-network 0.1.4
+│           ├── alloy-eips 0.1.4
+│           └── alloy-consensus 0.1.4
+└── ark-ff 0.3.0
+    └── ruint 1.17.2
 
 [0m[0m[1m[33mCrate:    [0m instant
 [0m[0m[1m[33mVersion:  [0m 0.1.13
@@ -208,15 +124,15 @@
 [0m[0m[1m[33mURL:      [0m https://rustsec.org/advisories/RUSTSEC-2024-0384
 [0m[0m[1m[33mDependency tree:
 [0minstant 0.1.13
-â””â”€â”€ backoff 0.4.0
-    â””â”€â”€ ramp-adapter 0.1.0
-        â”œâ”€â”€ ramp-core 0.1.0
-        â”‚   â”œâ”€â”€ ramp-api 0.1.0
-        â”‚   â””â”€â”€ ramp-aa 0.1.0
-        â”‚       â””â”€â”€ ramp-api 0.1.0
-        â””â”€â”€ ramp-compliance 0.1.0
-            â”œâ”€â”€ ramp-core 0.1.0
-            â””â”€â”€ ramp-api 0.1.0
+└── backoff 0.4.0
+    └── ramp-adapter 0.1.0
+        ├── ramp-core 0.1.0
+        │   ├── ramp-api 0.1.0
+        │   └── ramp-aa 0.1.0
+        │       └── ramp-api 0.1.0
+        └── ramp-compliance 0.1.0
+            ├── ramp-core 0.1.0
+            └── ramp-api 0.1.0
 
 [0m[0m[1m[33mCrate:    [0m paste
 [0m[0m[1m[33mVersion:  [0m 1.0.15
@@ -227,129 +143,70 @@
 [0m[0m[1m[33mURL:      [0m https://rustsec.org/advisories/RUSTSEC-2024-0436
 [0m[0m[1m[33mDependency tree:
 [0mpaste 1.0.15
-â”œâ”€â”€ syn-solidity 0.7.7
-â”‚   â”œâ”€â”€ alloy-sol-macro-input 0.7.7
-â”‚   â”‚   â”œâ”€â”€ alloy-sol-macro-expander 0.7.7
-â”‚   â”‚   â”‚   â””â”€â”€ alloy-sol-macro 0.7.7
-â”‚   â”‚   â”‚       â””â”€â”€ alloy-sol-types 0.7.7
-â”‚   â”‚   â”‚           â”œâ”€â”€ alloy-rpc-types-eth 0.1.4
-â”‚   â”‚   â”‚           â”‚   â”œâ”€â”€ alloy-rpc-types-engine 0.1.4
-â”‚   â”‚   â”‚           â”‚   â”‚   â””â”€â”€ alloy-rpc-types 0.1.4
-â”‚   â”‚   â”‚           â”‚   â”‚       â””â”€â”€ alloy 0.1.4
-â”‚   â”‚   â”‚           â”‚   â”‚           â”œâ”€â”€ ramp-core 0.1.0
-â”‚   â”‚   â”‚           â”‚   â”‚           â”‚   â”œâ”€â”€ ramp-api 0.1.0
-â”‚   â”‚   â”‚           â”‚   â”‚           â”‚   â””â”€â”€ ramp-aa 0.1.0
-â”‚   â”‚   â”‚           â”‚   â”‚           â”‚       â””â”€â”€ ramp-api 0.1.0
-â”‚   â”‚   â”‚           â”‚   â”‚           â”œâ”€â”€ ramp-api 0.1.0
-â”‚   â”‚   â”‚           â”‚   â”‚           â””â”€â”€ ramp-aa 0.1.0
-â”‚   â”‚   â”‚           â”‚   â”œâ”€â”€ alloy-rpc-types 0.1.4
-â”‚   â”‚   â”‚           â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚   â”‚   â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-contract 0.1.4
-â”‚   â”‚   â”‚           â”‚   â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚   â”‚   â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚   â”‚   â”‚           â”‚   â”œâ”€â”€ alloy-network 0.1.4
-â”‚   â”‚   â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-signer-local 0.1.4
-â”‚   â”‚   â”‚           â”‚   â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚   â”‚   â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚   â”‚   â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-contract 0.1.4
-â”‚   â”‚   â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚   â”‚   â”‚           â”‚   â””â”€â”€ alloy-contract 0.1.4
-â”‚   â”‚   â”‚           â”œâ”€â”€ alloy-network 0.1.4
-â”‚   â”‚   â”‚           â”œâ”€â”€ alloy-dyn-abi 0.7.7
-â”‚   â”‚   â”‚           â”‚   â”œâ”€â”€ alloy-core 0.7.7
-â”‚   â”‚   â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚   â”‚   â”‚           â”‚   â””â”€â”€ alloy-contract 0.1.4
-â”‚   â”‚   â”‚           â”œâ”€â”€ alloy-core 0.7.7
-â”‚   â”‚   â”‚           â””â”€â”€ alloy-contract 0.1.4
-â”‚   â”‚   â””â”€â”€ alloy-sol-macro 0.7.7
-â”‚   â””â”€â”€ alloy-sol-macro-expander 0.7.7
-â”œâ”€â”€ ark-ff 0.5.0
-â”‚   â””â”€â”€ ruint 1.17.2
-â”‚       â”œâ”€â”€ alloy-primitives 0.8.26
-â”‚       â”‚   â””â”€â”€ alloy-chains 0.1.69
-â”‚       â”‚       â””â”€â”€ alloy-provider 0.1.4
-â”‚       â””â”€â”€ alloy-primitives 0.7.7
-â”‚           â”œâ”€â”€ alloy-sol-types 0.7.7
-â”‚           â”œâ”€â”€ alloy-signer-local 0.1.4
-â”‚           â”œâ”€â”€ alloy-signer 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-signer-local 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-network 0.1.4
-â”‚           â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”œâ”€â”€ alloy-serde 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-rpc-types-eth 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-rpc-types-engine 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-rpc-types 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-network 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-eips 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-rpc-types-eth 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-rpc-types-engine 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-network 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-consensus 0.1.4
-â”‚           â”‚   â”‚   â”‚   â”œâ”€â”€ alloy-signer-local 0.1.4
-â”‚           â”‚   â”‚   â”‚   â”œâ”€â”€ alloy-rpc-types-eth 0.1.4
-â”‚           â”‚   â”‚   â”‚   â”œâ”€â”€ alloy-rpc-types-engine 0.1.4
-â”‚           â”‚   â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â”‚   â”œâ”€â”€ alloy-network 0.1.4
-â”‚           â”‚   â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â””â”€â”€ alloy-consensus 0.1.4
-â”‚           â”œâ”€â”€ alloy-rpc-types-eth 0.1.4
-â”‚           â”œâ”€â”€ alloy-rpc-types-engine 0.1.4
-â”‚           â”œâ”€â”€ alloy-rpc-client 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”œâ”€â”€ alloy-pubsub 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-transport-ws 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-rpc-client 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-transport-ipc 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-rpc-client 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-rpc-client 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-contract 0.1.4
-â”‚           â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”œâ”€â”€ alloy-network 0.1.4
-â”‚           â”œâ”€â”€ alloy-json-rpc 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-transport-ipc 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-transport-http 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-rpc-client 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-transport 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-transport-ws 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-transport-ipc 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-transport-http 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-rpc-client 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-pubsub 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-contract 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-rpc-client 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-pubsub 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â””â”€â”€ alloy-network 0.1.4
-â”‚           â”œâ”€â”€ alloy-json-abi 0.7.7
-â”‚           â”‚   â”œâ”€â”€ alloy-sol-types 0.7.7
-â”‚           â”‚   â”œâ”€â”€ alloy-sol-macro-input 0.7.7
-â”‚           â”‚   â”œâ”€â”€ alloy-sol-macro-expander 0.7.7
-â”‚           â”‚   â”œâ”€â”€ alloy-dyn-abi 0.7.7
-â”‚           â”‚   â”œâ”€â”€ alloy-core 0.7.7
-â”‚           â”‚   â””â”€â”€ alloy-contract 0.1.4
-â”‚           â”œâ”€â”€ alloy-eips 0.1.4
-â”‚           â”œâ”€â”€ alloy-dyn-abi 0.7.7
-â”‚           â”œâ”€â”€ alloy-core 0.7.7
-â”‚           â”œâ”€â”€ alloy-contract 0.1.4
-â”‚           â””â”€â”€ alloy-consensus 0.1.4
-â”œâ”€â”€ ark-ff 0.4.2
-â”‚   â””â”€â”€ ruint 1.17.2
-â”œâ”€â”€ ark-ff 0.3.0
-â”‚   â””â”€â”€ ruint 1.17.2
-â””â”€â”€ alloy-primitives 0.8.26
+├── syn-solidity 0.7.7
+│   ├── alloy-sol-macro-input 0.7.7
+│   │   ├── alloy-sol-macro-expander 0.7.7
+│   │   │   └── alloy-sol-macro 0.7.7
+│   │   │       └── alloy-sol-types 0.7.7
+│   │   │           ├── alloy-rpc-types-eth 0.1.4
+│   │   │           │   ├── ramp-core 0.1.0
+│   │   │           │   │   ├── ramp-api 0.1.0
+│   │   │           │   │   └── ramp-aa 0.1.0
+│   │   │           │   │       └── ramp-api 0.1.0
+│   │   │           │   ├── alloy-provider 0.1.4
+│   │   │           │   │   └── ramp-core 0.1.0
+│   │   │           │   └── alloy-network 0.1.4
+│   │   │           │       └── alloy-provider 0.1.4
+│   │   │           └── alloy-network 0.1.4
+│   │   └── alloy-sol-macro 0.7.7
+│   └── alloy-sol-macro-expander 0.7.7
+├── ark-ff 0.5.0
+│   └── ruint 1.17.2
+│       ├── alloy-primitives 0.8.26
+│       │   └── alloy-chains 0.1.69
+│       │       └── alloy-provider 0.1.4
+│       └── alloy-primitives 0.7.7
+│           ├── ramp-core 0.1.0
+│           ├── ramp-api 0.1.0
+│           ├── ramp-aa 0.1.0
+│           ├── alloy-sol-types 0.7.7
+│           ├── alloy-signer 0.1.4
+│           │   └── alloy-network 0.1.4
+│           ├── alloy-serde 0.1.4
+│           │   ├── alloy-rpc-types-eth 0.1.4
+│           │   ├── alloy-network 0.1.4
+│           │   ├── alloy-eips 0.1.4
+│           │   │   ├── alloy-rpc-types-eth 0.1.4
+│           │   │   ├── alloy-provider 0.1.4
+│           │   │   ├── alloy-network 0.1.4
+│           │   │   └── alloy-consensus 0.1.4
+│           │   │       ├── alloy-rpc-types-eth 0.1.4
+│           │   │       ├── alloy-provider 0.1.4
+│           │   │       └── alloy-network 0.1.4
+│           │   └── alloy-consensus 0.1.4
+│           ├── alloy-rpc-types-eth 0.1.4
+│           ├── alloy-provider 0.1.4
+│           ├── alloy-network 0.1.4
+│           ├── alloy-json-rpc 0.1.4
+│           │   ├── alloy-transport-http 0.1.4
+│           │   │   ├── ramp-core 0.1.0
+│           │   │   ├── alloy-rpc-client 0.1.4
+│           │   │   │   └── alloy-provider 0.1.4
+│           │   │   └── alloy-provider 0.1.4
+│           │   ├── alloy-transport 0.1.4
+│           │   │   ├── alloy-transport-http 0.1.4
+│           │   │   ├── alloy-rpc-client 0.1.4
+│           │   │   └── alloy-provider 0.1.4
+│           │   ├── alloy-rpc-client 0.1.4
+│           │   ├── alloy-provider 0.1.4
+│           │   └── alloy-network 0.1.4
+│           ├── alloy-eips 0.1.4
+│           └── alloy-consensus 0.1.4
+├── ark-ff 0.4.2
+│   └── ruint 1.17.2
+├── ark-ff 0.3.0
+│   └── ruint 1.17.2
+└── alloy-primitives 0.8.26
 
 [0m[0m[1m[33mCrate:    [0m proc-macro-error
 [0m[0m[1m[33mVersion:  [0m 1.0.4
@@ -360,44 +217,25 @@
 [0m[0m[1m[33mURL:      [0m https://rustsec.org/advisories/RUSTSEC-2024-0370
 [0m[0m[1m[33mDependency tree:
 [0mproc-macro-error 1.0.4
-â”œâ”€â”€ utoipa-gen 4.3.1
-â”‚   â””â”€â”€ utoipa 4.2.3
-â”‚       â”œâ”€â”€ utoipa-swagger-ui 6.0.0
-â”‚       â”‚   â””â”€â”€ ramp-api 0.1.0
-â”‚       â””â”€â”€ ramp-api 0.1.0
-â”œâ”€â”€ alloy-sol-macro-expander 0.7.7
-â”‚   â””â”€â”€ alloy-sol-macro 0.7.7
-â”‚       â””â”€â”€ alloy-sol-types 0.7.7
-â”‚           â”œâ”€â”€ alloy-rpc-types-eth 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-rpc-types-engine 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy-rpc-types 0.1.4
-â”‚           â”‚   â”‚       â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”‚           â”œâ”€â”€ ramp-core 0.1.0
-â”‚           â”‚   â”‚           â”‚   â”œâ”€â”€ ramp-api 0.1.0
-â”‚           â”‚   â”‚           â”‚   â””â”€â”€ ramp-aa 0.1.0
-â”‚           â”‚   â”‚           â”‚       â””â”€â”€ ramp-api 0.1.0
-â”‚           â”‚   â”‚           â”œâ”€â”€ ramp-api 0.1.0
-â”‚           â”‚   â”‚           â””â”€â”€ ramp-aa 0.1.0
-â”‚           â”‚   â”œâ”€â”€ alloy-rpc-types 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-contract 0.1.4
-â”‚           â”‚   â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”œâ”€â”€ alloy-network 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-signer-local 0.1.4
-â”‚           â”‚   â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-provider 0.1.4
-â”‚           â”‚   â”‚   â”œâ”€â”€ alloy-contract 0.1.4
-â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â””â”€â”€ alloy-contract 0.1.4
-â”‚           â”œâ”€â”€ alloy-network 0.1.4
-â”‚           â”œâ”€â”€ alloy-dyn-abi 0.7.7
-â”‚           â”‚   â”œâ”€â”€ alloy-core 0.7.7
-â”‚           â”‚   â”‚   â””â”€â”€ alloy 0.1.4
-â”‚           â”‚   â””â”€â”€ alloy-contract 0.1.4
-â”‚           â”œâ”€â”€ alloy-core 0.7.7
-â”‚           â””â”€â”€ alloy-contract 0.1.4
-â””â”€â”€ alloy-sol-macro 0.7.7
+├── utoipa-gen 4.3.1
+│   └── utoipa 4.2.3
+│       ├── utoipa-swagger-ui 6.0.0
+│       │   └── ramp-api 0.1.0
+│       └── ramp-api 0.1.0
+├── alloy-sol-macro-expander 0.7.7
+│   └── alloy-sol-macro 0.7.7
+│       └── alloy-sol-types 0.7.7
+│           ├── alloy-rpc-types-eth 0.1.4
+│           │   ├── ramp-core 0.1.0
+│           │   │   ├── ramp-api 0.1.0
+│           │   │   └── ramp-aa 0.1.0
+│           │   │       └── ramp-api 0.1.0
+│           │   ├── alloy-provider 0.1.4
+│           │   │   └── ramp-core 0.1.0
+│           │   └── alloy-network 0.1.4
+│           │       └── alloy-provider 0.1.4
+│           └── alloy-network 0.1.4
+└── alloy-sol-macro 0.7.7
 
 [0m[0m[1m[33mCrate:    [0m rustls-pemfile
 [0m[0m[1m[33mVersion:  [0m 1.0.4
@@ -408,34 +246,34 @@
 [0m[0m[1m[33mURL:      [0m https://rustsec.org/advisories/RUSTSEC-2025-0134
 [0m[0m[1m[33mDependency tree:
 [0mrustls-pemfile 1.0.4
-â”œâ”€â”€ rustls-native-certs 0.6.3
-â”‚   â””â”€â”€ async-nats 0.33.0
-â”‚       â””â”€â”€ ramp-core 0.1.0
-â”‚           â”œâ”€â”€ ramp-api 0.1.0
-â”‚           â””â”€â”€ ramp-aa 0.1.0
-â”‚               â””â”€â”€ ramp-api 0.1.0
-â”œâ”€â”€ reqwest 0.11.27
-â”‚   â”œâ”€â”€ ramp-api 0.1.0
-â”‚   â”œâ”€â”€ ramp-adapter 0.1.0
-â”‚   â”‚   â”œâ”€â”€ ramp-core 0.1.0
-â”‚   â”‚   â””â”€â”€ ramp-compliance 0.1.0
-â”‚   â”‚       â”œâ”€â”€ ramp-core 0.1.0
-â”‚   â”‚       â””â”€â”€ ramp-api 0.1.0
-â”‚   â”œâ”€â”€ opentelemetry-otlp 0.15.0
-â”‚   â”‚   â””â”€â”€ ramp-common 0.1.0
-â”‚   â”‚       â”œâ”€â”€ ramp-ledger 0.1.0
-â”‚   â”‚       â”‚   â””â”€â”€ ramp-core 0.1.0
-â”‚   â”‚       â”œâ”€â”€ ramp-core 0.1.0
-â”‚   â”‚       â”œâ”€â”€ ramp-compliance 0.1.0
-â”‚   â”‚       â”œâ”€â”€ ramp-api 0.1.0
-â”‚   â”‚       â”œâ”€â”€ ramp-adapter 0.1.0
-â”‚   â”‚       â””â”€â”€ ramp-aa 0.1.0
-â”‚   â””â”€â”€ opentelemetry-http 0.11.1
-â”‚       â””â”€â”€ opentelemetry-otlp 0.15.0
-â”œâ”€â”€ hickory-proto 0.24.4
-â”‚   â””â”€â”€ hickory-resolver 0.24.4
-â”‚       â””â”€â”€ ramp-core 0.1.0
-â””â”€â”€ async-nats 0.33.0
+├── rustls-native-certs 0.6.3
+│   └── async-nats 0.33.0
+│       └── ramp-core 0.1.0
+│           ├── ramp-api 0.1.0
+│           └── ramp-aa 0.1.0
+│               └── ramp-api 0.1.0
+├── reqwest 0.11.27
+│   ├── ramp-api 0.1.0
+│   ├── ramp-adapter 0.1.0
+│   │   ├── ramp-core 0.1.0
+│   │   └── ramp-compliance 0.1.0
+│   │       ├── ramp-core 0.1.0
+│   │       └── ramp-api 0.1.0
+│   ├── opentelemetry-otlp 0.15.0
+│   │   └── ramp-common 0.1.0
+│   │       ├── ramp-ledger 0.1.0
+│   │       │   └── ramp-core 0.1.0
+│   │       ├── ramp-core 0.1.0
+│   │       ├── ramp-compliance 0.1.0
+│   │       ├── ramp-api 0.1.0
+│   │       ├── ramp-adapter 0.1.0
+│   │       └── ramp-aa 0.1.0
+│   └── opentelemetry-http 0.11.1
+│       └── opentelemetry-otlp 0.15.0
+├── hickory-proto 0.24.4
+│   └── hickory-resolver 0.24.4
+│       └── ramp-core 0.1.0
+└── async-nats 0.33.0
 
 [0m[0m[1m[33mCrate:    [0m lru
 [0m[0m[1m[33mVersion:  [0m 0.12.5
@@ -446,27 +284,13 @@
 [0m[0m[1m[33mURL:      [0m https://rustsec.org/advisories/RUSTSEC-2026-0002
 [0m[0m[1m[33mDependency tree:
 [0mlru 0.12.5
-â”œâ”€â”€ aws-sdk-s3 1.119.0
-â”‚   â””â”€â”€ ramp-compliance 0.1.0
-â”‚       â”œâ”€â”€ ramp-core 0.1.0
-â”‚       â”‚   â”œâ”€â”€ ramp-api 0.1.0
-â”‚       â”‚   â””â”€â”€ ramp-aa 0.1.0
-â”‚       â”‚       â””â”€â”€ ramp-api 0.1.0
-â”‚       â””â”€â”€ ramp-api 0.1.0
-â””â”€â”€ alloy-provider 0.1.4
-    â”œâ”€â”€ alloy-contract 0.1.4
-    â”‚   â””â”€â”€ alloy 0.1.4
-    â”‚       â”œâ”€â”€ ramp-core 0.1.0
-    â”‚       â”œâ”€â”€ ramp-api 0.1.0
-    â”‚       â””â”€â”€ ramp-aa 0.1.0
-    â””â”€â”€ alloy 0.1.4
+├── aws-sdk-s3 1.119.0
+│   └── ramp-compliance 0.1.0
+│       ├── ramp-core 0.1.0
+│       │   ├── ramp-api 0.1.0
+│       │   └── ramp-aa 0.1.0
+│       │       └── ramp-api 0.1.0
+│       └── ramp-api 0.1.0
+└── alloy-provider 0.1.4
+    └── ramp-core 0.1.0
 
-
-[0m[0m[1m[32m    Fetching[0m advisory database from `https://github.com/RustSec/advisory-db.git`
-[0m[0m[1m[33mwarning:[0m directory C:\Users\hades\.cargo\advisory-db is locked, waiting for up to 300 seconds for it to become available
-[0m[0m[1m[32m      Loaded[0m 949 security advisories (from C:\Users\hades\.cargo\advisory-db)
-[0m[0m[1m[32m    Updating[0m crates.io index
-[0m[0m[1m[33mwarning:[0m directory C:\Users\hades\.cargo\advisory-db is locked, waiting for up to 300 seconds for it to become available
-[0m[0m[1m[32m    Scanning[0m Cargo.lock for vulnerabilities (758 crate dependencies)
-[0m[0m[1m[31merror:[0m 2 vulnerabilities found!
-[0m[0m[1m[33mwarning:[0m 7 allowed warnings found

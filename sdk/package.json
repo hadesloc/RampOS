@@ -41,8 +41,12 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "axios": "^1.7.9",
+    "axios": "^1.13.5",
     "ethers": "^6.16.0",
     "zod": "^3.22.0"
+  },
+  "overrides": {
+    "minimatch": "3.1.4",
+    "rollup": "4.59.0"
   }
 }
