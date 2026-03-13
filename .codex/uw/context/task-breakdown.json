@@ -1,0 +1,1431 @@
+{
+  "project": {
+    "name": "RampOS World-Class Additive Control Plane",
+    "generated_at": "2026-03-12T10:05:00+07:00"
+  },
+  "tasks": [
+    {
+      "id": "T-001",
+      "epic_id": "E1",
+      "story_id": "S01",
+      "requirement_id": "FR-001",
+      "title": "Create additive seam and preserve matrix",
+      "description": "Files: update `.codex/uw/context/product-spec.md`, `.codex/uw/context/implementation-plan.md`, `.codex/uw/context/task-breakdown.json`, and `.codex/uw/context/user-journeys.json` so every stream names the current seam it extends, the non-goals it preserves, and the minimal new modules allowed.",
+      "priority": "P0",
+      "owner": "fullstack",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Every epic and task names the current seam it extends.",
+        "Preserve and non-goal rules are explicit in UW artifacts.",
+        "No early-phase task implies a second engine or framework."
+      ],
+      "test_cases": [
+        "Run the UW validator and confirm the planning artifacts are internally consistent.",
+        "Review all epic and task descriptions for explicit seam references."
+      ],
+      "expected_output": "Validated additive seam matrix embedded in UW planning artifacts",
+      "definition_of_done": [
+        "UW planning artifacts are rewritten around additive control-plane work.",
+        "No task requires rewriting workflow, ledger, compliance, or adapter cores.",
+        "The task graph remains deterministic and acyclic."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 6,
+        "risk": 2,
+        "ambiguity": 1,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Cross-artifact planning task with moderate scope and low ambiguity."
+      }
+    },
+    {
+      "id": "T-002",
+      "epic_id": "E1",
+      "story_id": "S02",
+      "requirement_id": "FR-002",
+      "title": "Define compatibility gate matrix",
+      "description": "Files: extend `.codex/uw/context/product-spec.md` and `.codex/uw/context/implementation-plan.md` with the concrete compatibility contract for OpenAPI, SDKs, widget, CLI, and migration rehearsal; note expected repo touchpoints in CI and release scripts.",
+      "priority": "P0",
+      "owner": "qa",
+      "dependencies": [
+        "T-001"
+      ],
+      "acceptance_criteria": [
+        "Compatibility gates cover API, SDK, widget, CLI, and migrations.",
+        "Every later stream can reference the same release-safety contract.",
+        "Backward-compatibility expectations are explicit."
+      ],
+      "test_cases": [
+        "Run the UW validator after the compatibility gate sections are added.",
+        "Cross-check that implementation plan and product spec describe the same gate families."
+      ],
+      "expected_output": "Compatibility gate matrix and release-safety contract",
+      "definition_of_done": [
+        "Compatibility gates are named in planning artifacts.",
+        "The release plan references those gates.",
+        "The task graph uses the gates as dependencies for rollout and certification work."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 5,
+        "risk": 2,
+        "ambiguity": 1,
+        "scope": 1,
+        "model": "gpt-5.4",
+        "justification": "Moderate planning work that drives later QA and release tasks."
+      }
+    },
+    {
+      "id": "T-003",
+      "epic_id": "E1",
+      "story_id": "S02",
+      "requirement_id": "FR-002",
+      "title": "Make feature-state labeling explicit",
+      "description": "Files: reference [crates/ramp-api/src/main.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-api/src/main.rs) and related admin surfaces in planning artifacts; define how `synthetic`, `live-read`, `operator-assisted`, and `guarded-write` states will be labeled and which bootstrap dependencies must fail loud instead of remaining ambiguous.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": [
+        "T-001"
+      ],
+      "acceptance_criteria": [
+        "Planning artifacts distinguish synthetic and live-read workbenches.",
+        "Bootstrap ambiguity in regulated features is called out explicitly.",
+        "Maturity labels are reusable across treasury, reconciliation, and Travel Rule operations."
+      ],
+      "test_cases": [
+        "Run the UW validator after feature-state sections are added.",
+        "Check that stories and tasks which touch operator surfaces reference maturity labels."
+      ],
+      "expected_output": "Feature-state labeling and explicit bootstrap policy",
+      "definition_of_done": [
+        "Maturity labels appear in the product spec and implementation plan.",
+        "Later tasks can depend on these labels without redefining them.",
+        "No operator surface is described as production-grade while remaining synthetic."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 6,
+        "risk": 2,
+        "ambiguity": 1,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Important control-plane policy task with moderate scope."
+      }
+    },
+    {
+      "id": "T-004",
+      "epic_id": "E2",
+      "story_id": "S03",
+      "requirement_id": "FR-003",
+      "title": "Design partner and capability registry schema",
+      "description": "Files: add new additive migrations under `migrations/` for partners, capabilities, health state, rollout scope, and approval references; define a shared partner taxonomy that covers rails, PSPs, compliance vendors, LPs, custodians, Travel Rule networks, and governed DeFi connectors; reference current admin and config services instead of creating a parallel registry framework.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": [
+        "T-001"
+      ],
+      "acceptance_criteria": [
+        "The schema can model rails, PSPs, compliance vendors, LPs, custodians, and DeFi partners.",
+        "Capabilities, rollout scope, and health signals are first-class records instead of embedded partner flags.",
+        "Schema changes are additive and backfillable.",
+        "Backfill preserves current admin/config identity and avoids a second registry runtime."
+      ],
+      "test_cases": [
+        "Validate migration naming and dependency ordering in the plan.",
+        "Check that the schema supports all partner classes listed in the product spec.",
+        "Confirm rollout-scope and health-state records stay additive instead of collapsing into a second registry runtime."
+      ],
+      "expected_output": "Partner and capability registry schema plan with shared partner taxonomy and additive rollout-health slices",
+      "definition_of_done": [
+        "Registry entities are reflected in the product spec data model.",
+        "Capability and rollout-scope records are reusable across current admin and config seams.",
+        "Task dependencies remain acyclic.",
+        "No second registry framework is introduced."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Core schema planning with multiple partner classes and governance semantics."
+      }
+    },
+    {
+      "id": "T-005",
+      "epic_id": "E2",
+      "story_id": "S03",
+      "requirement_id": "FR-003",
+      "title": "Plan registry repositories and service interfaces",
+      "description": "Files: extend planning against [crates/ramp-core/src/service/config_bundle.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-core/src/service/config_bundle.rs), [crates/ramp-api/src/handlers/admin/extensions.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-api/src/handlers/admin/extensions.rs), and related handlers so registry reads and writes layer on the current admin and core service model.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": [
+        "T-004"
+      ],
+      "acceptance_criteria": [
+        "Registry services are described as additive layers over current admin/core seams.",
+        "The plan identifies bounded repository and service responsibilities for partner catalog, capability catalog, rollout scope, and health reads.",
+        "Static demo responses in current handlers are marked for replacement with registry-backed reads."
+      ],
+      "test_cases": [
+        "Confirm epic and story text reference the same repo touchpoints.",
+        "Validate that later registry-backed tasks depend on this service layer plan.",
+        "Check that registry-backed reads route through current config-bundle and extensions seams rather than a new admin shell.",
+        "Confirm current demo payloads are explicitly superseded by registry-backed reads without changing current route shapes."
+      ],
+      "expected_output": "Registry repository and service-layer design",
+      "definition_of_done": [
+        "Registry service responsibilities are explicitly scoped.",
+        "Partner, capability, rollout, and health reads are assigned to bounded repository or service interfaces.",
+        "Current demo responses are replaced in the plan by registry-backed reads that preserve existing shells and seams.",
+        "No task assumes a new admin shell or new extension runtime.",
+        "Follow-on tasks can reuse this layer consistently."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Service-layer planning across multiple existing seams."
+      }
+    },
+    {
+      "id": "T-006",
+      "epic_id": "E2",
+      "story_id": "S04",
+      "requirement_id": "FR-004",
+      "title": "Plan credential indirection and secret references",
+      "description": "Files: define additive data-model changes and admin/API behavior so connector credentials are stored by reference and not inline in config bundles or public surfaces; align with current encrypted-secret handling conventions rather than inventing a second secret system.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": [
+        "T-004"
+      ],
+      "acceptance_criteria": [
+        "Credential references are modeled separately from partner capabilities and bundle payloads.",
+        "The plan forbids inline secret propagation in config artifacts.",
+        "Secret handling remains compatible with current service boundaries.",
+        "Current admin/config services resolve references without introducing a second secret system.",
+        "Reference resolution remains additive to the existing encrypted-secret handling path."
+      ],
+      "test_cases": [
+        "Check that the product spec and implementation plan both reference secret indirection.",
+        "Ensure later config-governance tasks depend on this credential model.",
+        "Confirm bundle and capability records only carry credential references, not raw secret payloads.",
+        "Validate that secret resolution still routes through current admin/config service seams."
+      ],
+      "expected_output": "Credential indirection and secret reference design tied to current admin/config seams",
+      "definition_of_done": [
+        "No later task contradicts the indirect credential model.",
+        "Secret references are part of the data model and governance flows.",
+        "Capability and bundle records carry references instead of raw secret payloads.",
+        "Reference resolution stays within current admin/config service boundaries.",
+        "The design remains additive to current encrypted-secret handling."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 6,
+        "risk": 3,
+        "ambiguity": 1,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Moderate planning task with important security constraints."
+      }
+    },
+    {
+      "id": "T-007",
+      "epic_id": "E2",
+      "story_id": "S04",
+      "requirement_id": "FR-004",
+      "title": "Plan registry-backed config bundle governance",
+      "description": "Files: evolve planning for [crates/ramp-core/src/service/config_bundle.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-core/src/service/config_bundle.rs), [crates/ramp-api/src/handlers/admin/config_bundle.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-api/src/handlers/admin/config_bundle.rs), and [crates/ramp-api/src/handlers/admin/extensions.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-api/src/handlers/admin/extensions.rs) so bundles, approvals, provenance, and rollout targets are real persisted flows.",
+      "priority": "P0",
+      "owner": "fullstack",
+      "dependencies": [
+        "T-005",
+        "T-006"
+      ],
+      "acceptance_criteria": [
+        "Config bundles are versioned and approval-gated in the plan.",
+        "Version and approval state preserve current config-bundle and extensions route shapes.",
+        "Admin surfaces remain additive to current routes and shells.",
+        "Rollout targets, provenance, and rollback metadata are modeled."
+      ],
+      "test_cases": [
+        "Confirm story S04 and epic E2 stay aligned on bundle governance scope.",
+        "Verify that no task introduces a plugin sandbox or dynamic runtime.",
+        "Check that current config-bundle and extensions handlers can carry version and approval state without reshaping routes."
+      ],
+      "expected_output": "Registry-backed config governance MVP plan with versioned and approval-gated bundle lifecycle",
+      "definition_of_done": [
+        "Version, approval, rollout, provenance, and rollback state are explicit in planning artifacts.",
+        "Static bundle and extension payloads are fully replaced in the plan.",
+        "All governance tasks preserve current public admin surface shapes where practical.",
+        "Follow-on approval and audit tasks can consume the same governance records."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 8,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 3,
+        "model": "gpt-5.4",
+        "justification": "Cross-cutting governance planning across backend and frontend surfaces."
+      }
+    },
+    {
+      "id": "T-008",
+      "epic_id": "E3",
+      "story_id": "S05",
+      "requirement_id": "FR-005",
+      "title": "Design corridor pack schema and lifecycle",
+      "description": "Files: add corridor-pack entities to planning artifacts and tie them to the current rails adapter model, rollout scopes, eligibility joins, provider references, currencies, fees, cutoffs, and compliance hooks; define endpoint, fee, cutoff, and compliance-hook slices as additive records; avoid introducing a parallel routing platform.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": [
+        "T-001"
+      ],
+      "acceptance_criteria": [
+        "Corridor packs can define source and destination entity, rail, currency, fee model, cutoff, and compliance hook data.",
+        "Corridor rollout scope and eligibility rules are first-class records tied back to partner capabilities and current adapter/provider registrations.",
+        "The corridor model is additive to current workflow entry points.",
+        "Pilot corridor tasks depend on the same schema instead of bespoke routing logic.",
+        "The schema can backfill current provider and adapter registration state without a second execution engine."
+      ],
+      "test_cases": [
+        "Check that corridor entities and schema fields appear in product spec and implementation plan.",
+        "Cross-check corridor references against current adapter factory, webhook, and workflow touchpoints.",
+        "Validate that pilot corridor tasks depend on this schema.",
+        "Confirm corridor eligibility links back to partner capabilities instead of implying a new routing engine."
+      ],
+      "expected_output": "Corridor pack schema and lifecycle design with endpoint, fee, cutoff, and compliance-hook slices",
+      "definition_of_done": [
+        "Corridor packs are represented in the data model.",
+        "Schema fields cover rollout scope, eligibility joins, and current provider references.",
+        "Pilot corridor tasks can reuse the schema directly.",
+        "The design does not imply a second execution engine."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Core internationalization model with moderate ambiguity and broad downstream impact."
+      }
+    },
+    {
+      "id": "T-009",
+      "epic_id": "E3",
+      "story_id": "S05",
+      "requirement_id": "FR-006",
+      "title": "Define canonical payment and status model",
+      "description": "Files: add planning coverage for a canonical payment/status vocabulary that maps partner payloads from current webhook and adapter entry points into structured states consumable by workflow, compliance, treasury, and reconciliation modules.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": [
+        "T-008"
+      ],
+      "acceptance_criteria": [
+        "Partner-specific payloads can map into structured canonical payment fields.",
+        "Canonical normalization happens on current webhook and adapter ingress seams.",
+        "Canonical status semantics are usable by compliance and reconciliation flows through one shared overlay vocabulary.",
+        "The vocabulary is ISO 20022-aligned at the concept and status-family layer without demanding full partner ISO support."
+      ],
+      "test_cases": [
+        "Check that canonical payment fields are represented in the product spec data model.",
+        "Ensure pilot corridor and evidence tasks explicitly depend on this model.",
+        "Confirm compliance, treasury, and reconciliation consumers can reference one shared canonical field set.",
+        "Check that compliance review and reconciliation lineage can consume canonical statuses without re-parsing partner-native status codes.",
+        "Verify ISO-aligned concepts stay in the canonical vocabulary layer without requiring native ISO payloads from every partner."
+      ],
+      "expected_output": "Canonical payment and status model design",
+      "definition_of_done": [
+        "Canonical payment/state modeling is a first-class planning artifact.",
+        "Later work can map partner payloads without redesigning current flow entry points.",
+        "Status mapping is positioned as an overlay, not a new engine.",
+        "ISO 20022 alignment is explicit at the canonical vocabulary layer."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 8,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Critical cross-domain model affecting rails, compliance, treasury, and reconciliation."
+      }
+    },
+    {
+      "id": "T-010",
+      "epic_id": "E3",
+      "story_id": "S06",
+      "requirement_id": "FR-007",
+      "title": "Model payment-method capability matrix",
+      "description": "Files: extend planning for corridor packs, partner capabilities, eligibility joins, API surfaces, and widget/server-driven config so push transfer, pull debit, open-banking pay-in, request-to-pay, and optional card-funded lanes are modeled as reusable capabilities without redesigning current intents.",
+      "priority": "P1",
+      "owner": "fullstack",
+      "dependencies": [
+        "T-008"
+      ],
+      "acceptance_criteria": [
+        "Payment methods are represented as capabilities rather than a new orchestration engine.",
+        "Method support is tied to corridor and partner eligibility.",
+        "Method families reuse shared partner-capability and corridor-eligibility records instead of a second orchestration runtime.",
+        "Card-funded support stays optional, bounded, and disabled-by-default unless policy and corridor records allow it."
+      ],
+      "test_cases": [
+        "Cross-check payment-method capability language across product spec and implementation plan.",
+        "Ensure widget and API compatibility concerns are noted.",
+        "Confirm payment-method planning ties back to partner and corridor eligibility joins rather than a second orchestration runtime.",
+        "Verify card-funded paths remain documented as optional and bounded rather than a default flow."
+      ],
+      "expected_output": "Payment-method capability matrix plan tied to corridor and partner eligibility",
+      "definition_of_done": [
+        "Capability matrix is reflected in planning artifacts.",
+        "Method support can be added later without redesigning the core flow model.",
+        "Capability joins reuse current intent surfaces and do not imply a new orchestration engine.",
+        "Card-funded support remains an explicitly bounded option, not a platform-wide default."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 6,
+        "risk": 2,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Moderate product and integration planning task tied to multiple public surfaces."
+      }
+    },
+    {
+      "id": "T-011",
+      "epic_id": "E3",
+      "story_id": "S06",
+      "requirement_id": "FR-008",
+      "title": "Plan pilot corridor implementation on current rail paths",
+      "description": "Files: reference [crates/ramp-adapter/src/traits.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-adapter/src/traits.rs), [crates/ramp-adapter/src/factory.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-adapter/src/factory.rs), [crates/ramp-api/src/handlers/bank_webhooks.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-api/src/handlers/bank_webhooks.rs), and [crates/ramp-core/src/workflows/activities.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-core/src/workflows/activities.rs) to define one payout corridor and one pay-in/import corridor slice on existing seams.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": [
+        "T-009",
+        "T-010",
+        "T-005"
+      ],
+      "acceptance_criteria": [
+        "Pilot corridors use current adapter factory, webhook, and workflow seams.",
+        "Domestic rails remain unaffected in the plan and keep their current routing, webhook, and workflow paths.",
+        "Corridor activation reads as configuration plus connector onboarding rather than bespoke coding."
+      ],
+      "test_cases": [
+        "Ensure implementation plan and release plan isolate pilot corridors rather than promising all global rails.",
+        "Check that certification tasks depend on this pilot slice.",
+        "Confirm one payout corridor and one pay-in/import slice map directly to current adapter, webhook, and workflow seams.",
+        "Validate that domestic rails keep their current paths and do not absorb pilot-only configuration.",
+        "Verify pilot activation is described as configuration plus connector onboarding rather than bespoke coding."
+      ],
+      "expected_output": "Pilot corridor implementation plan on current rails and ingress seams",
+      "definition_of_done": [
+        "At least one payout and one pay-in/import pilot corridor are planned.",
+        "Pilot slices bind to current adapter factory, webhook-handler, and workflow-activity seams.",
+        "Domestic rails keep their current paths outside the pilot scope.",
+        "No rail rewrite is implied.",
+        "Pilot activation remains a configuration-plus-onboarding slice on current seams."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 8,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 3,
+        "model": "gpt-5.4",
+        "justification": "High-impact pilot delivery task touching multiple core seams with real integration risk."
+      }
+    },
+    {
+      "id": "T-012",
+      "epic_id": "E4",
+      "story_id": "S07",
+      "requirement_id": "FR-009",
+      "title": "Design provider registry and routing policies",
+      "description": "Files: extend planning around [crates/ramp-compliance/src/providers/factory.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-compliance/src/providers/factory.rs) so provider selection can be driven by registry and policy state keyed by corridor, entity type, risk tier, amount, asset, and partner across KYC, KYB, KYT, sanctions, adverse media, and Travel Rule connector families.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": [
+        "T-005",
+        "T-008"
+      ],
+      "acceptance_criteria": [
+        "Provider routing rules cover KYC, KYB, KYT, sanctions, adverse media, and Travel Rule connectors.",
+        "Fallback order and scorecard semantics are represented.",
+        "Provider selection is keyed by corridor, entity type, risk tier, amount, asset, and partner.",
+        "Current provider-factory seams remain authoritative.",
+        "Routing policy stays additive to the current compliance service boundaries.",
+        "Downstream tasks reuse the shared routing model instead of re-specifying provider selection logic."
+      ],
+      "test_cases": [
+        "Verify that product spec FR-009 and implementation story S07 use consistent provider-routing language.",
+        "Check that institutional and Travel Rule tasks depend on this routing layer.",
+        "Confirm provider families and fallback metadata stay on current provider-factory seams rather than a second routing engine.",
+        "Validate that corridor, entity, risk, amount, asset, and partner keys are all represented in the routing model.",
+        "Check that downstream tasks can consume the shared policy model without redefining provider-selection behavior."
+      ],
+      "expected_output": "Provider registry and policy-routing design tied to current compliance seams",
+      "definition_of_done": [
+        "Routing policy entities are represented in the data model.",
+        "Provider routing is explicitly additive to current compliance seams.",
+        "Connector-class coverage includes KYC, KYB, KYT, sanctions, adverse media, and Travel Rule providers.",
+        "Later tasks can consume the same routing model.",
+        "Downstream tasks reuse one shared provider-routing model on current compliance seams."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 8,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Core compliance-control-plane design with broad downstream reuse."
+      }
+    },
+    {
+      "id": "T-013",
+      "epic_id": "E4",
+      "story_id": "S08",
+      "requirement_id": "FR-011",
+      "title": "Plan Travel Rule connector governance and interoperability metadata",
+      "description": "Files: extend planning for [crates/ramp-compliance/src/travel_rule/mod.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-compliance/src/travel_rule/mod.rs), [crates/ramp-compliance/src/travel_rule/exchange.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-compliance/src/travel_rule/exchange.rs), and admin travel-rule handlers so connectors are governed like first-class partners with trust and interoperability state.",
+      "priority": "P1",
+      "owner": "backend",
+      "dependencies": [
+        "T-012"
+      ],
+      "acceptance_criteria": [
+        "Travel Rule connectors have governance, approval, trust, and interoperability metadata.",
+        "Current transport/policy split remains intact.",
+        "Connector trust, interoperability capability, and counterparty-compatibility state are explicit and operator-visible."
+      ],
+      "test_cases": [
+        "Check that Travel Rule connectors appear in partner-registry planning and compliance-routing planning.",
+        "Confirm governance metadata binds to current travel-rule transport modules and admin handlers.",
+        "Check that trust and interoperability state remain explicit without collapsing the current transport/policy split.",
+        "Ensure no second Travel Rule platform is implied."
+      ],
+      "expected_output": "Travel Rule connector governance design",
+      "definition_of_done": [
+        "Travel Rule connectors are modeled consistently with other partner types.",
+        "Interoperability state is captured in planning artifacts.",
+        "Trust and counterparty-compatibility state are captured in planning artifacts.",
+        "Current transport abstractions remain the seam of record.",
+        "Shared partner governance and approval records can be reused by downstream Travel Rule tasks."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Specialized connector-governance planning on top of an existing abstraction."
+      }
+    },
+    {
+      "id": "T-014",
+      "epic_id": "E4",
+      "story_id": "S08",
+      "requirement_id": "FR-010",
+      "title": "Plan persistent KYB and UBO evidence package model",
+      "description": "Files: replace sample-only assumptions in planning for [crates/ramp-compliance/src/kyb/graph.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-compliance/src/kyb/graph.rs) and related admin handlers with persisted institutional evidence packages, UBO support, and export flows.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": [
+        "T-012"
+      ],
+      "acceptance_criteria": [
+        "Institutional evidence is persisted and exportable.",
+        "Persisted evidence packages carry provider-routing, corridor, and entity-review context.",
+        "UBO ownership references, evidence sources, and review state are reusable across current compliance/admin seams.",
+        "Review-only sample graph assumptions are explicitly replaced.",
+        "Evidence packages tie back to provider-routing and corridor context."
+      ],
+      "test_cases": [
+        "Check that product spec and implementation plan both mention persistent KYB/UBO evidence.",
+        "Validate dependency ordering from provider routing to institutional evidence.",
+        "Confirm evidence packages replace sample-only review graphs on current compliance/admin seams.",
+        "Verify UBO ownership references and evidence-source lineage stay reusable across institutional review and export flows."
+      ],
+      "expected_output": "Persistent KYB and UBO evidence package design tied to current compliance and admin seams",
+      "definition_of_done": [
+        "Institutional evidence appears as a first-class entity in planning artifacts.",
+        "Evidence package fields cover UBO structure, provider-routing context, review state, and export metadata.",
+        "Evidence export and review flows are scoped.",
+        "UBO ownership references and evidence-source lineage are reusable across current compliance/admin seams.",
+        "No external graph database is assumed."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 8,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Important institutional-compliance planning task with moderate scope."
+      }
+    },
+    {
+      "id": "T-015",
+      "epic_id": "E4",
+      "story_id": "S08",
+      "requirement_id": "FR-010",
+      "title": "Plan institutional onboarding and evidence review surfaces",
+      "description": "Files: extend planning for admin and operator surfaces so institutional onboarding packages, KYB/UBO review, Travel Rule trust state, and export flows appear in current admin shells rather than a new portal stack.",
+      "priority": "P1",
+      "owner": "fullstack",
+      "dependencies": [
+        "T-014",
+        "T-013"
+      ],
+      "acceptance_criteria": [
+        "Institutional review, Travel Rule trust visibility, and export flows stay on current admin shells rather than a second portal.",
+        "Institutional review surfaces are additive to the current admin shell.",
+        "Evidence packages and trust state are operator-visible on current admin shells.",
+        "Institutional review and export flows stay on current admin surfaces instead of a second portal.",
+        "The review experience remains bounded and auditable."
+      ],
+      "test_cases": [
+        "Cross-check user journeys, stories, and product spec UI/UX sections for institutional review coverage.",
+        "Ensure no new shell or second admin application is implied.",
+        "Verify export flows and trust-state visibility remain attached to current admin handlers and review surfaces.",
+        "Validate that institutional review, trust visibility, and export controls stay on current admin shells rather than a second review portal."
+      ],
+      "expected_output": "Institutional evidence review surface plan on current admin shells",
+      "definition_of_done": [
+        "Current admin shell is preserved in the plan.",
+        "Institutional review and export surfaces are explicitly scoped.",
+        "Travel Rule trust and institutional evidence are connected in operator journeys.",
+        "No second institutional review portal is implied.",
+        "Trust visibility and export flows remain on current admin shells and reuse one institutional evidence model."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 7,
+        "risk": 2,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Cross-surface planning task bridging backend evidence and admin UX."
+      }
+    },
+    {
+      "id": "T-016",
+      "epic_id": "E5",
+      "story_id": "S09",
+      "requirement_id": "FR-012",
+      "title": "Plan treasury evidence import and normalization",
+      "description": "Files: define additive import and normalized-evidence planning for bank statements, custodian balances, LP confirmations, and on-chain state feeding [crates/ramp-core/src/service/treasury.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-core/src/service/treasury.rs) and related admin handlers.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": [
+        "T-008"
+      ],
+      "acceptance_criteria": [
+        "Treasury evidence sources include bank, custodian, LP, and chain inputs.",
+        "Imports are modeled as idempotent and replay-safe on current treasury seams.",
+        "Treasury views become live-read instead of fixture-backed.",
+        "Live-read treasury goals stay additive to current treasury services and admin handlers."
+      ],
+      "test_cases": [
+        "Confirm evidence import entities appear in the product spec data model.",
+        "Ensure treasury and reconciliation tasks share compatible evidence language.",
+        "Validate that repeated imports can be keyed and replayed safely without implying a second treasury engine.",
+        "Verify live-read treasury views remain evidence-backed overlays on current treasury seams rather than a second treasury engine."
+      ],
+      "expected_output": "Treasury evidence import and normalization design",
+      "definition_of_done": [
+        "Evidence imports are represented in planning artifacts.",
+        "Live-read treasury goals are explicitly tied to imported evidence.",
+        "Idempotency and replay-safety are explicit on current treasury service seams.",
+        "No autonomous fund movement is assumed.",
+        "Live-read treasury goals are explicitly tied to current treasury services and admin handlers."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 8,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "High-value evidence-layer planning with multiple external source types."
+      }
+    },
+    {
+      "id": "T-017",
+      "epic_id": "E5",
+      "story_id": "S09",
+      "requirement_id": "FR-014",
+      "title": "Plan safeguarding and reserve overlays",
+      "description": "Files: define additive safeguarding, client-money, and reserve-position overlays on top of current ledger and reporting surfaces so audit-grade views can be exported without deep ledger redesign.",
+      "priority": "P1",
+      "owner": "backend",
+      "dependencies": [
+        "T-016"
+      ],
+      "acceptance_criteria": [
+        "Safeguarding and reserve views are modeled as overlays, not ledger replacement.",
+        "Exports can tie back to evidence, entity context, and corridor context.",
+        "The current ledger core remains preserved."
+      ],
+      "test_cases": [
+        "Check that safeguarding overlays appear in both product spec and implementation plan.",
+        "Validate that no task requires a ledger rewrite to satisfy these outputs.",
+        "Confirm export and audit outputs stay joinable to evidence and current reporting seams."
+      ],
+      "expected_output": "Safeguarding and reserve overlay design",
+      "definition_of_done": [
+        "Overlay reporting is clearly differentiated from ledger-core change.",
+        "Export and audit use cases are covered.",
+        "Exports remain tied to evidence and entity context on current reporting seams.",
+        "Dependencies remain additive and acyclic."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Important reporting overlay planning task with compliance implications."
+      }
+    },
+    {
+      "id": "T-018",
+      "epic_id": "E5",
+      "story_id": "S10",
+      "requirement_id": "FR-013",
+      "title": "Plan reconciliation evidence import and lineage model",
+      "description": "Files: define normalized discrepancy, evidence, and lineage records for [crates/ramp-api/src/handlers/admin/reconciliation.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-api/src/handlers/admin/reconciliation.rs) and related core services so reconciliation can move from fixtures to live-read evidence.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": [
+        "T-016"
+      ],
+      "acceptance_criteria": [
+        "Reconciliation records can trace imported evidence back to source systems.",
+        "Discrepancy, evidence-source, and lineage records stay explicit on current reconciliation seams.",
+        "Live-read reconciliation is explicitly grounded in imported evidence and lineage.",
+        "Current workbench response shapes can be preserved where practical."
+      ],
+      "test_cases": [
+        "Check that reconciliation evidence and treasury evidence share consistent entity language.",
+        "Ensure operator-assisted action tasks depend on this lineage model.",
+        "Confirm discrepancy, evidence-source, and lineage records stay on current reconciliation/admin seams rather than a second accounting engine.",
+        "Validate that live-read reconciliation views are described as projections over imported evidence and lineage instead of fixture-only state.",
+        "Confirm current workbench response shapes remain preservable while switching reads to imported evidence."
+      ],
+      "expected_output": "Reconciliation evidence and lineage design tied to current reconciliation seams",
+      "definition_of_done": [
+        "Lineage entities appear in planning artifacts.",
+        "Reconciliation live-read goals are grounded in imported evidence.",
+        "Traceability chains cover treasury imports, partner events, and operator review state.",
+        "Current workbench response shapes remain preservable on the existing admin shell.",
+        "No new accounting engine is implied."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 8,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Critical operations-evidence planning with nontrivial source traceability."
+      }
+    },
+    {
+      "id": "T-019",
+      "epic_id": "E5",
+      "story_id": "S10",
+      "requirement_id": "FR-013",
+      "title": "Plan live-read reconciliation workbench and gated actions",
+      "description": "Files: extend planning for [crates/ramp-api/src/handlers/admin/reconciliation.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-api/src/handlers/admin/reconciliation.rs) so current workbench shells consume live evidence and only expose operator-assisted actions behind approval and audit controls.",
+      "priority": "P1",
+      "owner": "fullstack",
+      "dependencies": [
+        "T-018",
+        "T-007"
+      ],
+      "acceptance_criteria": [
+        "Current reconciliation shell is preserved where practical.",
+        "Operator actions are labeled as operator-assisted, not autonomous.",
+        "Approval and audit hooks are planned for any mutable action.",
+        "Current workbench response shapes are preserved where practical."
+      ],
+      "test_cases": [
+        "Cross-check story S10 with user journey J-006 and release plan references.",
+        "Validate that break-glass and approval tasks can reuse the same audit model.",
+        "Confirm mutable reconciliation actions stay operator-assisted and audit-linked on the current admin shell rather than an autonomous side effect path.",
+        "Verify live-read reconciliation preserves current workbench response shapes while remaining evidence-backed."
+      ],
+      "expected_output": "Live-read reconciliation workbench plan on current admin surfaces",
+      "definition_of_done": [
+        "Synthetic reconciliation assumptions are replaced in the plan.",
+        "Operator-assisted actions are clearly bounded and audit-linked.",
+        "The workbench continues to fit the current admin shell.",
+        "No new accounting engine or reconciliation console is implied."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Cross-surface planning task that depends on live-read lineage and governance."
+      }
+    },
+    {
+      "id": "T-020",
+      "epic_id": "E6",
+      "story_id": "S11",
+      "requirement_id": "FR-015",
+      "title": "Plan liquidity partner registry and normalization layer",
+      "description": "Files: extend partner governance planning so liquidity providers use the same registry and rollout model; define normalized quote, fill, cancel, and settlement-quality inputs for the current RFQ and liquidity-policy stack.",
+      "priority": "P1",
+      "owner": "backend",
+      "dependencies": [
+        "T-005"
+      ],
+      "acceptance_criteria": [
+        "Liquidity partners are represented through the shared partner model.",
+        "Quote, fill, cancel, and settlement-quality normalization is explicitly planned on current RFQ/liquidity seams.",
+        "Current RFQ service remains the authoritative coordination layer."
+      ],
+      "test_cases": [
+        "Check that liquidity partner governance appears in both the gap map and implementation stories.",
+        "Ensure later scoring tasks depend on normalized quote inputs.",
+        "Confirm liquidity-partner reads and normalized outcomes flow through current RFQ and liquidity-policy seams rather than a second liquidity platform."
+      ],
+      "expected_output": "Liquidity partner registry and normalization design tied to shared partner governance and RFQ seams",
+      "definition_of_done": [
+        "Liquidity partners are modeled consistently with other partner classes.",
+        "Normalized quote, fill, cancel, and settlement-quality inputs are part of the data model and story flow.",
+        "Current RFQ and liquidity-policy seams remain authoritative.",
+        "No second liquidity platform is implied."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Important execution-quality planning task with shared registry reuse."
+      }
+    },
+    {
+      "id": "T-021",
+      "epic_id": "E6",
+      "story_id": "S12",
+      "requirement_id": "FR-016",
+      "title": "Plan constraint-aware route scoring",
+      "description": "Files: extend planning for [crates/ramp-core/src/service/rfq.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-core/src/service/rfq.rs) and [crates/ramp-core/src/chain/solver.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-core/src/chain/solver.rs) so best execution uses treasury inventory, corridor eligibility, partner quality, and compliance routing signals without replacing current routing primitives.",
+      "priority": "P1",
+      "owner": "backend",
+      "dependencies": [
+        "T-020",
+        "T-016",
+        "T-012"
+      ],
+      "acceptance_criteria": [
+        "Route scoring consumes treasury, corridor, partner, and compliance signals.",
+        "Current solver and RFQ seams remain the execution basis for those governed inputs.",
+        "Current RFQ and solver coordination remains authoritative for route selection and governed score-input consumption.",
+        "Governed DeFi lanes remain optional, policy-controlled, and disabled by default unless corridor, partner, and compliance policy records explicitly permit them."
+      ],
+      "test_cases": [
+        "Cross-check solver and RFQ touchpoints in the implementation plan.",
+        "Ensure product spec FR-016 is fully covered by scoring and explainability tasks.",
+        "Validate that treasury evidence, corridor eligibility, partner quality, and provider-routing outputs all feed one scoring model on current seams.",
+        "Confirm current RFQ and solver coordination remains authoritative and no second scoring engine is implied.",
+        "Verify governed DeFi lanes remain opt-in through corridor, partner, and policy records rather than a default route family."
+      ],
+      "expected_output": "Constraint-aware best-execution scoring plan",
+      "definition_of_done": [
+        "Best-execution inputs are explicitly defined.",
+        "Treasury, corridor, partner, and compliance signals are joined to the current RFQ and solver seams.",
+        "Current RFQ and solver coordination remains authoritative for governed route selection.",
+        "Governed DeFi lanes remain optional and policy-controlled on current seams.",
+        "No replacement of the current RFQ or solver engine is implied.",
+        "Later explainability tasks can consume the same scoring rationale."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 8,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Core routing-planning task with high strategic value and meaningful risk."
+      }
+    },
+    {
+      "id": "T-022",
+      "epic_id": "E6",
+      "story_id": "S12",
+      "requirement_id": "FR-016",
+      "title": "Plan execution explainability surfaces",
+      "description": "Files: extend planning for [crates/ramp-api/src/handlers/admin/liquidity.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-api/src/handlers/admin/liquidity.rs) and related UI/admin surfaces so operators can inspect why a route won, what constraints applied, and why governed DeFi or bank lanes were rejected.",
+      "priority": "P2",
+      "owner": "fullstack",
+      "dependencies": [
+        "T-021"
+      ],
+      "acceptance_criteria": [
+        "Route explainability is available to operators on the current admin shell.",
+        "Explainability references partner, corridor, treasury, and compliance inputs.",
+        "The current admin shell remains the UI host and no second analytics console is introduced.",
+        "Explanation output aligns with the canonical route-scoring model."
+      ],
+      "test_cases": [
+        "Ensure user journey J-007 maps cleanly to this explainability work.",
+        "Cross-check the UI/UX section and implementation plan test mapping.",
+        "Verify explainability references partner, corridor, treasury, and compliance inputs on current admin/operator surfaces.",
+        "Confirm winning-lane and rejected-lane rationale align with the canonical route-scoring model on the current admin shell."
+      ],
+      "expected_output": "Best-execution explainability plan tied to current admin/operator surfaces",
+      "definition_of_done": [
+        "Explainability is captured as a first-class operator requirement.",
+        "Current admin/operator surfaces are the host for winning-lane and rejected-lane rationale.",
+        "No new UI shell is introduced.",
+        "Explanation output aligns with the canonical route-scoring model."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 6,
+        "risk": 2,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Moderate operator-UX planning task built on existing scoring logic."
+      }
+    },
+    {
+      "id": "T-023",
+      "epic_id": "E7",
+      "story_id": "S13",
+      "requirement_id": "FR-017",
+      "title": "Plan corridor simulator and certification artifact flow",
+      "description": "Files: define simulator and certification artifacts in planning artifacts so corridor and connector rollouts can be certified through repeatable checks instead of one-off manual validation.",
+      "priority": "P1",
+      "owner": "fullstack",
+      "dependencies": [
+        "T-002",
+        "T-011"
+      ],
+      "acceptance_criteria": [
+        "Certification artifacts are attached to partner or corridor rollout state.",
+        "Certification artifacts stay linked to current rollout and governance records.",
+        "Simulator-driven certification is part of release planning on current rollout and distribution surfaces.",
+        "Certification work is additive to current distribution surfaces."
+      ],
+      "test_cases": [
+        "Map user journey J-008 to this certification flow.",
+        "Verify that certification depends on pilot corridor planning and compatibility gates.",
+        "Confirm certification artifacts attach to current rollout records instead of a separate certification console.",
+        "Check that simulator-driven certification is modeled as release-planning behavior on current rollout and distribution surfaces.",
+        "Ensure certification outputs extend current distribution surfaces rather than forking into a certification-only release channel."
+      ],
+      "expected_output": "Certification artifact and simulator design tied to current rollout state and release planning",
+      "definition_of_done": [
+        "Certification artifacts appear in the data model and release plan.",
+        "Release-planning certification evidence stays attached to current rollout and distribution records.",
+        "Certification work remains additive to current distribution surfaces.",
+        "Simulator scope is bounded to corridor and partner certification.",
+        "No certification-only fork of product surfaces is implied."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 7,
+        "risk": 2,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Moderate cross-surface planning task that hardens release quality."
+      }
+    },
+    {
+      "id": "T-024",
+      "epic_id": "E7",
+      "story_id": "S13",
+      "requirement_id": "FR-002",
+      "title": "Plan release-safety and compatibility gate integration",
+      "description": "Files: extend planning for CI, OpenAPI, SDK, widget, CLI, and migration smoke gates so release and certification flows explicitly require one shared compatibility contract before rollout.",
+      "priority": "P0",
+      "owner": "qa",
+      "dependencies": [
+        "T-002",
+        "T-023"
+      ],
+      "acceptance_criteria": [
+        "Release and certification paths share the same compatibility gate contract.",
+        "OpenAPI, SDK, widget, CLI, and migration smoke validation are all represented.",
+        "The release plan cannot bypass compatibility evidence.",
+        "Missing or stale compatibility evidence blocks release progression on current rollout surfaces."
+      ],
+      "test_cases": [
+        "Run the UW validator after all compatibility references are updated.",
+        "Check implementation-plan release steps against the compatibility gate matrix.",
+        "Verify one shared compatibility contract covers OpenAPI, SDK, widget, CLI, and migration smoke gates on current CI and rollout surfaces.",
+        "Confirm no release path can advance when compatibility evidence is missing or stale."
+      ],
+      "expected_output": "Integrated release-safety gate plan with one shared compatibility contract",
+      "definition_of_done": [
+        "Compatibility gates are explicit in both certification and release sections.",
+        "One shared compatibility contract covers OpenAPI, SDK, widget, CLI, and migration smoke validation.",
+        "Task dependencies enforce gate ordering.",
+        "Current integrator-facing surfaces are protected in the plan.",
+        "Release planning fails closed when compatibility evidence is absent."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 6,
+        "risk": 2,
+        "ambiguity": 1,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Quality and release planning task with moderate scope and low ambiguity."
+      }
+    },
+    {
+      "id": "T-025",
+      "epic_id": "E7",
+      "story_id": "S14",
+      "requirement_id": "FR-018",
+      "title": "Plan maker-checker and delegated approval model",
+      "description": "Files: extend planning for config governance, reconciliation actions, and high-risk admin mutations so maker-checker and delegated approval state can be enforced consistently across current admin surfaces.",
+      "priority": "P1",
+      "owner": "backend",
+      "dependencies": [
+        "T-007"
+      ],
+      "acceptance_criteria": [
+        "High-risk actions can require approval state.",
+        "Current admin surfaces remain the approval control surface for high-risk mutations.",
+        "Delegated approvals are scoped and auditable.",
+        "Approval records integrate with current governance surfaces."
+      ],
+      "test_cases": [
+        "Check that ops-control language is consistent across product spec, implementation plan, and task graph.",
+        "Ensure break-glass planning depends on this approval model.",
+        "Validate that delegation scope, expiry, and audit lineage stay on current admin surfaces rather than a second control surface."
+      ],
+      "expected_output": "Maker-checker and delegated approval design on current admin surfaces",
+      "definition_of_done": [
+        "Approval controls are explicit in planning artifacts.",
+        "Delegation scope and audit lineage are explicit on current admin surfaces.",
+        "Current admin shell remains the control surface.",
+        "Audit records are planned as first-class outputs."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Important control-plane planning task spanning multiple mutation paths."
+      }
+    },
+    {
+      "id": "T-026",
+      "epic_id": "E7",
+      "story_id": "S14",
+      "requirement_id": "FR-018",
+      "title": "Plan break-glass flow and immutable audit exports",
+      "description": "Files: extend planning so emergency actions capture actor, scope, evidence, compatibility impact, and rollback context, and so audit journaling/export remains available across config, reconciliation, and operator surfaces.",
+      "priority": "P2",
+      "owner": "fullstack",
+      "dependencies": [
+        "T-025",
+        "T-019"
+      ],
+      "acceptance_criteria": [
+        "Break-glass actions are explicitly bounded and attributable.",
+        "Audit exports remain available across high-risk surfaces.",
+        "Break-glass is treated as governed emergency control, not a shortcut around compatibility or approvals.",
+        "Break-glass state stays on current admin and audit surfaces without a second emergency console.",
+        "Break-glass fails closed against compatibility and approval policy unless explicit emergency scope and attribution are recorded.",
+        "Audit exports stay tied to shared approval and live-read lineage foundations rather than one-off emergency logs."
+      ],
+      "test_cases": [
+        "Map break-glass expectations back to story S14 and the release plan.",
+        "Ensure audit export expectations appear in product spec and implementation-plan sections.",
+        "Verify bounded scope, actor attribution, evidence, and rollback context remain explicit on current admin and audit surfaces.",
+        "Confirm config governance, reconciliation, and high-risk operator surfaces reuse one audit-export model.",
+        "Verify break-glass cannot bypass compatibility or approval policy without explicit emergency scope and immutable attribution."
+      ],
+      "expected_output": "Break-glass and immutable audit export design on current admin and audit surfaces",
+      "definition_of_done": [
+        "Emergency-control semantics are explicit in the planning artifacts.",
+        "Break-glass depends on approval and live-read lineage foundations.",
+        "Audit export remains a first-class deliverable.",
+        "Current admin and audit surfaces remain the control surface for break-glass actions.",
+        "Break-glass fails closed against compatibility and approval policy unless explicit emergency scope is captured.",
+        "Audit exports are scoped to shared approval and lineage records across high-risk surfaces."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 6,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Moderate governance-planning task dependent on prior controls and live evidence."
+      }
+    },
+    {
+      "id": "T-027",
+      "epic_id": "E8",
+      "story_id": "S15",
+      "requirement_id": "FR-019",
+      "title": "Create bank-ready gap checklist",
+      "description": "Files: create repo-grounded hardening artifacts under `docs/operations/` and refine `.codex/uw/context/*` so missing release hardening, staging, DR, security, and signoff proofs are enumerated against the implemented control-plane surfaces.",
+      "priority": "P0",
+      "owner": "qa",
+      "dependencies": [
+        "T-024",
+        "T-026"
+      ],
+      "acceptance_criteria": [
+        "Every missing production-readiness proof is listed against a concrete repo seam or operational surface.",
+        "The checklist distinguishes implemented features from unproven operational readiness.",
+        "The checklist is attributable and reusable as a release gate input."
+      ],
+      "test_cases": [
+        "Run the UW validator after the new hardening milestone and tasks are added.",
+        "Review the checklist against the implemented M0-M5 surfaces and confirm no major release-risk class is omitted."
+      ],
+      "expected_output": "Bank-ready gap checklist tied to current repo surfaces",
+      "definition_of_done": [
+        "Gap checklist exists in planning artifacts and operations docs.",
+        "Every hardening gap is attributable to a current seam or operational proof area.",
+        "The task graph can use the checklist as the root for the hardening phase."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 6,
+        "risk": 2,
+        "ambiguity": 1,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Moderate planning task that converts feature completion into an actionable hardening backlog."
+      }
+    },
+    {
+      "id": "T-028",
+      "epic_id": "E8",
+      "story_id": "S15",
+      "requirement_id": "FR-019",
+      "title": "Build full verification matrix and release checklist",
+      "description": "Files: create `docs/operations/full-verification-matrix.md` and `docs/operations/release-checklist.md` with one command matrix covering OpenAPI, CLI, SDK, migrations, regression suites, and release-candidate evidence collection.",
+      "priority": "P0",
+      "owner": "qa",
+      "dependencies": [
+        "T-027"
+      ],
+      "acceptance_criteria": [
+        "All relevant verification commands are grouped by seam and release purpose.",
+        "Release checklist fails closed when compatibility, migration, or regression evidence is missing.",
+        "The matrix is executable by operators without rediscovering commands from chat history."
+      ],
+      "test_cases": [
+        "Check that every implemented seam from M0-M5 maps to at least one verification entry.",
+        "Confirm the release checklist references compatibility, migration, and regression gates together."
+      ],
+      "expected_output": "Verification matrix and release checklist",
+      "definition_of_done": [
+        "Verification matrix exists and is referenced by the implementation plan.",
+        "Release checklist is explicit about blocking conditions.",
+        "The artifacts are ready to drive a release-candidate rehearsal."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 1,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "High-value hardening task because it translates implementation into repeatable release proof."
+      }
+    },
+    {
+      "id": "T-029",
+      "epic_id": "E8",
+      "story_id": "S15",
+      "requirement_id": "FR-019",
+      "title": "Define migration and rollback rehearsal plan",
+      "description": "Files: create release-hardening guidance for migrations `043-048`, rollback rehearsal, and seed or fixture validation so release candidates carry explicit database proof before production promotion.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": [
+        "T-028"
+      ],
+      "acceptance_criteria": [
+        "Forward and rollback rehearsal steps are defined for the additive migration set.",
+        "Seed or fixture validation is part of the same release-candidate proof.",
+        "Promotion is explicitly blocked when migration evidence is absent."
+      ],
+      "test_cases": [
+        "Cross-check migration coverage against the migrations present in the repo.",
+        "Validate that rollback rehearsal is tied to the same release checklist and signoff flow."
+      ],
+      "expected_output": "Migration and rollback rehearsal plan",
+      "definition_of_done": [
+        "Migration rehearsal guidance exists for all current additive migrations.",
+        "Rollback and seed-validation evidence is required in the release plan.",
+        "The plan fails closed when migration proof is missing."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 4,
+        "ambiguity": 1,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Release-critical planning task with meaningful operational risk."
+      }
+    },
+    {
+      "id": "T-030",
+      "epic_id": "E8",
+      "story_id": "S16",
+      "requirement_id": "FR-020",
+      "title": "Define staging environment contract",
+      "description": "Files: create `docs/operations/staging-validation-plan.md` and supporting plan text for a production-like staging environment covering DB, secrets, auth, webhooks, exports, CLI, and rollout surfaces.",
+      "priority": "P0",
+      "owner": "devops",
+      "dependencies": [
+        "T-028"
+      ],
+      "acceptance_criteria": [
+        "The staging contract names required services, data dependencies, auth expectations, and rollback checkpoints.",
+        "Production-like assumptions are explicit rather than implied.",
+        "The staging contract is directly reusable by release and operations teams."
+      ],
+      "test_cases": [
+        "Check that staging assumptions cover DB, secrets, auth, webhooks, exports, and CLI.",
+        "Confirm the plan does not rely on fixture-only or synthetic shortcuts for critical flows."
+      ],
+      "expected_output": "Production-like staging environment contract",
+      "definition_of_done": [
+        "Staging contract exists and is linked from the implementation plan.",
+        "Critical infrastructure assumptions are explicit and attributable.",
+        "Release promotion can depend on this contract without ambiguity."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 6,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Moderate platform-planning task that removes staging ambiguity for release hardening."
+      }
+    },
+    {
+      "id": "T-031",
+      "epic_id": "E8",
+      "story_id": "S16",
+      "requirement_id": "FR-020",
+      "title": "Define production-like staging validation flows",
+      "description": "Files: extend `docs/operations/staging-validation-plan.md` and `.codex/uw/context/user-journeys.json` with concrete staging validation flows for KYB evidence, treasury and reconciliation, liquidity explainability, CLI certification, and break-glass audit export.",
+      "priority": "P0",
+      "owner": "fullstack",
+      "dependencies": [
+        "T-030",
+        "T-029"
+      ],
+      "acceptance_criteria": [
+        "Each critical control-plane flow has a staging validation path.",
+        "Validation evidence, actor attribution, and rollback checkpoints are explicit.",
+        "Staging outputs can feed the final bank-grade signoff package."
+      ],
+      "test_cases": [
+        "Check that all critical flows named by the user are present in the staging plan.",
+        "Confirm staging validation outputs are compatible with the release and signoff checklists."
+      ],
+      "expected_output": "Staging validation plan for critical flows",
+      "definition_of_done": [
+        "Critical staging flows are documented and attributable.",
+        "Validation evidence and rollback checkpoints are part of the plan.",
+        "The signoff phase can consume the same staging evidence."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "High-signal planning task because it bridges implemented features to production-like proof."
+      }
+    },
+    {
+      "id": "T-032",
+      "epic_id": "E9",
+      "story_id": "S17",
+      "requirement_id": "FR-021",
+      "title": "Write release, rollback, and incident runbook skeletons",
+      "description": "Files: create `docs/operations/runbook-skeleton.md` and related runbook sections for release, rollback, incident response, and on-call execution on the current control-plane surfaces.",
+      "priority": "P1",
+      "owner": "devops",
+      "dependencies": [
+        "T-029",
+        "T-030"
+      ],
+      "acceptance_criteria": [
+        "Release, rollback, incident, and on-call procedures exist in one operator-facing set.",
+        "Runbooks reference the current admin, audit, treasury, and reconciliation seams.",
+        "Runbooks are explicit about evidence capture and escalation."
+      ],
+      "test_cases": [
+        "Review runbook coverage against the release and staging checklists.",
+        "Confirm operator actions remain attached to current surfaces rather than a separate ops console."
+      ],
+      "expected_output": "Runbook skeleton set",
+      "definition_of_done": [
+        "Runbook skeletons exist and are linked from the plan.",
+        "Release, rollback, incident, and on-call flows are clearly separated.",
+        "Operational evidence capture is explicit."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 6,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Operational planning task that turns release proof into supportable execution."
+      }
+    },
+    {
+      "id": "T-033",
+      "epic_id": "E9",
+      "story_id": "S17",
+      "requirement_id": "FR-021",
+      "title": "Define backup restore and disaster recovery proof",
+      "description": "Files: create `docs/operations/disaster-recovery-plan.md` with backup restore, disaster recovery rehearsal, pass or fail evidence capture, and linkage to the release signoff ledger.",
+      "priority": "P0",
+      "owner": "devops",
+      "dependencies": [
+        "T-032"
+      ],
+      "acceptance_criteria": [
+        "Backup restore and disaster recovery rehearsal steps are explicit.",
+        "Pass or fail evidence is defined and attributable.",
+        "DR proof can block signoff if absent."
+      ],
+      "test_cases": [
+        "Check that DR coverage includes backup restore evidence and rollback checkpoints.",
+        "Confirm DR proof is referenced by the signoff and release checklist."
+      ],
+      "expected_output": "Disaster recovery and backup restore plan",
+      "definition_of_done": [
+        "DR plan exists and is linked from the plan.",
+        "Backup restore evidence expectations are explicit.",
+        "The signoff phase can consume DR proof without reinterpretation."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Critical operations-readiness planning because bank-grade claims depend on recoverability proof."
+      }
+    },
+    {
+      "id": "T-034",
+      "epic_id": "E9",
+      "story_id": "S18",
+      "requirement_id": "FR-022",
+      "title": "Define independent security review and closure workflow",
+      "description": "Files: create `docs/security/independent-security-review-plan.md` and extend planning artifacts so external review scope, finding severity, owners, due dates, and closure evidence are part of the release lifecycle.",
+      "priority": "P0",
+      "owner": "devops",
+      "dependencies": [
+        "T-027",
+        "T-031"
+      ],
+      "acceptance_criteria": [
+        "Independent review scope is bounded to the implemented control-plane surfaces.",
+        "Finding lifecycle and closure evidence are explicit.",
+        "High and critical findings block signoff unless formally risk-accepted."
+      ],
+      "test_cases": [
+        "Check that review scope maps to the implemented M0-M6 surfaces.",
+        "Confirm the signoff package references security findings and closure evidence."
+      ],
+      "expected_output": "Independent security review plan",
+      "definition_of_done": [
+        "Security review scope exists and is attributable.",
+        "Finding severity and closure rules are explicit.",
+        "The signoff phase can fail closed based on unresolved findings."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Security-planning task with high downstream importance for regulated readiness."
+      }
+    },
+    {
+      "id": "T-035",
+      "epic_id": "E9",
+      "story_id": "S18",
+      "requirement_id": "FR-023",
+      "title": "Define bank-grade signoff ledger and approval gate",
+      "description": "Files: create `docs/operations/bank-grade-signoff-ledger.md` and refine planning artifacts so performance, resilience, staging, DR, security, and compatibility evidence converge into one signoff package with approvers, exceptions, and expiry.",
+      "priority": "P0",
+      "owner": "fullstack",
+      "dependencies": [
+        "T-028",
+        "T-031",
+        "T-033",
+        "T-034"
+      ],
+      "acceptance_criteria": [
+        "One signoff ledger records all required evidence categories.",
+        "Approver chain, exception handling, and expiry are explicit.",
+        "No candidate can be labeled bank-grade without a complete ledger."
+      ],
+      "test_cases": [
+        "Check that every hardening artifact feeds the signoff ledger.",
+        "Confirm signoff rules fail closed when any required evidence category is absent."
+      ],
+      "expected_output": "Bank-grade signoff ledger design",
+      "definition_of_done": [
+        "Bank-grade signoff ledger exists and is linked from the release plan.",
+        "Evidence categories, approvers, exceptions, and expiry are explicit.",
+        "The hardening phase ends in one attributable signoff gate."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 8,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4",
+        "justification": "Final readiness-planning task that turns all hardening outputs into a bank-grade promotion gate."
+      }
+    }
+  ]
+}

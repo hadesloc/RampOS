@@ -1,0 +1,337 @@
+{
+  "meta": {
+    "app_url": "http://localhost:3000",
+    "start_command": "npm run dev --prefix frontend",
+    "wait_for_ready": 90
+  },
+  "viewports": [
+    "desktop",
+    "mobile"
+  ],
+  "viewport_presets": {
+    "desktop": {
+      "width": 1440,
+      "height": 900
+    },
+    "mobile": {
+      "device": "iPhone 12"
+    }
+  },
+  "journeys": [
+    {
+      "id": "J-001",
+      "name": "Govern Partner Connector",
+      "priority": "critical",
+      "preconditions": [
+        "admin authenticated",
+        "partner registry feature enabled"
+      ],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/admin/settings/extensions",
+          "description": "Open governed connector and extension area"
+        },
+        {
+          "action": "verify_visible",
+          "selector": "body",
+          "description": "Registry page renders"
+        },
+        {
+          "action": "screenshot",
+          "name": "partner-registry",
+          "description": "Capture partner governance surface"
+        }
+      ]
+    },
+    {
+      "id": "J-002",
+      "name": "Activate Pilot Corridor Pack",
+      "priority": "critical",
+      "preconditions": [
+        "admin authenticated",
+        "corridor pack model available"
+      ],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/admin/settings/config-bundles",
+          "description": "Open configuration and rollout surface"
+        },
+        {
+          "action": "verify_visible",
+          "selector": "body",
+          "description": "Config governance page renders"
+        },
+        {
+          "action": "screenshot",
+          "name": "corridor-pack",
+          "description": "Capture corridor configuration state"
+        }
+      ]
+    },
+    {
+      "id": "J-003",
+      "name": "Resolve Institutional Compliance Review",
+      "priority": "critical",
+      "preconditions": [
+        "admin authenticated",
+        "institutional review case exists"
+      ],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/admin/compliance/kyb",
+          "description": "Open KYB and institutional review surface"
+        },
+        {
+          "action": "verify_visible",
+          "selector": "body",
+          "description": "Institutional review page renders"
+        },
+        {
+          "action": "screenshot",
+          "name": "institutional-review",
+          "description": "Capture KYB and UBO review state"
+        }
+      ]
+    },
+    {
+      "id": "J-004",
+      "name": "Switch Compliance Provider By Policy",
+      "priority": "major",
+      "preconditions": [
+        "admin authenticated",
+        "provider routing policy exists"
+      ],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/admin/risk-lab",
+          "description": "Open policy and risk operations surface"
+        },
+        {
+          "action": "verify_visible",
+          "selector": "body",
+          "description": "Policy page renders"
+        },
+        {
+          "action": "screenshot",
+          "name": "provider-routing",
+          "description": "Capture provider-routing state"
+        }
+      ]
+    },
+    {
+      "id": "J-005",
+      "name": "Operate Live Treasury Evidence",
+      "priority": "critical",
+      "preconditions": [
+        "admin authenticated",
+        "treasury evidence imported"
+      ],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/admin/treasury",
+          "description": "Open treasury workbench"
+        },
+        {
+          "action": "verify_visible",
+          "selector": "body",
+          "description": "Treasury page renders"
+        },
+        {
+          "action": "screenshot",
+          "name": "treasury-live-read",
+          "description": "Capture live treasury state"
+        }
+      ]
+    },
+    {
+      "id": "J-006",
+      "name": "Investigate Reconciliation Discrepancy",
+      "priority": "critical",
+      "preconditions": [
+        "admin authenticated",
+        "reconciliation discrepancy exists"
+      ],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/admin/reconciliation",
+          "description": "Open reconciliation workbench"
+        },
+        {
+          "action": "verify_visible",
+          "selector": "body",
+          "description": "Reconciliation page renders"
+        },
+        {
+          "action": "screenshot",
+          "name": "reconciliation-live-read",
+          "description": "Capture discrepancy and lineage state"
+        }
+      ]
+    },
+    {
+      "id": "J-007",
+      "name": "Review Best Execution Explainability",
+      "priority": "major",
+      "preconditions": [
+        "admin authenticated",
+        "liquidity and route data exists"
+      ],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/admin/liquidity",
+          "description": "Open liquidity and execution surface"
+        },
+        {
+          "action": "verify_visible",
+          "selector": "body",
+          "description": "Liquidity page renders"
+        },
+        {
+          "action": "screenshot",
+          "name": "best-execution",
+          "description": "Capture route explainability state"
+        }
+      ]
+    },
+    {
+      "id": "J-008",
+      "name": "Certify Corridor Release",
+      "priority": "major",
+      "preconditions": [
+        "admin authenticated",
+        "pilot corridor configured",
+        "compatibility gates available"
+      ],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/admin/settings/config-bundles",
+          "description": "Open rollout and certification-related control plane"
+        },
+        {
+          "action": "verify_visible",
+          "selector": "body",
+          "description": "Certification-adjacent page renders"
+        },
+        {
+          "action": "screenshot",
+          "name": "certification",
+          "description": "Capture release and certification state"
+        }
+      ]
+    },
+    {
+      "id": "J-009",
+      "name": "Harden Release Candidate",
+      "priority": "critical",
+      "preconditions": [
+        "release candidate frozen",
+        "verification matrix defined",
+        "compatibility evidence expected"
+      ],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/admin/settings/config-bundles",
+          "description": "Open the current rollout and certification control surface"
+        },
+        {
+          "action": "verify_visible",
+          "selector": "body",
+          "description": "Release-hardening surface or adjacent control plane renders"
+        },
+        {
+          "action": "screenshot",
+          "name": "release-hardening",
+          "description": "Capture release candidate hardening evidence"
+        }
+      ]
+    },
+    {
+      "id": "J-010",
+      "name": "Validate Production-Like Staging",
+      "priority": "critical",
+      "preconditions": [
+        "staging environment contract defined",
+        "production-like services available"
+      ],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/admin/reconciliation",
+          "description": "Open a live-read operator surface used in staging validation"
+        },
+        {
+          "action": "verify_visible",
+          "selector": "body",
+          "description": "Staging validation target surface renders"
+        },
+        {
+          "action": "screenshot",
+          "name": "staging-validation",
+          "description": "Capture production-like staging evidence"
+        }
+      ]
+    },
+    {
+      "id": "J-011",
+      "name": "Run Disaster Recovery Drill",
+      "priority": "major",
+      "preconditions": [
+        "backup or restore rehearsal plan defined",
+        "incident runbook available"
+      ],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/admin/audit",
+          "description": "Open audit or operations-adjacent surface"
+        },
+        {
+          "action": "verify_visible",
+          "selector": "body",
+          "description": "Audit or recovery control surface renders"
+        },
+        {
+          "action": "screenshot",
+          "name": "disaster-recovery",
+          "description": "Capture recovery evidence and attribution"
+        }
+      ]
+    },
+    {
+      "id": "J-012",
+      "name": "Approve Bank-Grade Candidate",
+      "priority": "major",
+      "preconditions": [
+        "security review complete",
+        "staging and DR evidence complete",
+        "signoff ledger prepared"
+      ],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/admin/audit",
+          "description": "Open signoff or immutable audit-adjacent surface"
+        },
+        {
+          "action": "verify_visible",
+          "selector": "body",
+          "description": "Bank-grade signoff evidence surface renders"
+        },
+        {
+          "action": "screenshot",
+          "name": "bank-grade-signoff",
+          "description": "Capture final signoff evidence"
+        }
+      ]
+    }
+  ]
+}
