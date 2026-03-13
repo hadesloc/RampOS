@@ -1,0 +1,116 @@
+[
+  {
+    "step": "validate-openapi-script",
+    "status": "planned",
+    "evidence": "Contract drift validation tied to scripts/validate-openapi.sh.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\validate-openapi-script.log"
+  },
+  {
+    "step": "rampos-cli-smoke-script",
+    "status": "planned",
+    "evidence": "CLI smoke validation tied to scripts/test-rampos-cli.sh.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\rampos-cli-smoke-script.log"
+  },
+  {
+    "step": "python-cli-drift",
+    "status": "planned",
+    "evidence": "Python CLI drift checks when contract surfaces change.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\python-cli-drift.log"
+  },
+  {
+    "step": "kyb-admin",
+    "status": "planned",
+    "evidence": "KYB evidence and admin review.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\kyb-admin.log"
+  },
+  {
+    "step": "treasury-admin",
+    "status": "planned",
+    "evidence": "Treasury evidence and workbench.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\treasury-admin.log"
+  },
+  {
+    "step": "reconciliation-admin",
+    "status": "planned",
+    "evidence": "Reconciliation lineage and gated actions.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\reconciliation-admin.log"
+  },
+  {
+    "step": "liquidity-admin",
+    "status": "planned",
+    "evidence": "Liquidity explainability.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\liquidity-admin.log"
+  },
+  {
+    "step": "net-settlement-admin",
+    "status": "planned",
+    "evidence": "Settlement governance and approvals.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\net-settlement-admin.log"
+  },
+  {
+    "step": "travel-rule-admin",
+    "status": "planned",
+    "evidence": "Travel Rule governed flows.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\travel-rule-admin.log"
+  },
+  {
+    "step": "partner-registry-admin",
+    "status": "planned",
+    "evidence": "Partner registry governance.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\partner-registry-admin.log"
+  },
+  {
+    "step": "route-scoring",
+    "status": "planned",
+    "evidence": "Constraint-aware route scoring.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\route-scoring.log"
+  },
+  {
+    "step": "quote-normalization",
+    "status": "planned",
+    "evidence": "Liquidity quote normalization.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\quote-normalization.log"
+  },
+  {
+    "step": "settlement-quality-normalization",
+    "status": "planned",
+    "evidence": "Settlement quality normalization.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\settlement-quality-normalization.log"
+  },
+  {
+    "step": "rfq-finalization",
+    "status": "planned",
+    "evidence": "RFQ settlement/cancel normalization.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\rfq-finalization.log"
+  },
+  {
+    "step": "treasury-balance-normalization",
+    "status": "planned",
+    "evidence": "Treasury balance normalization.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\treasury-balance-normalization.log"
+  },
+  {
+    "step": "treasury-import-idempotency",
+    "status": "planned",
+    "evidence": "Replay-safe treasury import.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\treasury-import-idempotency.log"
+  },
+  {
+    "step": "cli-certification-suite",
+    "status": "planned",
+    "evidence": "Certification and compatibility gate suite.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\cli-certification-suite.log"
+  },
+  {
+    "step": "break-glass-response-shape",
+    "status": "planned",
+    "evidence": "Break-glass export shape preservation.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\break-glass-response-shape.log"
+  },
+  {
+    "step": "break-glass-filtering-and-linkage",
+    "status": "planned",
+    "evidence": "Break-glass linkage and filtering.",
+    "log": "docs\\operations\\evidence\\rc-m6-dryrun\\break-glass-filtering-and-linkage.log"
+  }
+]

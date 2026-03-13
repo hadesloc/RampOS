@@ -1115,7 +1115,7 @@
         "Every hardening gap is attributable to a current seam or operational proof area.",
         "The task graph can use the checklist as the root for the hardening phase."
       ],
-      "status": "pending",
+      "status": "completed",
       "tier": {
         "score": 6,
         "risk": 2,
@@ -1152,7 +1152,7 @@
         "Release checklist is explicit about blocking conditions.",
         "The artifacts are ready to drive a release-candidate rehearsal."
       ],
-      "status": "pending",
+      "status": "completed",
       "tier": {
         "score": 7,
         "risk": 3,
@@ -1189,7 +1189,7 @@
         "Rollback and seed-validation evidence is required in the release plan.",
         "The plan fails closed when migration proof is missing."
       ],
-      "status": "pending",
+      "status": "completed",
       "tier": {
         "score": 7,
         "risk": 4,
@@ -1226,7 +1226,7 @@
         "Critical infrastructure assumptions are explicit and attributable.",
         "Release promotion can depend on this contract without ambiguity."
       ],
-      "status": "pending",
+      "status": "completed",
       "tier": {
         "score": 6,
         "risk": 3,
@@ -1264,7 +1264,7 @@
         "Validation evidence and rollback checkpoints are part of the plan.",
         "The signoff phase can consume the same staging evidence."
       ],
-      "status": "pending",
+      "status": "completed",
       "tier": {
         "score": 7,
         "risk": 3,
@@ -1302,7 +1302,7 @@
         "Release, rollback, incident, and on-call flows are clearly separated.",
         "Operational evidence capture is explicit."
       ],
-      "status": "pending",
+      "status": "completed",
       "tier": {
         "score": 6,
         "risk": 3,
@@ -1339,7 +1339,7 @@
         "Backup restore evidence expectations are explicit.",
         "The signoff phase can consume DR proof without reinterpretation."
       ],
-      "status": "pending",
+      "status": "completed",
       "tier": {
         "score": 7,
         "risk": 4,
@@ -1377,7 +1377,7 @@
         "Finding severity and closure rules are explicit.",
         "The signoff phase can fail closed based on unresolved findings."
       ],
-      "status": "pending",
+      "status": "completed",
       "tier": {
         "score": 7,
         "risk": 4,
@@ -1417,7 +1417,7 @@
         "Evidence categories, approvers, exceptions, and expiry are explicit.",
         "The hardening phase ends in one attributable signoff gate."
       ],
-      "status": "pending",
+      "status": "completed",
       "tier": {
         "score": 8,
         "risk": 4,

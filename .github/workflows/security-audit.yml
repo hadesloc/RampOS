@@ -3,10 +3,43 @@ name: Security Audit
 on:
   schedule:
     - cron: '0 0 * * *'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Cargo.lock'
+      - '.github/workflows/security-audit.yml'
+      - 'docs/security/**'
+      - 'docs/operations/bank-grade-signoff-ledger.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-audit-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  security_docs_guard:
+    name: Security Review Docs Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Verify required M6 security docs exist
+        run: |
+          test -f docs/security/independent-security-review-plan.md
+          test -f docs/operations/bank-grade-signoff-ledger.md
+      - name: Verify docs contain required gate sections
+        run: |
+          grep -q "^## In-Scope Surfaces" docs/security/independent-security-review-plan.md
+          grep -q "^## Finding Record Schema" docs/security/independent-security-review-plan.md
+          grep -q "^## Risk Acceptance Rules" docs/security/independent-security-review-plan.md
+          grep -q "^## Evidence Categories" docs/operations/bank-grade-signoff-ledger.md
+          grep -q "^## Final Gate Rules" docs/operations/bank-grade-signoff-ledger.md
+
   security_audit:
     runs-on: ubuntu-latest
+    needs: security_docs_guard
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Install Rust

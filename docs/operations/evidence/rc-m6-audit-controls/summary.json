@@ -1,0 +1,14 @@
+[
+  {
+    "step": "break-glass-response-shape",
+    "status": "passed",
+    "evidence": "Break-glass export shape preservation.",
+    "log": "docs\\operations\\evidence\\rc-m6-audit-controls\\break-glass-response-shape.log"
+  },
+  {
+    "step": "break-glass-filtering-and-linkage",
+    "status": "passed",
+    "evidence": "Break-glass linkage and filtering.",
+    "log": "docs\\operations\\evidence\\rc-m6-audit-controls\\break-glass-filtering-and-linkage.log"
+  }
+]
