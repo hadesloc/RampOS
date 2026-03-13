@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS offramp_intents (
     id TEXT PRIMARY KEY,
-    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    tenant_id VARCHAR(64) NOT NULL REFERENCES tenants(id),
     user_id TEXT NOT NULL,
     crypto_asset TEXT NOT NULL,
     crypto_amount NUMERIC NOT NULL,

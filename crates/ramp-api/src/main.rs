@@ -19,12 +19,14 @@ use ramp_core::{
     config::Config,
     jobs::intent_timeout::IntentTimeoutJob,
     repository::{
-        intent::PgIntentRepository, ledger::PgLedgerRepository, tenant::PgTenantRepository,
-        user::PgUserRepository, webhook::PgWebhookRepository, PgSmartAccountRepository,
+        compliance_audit::PgComplianceAuditRepository, intent::PgIntentRepository,
+        ledger::PgLedgerRepository, tenant::PgTenantRepository, user::PgUserRepository,
+        webhook::PgWebhookRepository, PgSmartAccountRepository,
     },
     service::{
         ledger::LedgerService, onboarding::OnboardingService, payin::PayinService,
         payout::PayoutService, trade::TradeService, user::UserService, webhook::WebhookService,
+        ComplianceAuditService,
     },
 };
 
@@ -121,6 +123,9 @@ async fn main() -> anyhow::Result<()> {
 
     let case_store = Arc::new(PostgresCaseStore::new(pool.clone()));
     let case_manager = Arc::new(CaseManager::new(case_store));
+    let compliance_audit_service = Arc::new(ComplianceAuditService::new(Arc::new(
+        PgComplianceAuditRepository::new(pool.clone()),
+    )));
 
     // Create Redis connection and idempotency handler
     info!("Connecting to Redis: {}", config.redis.url);
@@ -219,7 +224,7 @@ async fn main() -> anyhow::Result<()> {
         portal_auth_config,
         bank_confirmation_repo: None,
         licensing_repo: None,
-        compliance_audit_service: None,
+        compliance_audit_service: Some(compliance_audit_service),
         sso_service: Arc::new(ramp_core::sso::SsoService::new()),
         // Build billing service via config-driven provider selection.
         // Respects BILLING_PROVIDER env var (accepted: "postgres", "mock").

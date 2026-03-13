@@ -1,0 +1,20 @@
+[
+  {
+    "step": "sqlx-migrate-run",
+    "status": "passed",
+    "evidence": "Forward migration rehearsal.",
+    "log": "docs\\operations\\evidence\\rc-m6-migration-live-4\\sqlx-migrate-run.log"
+  },
+  {
+    "step": "sqlx-migrate-revert",
+    "status": "passed",
+    "evidence": "Rollback rehearsal.",
+    "log": "docs\\operations\\evidence\\rc-m6-migration-live-4\\sqlx-migrate-revert.log"
+  },
+  {
+    "step": "post-migration-regression",
+    "status": "passed",
+    "evidence": "Cheap DB-backed post-migration regression.",
+    "log": "docs\\operations\\evidence\\rc-m6-migration-live-4\\post-migration-regression.log"
+  }
+]

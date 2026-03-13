@@ -1,0 +1,17 @@
+[
+  {
+    "name": "kyb_evidence_detail",
+    "status": 200,
+    "path": "/v1/admin/kyb/evidence/pkg_stage_local_001"
+  },
+  {
+    "name": "kyb_evidence_export",
+    "status": 200,
+    "path": "/v1/admin/kyb/evidence/pkg_stage_local_001/export"
+  },
+  {
+    "name": "partner_registry_list",
+    "status": 200,
+    "path": "/v1/admin/partners"
+  }
+]

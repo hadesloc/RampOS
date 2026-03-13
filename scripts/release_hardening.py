@@ -300,7 +300,7 @@ def ensure_run_dir(base: Path, candidate: str | None) -> Path:
 
 
 def step_command(step: dict) -> list[str]:
-    if step.get("requires_bash") and has_bash():
+    if step.get("requires_bash") and has_bash() and os.name != "nt":
         return step["command"]
     return step.get("fallback_command", step["command"])
 

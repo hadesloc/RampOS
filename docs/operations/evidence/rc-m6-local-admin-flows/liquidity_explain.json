@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json",
+    "rampos-version": "2026-02-01",
+    "x-request-id": "019ce599-32ec-7021-bf0e-e0a4bcd539c1",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "content-security-policy": "default-src 'self'",
+    "vary": "origin, access-control-request-method, access-control-request-headers",
+    "access-control-allow-credentials": "true",
+    "access-control-expose-headers": "content-type,x-request-id,rampos-version",
+    "content-length": "725",
+    "connection": "close",
+    "date": "Fri, 13 Mar 2026 05:09:08 GMT"
+  },
+  "body": "{\"policyVersion\":\"liquidity-policy-default-v1\",\"selectedCandidateId\":\"1\",\"winningReason\":\"Selected route balanced treasury, partner, and compliance constraints.\",\"candidates\":[{\"candidateId\":\"0\",\"partnerId\":\"lp_alpha\",\"corridorCode\":\"US_VN_OFFRAMP\",\"baseOutput\":995,\"adjustedOutput\":962,\"treasuryPenaltyBps\":220,\"partnerQualityPenaltyBps\":225,\"corridorEligible\":true,\"complianceStatus\":\"review_required\",\"rejectionReasons\":[\"manual_compliance_review\"],\"selected\":false},{\"candidateId\":\"1\",\"partnerId\":\"lp_beta\",\"corridorCode\":\"US_VN_OFFRAMP\",\"baseOutput\":990,\"adjustedOutput\":984,\"treasuryPenaltyBps\":25,\"partnerQualityPenaltyBps\":40,\"corridorEligible\":true,\"complianceStatus\":\"clear\",\"rejectionReasons\":[],\"selected\":true}]}"
+}

@@ -1,0 +1,20 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json",
+    "content-disposition": "attachment; filename=\"reconciliation_snapshot_20260313_050908.json\"",
+    "rampos-version": "2026-02-01",
+    "x-request-id": "019ce599-32e2-71a3-805e-5b7593338c0f",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "content-security-policy": "default-src 'self'",
+    "vary": "origin, access-control-request-method, access-control-request-headers",
+    "access-control-allow-credentials": "true",
+    "access-control-expose-headers": "content-type,x-request-id,rampos-version",
+    "content-length": "2614",
+    "connection": "close",
+    "date": "Fri, 13 Mar 2026 05:09:08 GMT"
+  },
+  "body": "{\n  \"generatedAt\": \"2026-03-13T05:09:08.451910070Z\",\n  \"queue\": [\n    {\n      \"ageBucket\": \"fresh\",\n      \"detectedAt\": \"2026-03-13T05:09:08.451893190Z\",\n      \"discrepancyId\": \"disc_statusmismatch_stl_recon_status_001_1\",\n      \"onChainTx\": \"0xstatus\",\n      \"ownerLane\": \"banking_partner\",\n      \"reportId\": \"recon_active_workbench\",\n      \"rootCause\": \"status_drift\",\n      \"settlementId\": \"stl_recon_status_001\",\n      \"severity\": \"Critical\",\n      \"suggestedMatches\": [],\n      \"summary\": \"Settlement stl_recon_status_001 is COMPLETED but on-chain tx 0xstatus is not confirmed\"\n    },\n    {\n      \"ageBucket\": \"fresh\",\n      \"detectedAt\": \"2026-03-13T05:09:08.451888548Z\",\n      \"discrepancyId\": \"disc_missingsettlement_0xqueue_0\",\n      \"onChainTx\": \"0xqueue\",\n      \"ownerLane\": \"settlement_operations\",\n      \"reportId\": \"recon_active_workbench\",\n      \"rootCause\": \"offchain_recording_gap\",\n      \"settlementId\": null,\n      \"severity\": \"High\",\n      \"suggestedMatches\": [\n        {\n          \"amountDelta\": 0.0049999999999954525,\n          \"bankReference\": null,\n          \"confidence\": \"high\",\n          \"rationale\": \"Pending settlement amount differs by 0.0050 and has no linked tx hash\",\n          \"settlementId\": \"stl_recon_processing_001\",\n          \"updatedAt\": \"2026-03-13T04:22:08.451871912Z\"\n        }\n      ],\n      \"summary\": \"On-chain tx 0xqueue has no matching settlement record\"\n    }\n  ],\n  \"report\": {\n    \"completed_at\": \"2026-03-13T05:09:08.451899071Z\",\n    \"critical_count\": 1,\n    \"discrepancies\": [\n      {\n        \"actual_amount\": 0.0,\n        \"details\": \"On-chain tx 0xqueue has no matching settlement record\",\n        \"detected_at\": \"2026-03-13T05:09:08.451888548Z\",\n        \"expected_amount\": 100.0,\n        \"id\": \"disc_missingsettlement_0xqueue_0\",\n        \"kind\": \"MissingSettlement\",\n        \"on_chain_tx\": \"0xqueue\",\n        \"settlement_id\": null,\n        \"severity\": \"High\"\n      },\n      {\n        \"actual_amount\": 250.0,\n        \"details\": \"Settlement stl_recon_status_001 is COMPLETED but on-chain tx 0xstatus is not confirmed\",\n        \"detected_at\": \"2026-03-13T05:09:08.451893190Z\",\n        \"expected_amount\": 250.0,\n        \"id\": \"disc_statusmismatch_stl_recon_status_001_1\",\n        \"kind\": \"StatusMismatch\",\n        \"on_chain_tx\": \"0xstatus\",\n        \"settlement_id\": \"stl_recon_status_001\",\n        \"severity\": \"Critical\"\n      }\n    ],\n    \"id\": \"recon_active_workbench\",\n    \"started_at\": \"2026-03-13T05:09:08.451875918Z\",\n    \"status\": \"CriticalIssues\",\n    \"total_discrepancies\": 2,\n    \"total_on_chain_txs_checked\": 2,\n    \"total_settlements_checked\": 2\n  }\n}"
+}

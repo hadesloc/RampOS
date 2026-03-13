@@ -1,0 +1,42 @@
+[
+  {
+    "name": "treasury_workbench",
+    "status": 200,
+    "path": "/v1/admin/treasury/workbench"
+  },
+  {
+    "name": "treasury_export_json",
+    "status": 200,
+    "path": "/v1/admin/treasury/export?format=json"
+  },
+  {
+    "name": "reconciliation_workbench",
+    "status": 200,
+    "path": "/v1/admin/reconciliation/workbench"
+  },
+  {
+    "name": "reconciliation_export_json",
+    "status": 200,
+    "path": "/v1/admin/reconciliation/export?format=json"
+  },
+  {
+    "name": "liquidity_explain",
+    "status": 200,
+    "path": "/v1/admin/liquidity/explain"
+  },
+  {
+    "name": "kyb_reviews",
+    "status": 200,
+    "path": "/v1/admin/kyb/reviews"
+  },
+  {
+    "name": "kyb_evidence_list",
+    "status": 200,
+    "path": "/v1/admin/kyb/evidence"
+  },
+  {
+    "name": "audit_export",
+    "status": 404,
+    "path": "/v1/admin/audit/export?format=json"
+  }
+]

@@ -183,6 +183,7 @@ async fn build_test_app(pool: sqlx::PgPool) -> (axum::Router, String, String) {
                 Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
             ),
         ),
+        event_publisher: event_publisher.clone(),
         db_pool: Some(pool.clone()),
         ctr_service: None,
         ws_state: None,

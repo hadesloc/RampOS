@@ -1,0 +1,116 @@
+[
+  {
+    "step": "validate-openapi-script",
+    "status": "passed",
+    "evidence": "Contract drift validation tied to scripts/validate-openapi.sh.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\validate-openapi-script.log"
+  },
+  {
+    "step": "rampos-cli-smoke-script",
+    "status": "passed",
+    "evidence": "CLI smoke validation tied to scripts/test-rampos-cli.sh.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\rampos-cli-smoke-script.log"
+  },
+  {
+    "step": "python-cli-drift",
+    "status": "passed",
+    "evidence": "Python CLI drift checks when contract surfaces change.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\python-cli-drift.log"
+  },
+  {
+    "step": "kyb-admin",
+    "status": "passed",
+    "evidence": "KYB evidence and admin review.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\kyb-admin.log"
+  },
+  {
+    "step": "treasury-admin",
+    "status": "passed",
+    "evidence": "Treasury evidence and workbench.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\treasury-admin.log"
+  },
+  {
+    "step": "reconciliation-admin",
+    "status": "passed",
+    "evidence": "Reconciliation lineage and gated actions.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\reconciliation-admin.log"
+  },
+  {
+    "step": "liquidity-admin",
+    "status": "passed",
+    "evidence": "Liquidity explainability.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\liquidity-admin.log"
+  },
+  {
+    "step": "net-settlement-admin",
+    "status": "passed",
+    "evidence": "Settlement governance and approvals.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\net-settlement-admin.log"
+  },
+  {
+    "step": "travel-rule-admin",
+    "status": "passed",
+    "evidence": "Travel Rule governed flows.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\travel-rule-admin.log"
+  },
+  {
+    "step": "partner-registry-admin",
+    "status": "passed",
+    "evidence": "Partner registry governance.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\partner-registry-admin.log"
+  },
+  {
+    "step": "route-scoring",
+    "status": "passed",
+    "evidence": "Constraint-aware route scoring.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\route-scoring.log"
+  },
+  {
+    "step": "quote-normalization",
+    "status": "passed",
+    "evidence": "Liquidity quote normalization.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\quote-normalization.log"
+  },
+  {
+    "step": "settlement-quality-normalization",
+    "status": "passed",
+    "evidence": "Settlement quality normalization.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\settlement-quality-normalization.log"
+  },
+  {
+    "step": "rfq-finalization",
+    "status": "passed",
+    "evidence": "RFQ settlement/cancel normalization.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\rfq-finalization.log"
+  },
+  {
+    "step": "treasury-balance-normalization",
+    "status": "passed",
+    "evidence": "Treasury balance normalization.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\treasury-balance-normalization.log"
+  },
+  {
+    "step": "treasury-import-idempotency",
+    "status": "passed",
+    "evidence": "Replay-safe treasury import.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\treasury-import-idempotency.log"
+  },
+  {
+    "step": "cli-certification-suite",
+    "status": "passed",
+    "evidence": "Certification and compatibility gate suite.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\cli-certification-suite.log"
+  },
+  {
+    "step": "break-glass-response-shape",
+    "status": "passed",
+    "evidence": "Break-glass export shape preservation.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\break-glass-response-shape.log"
+  },
+  {
+    "step": "break-glass-filtering-and-linkage",
+    "status": "passed",
+    "evidence": "Break-glass linkage and filtering.",
+    "log": "docs\\operations\\evidence\\rc-m6-full-local-3\\break-glass-filtering-and-linkage.log"
+  }
+]

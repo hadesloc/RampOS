@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json",
+    "rampos-version": "2026-02-01",
+    "x-request-id": "019ce5db-2040-7973-856a-ed362ea1a219",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "content-security-policy": "default-src 'self'",
+    "vary": "origin, access-control-request-method, access-control-request-headers",
+    "access-control-allow-credentials": "true",
+    "access-control-expose-headers": "content-type,x-request-id,rampos-version",
+    "content-length": "900",
+    "connection": "close",
+    "date": "Fri, 13 Mar 2026 06:21:09 GMT"
+  },
+  "body": "{\"packageId\":\"pkg_stage_local_001\",\"tenantId\":\"tenant_stage_local\",\"institutionEntityId\":\"kyb_stage_business\",\"institutionLegalName\":\"Local Stage Biz\",\"providerFamily\":\"kyb\",\"providerPolicyId\":\"policy_kyb_default\",\"corridorCode\":\"VN_SG_PAYOUT\",\"reviewStatus\":\"approved\",\"reviewNotes\":\"manual review completed\",\"exportStatus\":\"ready\",\"exportArtifactUri\":\"s3://evidence/pkg_stage_local_001.json\",\"metadata\":{\"entityType\":\"business\"},\"exportedAt\":null,\"evidenceSources\":[{\"evidenceSourceId\":\"source_stage_local_001\",\"sourceKind\":\"registry_extract\",\"sourceRef\":\"registry://sg/acra/local-stage\",\"documentId\":null,\"collectedAt\":\"2026-03-13T06:20:42.195776Z\",\"metadata\":{\"freshnessDays\":7}}],\"uboLinks\":[{\"uboLinkId\":\"ubo_stage_local_001\",\"ownerEntityId\":\"kyb_stage_ubo\",\"ownershipPct\":\"75.00\",\"evidenceSourceRef\":\"registry://sg/acra/local-stage\",\"reviewState\":\"verified\",\"metadata\":{\"source\":\"registry\"}}]}"
+}

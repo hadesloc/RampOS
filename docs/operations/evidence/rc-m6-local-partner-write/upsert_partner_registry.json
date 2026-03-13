@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json",
+    "rampos-version": "2026-02-01",
+    "x-request-id": "019ce5d9-f1cd-7541-98d7-fd0091be9e18",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "content-security-policy": "default-src 'self'",
+    "vary": "origin, access-control-request-method, access-control-request-headers",
+    "access-control-allow-credentials": "true",
+    "access-control-expose-headers": "content-type,x-request-id,rampos-version",
+    "content-length": "1464",
+    "connection": "close",
+    "date": "Fri, 13 Mar 2026 06:19:51 GMT"
+  },
+  "body": "{\"actionMode\":\"registry_backed\",\"source\":\"registry\",\"partners\":[{\"partnerId\":\"partner_local_stage_bank\",\"tenantId\":\"tenant_stage_local\",\"partnerClass\":\"rail_bank\",\"code\":\"local-sg-bank\",\"displayName\":\"Local SG Bank\",\"legalName\":\"Local SG Bank Ltd\",\"market\":\"SG\",\"jurisdiction\":\"SG\",\"serviceDomain\":\"rails\",\"lifecycleState\":\"active\",\"approvalStatus\":\"approved\",\"metadata\":{\"tier\":\"pilot\"},\"capabilities\":[{\"capabilityId\":\"capability_local_stage_payout\",\"capabilityFamily\":\"payout\",\"environment\":\"production\",\"adapterKey\":\"local_stage_adapter\",\"providerKey\":null,\"supportedRails\":[\"fps\"],\"supportedMethods\":[\"push_transfer\"],\"approvalStatus\":\"approved\",\"metadata\":{\"currency\":\"SGD\"},\"rolloutScopes\":[{\"scopeId\":\"scope_local_stage_payout\",\"tenantId\":\"tenant_stage_local\",\"environment\":\"production\",\"corridorCode\":\"VN_SG_PAYOUT\",\"geography\":\"SG\",\"methodFamily\":\"push_transfer\",\"rolloutState\":\"approved\",\"rollbackTarget\":\"cfg_bundle_previous\",\"approvalReference\":\"approval_local_stage_bank\"}],\"healthSignals\":[{\"healthSignalId\":\"health_local_stage_payout\",\"status\":\"healthy\",\"source\":\"synthetic_monitor\",\"score\":98,\"incidentSummary\":null,\"evidence\":{\"latencyMs\":90},\"observedAt\":\"2026-03-13T05:00:00Z\"}]}],\"credentialReferences\":[{\"credentialId\":\"cred_local_stage_bank\",\"credentialKind\":\"api_key\",\"locator\":\"vault://partners/local-stage-bank/api\",\"environment\":\"production\",\"approvalReference\":\"approval_local_stage_bank\",\"rotationMetadata\":{\"rotatesEveryDays\":30}}]}]}"
+}

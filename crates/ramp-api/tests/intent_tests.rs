@@ -162,11 +162,11 @@ async fn test_get_intent_endpoint() {
                 Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
             ),
         ),
+        event_publisher: event_publisher.clone(),
         db_pool: None,
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
-        event_publisher,
     };
 
     let app = create_router(app_state);
@@ -304,11 +304,11 @@ async fn test_get_intent_not_found() {
                 Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
             ),
         ),
+        event_publisher: event_publisher.clone(),
         db_pool: None,
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
-        event_publisher,
     };
 
     let app = create_router(app_state);
@@ -486,11 +486,11 @@ async fn test_get_intent_wrong_tenant() {
                 Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
             ),
         ),
+        event_publisher: event_publisher.clone(),
         db_pool: None,
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
-        event_publisher,
     };
 
     let app = create_router(app_state);

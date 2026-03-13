@@ -52,15 +52,19 @@ fn build_signed_admin_request(
     let path = uri.split('?').next().unwrap_or(uri);
     let signature = generate_signature(method, path, &timestamp, body, api_secret);
 
-    Request::builder()
+    let mut builder = Request::builder()
         .uri(uri)
         .method(method)
         .header("Authorization", format!("Bearer {api_key}"))
         .header("X-Timestamp", &timestamp)
         .header("X-Signature", signature)
-        .header("X-Admin-Key", admin_key)
-        .body(Body::from(body.to_string()))
-        .unwrap()
+        .header("X-Admin-Key", admin_key);
+
+    if !body.is_empty() {
+        builder = builder.header("Content-Type", "application/json");
+    }
+
+    builder.body(Body::from(body.to_string())).unwrap()
 }
 
 async fn setup_app(tenant_id: &str) -> TestApp {
@@ -95,6 +99,40 @@ async fn setup_app_with_pool(tenant_id: &str, db_pool: Option<PgPool>) -> TestAp
         created_at: Utc::now(),
         updated_at: Utc::now(),
     });
+
+    if let Some(pool) = db_pool.as_ref() {
+        sqlx::query(
+            r#"
+            INSERT INTO tenants (
+                id,
+                name,
+                status,
+                api_key_hash,
+                webhook_secret_hash,
+                webhook_url,
+                config,
+                created_at,
+                updated_at
+            ) VALUES (
+                $1,
+                'Partner Registry Test Tenant',
+                'ACTIVE',
+                $2,
+                'secret',
+                NULL,
+                '{}'::jsonb,
+                NOW(),
+                NOW()
+            )
+            ON CONFLICT (id) DO NOTHING
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(hex::encode(Sha256::digest(TEST_API_KEY.as_bytes())))
+        .execute(pool)
+        .await
+        .expect("db-backed tenant seed should succeed");
+    }
 
     let payin_service = Arc::new(PayinService::new(
         intent_repo.clone(),

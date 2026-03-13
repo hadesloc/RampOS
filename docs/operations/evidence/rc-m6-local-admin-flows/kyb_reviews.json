@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json",
+    "rampos-version": "2026-02-01",
+    "x-request-id": "019ce599-32f8-70b1-b861-4f1210e4d092",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "content-security-policy": "default-src 'self'",
+    "vary": "origin, access-control-request-method, access-control-request-headers",
+    "access-control-allow-credentials": "true",
+    "access-control-expose-headers": "content-type,x-request-id,rampos-version",
+    "content-length": "39",
+    "connection": "close",
+    "date": "Fri, 13 Mar 2026 05:09:08 GMT"
+  },
+  "body": "{\"queue\":[],\"actionMode\":\"review_only\"}"
+}

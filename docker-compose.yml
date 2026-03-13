@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
@@ -116,6 +114,9 @@ services:
       RAMPOS__SERVER__HOST: 0.0.0.0
       RAMPOS__SERVER__PORT: 8080
       RAMPOS_ADMIN_KEY: ${RAMPOS_ADMIN_KEY:?RAMPOS_ADMIN_KEY must be set}
+      RAMPOS_ADMIN_ROLE: ${RAMPOS_ADMIN_ROLE:-operator}
+      JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       RUST_LOG: info,ramp_api=debug,ramp_core=debug
     depends_on:
       postgres:

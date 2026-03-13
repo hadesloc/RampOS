@@ -3,10 +3,15 @@ use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
+    #[serde(default)]
     pub database: DatabaseConfig,
+    #[serde(default)]
     pub redis: RedisConfig,
+    #[serde(default)]
     pub nats: NatsConfig,
+    #[serde(default)]
     pub server: ServerConfig,
+    #[serde(default)]
     pub webhook: WebhookConfig,
     pub storage: Option<StorageConfig>,
     #[serde(default)]
@@ -21,6 +26,7 @@ pub struct StorageConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct DatabaseConfig {
     pub url: String,
     pub max_connections: u32,
@@ -44,6 +50,7 @@ impl Default for DatabaseConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct RedisConfig {
     pub url: String,
     pub pool_size: u32,
@@ -59,6 +66,7 @@ impl Default for RedisConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct NatsConfig {
     pub url: String,
     pub stream_name: String,
@@ -74,6 +82,7 @@ impl Default for NatsConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
@@ -91,6 +100,7 @@ impl Default for ServerConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct WebhookConfig {
     pub retry_max_attempts: u32,
     pub retry_initial_delay_ms: u64,
@@ -153,5 +163,41 @@ mod tests {
     fn test_redis_default_config() {
         let config = RedisConfig::default();
         assert_eq!(config.url, "redis://:dev_redis_pass@localhost:6379");
+    }
+
+    #[test]
+    fn test_config_from_env_accepts_partial_database_section() {
+        let keys = [
+            "RAMPOS__DATABASE__URL",
+            "RAMPOS__REDIS__URL",
+            "RAMPOS__NATS__URL",
+        ];
+        let original: Vec<(String, Option<String>)> = keys
+            .iter()
+            .map(|key| ((*key).to_string(), std::env::var(key).ok()))
+            .collect();
+
+        std::env::set_var(
+            "RAMPOS__DATABASE__URL",
+            "postgres://rampos:test@db.internal:5432/rampos",
+        );
+        std::env::set_var("RAMPOS__REDIS__URL", "redis://:pass@redis.internal:6379");
+        std::env::set_var("RAMPOS__NATS__URL", "nats://nats.internal:4222");
+
+        let config = Config::from_env().expect("partial env config should deserialize");
+
+        assert_eq!(config.database.url, "postgres://rampos:test@db.internal:5432/rampos");
+        assert_eq!(config.database.max_connections, 100);
+        assert_eq!(config.redis.url, "redis://:pass@redis.internal:6379");
+        assert_eq!(config.redis.pool_size, 20);
+        assert_eq!(config.nats.url, "nats://nats.internal:4222");
+        assert_eq!(config.server.port, 8080);
+
+        for (key, value) in original {
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+        }
     }
 }

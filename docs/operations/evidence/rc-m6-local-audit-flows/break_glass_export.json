@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json",
+    "rampos-version": "2026-02-01",
+    "x-request-id": "019ce5a3-5f34-7b40-9b77-4d794eb0cec9",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "content-security-policy": "default-src 'self'",
+    "vary": "origin, access-control-request-method, access-control-request-headers",
+    "access-control-allow-credentials": "true",
+    "access-control-expose-headers": "content-type,x-request-id,rampos-version",
+    "content-length": "363",
+    "connection": "close",
+    "date": "Fri, 13 Mar 2026 05:20:15 GMT"
+  },
+  "body": "{\"actorId\":\"ops.local.drill\",\"emergencyScope\":\"local-drill\",\"evidenceRef\":\"evidence-local\",\"rollbackContext\":\"restore-prior-state\",\"compatibilityImpact\":\"none\",\"immutableExport\":true,\"auditExport\":{\"tenantId\":\"tenant_stage_local\",\"exportedAt\":\"2026-03-13T05:20:15.167334406+00:00\",\"fromDate\":null,\"toDate\":null,\"totalEntries\":0,\"chainVerified\":true,\"entries\":[]}}"
+}

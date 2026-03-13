@@ -1,5 +1,6 @@
 from argparse import Namespace
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from rampos.cli.app import build_certification_artifact, build_parser, cmd_certification_artifact
@@ -41,6 +42,7 @@ def test_build_certification_artifact_is_repeatable() -> None:
 
 
 def test_cmd_certification_artifact_writes_output_file(tmp_path: Path) -> None:
+    current_stamp = datetime.now(timezone.utc).date().isoformat()
     output_file = tmp_path / "certification.json"
     args = Namespace(
         profile="default",
@@ -54,9 +56,9 @@ def test_cmd_certification_artifact_writes_output_file(tmp_path: Path) -> None:
         status="certified",
         checks=["price_parity"],
         compatibility_evidence=[
-            "openapi@2026-03-12",
-            "sdk-python@2026-03-12",
-            "cli@2026-03-12",
+            f"openapi@{current_stamp}",
+            f"sdk-python@{current_stamp}",
+            f"cli@{current_stamp}",
         ],
         output_file=str(output_file),
     )

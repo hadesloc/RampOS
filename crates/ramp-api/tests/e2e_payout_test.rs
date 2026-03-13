@@ -188,6 +188,7 @@ async fn setup_app() -> TestApp {
                 Arc::new(ramp_core::stablecoin::vnst_protocol::MockVnstProtocolDataProvider::new()),
             ),
         ),
+        event_publisher: event_publisher.clone(),
         db_pool: None,
         ctr_service: None,
         ws_state: None,

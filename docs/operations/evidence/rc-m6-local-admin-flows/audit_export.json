@@ -1,0 +1,17 @@
+{
+  "status": 404,
+  "headers": {
+    "x-request-id": "019ce599-3329-7fb0-ad2b-0221aa8b84ee",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "content-security-policy": "default-src 'self'",
+    "vary": "origin, access-control-request-method, access-control-request-headers",
+    "access-control-allow-credentials": "true",
+    "access-control-expose-headers": "content-type,x-request-id,rampos-version",
+    "connection": "close",
+    "content-length": "0",
+    "date": "Fri, 13 Mar 2026 05:09:08 GMT"
+  },
+  "body": ""
+}

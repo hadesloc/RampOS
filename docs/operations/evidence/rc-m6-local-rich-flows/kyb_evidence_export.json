@@ -1,0 +1,20 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json",
+    "content-disposition": "attachment; filename=\"kyb_evidence_package_pkg_stage_local_001_20260313_062109.json\"",
+    "rampos-version": "2026-02-01",
+    "x-request-id": "019ce5db-204e-78e0-9ac4-dac52949be7c",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "content-security-policy": "default-src 'self'",
+    "vary": "origin, access-control-request-method, access-control-request-headers",
+    "access-control-allow-credentials": "true",
+    "access-control-expose-headers": "content-type,x-request-id,rampos-version",
+    "content-length": "1126",
+    "connection": "close",
+    "date": "Fri, 13 Mar 2026 06:21:09 GMT"
+  },
+  "body": "{\n  \"packageId\": \"pkg_stage_local_001\",\n  \"tenantId\": \"tenant_stage_local\",\n  \"institutionEntityId\": \"kyb_stage_business\",\n  \"institutionLegalName\": \"Local Stage Biz\",\n  \"providerFamily\": \"kyb\",\n  \"providerPolicyId\": \"policy_kyb_default\",\n  \"corridorCode\": \"VN_SG_PAYOUT\",\n  \"reviewStatus\": \"approved\",\n  \"reviewNotes\": \"manual review completed\",\n  \"exportStatus\": \"ready\",\n  \"exportArtifactUri\": \"s3://evidence/pkg_stage_local_001.json\",\n  \"metadata\": {\n    \"entityType\": \"business\"\n  },\n  \"exportedAt\": null,\n  \"evidenceSources\": [\n    {\n      \"evidenceSourceId\": \"source_stage_local_001\",\n      \"sourceKind\": \"registry_extract\",\n      \"sourceRef\": \"registry://sg/acra/local-stage\",\n      \"documentId\": null,\n      \"collectedAt\": \"2026-03-13T06:20:42.195776Z\",\n      \"metadata\": {\n        \"freshnessDays\": 7\n      }\n    }\n  ],\n  \"uboLinks\": [\n    {\n      \"uboLinkId\": \"ubo_stage_local_001\",\n      \"ownerEntityId\": \"kyb_stage_ubo\",\n      \"ownershipPct\": \"75.00\",\n      \"evidenceSourceRef\": \"registry://sg/acra/local-stage\",\n      \"reviewState\": \"verified\",\n      \"metadata\": {\n        \"source\": \"registry\"\n      }\n    }\n  ]\n}"
+}

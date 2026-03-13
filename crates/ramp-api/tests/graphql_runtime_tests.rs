@@ -172,11 +172,11 @@ async fn setup_app() -> axum::Router {
             ramp_core::stablecoin::VnstProtocolConfig::default(),
             Arc::new(ramp_core::stablecoin::MockVnstProtocolDataProvider::new()),
         )),
+        event_publisher: event_publisher.clone(),
         db_pool: None,
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
-        event_publisher,
     };
 
     create_router(app_state)
@@ -627,11 +627,11 @@ fn setup_app_state_with_data() -> (
             ramp_core::stablecoin::VnstProtocolConfig::default(),
             Arc::new(ramp_core::stablecoin::MockVnstProtocolDataProvider::new()),
         )),
+        event_publisher: event_publisher.clone(),
         db_pool: None,
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
-        event_publisher,
     };
 
     (app_state, intent_repo, user_repo)

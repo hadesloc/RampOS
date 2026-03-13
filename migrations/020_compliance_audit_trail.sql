@@ -131,9 +131,14 @@ BEGIN
     END IF;
 END $$;
 
--- Grant permissions
-GRANT SELECT, INSERT ON compliance_audit_log TO ramp_app;
-REVOKE UPDATE, DELETE ON compliance_audit_log FROM ramp_app;
+-- Grant permissions only when the application role exists in the target environment.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ramp_app') THEN
+        GRANT SELECT, INSERT ON compliance_audit_log TO ramp_app;
+        REVOKE UPDATE, DELETE ON compliance_audit_log FROM ramp_app;
+    END IF;
+END $$;
 
 -- Comment for documentation
 COMMENT ON TABLE compliance_audit_log IS
