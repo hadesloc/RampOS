@@ -5,6 +5,34 @@ All notable changes to RampOS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-03-13
+
+### Added
+
+#### Bank-Ready Control Plane (Migrations 043-048)
+- **Partner Registry** (043): Multi-tenant partner onboarding with lifecycle states (draft→active), capability declarations, rollout scopes, approval references, health signals, and credential references — 6 new tables with tenant-scoped indexes
+- **Corridor Packs** (044): Payment corridor definitions with source/destination market mapping, fee profiles (base fee, FX spread, liquidity cost, surcharge), cutoff policies with timezone-aware windows, compliance hooks, rollout scopes, and eligibility rules — 7 new tables with corridor-code uniqueness constraints
+- **Payment Method Capabilities** (045): Method-family declarations per corridor with funding source, presentment model, card-funding toggle, and policy flags — linked to both corridor packs and partner capabilities
+- **Provider Routing Policies** (046): Multi-dimensional routing rules supporting corridor, entity type, risk tier, partner, asset, and amount-range matching with weighted provider scorecards and fallback ordering
+- **KYB Evidence Packages** (047): Institutional evidence packaging for bank compliance with review status workflow, export artifact URIs, evidence source tracking, and UBO evidence linking with ownership percentages — 3 new tables
+- **Treasury Evidence Imports** (048): External treasury balance imports with idempotent ingestion, source lineage tracking, and per-account-scope snapshots for bank reporting and reserve proofs
+
+#### New Services & Handlers
+- `PartnerRegistryService` — Partner lifecycle management with registry-backed/fallback modes
+- `CorridorPackService` — Corridor configuration CRUD with fee profiles and compliance hooks
+- `PaymentMethodCapabilityService` — Payment method management per corridor
+- `ProviderRoutingService` — Multi-dimensional provider routing with scorecard evaluation
+- `TreasuryEvidenceService` — External balance import and evidence audit trail
+- Admin handlers: `partners`, `corridor_packs` (in admin mod)
+
+### Changed
+- Migration count increased from 42 to 49 (including seed data migration renumbered to 999)
+- Core service modules expanded from 46 to 51
+- Repository modules expanded from 16 to 19 (added `partner_registry`, `corridor_pack`, `payment_method_capability`)
+- Admin handler count expanded from 33 to 35 handler files
+
+---
+
 ## [1.2.0] - 2026-03-11
 
 ### Added
@@ -226,7 +254,8 @@ This was the initial development release for internal testing.
 
 | Version | Date | Status |
 |---------|------|--------|
-| 1.2.0 | 2026-03-11 | Current |
+| 1.3.0 | 2026-03-13 | Current |
+| 1.2.0 | 2026-03-11 | Stable |
 | 1.1.0 | 2026-03-08 | Stable |
 | 1.0.0 | 2026-02-02 | Stable |
 | 0.1.0 | 2026-01-23 | Deprecated |
@@ -239,7 +268,8 @@ Thanks to all contributors who made this release possible.
 
 ---
 
-[1.2.0]: https://github.com/rampos/rampos/releases/tag/v1.2.0
-[1.1.0]: https://github.com/rampos/rampos/releases/tag/v1.1.0
-[1.0.0]: https://github.com/rampos/rampos/releases/tag/v1.0.0
-[0.1.0]: https://github.com/rampos/rampos/releases/tag/v0.1.0
+[1.3.0]: https://github.com/hadesloc/RampOS/releases/tag/v1.3.0
+[1.2.0]: https://github.com/hadesloc/RampOS/releases/tag/v1.2.0
+[1.1.0]: https://github.com/hadesloc/RampOS/releases/tag/v1.1.0
+[1.0.0]: https://github.com/hadesloc/RampOS/releases/tag/v1.0.0
+[0.1.0]: https://github.com/hadesloc/RampOS/releases/tag/v0.1.0

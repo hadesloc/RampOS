@@ -158,6 +158,11 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 | **Liquidity Policy** | Xếp hạng LP, chấm điểm độ tin cậy, và phân bổ thanh khoản |
 | **SLA Guardian** | Giám sát SLA và cảnh báo tự động |
 | **Incident Timeline** | Theo dõi sự cố và tái dựng timeline |
+| **Partner Registry** | Quản lý vòng đời đối tác multi-tenant với khai báo khả năng |
+| **Corridor Packs** | Định nghĩa hành lang thanh toán với biểu phí và hook compliance |
+| **Payment Methods** | Khai báo khả năng phương thức thanh toán theo hành lang và đối tác |
+| **Provider Routing** | Định tuyến đa chiều với scorecard và thứ tự fallback |
+| **Treasury Evidence** | Nhập số dư bên ngoài với idempotent cho báo cáo ngân hàng |
 | **Event Catalog** | Danh mục sự kiện typed với phiên bản và schema registry |
 | **Reconciliation Export** | Xuất bảng chứng đối soát cho tài chính và kiểm toán |
 | **Rescreening Actions** | Hành động tự động cho rescreening (freeze/restrict/notify) |
@@ -259,7 +264,7 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 │  └────────────────┘           │  ┌──────────┐  ┌──────────┐  ┌────────────┐  │  │
 │                               │  │  Intent  │  │ Workflow │  │  Service   │  │  │
 │  ┌────────────────┐  iframe  │  │  Engine  │  │  Engine  │  │  Layer     │  │  │
-│  │  Widget nhúng  │◄────────  │  │ (Solver) │  │(Temporal)│  │ (15 svcs) │  │  │
+│  │  Widget nhúng  │◄────────  │  │ (Solver) │  │(Temporal)│  │ (51 svcs) │  │  │
 │  └────────────────┘           │  └────┬─────┘  └────┬─────┘  └─────┬──────┘  │  │
 │                               │       └──────────────┴──────────────┘         │  │
 │  ┌────────────────┐  SDK/API │               │                                 │  │
@@ -487,8 +492,8 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 
 | Crate | Mô tả | Phụ thuộc chính |
 |-------|-------------|-----------------|
-| `ramp-api` | API Gateway REST — 33 admin + 9 portal + 2 LP handlers | Axum 0.7, Tower, OpenTelemetry |
-| `ramp-core` | Logic nghiệp vụ, state machine, 133 modules | Tokio, SQLx, async-nats |
+| `ramp-api` | API Gateway REST — 35 admin + 9 portal + 2 LP handlers | Axum 0.7, Tower, OpenTelemetry |
+| `ramp-core` | Logic nghiệp vụ, state machine, 51 service + 19 repository modules | Tokio, SQLx, async-nats |
 | `ramp-ledger` | Kế toán sổ cái kép | rust_decimal |
 | `ramp-compliance` | KYC/AML/KYT/Travel Rule, 75 modules | Fuzz testing, tạo báo cáo |
 | `ramp-aa` | Account Abstraction (ERC-4337) | Alloy |
@@ -500,8 +505,8 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 ```
 rampos/
 ├── crates/                # 7 Rust workspace crates
-│   ├── ramp-api/           # HTTP API (Axum) — 33 admin + 9 portal + 2 LP handlers
-│   ├── ramp-core/          # Logic nghiệp vụ — 133 modules
+│   ├── ramp-api/           # HTTP API (Axum) — 35 admin + 9 portal + 2 LP handlers
+│   ├── ramp-core/          # Logic nghiệp vụ — 51 service + 19 repository modules
 │   │   ├── billing/         # Đo lường, Stripe
 │   │   ├── bridge/          # Across, Stargate
 │   │   ├── chain/           # EVM, Solana, TON, swaps
@@ -511,8 +516,8 @@ rampos/
 │   │   ├── intents/         # Solver, thực thi, số dư thống nhất
 │   │   ├── jobs/            # Compliance alerts, timeout, webhook retry
 │   │   ├── oracle/          # Chainlink, fallback
-│   │   ├── repository/      # 16 data access modules
-│   │   ├── service/         # 46 service modules
+│   │   ├── repository/      # 19 data access modules
+│   │   ├── service/         # 51 service modules
 │   │   ├── sso/             # Enterprise SSO
 │   │   ├── stablecoin/      # Multi-stablecoin
 │   │   ├── swap/            # DEX aggregation
@@ -546,7 +551,7 @@ rampos/
 ├── packages/widget/        # Widget nhúng
 ├── frontend/               # Dashboard Admin (Next.js 15)
 ├── frontend-landing/       # Trang marketing
-├── migrations/             # 42 up + 32 down PostgreSQL migrations
+├── migrations/             # 49 up + 32 down PostgreSQL migrations
 ├── k8s/                    # Kubernetes (Kustomize)
 │   ├── base/               # Manifests lõi, Postgres HA, PgBouncer
 │   ├── jobs/               # Backup jobs (Postgres, Redis, NATS → S3)

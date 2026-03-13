@@ -163,9 +163,14 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 | **Metrics** | Internal metrics collection for Prometheus export |
 | **Sandbox** | Programmable replay environments with presets for testing & drills |
 | **Treasury** | Treasury operations and reserve management |
+| **Treasury Evidence** | External balance imports with idempotent ingestion for bank reporting |
 | **Liquidity Policy** | LP ranking, reliability scoring, and allocation policies |
 | **SLA Guardian** | SLA monitoring and automated alerting |
 | **Incident Timeline** | Incident tracking and timeline reconstruction |
+| **Partner Registry** | Multi-tenant partner lifecycle management with capability declarations |
+| **Corridor Packs** | Payment corridor definitions with fee profiles and compliance hooks |
+| **Payment Methods** | Method-family capability declarations per corridor and partner |
+| **Provider Routing** | Multi-dimensional routing with scorecard and fallback ordering |
 
 ### 🏦 Compliance Engine (`ramp-compliance`)
 - **KYC Tiering** — Tier 1/2/3 with configurable limits; integrations with Onfido and eKYC providers
@@ -503,8 +508,8 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 
 | Crate | Description | Key Dependencies |
 |-------|-------------|-----------------|
-| `ramp-api` | REST API Gateway — 33 admin + 9 portal + 2 LP handlers | Axum 0.7, Tower, OpenTelemetry |
-| `ramp-core` | Business logic, state machine, 133 modules | Tokio, SQLx, async-nats |
+| `ramp-api` | REST API Gateway — 35 admin + 9 portal + 2 LP handlers | Axum 0.7, Tower, OpenTelemetry |
+| `ramp-core` | Business logic, state machine, 51 service + 19 repository modules | Tokio, SQLx, async-nats |
 | `ramp-ledger` | Double-entry accounting | rust_decimal |
 | `ramp-compliance` | KYC/AML/KYT/Travel Rule, 75 modules | Fuzz testing, report generation |
 | `ramp-aa` | Account Abstraction (ERC-4337) | Alloy |
@@ -516,8 +521,8 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 ```
 rampos/
 ├── crates/                # 7 Rust workspace crates
-│   ├── ramp-api/           # HTTP API (Axum) — 33 admin + 9 portal + 2 LP handlers
-│   ├── ramp-core/          # Business logic — 133 modules
+│   ├── ramp-api/           # HTTP API (Axum) — 35 admin + 9 portal + 2 LP handlers
+│   ├── ramp-core/          # Business logic — 51 service + 19 repository modules
 │   │   ├── billing/         # Metering, Stripe
 │   │   ├── bridge/          # Across, Stargate
 │   │   ├── chain/           # EVM, Solana, TON, swaps
@@ -527,8 +532,8 @@ rampos/
 │   │   ├── intents/         # Solver, execution, unified balance
 │   │   ├── jobs/            # Compliance alerts, timeout, webhook retry
 │   │   ├── oracle/          # Chainlink, fallback
-│   │   ├── repository/      # 16 data access modules
-│   │   ├── service/         # 46 service modules
+│   │   ├── repository/      # 19 data access modules
+│   │   ├── service/         # 51 service modules
 │   │   ├── sso/             # Enterprise SSO
 │   │   ├── stablecoin/      # Multi-stablecoin
 │   │   ├── swap/            # DEX aggregation
@@ -563,7 +568,7 @@ rampos/
 ├── packages/widget/        # Embeddable widget (headless + server-driven)
 ├── frontend/               # Admin Dashboard (Next.js 15)
 ├── frontend-landing/       # Marketing site
-├── migrations/             # 42 up + 32 down PostgreSQL migrations
+├── migrations/             # 49 up + 32 down PostgreSQL migrations
 ├── k8s/                    # Kubernetes (Kustomize)
 │   ├── base/               # Core manifests, HA Postgres, PgBouncer
 │   ├── jobs/               # Backup jobs (Postgres, Redis, NATS → S3)
@@ -831,7 +836,7 @@ More details:
 | Layer | Technology |
 |-------|------------|
 | **Backend** | Rust, Tokio, Axum, SQLx |
-| **Database** | PostgreSQL 16 (42 migrations) |
+| **Database** | PostgreSQL 16 (49 migrations) |
 | **Cache** | Redis 7 |
 | **Messaging** | NATS JetStream |
 | **Analytics** | ClickHouse |

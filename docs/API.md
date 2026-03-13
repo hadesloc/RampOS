@@ -352,6 +352,49 @@ List intents with filters.
 | `page` | integer | Page number |
 | `limit` | integer | Items per page (max 100) |
 
+#### GET /v1/admin/partners
+
+List all registered partners and their capabilities. Auth: Admin key.
+
+**Response** (200 OK)
+```json
+{
+  "actionMode": "registry_backed",
+  "source": "registry",
+  "partners": [
+    {
+      "id": "partner_001",
+      "code": "acme_bank",
+      "displayName": "ACME Bank",
+      "partnerClass": "bank",
+      "lifecycleState": "active",
+      "capabilities": [...],
+      "rolloutScopes": [...]
+    }
+  ]
+}
+```
+
+#### PUT /v1/admin/partners
+
+Upsert a partner with capabilities, approval references, and credential references. Auth: Admin key (operator-level).
+
+#### GET /v1/admin/corridor-packs
+
+List all corridor packs with fee profiles, cutoff policies, compliance hooks, and eligibility rules. Auth: Admin key.
+
+#### GET /v1/admin/provider-routing
+
+List provider routing policies for the authenticated tenant. Auth: Admin key.
+
+#### GET /v1/admin/kyb-evidence
+
+List KYB evidence packages for institutional due diligence. Auth: Admin key.
+
+#### GET /v1/admin/treasury-evidence
+
+List treasury evidence imports (external balance snapshots). Auth: Admin key.
+
 ---
 
 ### RFQ Auction — Bidirectional Price Discovery
@@ -645,6 +688,15 @@ The complete OpenAPI 3.0 specification is available at:
 
 ## Changelog
 
+### v0.4.0 (2026-03-13)
+- **Bank-Ready Control Plane** — Partner Registry, Corridor Packs, Payment Method Capabilities, Provider Routing
+  - `GET/PUT /v1/admin/partners` — Partner lifecycle management
+  - `GET /v1/admin/corridor-packs` — Payment corridor configurations
+  - `GET /v1/admin/provider-routing` — Multi-dimensional routing policies
+  - `GET /v1/admin/kyb-evidence` — KYB evidence packages
+  - `GET /v1/admin/treasury-evidence` — Treasury balance imports
+- New DB tables: `partners`, `partner_capabilities`, `corridor_packs`, `corridor_fee_profiles`, `provider_routing_policies`, `kyb_evidence_packages`, `treasury_evidence_imports` + more (migrations 043-048)
+
 ### v0.3.0 (2026-03-08)
 - **RFQ Auction Layer** — Bidirectional LP marketplace for competitive USDT↔VND pricing
   - `POST /v1/portal/rfq` — Create OFFRAMP/ONRAMP auction
@@ -671,4 +723,4 @@ The complete OpenAPI 3.0 specification is available at:
 
 ---
 
-Last updated: 2026-03-08
+Last updated: 2026-03-13
