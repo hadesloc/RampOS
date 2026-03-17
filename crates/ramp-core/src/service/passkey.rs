@@ -3,13 +3,16 @@
 //! Stores passkey credentials (WebAuthn P256 public keys) and links them
 //! to user smart account addresses.
 //!
-//! **Storage**: PostgreSQL-backed via `passkey_credentials` table (migration 050).
-//! Previous versions used in-memory HashMap; this has been upgraded for
-//! production durability.
+//! Production code should use PostgreSQL-backed storage via `with_pool()`.
+//! The in-memory backend remains available for focused tests that exercise
+//! WebAuthn ceremony logic without external database setup.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 /// Passkey credential stored in the backend
@@ -61,15 +64,36 @@ pub struct LinkAccountRequest {
     pub smart_account_address: String,
 }
 
-/// Passkey service — manages passkey credentials in PostgreSQL
+#[derive(Debug, Clone, Default)]
+struct InMemoryPasskeyStore {
+    credentials: HashMap<String, Vec<PasskeyCredential>>,
+}
+
+enum PasskeyBackend {
+    Postgres(PgPool),
+    InMemory(Arc<RwLock<InMemoryPasskeyStore>>),
+}
+
+/// Passkey service — manages passkey credentials via pluggable storage.
 pub struct PasskeyService {
-    pool: PgPool,
+    backend: PasskeyBackend,
 }
 
 impl PasskeyService {
-    /// Create a new PasskeyService with a PostgreSQL connection pool
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    /// Create a new in-memory PasskeyService.
+    ///
+    /// This backend is intended for focused tests and local ceremony simulation.
+    pub fn new() -> Self {
+        Self {
+            backend: PasskeyBackend::InMemory(Arc::new(RwLock::new(InMemoryPasskeyStore::default()))),
+        }
+    }
+
+    /// Create a PostgreSQL-backed PasskeyService for production durability.
+    pub fn with_pool(pool: PgPool) -> Self {
+        Self {
+            backend: PasskeyBackend::Postgres(pool),
+        }
     }
 
     /// Register a new passkey credential for a user
@@ -77,7 +101,6 @@ impl PasskeyService {
         &self,
         request: RegisterPasskeyRequest,
     ) -> Result<RegisterPasskeyResponse, PasskeyError> {
-        // Validate public key coordinates are valid hex
         validate_hex_coordinate(&request.public_key_x)?;
         validate_hex_coordinate(&request.public_key_y)?;
 
@@ -89,34 +112,64 @@ impl PasskeyService {
             return Err(PasskeyError::InvalidUserId);
         }
 
-        // Check for duplicate credential ID
-        let existing: Option<(String,)> = sqlx::query_as(
-            "SELECT credential_id FROM passkey_credentials WHERE credential_id = $1",
-        )
-        .bind(&request.credential_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
-
-        if existing.is_some() {
-            return Err(PasskeyError::CredentialAlreadyExists);
-        }
-
         let now = Utc::now();
 
-        sqlx::query(
-            "INSERT INTO passkey_credentials (credential_id, user_id, public_key_x, public_key_y, display_name, is_active, created_at)
-             VALUES ($1, $2, $3, $4, $5, true, $6)"
-        )
-        .bind(&request.credential_id)
-        .bind(&request.user_id)
-        .bind(&request.public_key_x)
-        .bind(&request.public_key_y)
-        .bind(&request.display_name)
-        .bind(now)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
+        match &self.backend {
+            PasskeyBackend::Postgres(pool) => {
+                let existing: Option<(String,)> = sqlx::query_as(
+                    "SELECT credential_id FROM passkey_credentials WHERE credential_id = $1",
+                )
+                .bind(&request.credential_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
+
+                if existing.is_some() {
+                    return Err(PasskeyError::CredentialAlreadyExists);
+                }
+
+                sqlx::query(
+                    "INSERT INTO passkey_credentials (credential_id, user_id, public_key_x, public_key_y, display_name, is_active, created_at)
+                     VALUES ($1, $2, $3, $4, $5, true, $6)",
+                )
+                .bind(&request.credential_id)
+                .bind(&request.user_id)
+                .bind(&request.public_key_x)
+                .bind(&request.public_key_y)
+                .bind(&request.display_name)
+                .bind(now)
+                .execute(pool)
+                .await
+                .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
+            }
+            PasskeyBackend::InMemory(store) => {
+                let mut store = store.write().await;
+                if store
+                    .credentials
+                    .values()
+                    .flat_map(|creds| creds.iter())
+                    .any(|cred| cred.credential_id == request.credential_id)
+                {
+                    return Err(PasskeyError::CredentialAlreadyExists);
+                }
+
+                store
+                    .credentials
+                    .entry(request.user_id.clone())
+                    .or_default()
+                    .push(PasskeyCredential {
+                        credential_id: request.credential_id.clone(),
+                        user_id: request.user_id.clone(),
+                        public_key_x: request.public_key_x.clone(),
+                        public_key_y: request.public_key_y.clone(),
+                        smart_account_address: None,
+                        display_name: request.display_name.clone(),
+                        is_active: true,
+                        created_at: now,
+                        last_used_at: None,
+                    });
+            }
+        }
 
         info!(
             user_id = %request.user_id,
@@ -137,18 +190,40 @@ impl PasskeyService {
         user_id: &str,
         credential_id: &str,
     ) -> Result<PasskeyCredential, PasskeyError> {
-        let credential: Option<PasskeyCredential> = sqlx::query_as(
-            "SELECT credential_id, user_id, public_key_x, public_key_y, smart_account_address, display_name, is_active, created_at, last_used_at
-             FROM passkey_credentials
-             WHERE user_id = $1 AND credential_id = $2 AND is_active = true"
-        )
-        .bind(user_id)
-        .bind(credential_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
+        match &self.backend {
+            PasskeyBackend::Postgres(pool) => {
+                let user_exists = self.user_has_any_credential(user_id).await?;
+                let credential: Option<PasskeyCredential> = sqlx::query_as(
+                    "SELECT credential_id, user_id, public_key_x, public_key_y, smart_account_address, display_name, is_active, created_at, last_used_at
+                     FROM passkey_credentials
+                     WHERE user_id = $1 AND credential_id = $2 AND is_active = true",
+                )
+                .bind(user_id)
+                .bind(credential_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
 
-        credential.ok_or_else(|| PasskeyError::CredentialNotFound(credential_id.to_string()))
+                match credential {
+                    Some(credential) => Ok(credential),
+                    None if user_exists => Err(PasskeyError::CredentialNotFound(credential_id.to_string())),
+                    None => Err(PasskeyError::UserNotFound(user_id.to_string())),
+                }
+            }
+            PasskeyBackend::InMemory(store) => {
+                let store = store.read().await;
+                let user_creds = store
+                    .credentials
+                    .get(user_id)
+                    .ok_or_else(|| PasskeyError::UserNotFound(user_id.to_string()))?;
+
+                user_creds
+                    .iter()
+                    .find(|c| c.credential_id == credential_id && c.is_active)
+                    .cloned()
+                    .ok_or_else(|| PasskeyError::CredentialNotFound(credential_id.to_string()))
+            }
+        }
     }
 
     /// List all passkey credentials for a user
@@ -156,18 +231,30 @@ impl PasskeyService {
         &self,
         user_id: &str,
     ) -> Result<Vec<PasskeyCredential>, PasskeyError> {
-        let credentials: Vec<PasskeyCredential> = sqlx::query_as(
-            "SELECT credential_id, user_id, public_key_x, public_key_y, smart_account_address, display_name, is_active, created_at, last_used_at
-             FROM passkey_credentials
-             WHERE user_id = $1 AND is_active = true
-             ORDER BY created_at ASC"
-        )
-        .bind(user_id)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
+        match &self.backend {
+            PasskeyBackend::Postgres(pool) => {
+                let credentials: Vec<PasskeyCredential> = sqlx::query_as(
+                    "SELECT credential_id, user_id, public_key_x, public_key_y, smart_account_address, display_name, is_active, created_at, last_used_at
+                     FROM passkey_credentials
+                     WHERE user_id = $1 AND is_active = true
+                     ORDER BY created_at ASC",
+                )
+                .bind(user_id)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
 
-        Ok(credentials)
+                Ok(credentials)
+            }
+            PasskeyBackend::InMemory(store) => {
+                let store = store.read().await;
+                Ok(store
+                    .credentials
+                    .get(user_id)
+                    .map(|creds| creds.iter().filter(|c| c.is_active).cloned().collect())
+                    .unwrap_or_default())
+            }
+        }
     }
 
     /// Link a passkey credential to a smart account address
@@ -175,19 +262,37 @@ impl PasskeyService {
         &self,
         request: LinkAccountRequest,
     ) -> Result<(), PasskeyError> {
-        let result = sqlx::query(
-            "UPDATE passkey_credentials SET smart_account_address = $1
-             WHERE user_id = $2 AND credential_id = $3"
-        )
-        .bind(&request.smart_account_address)
-        .bind(&request.user_id)
-        .bind(&request.credential_id)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
+        match &self.backend {
+            PasskeyBackend::Postgres(pool) => {
+                let result = sqlx::query(
+                    "UPDATE passkey_credentials SET smart_account_address = $1
+                     WHERE user_id = $2 AND credential_id = $3",
+                )
+                .bind(&request.smart_account_address)
+                .bind(&request.user_id)
+                .bind(&request.credential_id)
+                .execute(pool)
+                .await
+                .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
 
-        if result.rows_affected() == 0 {
-            return Err(PasskeyError::CredentialNotFound(request.credential_id));
+                if result.rows_affected() == 0 {
+                    return Err(PasskeyError::CredentialNotFound(request.credential_id));
+                }
+            }
+            PasskeyBackend::InMemory(store) => {
+                let mut store = store.write().await;
+                let user_creds = store
+                    .credentials
+                    .get_mut(&request.user_id)
+                    .ok_or_else(|| PasskeyError::UserNotFound(request.user_id.clone()))?;
+
+                let credential = user_creds
+                    .iter_mut()
+                    .find(|c| c.credential_id == request.credential_id)
+                    .ok_or_else(|| PasskeyError::CredentialNotFound(request.credential_id.clone()))?;
+
+                credential.smart_account_address = Some(request.smart_account_address.clone());
+            }
         }
 
         info!(
@@ -206,18 +311,36 @@ impl PasskeyService {
         user_id: &str,
         credential_id: &str,
     ) -> Result<(), PasskeyError> {
-        let result = sqlx::query(
-            "UPDATE passkey_credentials SET is_active = false
-             WHERE user_id = $1 AND credential_id = $2"
-        )
-        .bind(user_id)
-        .bind(credential_id)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
+        match &self.backend {
+            PasskeyBackend::Postgres(pool) => {
+                let result = sqlx::query(
+                    "UPDATE passkey_credentials SET is_active = false
+                     WHERE user_id = $1 AND credential_id = $2",
+                )
+                .bind(user_id)
+                .bind(credential_id)
+                .execute(pool)
+                .await
+                .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
 
-        if result.rows_affected() == 0 {
-            return Err(PasskeyError::CredentialNotFound(credential_id.to_string()));
+                if result.rows_affected() == 0 {
+                    return Err(PasskeyError::CredentialNotFound(credential_id.to_string()));
+                }
+            }
+            PasskeyBackend::InMemory(store) => {
+                let mut store = store.write().await;
+                let user_creds = store
+                    .credentials
+                    .get_mut(user_id)
+                    .ok_or_else(|| PasskeyError::UserNotFound(user_id.to_string()))?;
+
+                let credential = user_creds
+                    .iter_mut()
+                    .find(|c| c.credential_id == credential_id)
+                    .ok_or_else(|| PasskeyError::CredentialNotFound(credential_id.to_string()))?;
+
+                credential.is_active = false;
+            }
         }
 
         warn!(
@@ -231,18 +354,36 @@ impl PasskeyService {
 
     /// Update the last_used_at timestamp for a credential
     pub async fn mark_used(&self, user_id: &str, credential_id: &str) -> Result<(), PasskeyError> {
-        let result = sqlx::query(
-            "UPDATE passkey_credentials SET last_used_at = NOW()
-             WHERE user_id = $1 AND credential_id = $2 AND is_active = true"
-        )
-        .bind(user_id)
-        .bind(credential_id)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
+        match &self.backend {
+            PasskeyBackend::Postgres(pool) => {
+                let result = sqlx::query(
+                    "UPDATE passkey_credentials SET last_used_at = NOW()
+                     WHERE user_id = $1 AND credential_id = $2 AND is_active = true",
+                )
+                .bind(user_id)
+                .bind(credential_id)
+                .execute(pool)
+                .await
+                .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
 
-        if result.rows_affected() == 0 {
-            return Err(PasskeyError::CredentialNotFound(credential_id.to_string()));
+                if result.rows_affected() == 0 {
+                    return Err(PasskeyError::CredentialNotFound(credential_id.to_string()));
+                }
+            }
+            PasskeyBackend::InMemory(store) => {
+                let mut store = store.write().await;
+                let user_creds = store
+                    .credentials
+                    .get_mut(user_id)
+                    .ok_or_else(|| PasskeyError::UserNotFound(user_id.to_string()))?;
+
+                let credential = user_creds
+                    .iter_mut()
+                    .find(|c| c.credential_id == credential_id && c.is_active)
+                    .ok_or_else(|| PasskeyError::CredentialNotFound(credential_id.to_string()))?;
+
+                credential.last_used_at = Some(Utc::now());
+            }
         }
 
         Ok(())
@@ -250,16 +391,54 @@ impl PasskeyService {
 
     /// Get credential count for a user
     pub async fn credential_count(&self, user_id: &str) -> usize {
-        let result: Option<(i64,)> = sqlx::query_as(
-            "SELECT COUNT(*) FROM passkey_credentials WHERE user_id = $1 AND is_active = true"
-        )
-        .bind(user_id)
-        .fetch_optional(&self.pool)
-        .await
-        .ok()
-        .flatten();
+        match &self.backend {
+            PasskeyBackend::Postgres(pool) => {
+                let result: Option<(i64,)> = sqlx::query_as(
+                    "SELECT COUNT(*) FROM passkey_credentials WHERE user_id = $1 AND is_active = true",
+                )
+                .bind(user_id)
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten();
 
-        result.map(|(count,)| count as usize).unwrap_or(0)
+                result.map(|(count,)| count as usize).unwrap_or(0)
+            }
+            PasskeyBackend::InMemory(store) => {
+                let store = store.read().await;
+                store
+                    .credentials
+                    .get(user_id)
+                    .map(|creds| creds.iter().filter(|c| c.is_active).count())
+                    .unwrap_or(0)
+            }
+        }
+    }
+
+    async fn user_has_any_credential(&self, user_id: &str) -> Result<bool, PasskeyError> {
+        match &self.backend {
+            PasskeyBackend::Postgres(pool) => {
+                let row: Option<(i64,)> = sqlx::query_as(
+                    "SELECT COUNT(*) FROM passkey_credentials WHERE user_id = $1",
+                )
+                .bind(user_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
+
+                Ok(row.map(|(count,)| count > 0).unwrap_or(false))
+            }
+            PasskeyBackend::InMemory(store) => {
+                let store = store.read().await;
+                Ok(store.credentials.contains_key(user_id))
+            }
+        }
+    }
+}
+
+impl Default for PasskeyService {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

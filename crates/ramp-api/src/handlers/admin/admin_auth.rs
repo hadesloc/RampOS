@@ -20,12 +20,17 @@ use crate::error::ApiError;
 // Configuration
 // ============================================================================
 
-/// JWT signing secret — reads from RAMPOS_ADMIN_JWT_SECRET env var.
-/// Falls back to RAMPOS_ADMIN_KEY for backward compatibility during transition.
-fn jwt_secret() -> String {
-    std::env::var("RAMPOS_ADMIN_JWT_SECRET")
-        .or_else(|_| std::env::var("RAMPOS_ADMIN_KEY"))
-        .unwrap_or_else(|_| "rampos-dev-jwt-secret-change-me".to_string())
+/// JWT signing secret — reads from `RAMPOS_ADMIN_JWT_SECRET`.
+///
+/// SECURITY: fail closed if the explicit JWT secret is missing. A public fallback
+/// or implicit reuse of the legacy admin key would make Bearer admin tokens
+/// forgeable across the entire admin surface.
+fn jwt_secret() -> Result<String, ApiError> {
+    std::env::var("RAMPOS_ADMIN_JWT_SECRET").map_err(|_| {
+        ApiError::Internal(
+            "Admin JWT secret not configured. Set RAMPOS_ADMIN_JWT_SECRET.".to_string(),
+        )
+    })
 }
 
 const ACCESS_TOKEN_EXPIRY_MINUTES: i64 = 30;
@@ -126,10 +131,14 @@ struct AdminUserRow {
 /// Authenticate admin user with email + password.
 /// Returns JWT access token + refresh token.
 pub async fn login(
-    State(pool): State<PgPool>,
+    State(app_state): State<crate::router::AppState>,
     headers: HeaderMap,
     Json(request): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, ApiError> {
+    let pool = app_state
+        .db_pool
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Admin auth database is not configured".to_string()))?;
     let ip = extract_ip(&headers);
     let user_agent = extract_user_agent(&headers);
 
@@ -139,7 +148,7 @@ pub async fn login(
          FROM admin_users WHERE email = $1",
     )
     .bind(&request.email)
-    .fetch_optional(&pool)
+    .fetch_optional(pool)
     .await
     .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?
     .ok_or_else(|| {
@@ -181,7 +190,7 @@ pub async fn login(
         .bind(new_count)
         .bind(lockout)
         .bind(admin.id)
-        .execute(&pool)
+        .execute(pool)
         .await
         .ok();
 
@@ -195,7 +204,7 @@ pub async fn login(
         "UPDATE admin_users SET failed_login_count = 0, locked_until = NULL, last_login_at = NOW() WHERE id = $1"
     )
     .bind(admin.id)
-    .execute(&pool)
+    .execute(pool)
     .await
     .ok();
 
@@ -213,7 +222,7 @@ pub async fn login(
     let access_token = encode(
         &Header::default(),
         &access_claims,
-        &EncodingKey::from_secret(jwt_secret().as_bytes()),
+        &EncodingKey::from_secret(jwt_secret()?.as_bytes()),
     )
     .map_err(|e| ApiError::Internal(format!("Failed to create token: {}", e)))?;
 
@@ -231,7 +240,7 @@ pub async fn login(
     .bind(user_agent.as_deref())
     .bind(ip.as_deref())
     .bind(refresh_expires)
-    .execute(&pool)
+    .execute(pool)
     .await
     .map_err(|e| ApiError::Internal(format!("Failed to store refresh token: {}", e)))?;
 
@@ -256,10 +265,14 @@ pub async fn login(
 ///
 /// Exchange a valid refresh token for a new access token.
 pub async fn refresh(
-    State(pool): State<PgPool>,
+    State(app_state): State<crate::router::AppState>,
     headers: HeaderMap,
     Json(request): Json<RefreshRequest>,
 ) -> Result<Json<RefreshResponse>, ApiError> {
+    let pool = app_state
+        .db_pool
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Admin auth database is not configured".to_string()))?;
     let ip = extract_ip(&headers);
     let user_agent = extract_user_agent(&headers);
     let token_hash = hash_token(&request.refresh_token);
@@ -270,7 +283,7 @@ pub async fn refresh(
          WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > NOW()"
     )
     .bind(&token_hash)
-    .fetch_optional(&pool)
+    .fetch_optional(pool)
     .await
     .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
 
@@ -284,7 +297,7 @@ pub async fn refresh(
          FROM admin_users WHERE id = $1 AND is_active = true",
     )
     .bind(admin_id)
-    .fetch_optional(&pool)
+    .fetch_optional(pool)
     .await
     .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?
     .ok_or_else(|| ApiError::Forbidden("Admin account not found or disabled".to_string()))?;
@@ -303,7 +316,7 @@ pub async fn refresh(
     let access_token = encode(
         &Header::default(),
         &access_claims,
-        &EncodingKey::from_secret(jwt_secret().as_bytes()),
+        &EncodingKey::from_secret(jwt_secret()?.as_bytes()),
     )
     .map_err(|e| ApiError::Internal(format!("Failed to create token: {}", e)))?;
 
@@ -320,10 +333,14 @@ pub async fn refresh(
 ///
 /// Revoke a refresh token.
 pub async fn logout(
-    State(pool): State<PgPool>,
+    State(app_state): State<crate::router::AppState>,
     headers: HeaderMap,
     Json(request): Json<LogoutRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let pool = app_state
+        .db_pool
+        .as_ref()
+        .ok_or_else(|| ApiError::Internal("Admin auth database is not configured".to_string()))?;
     let ip = extract_ip(&headers);
     let user_agent = extract_user_agent(&headers);
     let token_hash = hash_token(&request.refresh_token);
@@ -333,7 +350,7 @@ pub async fn logout(
         "UPDATE admin_refresh_tokens SET revoked_at = NOW() WHERE token_hash = $1 AND revoked_at IS NULL"
     )
     .bind(&token_hash)
-    .execute(&pool)
+    .execute(pool)
     .await
     .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
 
@@ -343,7 +360,7 @@ pub async fn logout(
             "SELECT admin_id FROM admin_refresh_tokens WHERE token_hash = $1"
         )
         .bind(&token_hash)
-        .fetch_optional(&pool)
+        .fetch_optional(pool)
         .await
         .ok()
         .flatten();
@@ -368,7 +385,7 @@ pub fn verify_admin_jwt(token: &str) -> Result<AdminClaims, ApiError> {
 
     let token_data = decode::<AdminClaims>(
         token,
-        &DecodingKey::from_secret(jwt_secret().as_bytes()),
+        &DecodingKey::from_secret(jwt_secret()?.as_bytes()),
         &validation,
     )
     .map_err(|e| ApiError::Forbidden(format!("Invalid admin token: {}", e)))?;

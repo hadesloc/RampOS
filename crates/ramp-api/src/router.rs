@@ -199,7 +199,7 @@ pub fn create_router(state: AppState) -> Router {
         .with_state(state.ledger_service.clone());
 
     // Report routes
-    let report_routes = Router::new()
+    let report_routes: Router = Router::new()
         .route("/aml", get(handlers::admin::reports::generate_aml_report))
         .route(
             "/aml/export",
@@ -497,8 +497,6 @@ pub fn create_router(state: AppState) -> Router {
             "/fraud/review",
             post(handlers::admin::fraud::submit_fraud_review),
         )
-        // Production readiness gate
-        .route("/readiness", get(handlers::admin::readiness_gate::get_readiness))
         .with_state(state.clone());
 
     // Admin Reports - needs to be separated or use AppState if ReportGenerator is in AppState
@@ -638,21 +636,29 @@ pub fn create_router(state: AppState) -> Router {
         .route("/:id/provision-ssl", post(handlers::domain::provision_ssl))
         .with_state(state.clone());
 
-    // Admin authentication routes (login, refresh, logout) — no admin key required
-    let admin_auth_routes = if let Some(ref pool) = state.db_pool {
-        Router::new()
-            .route("/auth/login", post(handlers::admin::admin_auth::login))
-            .route("/auth/refresh", post(handlers::admin::admin_auth::refresh))
-            .route("/auth/logout", post(handlers::admin::admin_auth::logout))
-            .with_state(pool.clone())
-    } else {
-        Router::new()
-    };
+    // Public admin bootstrap routes that must remain reachable without tenant API auth.
+    let admin_public_routes = Router::new()
+        .route(
+            "/v1/admin/readiness",
+            get(handlers::admin::readiness_gate::get_readiness),
+        )
+        .route(
+            "/v1/admin/auth/login",
+            post(handlers::admin::admin_auth::login),
+        )
+        .route(
+            "/v1/admin/auth/refresh",
+            post(handlers::admin::admin_auth::refresh),
+        )
+        .route(
+            "/v1/admin/auth/logout",
+            post(handlers::admin::admin_auth::logout),
+        )
+        .with_state(state.clone());
 
     // Combine them
     let admin_routes = Router::new()
         .merge(admin_general_routes)
-        .merge(admin_auth_routes)
         .merge(tenant_routes)
         .merge(tier_routes)
         .merge(bridge_routes)
@@ -854,6 +860,7 @@ pub fn create_router(state: AppState) -> Router {
     Router::new()
         .merge(health_routes)
         .merge(metrics_route)
+        .merge(admin_public_routes)
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
         .route("/openapi.json", get(openapi_json))
         .route("/docs", get(docs_handler))

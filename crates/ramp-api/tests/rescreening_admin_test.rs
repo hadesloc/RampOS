@@ -241,6 +241,7 @@ async fn rescreening_runs_lists_due_users() {
 #[tokio::test]
 async fn rescreening_restriction_action_updates_user_flags() {
     std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
     let app = setup_app("tenant_rescreening_restrict").await;
     let body = serde_json::json!({
         "restrictionStatus": "RESTRICTED",
@@ -254,7 +255,7 @@ async fn rescreening_restriction_action_updates_user_flags() {
         &body,
         &app.api_key,
         &app.api_secret,
-        &format!("{TEST_ADMIN_KEY}:operator"),
+        TEST_ADMIN_KEY,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -266,4 +267,5 @@ async fn rescreening_restriction_action_updates_user_flags() {
     assert_eq!(payload["userId"], "user_rescreen_due");
     assert_eq!(payload["restrictionStatus"], "RESTRICTED");
     assert_eq!(payload["reason"], "watchlist escalation");
+    std::env::remove_var("RAMPOS_ADMIN_ROLE");
 }

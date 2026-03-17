@@ -114,22 +114,26 @@ pub(crate) fn check_admin_key_with_role(
     required_role: AdminRole,
 ) -> Result<AdminAuth, ApiError> {
     // ── Strategy 1: JWT Bearer token (preferred) ────────────────────────
-    if let Some(token) = super::admin_auth::extract_bearer_token(headers) {
-        let claims = super::admin_auth::verify_admin_jwt(token)?;
-        let role = AdminRole::from_str(&claims.role)
-            .unwrap_or(AdminRole::Viewer);
+    if headers.get("X-Admin-Key").is_none() {
+        if let Some(token) = super::admin_auth::extract_bearer_token(headers) {
+            if token.split('.').count() == 3 {
+                let claims = super::admin_auth::verify_admin_jwt(token)?;
+                let role = AdminRole::from_str(&claims.role)
+                    .unwrap_or(AdminRole::Viewer);
 
-        if role < required_role {
-            return Err(ApiError::Forbidden(format!(
-                "Insufficient permissions. Required: {:?}, Have: {:?}",
-                required_role, role
-            )));
+                if role < required_role {
+                    return Err(ApiError::Forbidden(format!(
+                        "Insufficient permissions. Required: {:?}, Have: {:?}",
+                        required_role, role
+                    )));
+                }
+
+                return Ok(AdminAuth {
+                    role,
+                    user_id: Some(claims.sub),
+                });
+            }
         }
-
-        return Ok(AdminAuth {
-            role,
-            user_id: Some(claims.sub),
-        });
     }
 
     // ── Strategy 2: Legacy X-Admin-Key (deprecated) ─────────────────────

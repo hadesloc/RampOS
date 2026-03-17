@@ -655,6 +655,12 @@ mod tests {
     use crate::workflows::BankConfirmation;
     use ramp_compliance::aml::AmlEngine;
     use ramp_compliance::{case::CaseManager, InMemoryCaseStore, MockTransactionHistoryStore};
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     fn create_test_worker() -> Arc<crate::temporal_worker::TemporalWorker> {
         let config = TemporalWorkerConfig::default();
@@ -744,6 +750,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_workflow_engine_in_process() {
+        let _guard = env_lock().lock().unwrap();
         std::env::remove_var("TEMPORAL_URL");
         let worker = create_test_worker();
         let engine = create_workflow_engine(worker, None);
@@ -752,6 +759,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_workflow_engine_temporal() {
+        let _guard = env_lock().lock().unwrap();
         std::env::set_var("TEMPORAL_URL", "http://localhost:7233");
         let worker = create_test_worker();
         let engine = create_workflow_engine(worker, None);
@@ -830,6 +838,7 @@ mod tests {
     #[tokio::test]
     async fn test_runtime_contract_factory_defaults_to_in_process() {
         // Without TEMPORAL_URL, factory MUST produce InProcessEngine
+        let _guard = env_lock().lock().unwrap();
         std::env::remove_var("TEMPORAL_URL");
         let worker = create_test_worker();
         let engine = create_workflow_engine(worker, None);
