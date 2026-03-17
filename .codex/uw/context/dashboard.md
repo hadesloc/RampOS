@@ -1,46 +1,40 @@
 # Project Dashboard
 
-**Last Updated**: 2026-03-16T22:09+07:00
-**Phase**: DEVELOPMENT
-**Progress**: 65%
+**Last Updated**: 2026-03-17T19:25+07:00
+**Phase**: REVIEW
+**Progress**: Implementation wave landed; signoff closure pending
 **Plan Approved**: True
 **Task Backend**: codex_native
-**Task Source Of Truth**: task-queue.json
+**Task Source Of Truth**: codebase + `docs/COMPLETION_STATUS.md` + `docs/operations/bank-grade-signoff-ledger.md`
 
 ## Metrics
-- Total Tasks: 26
-- Completed: 17
-- In Progress: 0
-- Pending: 9
+
+- Legacy `task-breakdown.json` counts are stale after post-plan implementation.
+- Do not use `17/26` as the current execution status.
+- Current meaningful gate: implementation landed, release signoff still blocked.
 
 ## Recent Completions
-- T-RR-001→004: E1 Internal Readiness ✅
-- T-RR-005→007: E2 Workflow Runtime Truth ✅
-- T-RR-008→011: E3 Live Evidence Surfaces ✅
-- T-RR-012→014: E4 CLI Parity ✅
-- T-RR-015→017: E5 Streaming & Tooling ✅
 
-## Session History (Recent 20)
-- Archive: `.codex/uw/context/dashboard-history.json`
-- Hidden older sessions: 0
-| Session | Date | Tasks Spawned | Completed | Failed | Learnings |
-|---|---|---|---|---|---|
-| S1 | 2026-03-16 | 17 | 17 | 0 | M0–M3 complete; task numbering drift caught in audit |
+- `f49374b5f`: March 2026 implementation wave completed through the planned E1-E8 scope.
+- `609a0a117`: Phase 1 hardening follow-up landed JWT admin auth, secrets abstraction, passkey PostgreSQL migration, readiness gate, and E2E coverage.
+- Workspace contains later-governance surfaces such as config bundles, extension registry, and SLA guardian; prior UW dashboard counts no longer describe the repo state accurately.
 
-## Cumulative Metrics
-- Total sessions: 1
-- Total tasks completed: 17/26
-- Average completion rate: 65%
+## Open Blockers
+
+- Staging validation evidence is still pending.
+- Independent external security review is still pending.
+- Trivy evidence needs refresh against the newer post-hardening state.
+- Residual `rsa` advisory disposition remains open.
+- Signoff approvers are still unnamed in the ledger.
 
 ## Next Session Focus
-- **T-RR-018**: Design governed partner registry schema (E6)
-- **T-RR-019**: Design config bundle governance (E6)
-- All changes uncommitted — review and commit first
 
-## Summary (User-Friendly)
+- Refresh or attach current signoff evidence against the post-2026-03-17 codebase.
+- Reconcile or archive stale UW task artifacts that still imply pre-implementation status.
+- Treat feature breadth as secondary until the release gate is updated.
 
-- What we are building: operator-credible, agent-native, commercially differentiated RampOS.
-- M0–M3 (P0 baseline) complete: internal readiness, workflow truth, evidence-backed treasury/reconciliation, CLI parity, JSONL watch, approval-aware boundaries.
-- Current focus: E6 Partner and Config Governance (T-RR-018→019).
-- No blocking items for next session.
+## Summary
 
+- The current repo state is closer to review and release hardening than to new roadmap implementation.
+- `.codex/uw` planning artifacts remain useful as history, but not as the current execution counter.
+- Use the codebase first, then the current status docs, when deciding what to do next.

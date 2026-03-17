@@ -14,6 +14,12 @@ This package is the current RC security evidence bundle for bank-grade signoff p
 - separate verified facts from inherited or stale reports,
 - identify remaining blocking security-control gaps before formal signoff.
 
+## Freshness Note
+
+This summary is scoped to RC `268670d74` and the `2026-03-13` review window.
+Later hardening work landed on `2026-03-17`, but that implementation response is outside the evidence window captured here.
+Do not read this file as a refreshed signoff verdict for the newer post-hardening workspace state unless a follow-up review package explicitly says so.
+
 ## Evidence Reviewed
 
 ### Current RC and hardening evidence
