@@ -21,6 +21,7 @@ pub struct ReconciliationWorkbenchSnapshot {
     pub generated_at: DateTime<Utc>,
     pub report: ReconciliationReport,
     pub queue: Vec<ReconciliationQueueItem>,
+    pub provenance: ReconciliationProvenance,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +31,47 @@ pub struct ReconciliationWorkbench {
     pub settlements: Vec<Settlement>,
     pub report: ReconciliationReport,
     pub queue: Vec<ReconciliationQueueItem>,
+    pub provenance: ReconciliationProvenance,
+}
+
+/// Provenance metadata for a reconciliation snapshot, making data lineage explicit.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconciliationProvenance {
+    /// Source kind: "settlement" for real settlement data, "empty" for no-data placeholder
+    pub source_kind: String,
+    /// Number of settlement records used as input
+    pub settlement_count: usize,
+    /// Number of on-chain transactions used as input
+    pub on_chain_tx_count: usize,
+    /// Explicit warning if data is incomplete
+    pub freshness_warning: Option<String>,
+}
+
+impl ReconciliationProvenance {
+    pub fn from_inputs(settlement_count: usize, on_chain_tx_count: usize) -> Self {
+        let source_kind = if settlement_count > 0 || on_chain_tx_count > 0 {
+            "live".to_string()
+        } else {
+            "empty".to_string()
+        };
+        let freshness_warning = if on_chain_tx_count == 0 && settlement_count > 0 {
+            Some(
+                "No on-chain transaction data was provided. Reconciliation can only detect missing on-chain confirmations."
+                    .to_string(),
+            )
+        } else if settlement_count == 0 {
+            Some("No settlement data available. Reconciliation results are empty.".to_string())
+        } else {
+            None
+        };
+        Self {
+            source_kind,
+            settlement_count,
+            on_chain_tx_count,
+            freshness_warning,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,11 +96,14 @@ impl ReconciliationExportService {
     ) -> ReconciliationWorkbenchSnapshot {
         let report = service.reconcile(on_chain_txs, settlements);
         let queue = service.build_break_queue(&report, settlements);
+        let provenance =
+            ReconciliationProvenance::from_inputs(settlements.len(), on_chain_txs.len());
 
         ReconciliationWorkbenchSnapshot {
             generated_at: Utc::now(),
             report,
             queue,
+            provenance,
         }
     }
 
@@ -83,6 +128,7 @@ impl ReconciliationExportService {
             settlements: settlements.to_vec(),
             report: snapshot.report,
             queue: snapshot.queue,
+            provenance: snapshot.provenance,
         }
     }
 

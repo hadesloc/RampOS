@@ -485,6 +485,23 @@ impl ReconciliationService {
             queue_item
         };
 
+        // Recompute linked settlements after fallback matching to include
+        // any candidates that were added by the fallback block above.
+        let linked_settlements: Vec<_> = if linked_settlements.is_empty() {
+            settlements
+                .iter()
+                .filter(|settlement| {
+                    queue_item
+                        .suggested_matches
+                        .iter()
+                        .any(|candidate| candidate.settlement_id == settlement.id)
+                })
+                .cloned()
+                .collect()
+        } else {
+            linked_settlements
+        };
+
         let mut settlement_ids = Vec::new();
         for settlement in &linked_settlements {
             if !settlement_ids.contains(&settlement.id) {

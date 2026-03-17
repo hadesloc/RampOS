@@ -200,6 +200,9 @@ async fn setup_app(tenant_id: &str) -> TestApp {
         ctr_service: None,
         ws_state: None,
         metrics_registry: Arc::new(ramp_core::service::MetricsRegistry::new()),
+        document_storage: None,
+            kyc_service: None,
+            kyt_service: None,
     };
 
     TestApp {

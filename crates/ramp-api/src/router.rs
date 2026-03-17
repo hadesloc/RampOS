@@ -45,9 +45,12 @@ use crate::middleware::{
 use crate::openapi::{docs_handler, openapi_json, ApiDoc};
 
 use ramp_compliance::case::CaseManager;
+use ramp_compliance::kyc::KycService;
+use ramp_compliance::kyt::KytService;
 use ramp_compliance::reports::ctr::CtrService;
 use ramp_compliance::reports::ReportGenerator;
 use ramp_compliance::rules::RuleCacheManager;
+use ramp_compliance::storage::DocumentStorage;
 
 /// Application state shared across handlers
 #[derive(Clone)]
@@ -80,6 +83,12 @@ pub struct AppState {
     pub metrics_registry: Arc<MetricsRegistry>,
     /// Shared event publisher (NATS or InMemory depending on config)
     pub event_publisher: Arc<dyn EventPublisher>,
+    /// Document storage for KYC uploads (S3, local filesystem, or mock)
+    pub document_storage: Option<Arc<dyn DocumentStorage>>,
+    /// KYC verification service (Onfido or Mock, auto-detected from env)
+    pub kyc_service: Option<Arc<KycService>>,
+    /// KYT on-chain risk screening service (Chainalysis or Mock, auto-detected from env)
+    pub kyt_service: Option<Arc<KytService>>,
 }
 
 struct NoopSandboxScenarioRunner;

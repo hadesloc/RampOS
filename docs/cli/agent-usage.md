@@ -1,57 +1,88 @@
-# RampOS CLI for Agents
+# RampOS CLI — Agent-Native Usage Patterns
 
-The CLI is designed to be machine-first:
+_Version: 1.0 — 2026-03-16_
 
-- JSON output is available on every command
-- auth can be supplied via flags, env vars, or named profiles
-- requests can be passed inline, from files, or from stdin
-- path parameters become explicit flags such as `--rfq-id`
+## Overview
 
-## Recommended Patterns
+The RampOS CLI is designed for both human operators and AI agents. This document covers patterns for automated, agent-driven usage.
 
-Use stdin for generated payloads:
+## Output Modes
+
+| Mode | Flag | Behavior | Use Case |
+| --- | --- | --- | --- |
+| JSON | `--output json` | Pretty-printed JSON (default) | Human inspection |
+| JSONL | `--output jsonl` | One JSON object per line | Agent consumption, piping |
+| Table | `--output table` | ASCII table | Terminal dashboards |
+
+## Agent Workflow Examples
+
+### 1. Monitor intents and react
 
 ```bash
-echo '{"tenantId":"tenant_123","userId":"user_123","amountVnd":1000000,"railsProvider":"VIETQR"}' | \
-python scripts/rampos-cli.py intents create-payin \
-  --auth-mode api \
-  --api-key test-key \
-  --body-stdin
+rampos watch --event-type intent.updated --portal-token $TOKEN | while IFS= read -r line; do
+  status=$(echo "$line" | jq -r '.data.status')
+  intent_id=$(echo "$line" | jq -r '.intentId')
+  if [ "$status" = "COMPLETED" ]; then
+    rampos reconciliation workbench --output jsonl --admin-key $ADMIN_KEY
+  fi
+done
 ```
 
-Use named profiles for repeated workflows:
+### 2. Dry-run dangerous operations
 
 ```bash
-python scripts/rampos-cli.py login \
-  --profile ops \
-  --base-url https://api.rampos.io \
+# Preview what would be sent
+rampos sandbox seed --tenant-name test --preset-code demo --dry-run
+
+# Execute with explicit approval
+rampos sandbox seed --tenant-name test --preset-code demo --yes
+```
+
+### 3. Batch processing with idempotency
+
+```bash
+for id in intent_001 intent_002 intent_003; do
+  rampos intents get --id "$id" --output jsonl --idempotency-key "batch-$(date +%s)-$id"
+done
+```
+
+### 4. Treasury evidence check with provenance
+
+```bash
+# Get treasury workbench and check data source
+result=$(rampos treasury workbench --output json)
+source=$(echo "$result" | jq -r '.dataSource')
+warning=$(echo "$result" | jq -r '.provenance.freshnessWarning // empty')
+if [ "$source" = "sample" ]; then
+  echo "WARNING: Using sample data — $warning"
+fi
+```
+
+## Authentication for Agents
+
+```bash
+# Save a profile for automation
+rampos login \
+  --profile agent \
+  --base-url https://api.ramp.example.com \
   --auth-mode admin \
-  --admin-key admin_test_key
+  --admin-key "$RAMPOS_ADMIN_KEY" \
+  --admin-role operator
+
+# Use the saved profile
+rampos treasury workbench --profile agent
 ```
 
-```bash
-python scripts/rampos-cli.py rfq list-open --profile ops
-```
+## Non-Interactive Mode
 
-Use help as the source of truth for argument shapes:
+When stdin is not a TTY (piped input), the CLI:
+- Refuses dangerous operations without `--yes`
+- Reads `--body-stdin` from piped input
+- Emits structured errors to stderr
 
-```bash
-python scripts/rampos-cli.py bridge routes --help
-python scripts/rampos-cli.py licensing upload --help
-python scripts/rampos-cli.py lp rfq bid --help
-```
+## Error Handling
 
-## Good Fits
-
-- operator queue inspection
-- RFQ lifecycle management
-- LP bid submission
-- licensing compatibility workflows
-- chain quote / bridge route queries
-- smoke checks in CI
-
-## Current Caveats
-
-- Some command coverage comes from a curated manifest because not every live route is represented in OpenAPI yet.
-- `licensing upload` currently reflects a compatibility storage path, not a hardened document pipeline.
-- RFQ finalize behavior mirrors current backend semantics and does not add transactional guarantees on top of the service.
+All errors are written to **stderr** as JSON. Agents should:
+1. Check exit code (0 = success, 1 = error)
+2. Parse stderr for structured error objects
+3. Use `--request-id` for correlation

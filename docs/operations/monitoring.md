@@ -197,6 +197,101 @@ kubectl apply -k k8s/monitoring/
 | `warning` | 15 minutes | Slack |
 | `info` | Next business day | Email |
 
+### Security-Specific Alerts (T-RR-007)
+
+Security alerts are distinct from reliability alerts. They detect abuse patterns, auth anomalies, and suspicious operator activity.
+
+**File**: `k8s/monitoring/security-alerts.yaml`
+
+```yaml
+# --- Authentication Abuse ---
+
+- alert: BruteForceLoginAttempt
+  expr: sum(rate(http_requests_total{path="/api/v1/auth/login", status="401"}[5m])) by (source_ip) > 5
+  for: 2m
+  labels:
+    severity: critical
+    alert_class: security
+  annotations:
+    summary: "Possible brute-force login attempt"
+    description: "More than 5 failed login attempts per second from source {{ $labels.source_ip }} in the last 5 minutes."
+
+- alert: UnusualAuthFailureRate
+  expr: rate(http_requests_total{status="401"}[15m]) / rate(http_requests_total[15m]) * 100 > 10
+  for: 5m
+  labels:
+    severity: warning
+    alert_class: security
+  annotations:
+    summary: "Unusual auth failure rate (>10%)"
+    description: "Overall 401 rate is {{ $value }}% — may indicate credential stuffing or misconfigured client."
+
+# --- API Key Abuse ---
+
+- alert: APIKeyHighVolumeAbuse
+  expr: sum(rate(http_requests_total[5m])) by (tenant_id) > 100
+  for: 5m
+  labels:
+    severity: warning
+    alert_class: security
+  annotations:
+    summary: "Unusually high request volume from tenant"
+    description: "Tenant {{ $labels.tenant_id }} is making {{ $value }} req/s — exceeds normal operational pattern."
+
+- alert: APIKeyPostRevocationUsage
+  expr: sum(rate(http_requests_total{status="403", error_code="revoked_key"}[5m])) > 0
+  for: 1m
+  labels:
+    severity: critical
+    alert_class: security
+  annotations:
+    summary: "Revoked API key still in use"
+    description: "Requests using a revoked API key detected — possible key compromise."
+
+# --- Rate Limit Bypass ---
+
+- alert: RateLimitBypassAttempt
+  expr: sum(rate(http_requests_total{status="429"}[5m])) by (source_ip) > 50
+  for: 2m
+  labels:
+    severity: warning
+    alert_class: security
+  annotations:
+    summary: "Excessive rate-limited requests from single source"
+    description: "Source {{ $labels.source_ip }} is generating {{ $value }} rate-limited requests/s — possible bypass attempt."
+
+# --- Admin Surface Abuse ---
+
+- alert: UnusualAdminActivity
+  expr: sum(rate(http_requests_total{path=~"/api/v1/admin/.*"}[15m])) > 10
+  for: 5m
+  labels:
+    severity: warning
+    alert_class: security
+  annotations:
+    summary: "Unusually high admin API activity"
+    description: "Admin API request rate is {{ $value }}/s — review for unauthorized access."
+
+- alert: SensitiveDataExport
+  expr: sum(rate(http_requests_total{path=~"/api/v1/admin/.*/export.*"}[5m])) > 1
+  for: 2m
+  labels:
+    severity: critical
+    alert_class: security
+  annotations:
+    summary: "High-volume data export detected"
+    description: "Admin export endpoint is receiving {{ $value }} req/s — possible unauthorized data exfiltration."
+```
+
+#### Alert Class Distinction
+
+| Alert Class | Purpose | Examples |
+| --- | --- | --- |
+| `reliability` | Service health and performance | High latency, error rates, pod restarts |
+| `security` | Abuse detection and threat response | Brute force, key abuse, unusual admin activity |
+
+Operators should route `alert_class: security` alerts to a separate channel (e.g., `#security-alerts`) and apply different escalation policies.
+
 ## Grafana Dashboards
 
 ### Available Dashboards

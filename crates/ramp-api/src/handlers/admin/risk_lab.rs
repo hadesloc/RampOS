@@ -700,6 +700,9 @@ mod tests {
             ws_state: None,
             metrics_registry: Arc::new(MetricsRegistry::new()),
             event_publisher,
+            document_storage: None,
+            kyc_service: None,
+            kyt_service: None,
         };
 
         let tenant_ctx = TenantContext {

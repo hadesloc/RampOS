@@ -258,6 +258,35 @@ pub async fn create_withdraw(
         "Create withdrawal intent requested"
     );
 
+    // KYT screening for CRYPTO withdrawals — check wallet address risk before processing
+    if method == "CRYPTO" {
+        if let (Some(ref kyt_service), Some(ref wallet_addr)) =
+            (&app_state.kyt_service, &req.wallet_address)
+        {
+            let address = ramp_common::types::WalletAddress(wallet_addr.clone());
+            let chain = req.network.as_deref().unwrap_or("ethereum");
+            match kyt_service.is_high_risk(&address, chain).await {
+                Ok(true) => {
+                    warn!(
+                        address = %wallet_addr,
+                        chain = chain,
+                        "KYT: wallet address flagged as high risk — withdrawal blocked"
+                    );
+                    return Err(ApiError::Forbidden(
+                        "Destination wallet address has been flagged as high risk".to_string(),
+                    ));
+                }
+                Ok(false) => {
+                    info!(address = %wallet_addr, "KYT: wallet address cleared");
+                }
+                Err(e) => {
+                    // KYT check failed but we don't block the user — log for review
+                    warn!(error = %e, "KYT check failed — proceeding with caution");
+                }
+            }
+        }
+    }
+
     let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
     let user_id = UserId::new(&portal_user.user_id.to_string());
 

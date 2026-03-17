@@ -167,6 +167,9 @@ async fn test_get_intent_endpoint() {
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
+        document_storage: None,
+            kyc_service: None,
+            kyt_service: None,
     };
 
     let app = create_router(app_state);
@@ -309,6 +312,9 @@ async fn test_get_intent_not_found() {
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
+        document_storage: None,
+            kyc_service: None,
+            kyt_service: None,
     };
 
     let app = create_router(app_state);
@@ -491,6 +497,9 @@ async fn test_get_intent_wrong_tenant() {
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
+        document_storage: None,
+            kyc_service: None,
+            kyt_service: None,
     };
 
     let app = create_router(app_state);

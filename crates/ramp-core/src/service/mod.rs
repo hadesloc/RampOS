@@ -3,6 +3,7 @@
 pub mod bridge;
 pub mod canonical_payment;
 pub mod compliance_audit;
+pub mod commercial_readiness;
 pub mod config_bundle;
 pub mod corridor_pack;
 pub mod crypto;
@@ -10,8 +11,10 @@ pub mod deposit;
 pub mod escrow;
 pub mod event_catalog;
 pub mod exchange_rate;
+pub mod execution_explainability;
 pub mod fees;
 pub mod incident_timeline;
+pub mod intelligence_sequencing;
 pub mod ledger;
 pub mod license;
 pub mod liquidity_policy;
@@ -26,6 +29,7 @@ pub mod onboarding;
 pub mod passkey;
 pub mod partner_registry;
 pub mod payin;
+pub mod provider_routing;
 pub mod payout;
 pub mod payment_method_capability;
 #[cfg(test)]
@@ -61,7 +65,11 @@ pub use canonical_payment::{
     CanonicalPaymentStatusFamily,
 };
 pub use compliance_audit::{AuditContext, AuditLogExport, ComplianceAuditService, ExportFormat};
-pub use config_bundle::{ConfigBundleArtifact, ConfigBundleService, WhitelistedExtensionAction};
+pub use config_bundle::{
+    ConfigBundleArtifact, ConfigBundleCredentialReference, ConfigBundleService,
+    ConfigBundleVersionEntry, ConfigBundleVersionHistory, CreateConfigBundleRequest,
+    WhitelistedExtensionAction,
+};
 pub use corridor_pack::{CorridorPackService, CorridorPackSnapshot, UpsertCorridorPackBundle};
 pub use crypto::CryptoService;
 pub use deposit::DepositService;
@@ -93,7 +101,8 @@ pub use net_settlement::{
 pub use onboarding::OnboardingService;
 pub use passkey::PasskeyService;
 pub use partner_registry::{
-    PartnerRegistryService, PartnerRegistrySnapshot, UpsertPartnerCapabilityBundle,
+    PartnerHealthSummary, PartnerRegistryService, PartnerRegistrySnapshot,
+    PartnerSearchCriteria, UpsertPartnerCapabilityBundle,
     UpsertPartnerRegistryRecordRequest,
 };
 pub use payin::PayinService;
@@ -109,7 +118,7 @@ pub use reconciliation::{
 };
 pub use reconciliation_export::{
     ReconciliationExportArtifact, ReconciliationExportFormat, ReconciliationExportService,
-    ReconciliationWorkbench, ReconciliationWorkbenchSnapshot,
+    ReconciliationProvenance, ReconciliationWorkbench, ReconciliationWorkbenchSnapshot,
 };
 pub use rescreening_actions::{RescreeningAccountAction, RescreeningActionService};
 pub use replay::{
@@ -128,9 +137,9 @@ pub use sla_guardian::{
 };
 pub use timeout::TimeoutService;
 pub use treasury::{
-    TreasuryActionMode, TreasuryControlTowerSnapshot, TreasuryExposureSummary,
-    TreasuryFloatSlice, TreasuryLiquidityForecast, TreasuryRecommendation, TreasuryService,
-    TreasuryStressAlert, TreasuryYieldAllocation,
+    TreasuryActionMode, TreasuryControlTowerSnapshot, TreasuryDataSource, TreasuryExposureSummary,
+    TreasuryFloatSlice, TreasuryLiquidityForecast, TreasuryProvenance, TreasuryRecommendation,
+    TreasuryService, TreasuryStressAlert, TreasuryYieldAllocation,
 };
 pub use treasury_evidence::{
     normalize_treasury_balances, TreasuryEvidenceImportQuery, TreasuryEvidenceImportRecord,
@@ -141,3 +150,20 @@ pub use user::UserService;
 pub use webhook::WebhookService;
 pub use withdraw::WithdrawService;
 pub use withdraw_policy_provider::IntentBasedWithdrawPolicyDataProvider;
+pub use commercial_readiness::{
+    CommercialExtensionRecord, CommercialReadinessService, CommercialReadinessSnapshot,
+    EnablementCheckResult,
+};
+pub use execution_explainability::{
+    ExecutionExplainabilityService, ExplainabilityWeights, RateNormalizationConfig,
+    RouteComparisonSnapshot, RouteExplainabilityFactor, RouteExplainabilityInput,
+    RouteExplainabilityResult,
+};
+pub use intelligence_sequencing::{
+    DependencyCheckResult, IntelligenceGuardrail, IntelligenceSequencingService,
+    IntelligenceSequencingSnapshot, IntelligenceWorkPackage,
+};
+pub use provider_routing::{
+    InstitutionalComplianceRecord, ProviderRoutingContext, ProviderRoutingDecision,
+    ProviderRoutingRule, ProviderRoutingService, ProviderRoutingSnapshot,
+};

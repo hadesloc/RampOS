@@ -6,6 +6,7 @@ use serde_json::json;
 use crate::repository::rfq::LpReliabilitySnapshotRow;
 use crate::service::rfq::{lp_counterparty_pressure_label, lp_counterparty_pressure_score};
 use crate::service::settlement::{Settlement, SettlementStatus};
+use crate::service::treasury_evidence::TreasuryEvidenceImportRecord;
 use crate::r#yield::{
     recommended_treasury_buffer_percent, StrategyConfig, YieldAllocationConfig,
 };
@@ -134,6 +135,8 @@ pub struct TreasuryControlTowerSnapshot {
     pub action_mode: String,
     pub buffer_target_percent: u8,
     pub policy_hint: String,
+    pub data_source: String,
+    pub provenance: TreasuryProvenance,
     pub float_slices: Vec<TreasuryFloatSlice>,
     pub forecasts: Vec<TreasuryLiquidityForecast>,
     pub exposures: Vec<TreasuryExposureSummary>,
@@ -142,6 +145,62 @@ pub struct TreasuryControlTowerSnapshot {
     pub safeguarding_overlays: Vec<TreasurySafeguardingOverlay>,
     pub reserve_positions: Vec<TreasuryReservePosition>,
     pub yield_allocations: Vec<TreasuryYieldAllocation>,
+}
+
+/// Provenance metadata for a treasury snapshot, making data lineage explicit.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TreasuryProvenance {
+    /// Source of the data: "sample" for hardcoded defaults, "evidence" for DB-backed imports
+    pub source_kind: String,
+    /// IDs of evidence imports used to build this snapshot (empty for sample mode)
+    pub evidence_import_ids: Vec<String>,
+    /// Earliest evidence snapshot timestamp (None for sample mode)
+    pub earliest_evidence_at: Option<String>,
+    /// Latest evidence snapshot timestamp (None for sample mode)
+    pub latest_evidence_at: Option<String>,
+    /// Explicit label: "sample" data should not be used for production decisions
+    pub freshness_warning: Option<String>,
+}
+
+impl TreasuryProvenance {
+    pub fn sample() -> Self {
+        Self {
+            source_kind: "sample".to_string(),
+            evidence_import_ids: Vec::new(),
+            earliest_evidence_at: None,
+            latest_evidence_at: None,
+            freshness_warning: Some(
+                "This snapshot uses sample data and should NOT be used for production treasury decisions."
+                    .to_string(),
+            ),
+        }
+    }
+
+    pub fn from_evidence(records: &[TreasuryEvidenceImportRecord]) -> Self {
+        let ids: Vec<String> = records.iter().map(|r| r.evidence_import_id.clone()).collect();
+        let earliest = records.iter().map(|r| r.snapshot_at).min();
+        let latest = records.iter().map(|r| r.snapshot_at).max();
+        Self {
+            source_kind: "evidence".to_string(),
+            evidence_import_ids: ids,
+            earliest_evidence_at: earliest.map(|t| t.to_rfc3339()),
+            latest_evidence_at: latest.map(|t| t.to_rfc3339()),
+            freshness_warning: None,
+        }
+    }
+}
+
+/// Specifies the data source for treasury control tower construction.
+#[derive(Debug, Clone)]
+pub enum TreasuryDataSource {
+    /// Use hardcoded sample data (development/demo only)
+    Sample(Option<String>),
+    /// Use evidence-backed data from the evidence import store
+    Evidence {
+        float_slices: Vec<TreasuryFloatSlice>,
+        provenance: TreasuryProvenance,
+    },
 }
 
 pub struct TreasuryService;
@@ -155,15 +214,42 @@ impl TreasuryService {
         &self,
         scenario: Option<&str>,
     ) -> TreasuryControlTowerSnapshot {
+        self.build_control_tower_from(TreasuryDataSource::Sample(
+            scenario.map(|s| s.to_string()),
+        ))
+    }
+
+    /// Build a control tower snapshot from an explicit data source.
+    ///
+    /// When using `TreasuryDataSource::Evidence`, float slices come from
+    /// evidence-backed reads and the provenance is tracked in the snapshot.
+    /// When using `TreasuryDataSource::Sample`, hardcoded sample data is used
+    /// and the provenance carries an explicit freshness warning.
+    pub fn build_control_tower_from(
+        &self,
+        source: TreasuryDataSource,
+    ) -> TreasuryControlTowerSnapshot {
         let now = Utc::now();
         let config = YieldAllocationConfig::default();
         let strategy = StrategyConfig::default();
-        let float_slices = sample_float_slices(scenario);
-        let settlements = sample_settlements(scenario);
-        let exposures = sample_exposures(scenario);
-        let safeguarding_overlays = sample_safeguarding_overlays(scenario);
-        let reserve_positions = sample_reserve_positions(scenario);
-        let yield_allocations = sample_yield_allocations(scenario);
+
+        let (float_slices, provenance, scenario_label) = match source {
+            TreasuryDataSource::Sample(ref scenario) => (
+                sample_float_slices(scenario.as_deref()),
+                TreasuryProvenance::sample(),
+                scenario.clone(),
+            ),
+            TreasuryDataSource::Evidence {
+                float_slices,
+                provenance,
+            } => (float_slices, provenance, None),
+        };
+
+        let settlements = sample_settlements(scenario_label.as_deref());
+        let exposures = sample_exposures(scenario_label.as_deref());
+        let safeguarding_overlays = sample_safeguarding_overlays(scenario_label.as_deref());
+        let reserve_positions = sample_reserve_positions(scenario_label.as_deref());
+        let yield_allocations = sample_yield_allocations(scenario_label.as_deref());
         let forecasts = build_forecasts(&float_slices, &settlements);
         let recommendations =
             build_recommendations(&float_slices, &forecasts, &exposures, &config, &strategy);
@@ -175,6 +261,8 @@ impl TreasuryService {
             action_mode: "recommendation_only".to_string(),
             buffer_target_percent: recommended_treasury_buffer_percent(&config),
             policy_hint: strategy.treasury_policy_hint(),
+            data_source: provenance.source_kind.clone(),
+            provenance,
             float_slices,
             forecasts,
             exposures: exposures

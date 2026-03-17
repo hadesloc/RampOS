@@ -116,10 +116,24 @@ async fn main() -> anyhow::Result<()> {
 
     // Create ReportGenerator
     // Use factory to create document storage from config
-    let document_storage = create_document_storage_async(&config.providers.document_storage)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to create document storage: {}", e))?;
-    let report_generator = Arc::new(ReportGenerator::new(pool.clone(), document_storage.into()));
+    let document_storage: std::sync::Arc<dyn ramp_compliance::storage::DocumentStorage> =
+        create_document_storage_async(&config.providers.document_storage)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to create document storage: {}", e))?
+            .into();
+    let report_generator = Arc::new(ReportGenerator::new(pool.clone(), document_storage.clone()));
+
+    // Create KYC provider + service from config (auto-detects ONFIDO_API_KEY / CHAINALYSIS_API_KEY)
+    let kyc_provider = ramp_compliance::providers::create_kyc_provider(&config.providers.kyc)
+        .map_err(|e| anyhow::anyhow!("Failed to create KYC provider: {}", e))?;
+    let kyc_service = Arc::new(ramp_compliance::kyc::KycService::new(
+        kyc_provider,
+        Box::new(ramp_compliance::storage::MockDocumentStorage::new()),
+    ));
+
+    let kyt_provider = ramp_compliance::providers::create_kyt_provider(&config.providers.kyt)
+        .map_err(|e| anyhow::anyhow!("Failed to create KYT provider: {}", e))?;
+    let kyt_service = Arc::new(ramp_compliance::kyt::KytService::new(kyt_provider));
 
     let case_store = Arc::new(PostgresCaseStore::new(pool.clone()));
     let case_manager = Arc::new(CaseManager::new(case_store));
@@ -239,6 +253,9 @@ async fn main() -> anyhow::Result<()> {
         ws_state: Some(ws_state),
         metrics_registry: Arc::new(ramp_core::service::MetricsRegistry::new()),
         event_publisher: event_publisher.clone(),
+        document_storage: Some(document_storage),
+        kyc_service: Some(kyc_service),
+        kyt_service: Some(kyt_service),
     };
 
     // Graceful shutdown flag

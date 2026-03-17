@@ -37,6 +37,8 @@ def _add_common_runtime_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--timeout", type=float)
     parser.add_argument("--request-id")
     parser.add_argument("--idempotency-key")
+    parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompts for dangerous operations.")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be sent without executing.")
 
 
 def cmd_login(args: argparse.Namespace) -> int:
@@ -82,20 +84,27 @@ def cmd_sandbox_seed(args: argparse.Namespace) -> int:
 
 def cmd_sandbox_run(args: argparse.Namespace) -> int:
     ctx = build_cli_context(args)
-    print_output(
-        {
-            "status": "placeholder",
-            "message": "Scenario execution is not live yet in the backend. Use sandbox seed and sandbox replay today.",
-            "request": {
-                "tenant_id": args.tenant_id,
-                "preset_code": args.preset_code,
-                "scenario_code": args.scenario_code,
+    payload = {
+        "tenantId": args.tenant_id,
+        "presetCode": args.preset_code,
+        "scenarioCode": args.scenario_code,
+    }
+    try:
+        result = request_json(ctx, "POST", "/v1/admin/sandbox/run", payload=payload, require_operator=True)
+        print_output(result, output=ctx.output, compact=ctx.compact)
+        return 0
+    except Exception as exc:
+        print_output(
+            {
+                "status": "backend_unavailable",
+                "error": str(exc),
+                "message": "Sandbox scenario execution endpoint is not available. Use 'sandbox seed' and 'sandbox replay' as the supported alternative.",
+                "request": payload,
             },
-        },
-        output=ctx.output,
-        compact=ctx.compact,
-    )
-    return 0
+            output=ctx.output,
+            compact=ctx.compact,
+        )
+        return 1
 
 
 def cmd_sandbox_replay(args: argparse.Namespace) -> int:
@@ -141,6 +150,113 @@ def cmd_treasury_workbench(args: argparse.Namespace) -> int:
     )
     result = request_json(ctx, "GET", path)
     print_output(result, output=ctx.output, compact=ctx.compact)
+    return 0
+
+
+def cmd_watch(args: argparse.Namespace) -> int:
+    """Connect to the WebSocket endpoint and emit events as JSONL to stdout."""
+    import sys
+    import signal
+    import time
+
+    ctx = build_cli_context(args)
+    base = ctx.base_url.rstrip("/").replace("https://", "wss://").replace("http://", "ws://")
+    ws_url = f"{base}/v1/portal/ws?token={ctx.portal_token or ctx.api_key or ''}"
+
+    event_filter = set(args.event_types) if args.event_types else None
+    intent_filter = args.intent_ids or []
+
+    stopped = False
+
+    def _handle_signal(*_: object) -> None:
+        nonlocal stopped
+        stopped = True
+
+    signal.signal(signal.SIGINT, _handle_signal)
+    signal.signal(signal.SIGTERM, _handle_signal)
+
+    try:
+        import websocket  # type: ignore[import-untyped]
+    except ImportError:
+        print(
+            json.dumps(
+                {
+                    "error": "MISSING_DEPENDENCY",
+                    "message": "websocket-client is required for watch mode. Run: pip install websocket-client",
+                },
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+        )
+        return 1
+
+    retry_count = 0
+    max_retries = 5 if not args.no_reconnect else 0
+
+    while not stopped:
+        try:
+            ws = websocket.create_connection(ws_url, timeout=args.timeout or 30)
+
+            # Subscribe
+            subscribe_msg = {"action": "subscribe"}
+            if intent_filter:
+                subscribe_msg["intentIds"] = intent_filter
+            ws.send(json.dumps(subscribe_msg))
+
+            retry_count = 0  # reset on successful connect
+
+            while not stopped:
+                try:
+                    raw = ws.recv()
+                except websocket.WebSocketTimeoutException:
+                    continue
+                if not raw:
+                    break
+
+                try:
+                    msg = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+
+                # Only emit 'event' messages as JSONL
+                if msg.get("type") != "event":
+                    if msg.get("type") == "warning":
+                        print(json.dumps(msg, sort_keys=True), file=sys.stderr)
+                    continue
+
+                event_data = msg.get("data", {})
+                event_type = event_data.get("eventType", "")
+
+                # Apply event type filter
+                if event_filter and event_type not in event_filter:
+                    continue
+
+                # Emit as JSONL (one JSON object per line, flushed immediately)
+                print(json.dumps(event_data, sort_keys=True), flush=True)
+
+        except (websocket.WebSocketException, OSError) as exc:
+            if stopped:
+                break
+            retry_count += 1
+            if retry_count > max_retries:
+                print(
+                    json.dumps(
+                        {"error": "CONNECTION_FAILED", "message": str(exc), "retries": retry_count},
+                        sort_keys=True,
+                    ),
+                    file=sys.stderr,
+                )
+                return 1
+            backoff = min(2 ** retry_count, 30)
+            print(
+                json.dumps(
+                    {"warning": "RECONNECTING", "retry": retry_count, "backoffSeconds": backoff},
+                    sort_keys=True,
+                ),
+                file=sys.stderr,
+            )
+            time.sleep(backoff)
+
     return 0
 
 
@@ -404,6 +520,33 @@ def build_parser() -> argparse.ArgumentParser:
     )
     artifact.add_argument("--output-file")
     artifact.set_defaults(func=cmd_certification_artifact)
+
+    watch = subparsers.add_parser(
+        "watch",
+        help="Stream live events as JSONL via WebSocket for agent or pipe consumption.",
+    )
+    _add_common_runtime_args(watch)
+    watch.add_argument(
+        "--event-type",
+        dest="event_types",
+        action="append",
+        default=[],
+        help="Filter by event type (e.g. intent.updated, intent.completed). Can be repeated.",
+    )
+    watch.add_argument(
+        "--intent-id",
+        dest="intent_ids",
+        action="append",
+        default=[],
+        help="Filter by intent ID. Can be repeated. If omitted, subscribes to all events.",
+    )
+    watch.add_argument(
+        "--no-reconnect",
+        action="store_true",
+        help="Do not attempt to reconnect on connection loss.",
+    )
+    watch.set_defaults(func=cmd_watch)
+
     _register_manifest_commands(subparsers)
 
     return parser

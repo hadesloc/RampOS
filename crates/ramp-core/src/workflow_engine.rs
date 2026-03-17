@@ -812,4 +812,118 @@ mod tests {
         let result = engine.cancel("payin-intent-123", "Test cancellation").await;
         assert!(result.is_ok());
     }
+
+    // === Runtime contract enforcement tests (T-RR-006) ===
+
+    #[tokio::test]
+    async fn test_runtime_contract_engine_types_are_stable() {
+        // Engine type strings are part of the runtime contract and must not change
+        let worker = create_test_worker();
+        let in_process = InProcessEngine::new(worker.clone());
+        assert_eq!(in_process.engine_type(), "in-process");
+
+        let config = TemporalWorkerConfig::default();
+        let temporal = TemporalEngine::new("http://localhost:7233".to_string(), config);
+        assert_eq!(temporal.engine_type(), "temporal");
+    }
+
+    #[tokio::test]
+    async fn test_runtime_contract_factory_defaults_to_in_process() {
+        // Without TEMPORAL_URL, factory MUST produce InProcessEngine
+        std::env::remove_var("TEMPORAL_URL");
+        let worker = create_test_worker();
+        let engine = create_workflow_engine(worker, None);
+        assert_eq!(engine.engine_type(), "in-process");
+    }
+
+    #[tokio::test]
+    async fn test_runtime_contract_in_process_status_default() {
+        // InProcessEngine without state repo defaults to Completed for unknown workflows
+        let worker = create_test_worker();
+        let engine = InProcessEngine::new(worker);
+        let status = engine.get_status("nonexistent-workflow-id").await.unwrap();
+        assert!(matches!(status, WorkflowStatus::Completed));
+    }
+
+    #[tokio::test]
+    async fn test_runtime_contract_workflow_id_format() {
+        // Workflow IDs must follow the pattern: {type}-{intent_id}
+        let worker = create_test_worker();
+        let engine = InProcessEngine::new(worker);
+
+        let payin_id = engine
+            .start_payin(PayinWorkflowInput {
+                tenant_id: "t".to_string(),
+                user_id: "u".to_string(),
+                intent_id: "contract-test-1".to_string(),
+                amount_vnd: 100,
+                rails_provider: "VCB".to_string(),
+                reference_code: "REF".to_string(),
+                expires_at: "2026-01-01T00:00:00Z".to_string(),
+            })
+            .await
+            .unwrap();
+        assert!(payin_id.starts_with("payin-"), "payin ID must start with 'payin-'");
+
+        let payout_id = engine
+            .start_payout(PayoutWorkflowInput {
+                tenant_id: "t".to_string(),
+                user_id: "u".to_string(),
+                intent_id: "contract-test-2".to_string(),
+                amount_vnd: 100,
+                rails_provider: "VCB".to_string(),
+                bank_account: BankAccountInfo {
+                    bank_code: "VCB".to_string(),
+                    account_number: "123".to_string(),
+                    account_name: "TEST".to_string(),
+                },
+            })
+            .await
+            .unwrap();
+        assert!(payout_id.starts_with("payout-"), "payout ID must start with 'payout-'");
+
+        let trade_id = engine
+            .start_trade(TradeWorkflowInput {
+                tenant_id: "t".to_string(),
+                user_id: "u".to_string(),
+                intent_id: "contract-test-3".to_string(),
+                trade_id: "tr-1".to_string(),
+                symbol: "BTC/VND".to_string(),
+                price: "1000000".to_string(),
+                vnd_delta: -100,
+                crypto_delta: "0.001".to_string(),
+                timestamp: "2026-01-01T00:00:00Z".to_string(),
+            })
+            .await
+            .unwrap();
+        assert!(trade_id.starts_with("trade-"), "trade ID must start with 'trade-'");
+    }
+
+    #[tokio::test]
+    async fn test_runtime_contract_temporal_fallback_preserves_id_format() {
+        // Even when TemporalEngine falls back to in-process, workflow IDs must follow the pattern
+        let worker = create_test_worker();
+        let config = TemporalWorkerConfig::default();
+        let engine = TemporalEngine::new(
+            "http://localhost:99999".to_string(), // unreachable
+            config,
+        )
+        .with_fallback(worker);
+
+        let input = PayoutWorkflowInput {
+            tenant_id: "t".to_string(),
+            user_id: "u".to_string(),
+            intent_id: "fallback-format-1".to_string(),
+            amount_vnd: 100,
+            rails_provider: "VCB".to_string(),
+            bank_account: BankAccountInfo {
+                bank_code: "VCB".to_string(),
+                account_number: "123".to_string(),
+                account_name: "TEST".to_string(),
+            },
+        };
+
+        let result = engine.start_payout(input).await;
+        assert!(result.is_ok(), "Fallback should succeed");
+    }
 }

@@ -1,46 +1,46 @@
 # Project Dashboard
 
-**Last Updated**: 2026-03-13T18:21:46+07:00
-**Phase**: QA
-**Progress**: 100%
+**Last Updated**: 2026-03-16T22:09+07:00
+**Phase**: DEVELOPMENT
+**Progress**: 65%
 **Plan Approved**: True
 **Task Backend**: codex_native
-**Task Source Of Truth**: `.codex/uw/context/task-breakdown.json`, `.codex/uw/context/task-queue.json`, and `current-state.md`
+**Task Source Of Truth**: task-queue.json
 
 ## Metrics
-- Total Tasks: 35
-- Completed: 35
+- Total Tasks: 26
+- Completed: 17
 - In Progress: 0
-- Pending: 0
-- Total Units: 79
-- Units Completed: 79
-- Units Pending: 0
+- Pending: 9
 
 ## Recent Completions
-- `T-027` through `T-035` operational hardening wave
-- QA checkpoint: full local non-destructive release matrix passed
-- QA checkpoint: manual migration rehearsal passed on isolated DB
-- QA checkpoint: live local admin, audit, partner-write, and DR evidence captured
-- QA checkpoint: RC `268670d74` security pre-signoff package created
-- QA checkpoint: signoff ledger refreshed with attached evidence and explicit blockers
-- QA checkpoint: staging blocker evidence recorded instead of leaving signoff state implicit
-- QA checkpoint: dependency remediation reduced open Rust advisories from `6` to `1`
-- QA checkpoint: fresh Semgrep evidence attached for RC `268670d74`
-- QA checkpoint: `alloy-dyn-abi` and `validator -> idna` are closed for the current RC
-- QA checkpoint: `frontend` and `sdk` npm audit are now clean
-- QA checkpoint: `jsonwebtoken` was upgraded to `10.3.0` and `sqlx` macro support was restored in workspace dependencies
-- QA checkpoint: Trivy is now runnable locally, but its latest report must be refreshed after the current dependency-remediation batch
+- T-RR-001→004: E1 Internal Readiness ✅
+- T-RR-005→007: E2 Workflow Runtime Truth ✅
+- T-RR-008→011: E3 Live Evidence Surfaces ✅
+- T-RR-012→014: E4 CLI Parity ✅
+- T-RR-015→017: E5 Streaming & Tooling ✅
 
 ## Session History (Recent 20)
 - Archive: `.codex/uw/context/dashboard-history.json`
 - Hidden older sessions: 0
 | Session | Date | Tasks Spawned | Completed | Failed | Learnings |
 |---|---|---|---|---|---|
-| current | 2026-03-13 | hardening, QA execution, signoff packaging | 9 | 0 | Trust repo artifacts over stale uwctl hints; keep blocker evidence explicit |
+| S1 | 2026-03-16 | 17 | 17 | 0 | M0–M3 complete; task numbering drift caught in audit |
+
+## Cumulative Metrics
+- Total sessions: 1
+- Total tasks completed: 17/26
+- Average completion rate: 65%
+
+## Next Session Focus
+- **T-RR-018**: Design governed partner registry schema (E6)
+- **T-RR-019**: Design config bundle governance (E6)
+- All changes uncommitted — review and commit first
 
 ## Summary (User-Friendly)
 
-- What we are building: a bank-grade additive control plane for RampOS with hardening artifacts implemented in-repo.
-- MVP scope: `M0` to `M6` repo implementation and local QA evidence are complete.
-- Current focus: close the last external blockers for official bank-grade signoff.
-- Blocking items now recorded explicitly: residual `rsa` report in `Cargo.lock`, staging ingress or DNS access, kubeconfig-backed staging execution, independent external security review, refreshed Trivy evidence for the updated RC, and named approver signoff.
+- What we are building: operator-credible, agent-native, commercially differentiated RampOS.
+- M0–M3 (P0 baseline) complete: internal readiness, workflow truth, evidence-backed treasury/reconciliation, CLI parity, JSONL watch, approval-aware boundaries.
+- Current focus: E6 Partner and Config Governance (T-RR-018→019).
+- No blocking items for next session.
+

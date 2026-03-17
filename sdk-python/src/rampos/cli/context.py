@@ -30,3 +30,5 @@ class CliContext:
     body: str | None = None
     body_file: str | None = None
     body_stdin: bool = False
+    yes: bool = False
+    dry_run: bool = False

@@ -211,6 +211,9 @@ async fn test_e2e_payin_flow() {
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
+        document_storage: None,
+            kyc_service: None,
+            kyt_service: None,
     };
 
     let app = create_router(app_state);
@@ -486,6 +489,9 @@ async fn confirm_payin_requires_internal_secret_header() {
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
+        document_storage: None,
+            kyc_service: None,
+            kyt_service: None,
     };
 
     let app = create_router(app_state);

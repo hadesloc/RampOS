@@ -17,6 +17,64 @@ def append_query(path: str, params: dict[str, str]) -> str:
     return f"{path}?{query}" if query else path
 
 
+# --- Approval-Aware Boundaries (T-RR-016) ---
+DANGEROUS_PATH_PATTERNS = (
+    "/admin/sandbox/seed",
+    "/admin/sandbox/run",
+    "/admin/bridge/transfer",
+    "/admin/rfq/",  # finalize
+    "/admin/config-bundles/",
+    "/admin/licensing/upload",
+    "/admin/rescreening/",
+    "/admin/travel-rule/",
+    "/admin/passport/",
+    "/admin/kyb/",
+)
+
+
+def is_dangerous_write(method: str, path: str) -> bool:
+    """Classify whether a request is a dangerous write that should require confirmation."""
+    if method in ("GET", "HEAD", "OPTIONS"):
+        return False
+    return any(pattern in path for pattern in DANGEROUS_PATH_PATTERNS)
+
+
+def confirm_dangerous_operation(
+    ctx: CliContext,
+    method: str,
+    path: str,
+    payload: Any,
+) -> bool:
+    """Prompt for confirmation before executing a dangerous write. Returns True if approved."""
+    if getattr(ctx, "yes", False):
+        return True
+
+    if getattr(ctx, "dry_run", False):
+        import json as _json
+        print(
+            _json.dumps(
+                {
+                    "dryRun": True,
+                    "method": method,
+                    "path": path,
+                    "payload": payload,
+                    "message": "Dangerous operation. Use --yes to skip confirmation.",
+                },
+                sort_keys=True,
+            )
+        )
+        return False
+
+    # Non-interactive check (piped stdin)
+    if not sys.stdin.isatty():
+        raise CliUsageError(
+            f"Dangerous write to {method} {path} requires --yes flag in non-interactive mode."
+        )
+
+    response = input(f"\n⚠️  DANGEROUS: {method} {path}\nProceed? [y/N] ").strip().lower()
+    return response in ("y", "yes")
+
+
 def load_body(ctx: CliContext, stdin_text: str | None = None) -> Any:
     sources = [ctx.body is not None, ctx.body_file is not None, ctx.body_stdin]
     if sum(bool(source) for source in sources) > 1:
@@ -83,6 +141,11 @@ def request_json(
     payload: Any = None,
     require_operator: bool = False,
 ) -> Any:
+    # Approval boundary for dangerous writes
+    if is_dangerous_write(method, path):
+        if not confirm_dangerous_operation(ctx, method, path, payload):
+            return {"aborted": True, "message": "Operation cancelled by operator."}
+
     url = f"{ctx.base_url.rstrip('/')}{path}"
     body = None if payload is None else json.dumps(payload).encode("utf-8")
     req = request.Request(

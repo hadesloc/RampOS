@@ -289,7 +289,7 @@ pub async fn get_kyc_status(
 
 /// POST /v1/portal/kyc/submit - Submit KYC data
 pub async fn submit_kyc(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     portal_user: PortalUser,
     Json(req): Json<KYCSubmission>,
 ) -> Result<Json<KYCStatus>, ApiError> {
@@ -322,18 +322,105 @@ pub async fn submit_kyc(
         "KYC submission received"
     );
 
-    // In production, this would:
-    // 1. Extract user from auth middleware
-    // 2. Validate the submission data
-    // 3. Store KYC data securely (encrypted)
-    // 4. Trigger KYC verification workflow
-    // 5. Update user's KYC status to PENDING
-
     let now = Utc::now();
+    let tenant_id = ramp_common::types::TenantId::new(portal_user.tenant_id.to_string());
+    let user_id = ramp_common::types::UserId::new(portal_user.user_id.to_string());
+
+    // 1. Update user KYC status to PENDING
+    app_state
+        .user_service
+        .update_user(
+            &tenant_id,
+            &user_id,
+            Some("PENDING".to_string()),
+            None,
+            None,
+            None,
+        )
+        .await
+        .map_err(|e| ApiError::Internal(format!("Failed to update user KYC status: {}", e)))?;
+
+    // 2. Store submission metadata in risk_flags for audit trail
+    let submission_metadata = serde_json::json!({
+        "kycSubmission": {
+            "firstName": req.first_name,
+            "lastName": req.last_name,
+            "dateOfBirth": req.date_of_birth,
+            "idDocumentType": req.id_document_type,
+            "submittedAt": now.to_rfc3339(),
+            "status": "PENDING"
+        }
+    });
+
+    app_state
+        .user_service
+        .update_user_risk_flags(
+            &tenant_id,
+            &user_id,
+            submission_metadata,
+        )
+        .await
+        .map_err(|e| ApiError::Internal(format!("Failed to store KYC submission data: {}", e)))?;
+
+    // 3. Trigger real KYC verification in background (Onfido / Mock provider)
+    if let Some(ref kyc_service) = app_state.kyc_service {
+        let kyc_service = kyc_service.clone();
+        let user_service = app_state.user_service.clone();
+        let bg_tenant_id = tenant_id.clone();
+        let bg_user_id = user_id.clone();
+
+        let verification_request = ramp_compliance::kyc::KycVerificationRequest {
+            tenant_id: bg_tenant_id.clone(),
+            user_id: bg_user_id.clone(),
+            tier: KycTier::from_i16(1), // Request Tier 1 for basic KYC
+            full_name: format!("{} {}", req.first_name, req.last_name),
+            date_of_birth: req.date_of_birth.clone(),
+            id_number: req.id_document_number.clone().unwrap_or_default(),
+            id_type: req.id_document_type.clone(),
+            documents: vec![],
+        };
+
+        tokio::spawn(async move {
+            match kyc_service.submit_verification(verification_request).await {
+                Ok(result) => {
+                    let new_status = match result.status {
+                        ramp_compliance::types::KycStatus::Approved => "VERIFIED",
+                        ramp_compliance::types::KycStatus::Rejected => "REJECTED",
+                        _ => "PENDING",
+                    };
+
+                    // Update user KYC status and tier
+                    let new_tier = result.verified_tier.map(|t| t as i16);
+                    if let Err(e) = user_service
+                        .update_user(&bg_tenant_id, &bg_user_id, Some(new_status.to_string()), new_tier, None, None)
+                        .await
+                    {
+                        tracing::error!(error = %e, "Failed to update user after KYC verification");
+                    } else {
+                        info!(
+                            user_id = %bg_user_id,
+                            status = new_status,
+                            "KYC verification completed via provider"
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "KYC provider verification failed");
+                }
+            }
+        });
+    }
+
+    // 4. Return PENDING status with real tier from user
+    let user = app_state
+        .user_service
+        .get_user(&tenant_id, &user_id)
+        .await
+        .map_err(|e| ApiError::Internal(format!("Failed to get user: {}", e)))?;
 
     let status = KYCStatus {
         status: "PENDING".to_string(),
-        tier: 0,
+        tier: i32::from(user.kyc_tier),
         submitted_at: Some(now.to_rfc3339()),
         verified_at: None,
         rejection_reason: None,
@@ -341,7 +428,7 @@ pub async fn submit_kyc(
         document_expiry_at: None,
         restriction_status: None,
         alert_codes: None,
-        passport_summary: None,
+        passport_summary: passport_summary_from_flags(&user.risk_flags),
     };
 
     Ok(Json(status))
@@ -349,7 +436,7 @@ pub async fn submit_kyc(
 
 /// POST /v1/portal/kyc/documents - Upload KYC document (JSON with base64 file)
 pub async fn upload_document(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     portal_user: PortalUser,
     Json(req): Json<DocumentUploadRequest>,
 ) -> Result<Json<DocumentUploadResponse>, ApiError> {
@@ -398,18 +485,47 @@ pub async fn upload_document(
         "Document upload processing"
     );
 
-    // In production, this would:
-    // 1. Validate file type by magic bytes
-    // 2. Scan for malware
-    // 3. Upload to secure storage (S3, etc.)
-    // 4. Store document reference in database
-    // 5. Return signed URL for viewing
+    // Map string document type to storage enum
+    let storage_doc_type = match req.document_type.as_str() {
+        "ID_FRONT" => ramp_compliance::storage::DocumentType::IdFront,
+        "ID_BACK" => ramp_compliance::storage::DocumentType::IdBack,
+        "SELFIE" => ramp_compliance::storage::DocumentType::Selfie,
+        "PROOF_OF_ADDRESS" => ramp_compliance::storage::DocumentType::ProofOfAddress,
+        _ => ramp_compliance::storage::DocumentType::IdFront, // already validated above
+    };
+
+    // Derive file extension from content type
+    let extension = match req.content_type.as_str() {
+        "image/jpeg" => "jpg",
+        "image/png" => "png",
+        "image/webp" => "webp",
+        "application/pdf" => "pdf",
+        _ => "bin",
+    };
+
+    // Upload to document storage if available, otherwise generate local reference
+    let document_url = if let Some(ref storage) = app_state.document_storage {
+        storage
+            .upload(
+                portal_user.tenant_id.to_string(),
+                portal_user.user_id.to_string(),
+                storage_doc_type,
+                file_bytes,
+                extension,
+            )
+            .await
+            .map_err(|e| ApiError::Internal(format!("Failed to upload document: {}", e)))?
+    } else {
+        // Fallback: generate reference ID without persistent storage
+        let document_id = Uuid::new_v4().to_string();
+        format!("/v1/portal/kyc/documents/{}", document_id)
+    };
 
     let document_id = Uuid::new_v4().to_string();
 
     let response = DocumentUploadResponse {
-        document_id: document_id.clone(),
-        url: format!("/v1/portal/kyc/documents/{}", document_id),
+        document_id,
+        url: document_url,
     };
 
     Ok(Json(response))
@@ -417,7 +533,7 @@ pub async fn upload_document(
 
 /// GET /v1/portal/kyc/tier - Get current tier information
 pub async fn get_tier(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     portal_user: PortalUser,
 ) -> Result<Json<TierInfo>, ApiError> {
     info!(
@@ -426,21 +542,44 @@ pub async fn get_tier(
         "Get tier info requested"
     );
 
-    // In production, this would:
-    // 1. Extract user from auth middleware
-    // 2. Get current tier and limits
-    // 3. Calculate next tier requirements
+    // Read real user tier from user service
+    let tenant_id = ramp_common::types::TenantId::new(portal_user.tenant_id.to_string());
+    let user_id = ramp_common::types::UserId::new(portal_user.user_id.to_string());
+    let user = app_state
+        .user_service
+        .get_user(&tenant_id, &user_id)
+        .await
+        .map_err(|e| ApiError::Internal(format!("Failed to get user: {}", e)))?;
 
-    let tier_info = TierInfo {
-        current_tier: 1,
-        tier_name: "Basic".to_string(),
-        limits: TierLimits {
-            daily_deposit_limit: "10000000".to_string(),    // 10M VND
-            daily_withdrawal_limit: "5000000".to_string(),  // 5M VND
-            monthly_deposit_limit: "100000000".to_string(), // 100M VND
-            monthly_withdrawal_limit: "50000000".to_string(), // 50M VND
-        },
-        next_tier: Some(NextTierInfo {
+    let current_tier = KycTier::from_i16(user.kyc_tier);
+
+    // Compute tier name
+    let tier_name = match current_tier {
+        KycTier::Tier0 => "Unverified",
+        KycTier::Tier1 => "Basic",
+        KycTier::Tier2 => "Verified",
+        KycTier::Tier3 => "Business",
+    };
+
+    // Compute limits dynamically from KycTier
+    let limits = TierLimits {
+        daily_deposit_limit: current_tier.daily_payin_limit_vnd().to_string(),
+        daily_withdrawal_limit: current_tier.daily_payout_limit_vnd().to_string(),
+        monthly_deposit_limit: (current_tier.daily_payin_limit_vnd() * rust_decimal::Decimal::from(30)).to_string(),
+        monthly_withdrawal_limit: (current_tier.daily_payout_limit_vnd() * rust_decimal::Decimal::from(30)).to_string(),
+    };
+
+    // Compute next tier requirements
+    let next_tier = match current_tier {
+        KycTier::Tier0 => Some(NextTierInfo {
+            tier: 1,
+            tier_name: "Basic".to_string(),
+            requirements: vec![
+                "Submit basic KYC information".to_string(),
+                "Upload ID document (front)".to_string(),
+            ],
+        }),
+        KycTier::Tier1 => Some(NextTierInfo {
             tier: 2,
             tier_name: "Verified".to_string(),
             requirements: vec![
@@ -449,6 +588,22 @@ pub async fn get_tier(
                 "Complete selfie verification".to_string(),
             ],
         }),
+        KycTier::Tier2 => Some(NextTierInfo {
+            tier: 3,
+            tier_name: "Business".to_string(),
+            requirements: vec![
+                "Complete business verification (KYB)".to_string(),
+                "Submit source of funds documentation".to_string(),
+            ],
+        }),
+        KycTier::Tier3 => None, // Already at highest tier
+    };
+
+    let tier_info = TierInfo {
+        current_tier: current_tier as i32,
+        tier_name: tier_name.to_string(),
+        limits,
+        next_tier,
     };
 
     Ok(Json(tier_info))

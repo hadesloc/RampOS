@@ -1,6 +1,6 @@
 # RampOS CLI Coverage Ledger
 
-_Last updated: 2026-03-11_
+_Last updated: 2026-03-17_
 
 This ledger maps the current RampOS product surface to the planned CLI surface for agent-driven use.
 
@@ -18,7 +18,7 @@ This ledger maps the current RampOS product surface to the planned CLI surface f
 | User balances and KYC status | `frontend/src/app/[locale]/(admin)/users/page.tsx` | `/v1/users/{tenant_id}/{user_id}/balances`, portal KYC routes | REST | OPENAPI | `rampos users balances|kyc-status` | READY | Existing API/docs and SDK coverage already exist. |
 | Ledger explorer | `frontend/src/app/[locale]/(admin)/ledger/page.tsx` | `/v1/admin/ledger/entries`, `/v1/admin/ledger/balances` | REST | OPENAPI | `rampos ledger entries|balances` | READY | Admin accounting surface should remain machine-readable by default. |
 | Webhook operations | `frontend/src/app/[locale]/(admin)/webhooks/page.tsx` | `/v1/admin/webhooks`, replay/retry/catalog/history routes | REST | OPENAPI | `rampos admin webhooks list|get|replay|retry|catalog|history` | READY | Useful for operator workflows and AI-driven replay. |
-| Sandbox preset operations | `frontend/src/app/[locale]/(admin)/sandbox/page.tsx` | `/v1/admin/sandbox/seed`, replay/export routes | REST | CURATED | `rampos sandbox presets|seed|run|replay` | READY | Current preview CLI already covers part of this surface. |
+| Sandbox preset operations | `frontend/src/app/[locale]/(admin)/sandbox/page.tsx` | `/v1/admin/sandbox/seed`, replay/export routes | REST | CURATED | `rampos sandbox presets|seed|run|replay` | READY | `seed` and `replay` are live. **`run` is a placeholder** — see T-RR-014. |
 | Reconciliation workbench | `frontend/src/app/[locale]/(admin)/reconciliation/page.tsx` | `/v1/admin/reconciliation/workbench`, evidence/export routes | REST | CURATED | `rampos reconciliation workbench|evidence|export` | READY | Existing preview CLI command family. |
 | Treasury workbench | `frontend/src/app/[locale]/(admin)/treasury/page.tsx` | `/v1/admin/treasury/workbench`, export route | REST | CURATED | `rampos treasury workbench|export` | READY | Existing preview CLI command family. |
 | Settlement workbench | `frontend/src/app/[locale]/(admin)/settlement/page.tsx` | `/v1/admin/settlement/workbench`, export route | REST | CURATED | `rampos settlement workbench|export` | READY | Mounted in router but not in the preview CLI yet. |
@@ -38,7 +38,7 @@ This ledger maps the current RampOS product surface to the planned CLI surface f
 | Extensions and config bundles | `frontend/src/app/[locale]/(admin)/settings/extensions/page.tsx`, `settings/config-bundles/page.tsx` | `/v1/admin/extensions`, `/v1/admin/config-bundles/export` | REST | CURATED | `rampos admin extensions list|config-bundles export` | READY | Important for machine-driven tenant configuration workflows. Responses now expose approval/source/rollout metadata and explicit fallback artifacts when no approved registry record is active. |
 | Domain management | `frontend/src/app/[locale]/(admin)/settings/domains/page.tsx` | domain CRUD under admin/domain handlers | REST | OPENAPI | `rampos domain create|get|verify|delete` | READY | White-label operations fit the CLI model well. |
 | GraphQL query and mutation | GraphiQL/dev-facing surface | `/graphql` query and mutation handlers | GRAPHQL | GRAPHQL | `rampos graphql query|mutation` | READY | Needed for non-REST consumers and parity beyond route inventory. |
-| Portal event streaming | Live portal UX / monitoring | `/v1/portal/ws` and `crates/ramp-api/src/handlers/ws.rs` | WS | WS | `rampos watch portal-events|intents|incidents` | READY | WebSocket watch mode should emit JSONL for agents. |
+| Portal event streaming | Live portal UX / monitoring | `/v1/portal/ws` and `crates/ramp-api/src/handlers/ws.rs` | WS | WS | `rampos watch --event-type intent.updated --portal-token $TOKEN` | READY | `cmd_watch` implemented with WebSocket JSONL streaming, event/intent filters, reconnect with exponential backoff. |
 | RFQ user portal UI | Portal RFQ page not yet shipped | Portal RFQ backend exists; portal UI folder not present yet | REST | CURATED | `rampos rfq create|get|accept|cancel` | READY | CLI can cover the user flow before the portal page lands. |
 | LP dashboard UI | LP dashboard pending per completion status | LP bid route exists | UI_ONLY_GAP | CURATED | `rampos lp rfq bid` | READY | CLI should close this gap immediately for agents and LP ops. |
 | Portal deposit/withdraw/auth | `frontend/src/app/[locale]/portal/deposit`, `withdraw`, `login` | portal auth/intents/offramp/wallet/transactions routes | REST | CURATED | `rampos portal auth|wallet|transactions|withdraw|kyc` | READY | Portal flows require portal-token auth mode in the packaged CLI. |

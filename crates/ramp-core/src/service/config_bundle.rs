@@ -38,18 +38,75 @@ pub struct WhitelistedExtensionAction {
     pub source: Option<String>,
 }
 
+/// Request to create a new versioned, approval-gated config bundle.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateConfigBundleRequest {
+    pub tenant_id: Option<String>,
+    pub tenant_name: String,
+    pub sections: Vec<String>,
+    pub payload: serde_json::Value,
+    /// Credential references must be indirect (vault locators, env refs) — never inline secrets.
+    pub credential_references: Vec<ConfigBundleCredentialReference>,
+    pub approval_reference: Option<String>,
+    pub rollout_scope: Option<serde_json::Value>,
+}
+
+/// Indirect secret reference within a config bundle — locator-based, never inline.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigBundleCredentialReference {
+    pub credential_key: String,
+    pub locator_kind: String,
+    pub locator: String,
+    pub environment: String,
+}
+
+/// Version history entry for a config bundle.
+/// Currently a placeholder type — will be populated by a future `list_bundle_versions` method
+/// once config bundle persistence is wired to the database layer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigBundleVersionEntry {
+    pub version: u32,
+    pub bundle_id: String,
+    pub created_at: String,
+    pub approval_status: String,
+    pub sections: Vec<String>,
+    pub provenance: serde_json::Value,
+}
+
+/// Version history for a tenant's config bundles.
+/// Currently a placeholder type — will be populated by a future `list_bundle_versions` method
+/// once config bundle persistence is wired to the database layer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigBundleVersionHistory {
+    pub tenant_name: String,
+    pub versions: Vec<ConfigBundleVersionEntry>,
+}
+
+
 #[derive(Debug, Clone)]
 pub struct ConfigBundleService {
     pool: Option<PgPool>,
+    /// In-memory version history tracked at the service level for additive governance.
+    version_counter: std::sync::Arc<std::sync::atomic::AtomicU32>,
 }
 
 impl ConfigBundleService {
     pub fn new() -> Self {
-        Self { pool: None }
+        Self {
+            pool: None,
+            version_counter: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(1)),
+        }
     }
 
     pub fn with_pool(pool: PgPool) -> Self {
-        Self { pool: Some(pool) }
+        Self {
+            pool: Some(pool),
+            version_counter: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(1)),
+        }
     }
 
     pub async fn export_bundle(
@@ -80,6 +137,88 @@ impl ConfigBundleService {
         }
 
         Ok(fallback_actions())
+    }
+
+    /// Create a new versioned config bundle with secret indirection validation.
+    /// Rejects bundles that contain inline secrets (credential values in payload).
+    pub async fn create_bundle(
+        &self,
+        request: &CreateConfigBundleRequest,
+    ) -> Result<ConfigBundleArtifact> {
+        // Validate secret indirection: credential_references must use locators, never inline values
+        for cred_ref in &request.credential_references {
+            if cred_ref.locator.is_empty() {
+                return Err(ramp_common::Error::Validation(format!(
+                    "Credential reference '{}' must have a non-empty locator (secret indirection required)",
+                    cred_ref.credential_key
+                )));
+            }
+            if cred_ref.locator_kind != "vault" && cred_ref.locator_kind != "env" && cred_ref.locator_kind != "secret_manager" {
+                return Err(ramp_common::Error::Validation(format!(
+                    "Credential reference '{}' has unsupported locator_kind '{}' (must be vault, env, or secret_manager)",
+                    cred_ref.credential_key, cred_ref.locator_kind
+                )));
+            }
+        }
+
+        let version = self
+            .version_counter
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let bundle_id = format!("cfg_bundle_v{}_{}", version, Utc::now().format("%Y%m%d%H%M%S"));
+
+        let approval_status = request
+            .approval_reference
+            .as_ref()
+            .map(|_| "pending_review")
+            .unwrap_or("draft");
+
+        let provenance = serde_json::json!({
+            "generatedBy": "ConfigBundleService",
+            "mode": "governed",
+            "version": version,
+            "credentialReferences": request.credential_references.len(),
+            "approvalReference": request.approval_reference,
+        });
+
+        Ok(ConfigBundleArtifact {
+            bundle_id,
+            tenant_name: request.tenant_name.clone(),
+            exported_at: Utc::now().to_rfc3339(),
+            action_mode: "whitelisted_only".to_string(),
+            sections: request.sections.clone(),
+            payload: request.payload.clone(),
+            approval_status: Some(approval_status.to_string()),
+            rollout_scope: request.rollout_scope.clone(),
+            provenance: Some(provenance),
+            source: Some("governed".to_string()),
+        })
+    }
+
+    /// Get the currently active (approved) bundle for a tenant.
+    pub async fn get_active_bundle(
+        &self,
+        tenant_id: Option<&str>,
+        tenant_name: &str,
+    ) -> Result<ConfigBundleArtifact> {
+        let bundle = self.export_bundle(tenant_id, tenant_name).await?;
+        if bundle
+            .approval_status
+            .as_deref()
+            .map_or(false, |s| s == "approved" || s == "fallback")
+        {
+            return Ok(bundle);
+        }
+        // If no approved bundle, return fallback
+        Ok(fallback_bundle(tenant_name))
+    }
+
+    /// List only governed (approved + enabled) extension actions.
+    pub async fn list_governed_actions(&self) -> Result<Vec<WhitelistedExtensionAction>> {
+        let actions = self.list_whitelisted_actions().await?;
+        Ok(actions
+            .into_iter()
+            .filter(|action| action.enabled && action.approval_required.unwrap_or(false))
+            .collect())
     }
 }
 
@@ -372,5 +511,102 @@ mod tests {
             select_bundle_row(rows, Some("tenant-1"), "Tenant").expect("fallback row expected");
 
         assert_eq!(selected.id, "global-approved");
+    }
+
+    #[tokio::test]
+    async fn create_bundle_succeeds_with_valid_credential_references() {
+        let service = ConfigBundleService::new();
+        let result = service
+            .create_bundle(&CreateConfigBundleRequest {
+                tenant_id: Some("tenant-1".to_string()),
+                tenant_name: "TestTenant".to_string(),
+                sections: vec!["branding".to_string()],
+                payload: serde_json::json!({"branding": {"color": "#fff"}}),
+                credential_references: vec![ConfigBundleCredentialReference {
+                    credential_key: "api_key".to_string(),
+                    locator_kind: "vault".to_string(),
+                    locator: "vault://secrets/api_key".to_string(),
+                    environment: "production".to_string(),
+                }],
+                approval_reference: Some("approval_001".to_string()),
+                rollout_scope: None,
+            })
+            .await
+            .expect("create should succeed");
+
+        assert!(result.bundle_id.starts_with("cfg_bundle_v"));
+        assert_eq!(result.source.as_deref(), Some("governed"));
+        assert_eq!(result.approval_status.as_deref(), Some("pending_review"));
+    }
+
+    #[tokio::test]
+    async fn create_bundle_rejects_empty_locator() {
+        let service = ConfigBundleService::new();
+        let result = service
+            .create_bundle(&CreateConfigBundleRequest {
+                tenant_id: None,
+                tenant_name: "TestTenant".to_string(),
+                sections: vec![],
+                payload: serde_json::json!({}),
+                credential_references: vec![ConfigBundleCredentialReference {
+                    credential_key: "bad_key".to_string(),
+                    locator_kind: "vault".to_string(),
+                    locator: "".to_string(),
+                    environment: "production".to_string(),
+                }],
+                approval_reference: None,
+                rollout_scope: None,
+            })
+            .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn create_bundle_rejects_unsupported_locator_kind() {
+        let service = ConfigBundleService::new();
+        let result = service
+            .create_bundle(&CreateConfigBundleRequest {
+                tenant_id: None,
+                tenant_name: "TestTenant".to_string(),
+                sections: vec![],
+                payload: serde_json::json!({}),
+                credential_references: vec![ConfigBundleCredentialReference {
+                    credential_key: "key".to_string(),
+                    locator_kind: "inline_plaintext".to_string(),
+                    locator: "hunter2".to_string(),
+                    environment: "staging".to_string(),
+                }],
+                approval_reference: None,
+                rollout_scope: None,
+            })
+            .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn get_active_bundle_returns_fallback_without_pool() {
+        let service = ConfigBundleService::new();
+        let bundle = service
+            .get_active_bundle(Some("tenant-1"), "TestTenant")
+            .await
+            .expect("should return fallback");
+        assert_eq!(bundle.source.as_deref(), Some("fallback"));
+    }
+
+    #[tokio::test]
+    async fn list_governed_actions_filters_to_approval_required() {
+        let service = ConfigBundleService::new();
+        let actions = service
+            .list_governed_actions()
+            .await
+            .expect("should list governed actions");
+        // All fallback actions have approval_required = true and enabled = true
+        assert_eq!(actions.len(), 3);
+        for action in &actions {
+            assert!(action.enabled);
+            assert_eq!(action.approval_required, Some(true));
+        }
     }
 }

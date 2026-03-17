@@ -213,6 +213,9 @@ async fn setup_portal_app() -> TestPortalApp {
         ctr_service: None,
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
+        document_storage: None,
+            kyc_service: None,
+            kyt_service: None,
     };
 
     let router = create_router(app_state);

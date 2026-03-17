@@ -2,6 +2,8 @@
 
 This document outlines the security measures implemented in RampOS and serves as a checklist for security audits.
 
+> **Scope note**: This checklist reflects the *current operational state* of the codebase. Items marked `[ ]` are explicitly **not implemented** in the current release candidate. The internal readiness gate ([`docs/operations/internal-readiness-gate.md`](operations/internal-readiness-gate.md)) references this checklist but does **not** require external audit completion for this cycle.
+
 ## 1. Authentication & Authorization
 
 ### API Authentication
@@ -70,10 +72,11 @@ This document outlines the security measures implemented in RampOS and serves as
 ## 5. Rate Limiting & DDoS Protection
 
 ### Rate Limiting
-- [x] Sliding window rate limiter
-- [x] Per-tenant limits
+- [x] Sliding window rate limiter (`crates/ramp-api/src/middleware/rate_limit.rs`)
+- [x] Per-tenant limits (`crates/ramp-api/src/middleware/tenant.rs`)
 - [x] Per-endpoint limits for sensitive operations
-- [ ] Implement adaptive rate limiting
+- [x] Tiered rate limiting by plan/role (`crates/ramp-api/src/middleware/tiered_rate_limit.rs`)
+- [ ] Implement adaptive rate limiting — *not implemented; current limits are static*
 
 ### DDoS Mitigation
 - [x] Request timeout configuration
@@ -95,9 +98,9 @@ This document outlines the security measures implemented in RampOS and serves as
 - [x] Separate secrets per environment
 
 ### Production Recommendations
-- [ ] Integrate with HashiCorp Vault or AWS Secrets Manager
-- [ ] Implement secret rotation
-- [ ] Audit secret access
+- [ ] Integrate with HashiCorp Vault or AWS Secrets Manager — *not implemented; current secrets are env vars*
+- [ ] Implement secret rotation — *not implemented; `scripts/rotate-secrets.sh` exists but is manual*
+- [ ] Audit secret access — *not implemented*
 
 ## 8. Logging & Monitoring
 
@@ -115,7 +118,7 @@ This document outlines the security measures implemented in RampOS and serves as
 ### Alerting
 - [x] OpenTelemetry integration
 - [x] Prometheus metrics
-- [ ] Security-specific alerts (brute force, unusual patterns)
+- [ ] Security-specific alerts (brute force, unusual patterns) — *not implemented; no code for auth-abuse detection exists*
 
 ## 9. Database Security
 
@@ -279,5 +282,5 @@ Before going to production, verify:
 
 ---
 
-Last updated: 2026-01-23
-Version: 1.0.0
+Last updated: 2026-03-16
+Version: 1.1.0 — reconciled with current operational state per T-RR-004

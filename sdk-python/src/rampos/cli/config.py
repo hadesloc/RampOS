@@ -107,4 +107,6 @@ def build_cli_context(
         body=getattr(args, "body", None),
         body_file=getattr(args, "body_file", None),
         body_stdin=bool(getattr(args, "body_stdin", False)),
+        yes=bool(getattr(args, "yes", False)),
+        dry_run=bool(getattr(args, "dry_run", False)),
     )
