@@ -497,6 +497,8 @@ pub fn create_router(state: AppState) -> Router {
             "/fraud/review",
             post(handlers::admin::fraud::submit_fraud_review),
         )
+        // Production readiness gate
+        .route("/readiness", get(handlers::admin::readiness_gate::get_readiness))
         .with_state(state.clone());
 
     // Admin Reports - needs to be separated or use AppState if ReportGenerator is in AppState
@@ -635,9 +637,22 @@ pub fn create_router(state: AppState) -> Router {
         .route("/:id/verify-dns", post(handlers::domain::verify_dns))
         .route("/:id/provision-ssl", post(handlers::domain::provision_ssl))
         .with_state(state.clone());
+
+    // Admin authentication routes (login, refresh, logout) — no admin key required
+    let admin_auth_routes = if let Some(ref pool) = state.db_pool {
+        Router::new()
+            .route("/auth/login", post(handlers::admin::admin_auth::login))
+            .route("/auth/refresh", post(handlers::admin::admin_auth::refresh))
+            .route("/auth/logout", post(handlers::admin::admin_auth::logout))
+            .with_state(pool.clone())
+    } else {
+        Router::new()
+    };
+
     // Combine them
     let admin_routes = Router::new()
         .merge(admin_general_routes)
+        .merge(admin_auth_routes)
         .merge(tenant_routes)
         .merge(tier_routes)
         .merge(bridge_routes)
@@ -646,6 +661,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/reports", report_routes)
         .nest("/sandbox", sandbox_routes)
         .nest("/domains", domain_routes);
+
 
     // Yield Strategy routes
     let yield_routes = Router::new()

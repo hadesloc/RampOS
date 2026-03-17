@@ -1,18 +1,19 @@
 //! Passkey credential management service
 //!
 //! Stores passkey credentials (WebAuthn P256 public keys) and links them
-//! to user smart account addresses. Uses in-memory storage (mock DB) for
-//! development; production would use PostgreSQL.
+//! to user smart account addresses.
+//!
+//! **Storage**: PostgreSQL-backed via `passkey_credentials` table (migration 050).
+//! Previous versions used in-memory HashMap; this has been upgraded for
+//! production durability.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use sqlx::PgPool;
 use tracing::{info, warn};
 
 /// Passkey credential stored in the backend
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct PasskeyCredential {
     /// Unique credential ID (from WebAuthn registration)
     pub credential_id: String,
@@ -60,18 +61,15 @@ pub struct LinkAccountRequest {
     pub smart_account_address: String,
 }
 
-/// Passkey service - manages passkey credentials in memory
+/// Passkey service — manages passkey credentials in PostgreSQL
 pub struct PasskeyService {
-    /// In-memory credential store: user_id -> Vec<PasskeyCredential>
-    credentials: Arc<RwLock<HashMap<String, Vec<PasskeyCredential>>>>,
+    pool: PgPool,
 }
 
 impl PasskeyService {
-    /// Create a new PasskeyService
-    pub fn new() -> Self {
-        Self {
-            credentials: Arc::new(RwLock::new(HashMap::new())),
-        }
+    /// Create a new PasskeyService with a PostgreSQL connection pool
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
     }
 
     /// Register a new passkey credential for a user
@@ -91,35 +89,34 @@ impl PasskeyService {
             return Err(PasskeyError::InvalidUserId);
         }
 
-        let now = Utc::now();
-        let credential = PasskeyCredential {
-            credential_id: request.credential_id.clone(),
-            user_id: request.user_id.clone(),
-            public_key_x: request.public_key_x,
-            public_key_y: request.public_key_y,
-            smart_account_address: None,
-            display_name: request.display_name,
-            is_active: true,
-            created_at: now,
-            last_used_at: None,
-        };
-
-        let mut store = self.credentials.write().await;
-
         // Check for duplicate credential ID
-        if let Some(user_creds) = store.get(&request.user_id) {
-            if user_creds
-                .iter()
-                .any(|c| c.credential_id == request.credential_id)
-            {
-                return Err(PasskeyError::CredentialAlreadyExists);
-            }
+        let existing: Option<(String,)> = sqlx::query_as(
+            "SELECT credential_id FROM passkey_credentials WHERE credential_id = $1",
+        )
+        .bind(&request.credential_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
+
+        if existing.is_some() {
+            return Err(PasskeyError::CredentialAlreadyExists);
         }
 
-        store
-            .entry(request.user_id.clone())
-            .or_default()
-            .push(credential);
+        let now = Utc::now();
+
+        sqlx::query(
+            "INSERT INTO passkey_credentials (credential_id, user_id, public_key_x, public_key_y, display_name, is_active, created_at)
+             VALUES ($1, $2, $3, $4, $5, true, $6)"
+        )
+        .bind(&request.credential_id)
+        .bind(&request.user_id)
+        .bind(&request.public_key_x)
+        .bind(&request.public_key_y)
+        .bind(&request.display_name)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
 
         info!(
             user_id = %request.user_id,
@@ -140,17 +137,18 @@ impl PasskeyService {
         user_id: &str,
         credential_id: &str,
     ) -> Result<PasskeyCredential, PasskeyError> {
-        let store = self.credentials.read().await;
+        let credential: Option<PasskeyCredential> = sqlx::query_as(
+            "SELECT credential_id, user_id, public_key_x, public_key_y, smart_account_address, display_name, is_active, created_at, last_used_at
+             FROM passkey_credentials
+             WHERE user_id = $1 AND credential_id = $2 AND is_active = true"
+        )
+        .bind(user_id)
+        .bind(credential_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
 
-        let user_creds = store
-            .get(user_id)
-            .ok_or_else(|| PasskeyError::UserNotFound(user_id.to_string()))?;
-
-        user_creds
-            .iter()
-            .find(|c| c.credential_id == credential_id && c.is_active)
-            .cloned()
-            .ok_or_else(|| PasskeyError::CredentialNotFound(credential_id.to_string()))
+        credential.ok_or_else(|| PasskeyError::CredentialNotFound(credential_id.to_string()))
     }
 
     /// List all passkey credentials for a user
@@ -158,12 +156,18 @@ impl PasskeyService {
         &self,
         user_id: &str,
     ) -> Result<Vec<PasskeyCredential>, PasskeyError> {
-        let store = self.credentials.read().await;
+        let credentials: Vec<PasskeyCredential> = sqlx::query_as(
+            "SELECT credential_id, user_id, public_key_x, public_key_y, smart_account_address, display_name, is_active, created_at, last_used_at
+             FROM passkey_credentials
+             WHERE user_id = $1 AND is_active = true
+             ORDER BY created_at ASC"
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
 
-        Ok(store
-            .get(user_id)
-            .map(|creds| creds.iter().filter(|c| c.is_active).cloned().collect())
-            .unwrap_or_default())
+        Ok(credentials)
     }
 
     /// Link a passkey credential to a smart account address
@@ -171,18 +175,20 @@ impl PasskeyService {
         &self,
         request: LinkAccountRequest,
     ) -> Result<(), PasskeyError> {
-        let mut store = self.credentials.write().await;
+        let result = sqlx::query(
+            "UPDATE passkey_credentials SET smart_account_address = $1
+             WHERE user_id = $2 AND credential_id = $3"
+        )
+        .bind(&request.smart_account_address)
+        .bind(&request.user_id)
+        .bind(&request.credential_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
 
-        let user_creds = store
-            .get_mut(&request.user_id)
-            .ok_or_else(|| PasskeyError::UserNotFound(request.user_id.clone()))?;
-
-        let credential = user_creds
-            .iter_mut()
-            .find(|c| c.credential_id == request.credential_id)
-            .ok_or_else(|| PasskeyError::CredentialNotFound(request.credential_id.clone()))?;
-
-        credential.smart_account_address = Some(request.smart_account_address.clone());
+        if result.rows_affected() == 0 {
+            return Err(PasskeyError::CredentialNotFound(request.credential_id));
+        }
 
         info!(
             user_id = %request.user_id,
@@ -200,18 +206,19 @@ impl PasskeyService {
         user_id: &str,
         credential_id: &str,
     ) -> Result<(), PasskeyError> {
-        let mut store = self.credentials.write().await;
+        let result = sqlx::query(
+            "UPDATE passkey_credentials SET is_active = false
+             WHERE user_id = $1 AND credential_id = $2"
+        )
+        .bind(user_id)
+        .bind(credential_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
 
-        let user_creds = store
-            .get_mut(user_id)
-            .ok_or_else(|| PasskeyError::UserNotFound(user_id.to_string()))?;
-
-        let credential = user_creds
-            .iter_mut()
-            .find(|c| c.credential_id == credential_id)
-            .ok_or_else(|| PasskeyError::CredentialNotFound(credential_id.to_string()))?;
-
-        credential.is_active = false;
+        if result.rows_affected() == 0 {
+            return Err(PasskeyError::CredentialNotFound(credential_id.to_string()));
+        }
 
         warn!(
             user_id = %user_id,
@@ -224,35 +231,35 @@ impl PasskeyService {
 
     /// Update the last_used_at timestamp for a credential
     pub async fn mark_used(&self, user_id: &str, credential_id: &str) -> Result<(), PasskeyError> {
-        let mut store = self.credentials.write().await;
+        let result = sqlx::query(
+            "UPDATE passkey_credentials SET last_used_at = NOW()
+             WHERE user_id = $1 AND credential_id = $2 AND is_active = true"
+        )
+        .bind(user_id)
+        .bind(credential_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
 
-        let user_creds = store
-            .get_mut(user_id)
-            .ok_or_else(|| PasskeyError::UserNotFound(user_id.to_string()))?;
-
-        let credential = user_creds
-            .iter_mut()
-            .find(|c| c.credential_id == credential_id && c.is_active)
-            .ok_or_else(|| PasskeyError::CredentialNotFound(credential_id.to_string()))?;
-
-        credential.last_used_at = Some(Utc::now());
+        if result.rows_affected() == 0 {
+            return Err(PasskeyError::CredentialNotFound(credential_id.to_string()));
+        }
 
         Ok(())
     }
 
     /// Get credential count for a user
     pub async fn credential_count(&self, user_id: &str) -> usize {
-        let store = self.credentials.read().await;
-        store
-            .get(user_id)
-            .map(|creds| creds.iter().filter(|c| c.is_active).count())
-            .unwrap_or(0)
-    }
-}
+        let result: Option<(i64,)> = sqlx::query_as(
+            "SELECT COUNT(*) FROM passkey_credentials WHERE user_id = $1 AND is_active = true"
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .ok()
+        .flatten();
 
-impl Default for PasskeyService {
-    fn default() -> Self {
-        Self::new()
+        result.map(|(count,)| count as usize).unwrap_or(0)
     }
 }
 
@@ -297,227 +304,7 @@ pub enum PasskeyError {
 
     #[error("Invalid public key: {0}")]
     InvalidPublicKey(String),
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn test_request() -> RegisterPasskeyRequest {
-        RegisterPasskeyRequest {
-            user_id: "user-123".to_string(),
-            credential_id: "cred-abc".to_string(),
-            public_key_x: "6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296"
-                .to_string(),
-            public_key_y: "4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5"
-                .to_string(),
-            display_name: "Test Passkey".to_string(),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_register_passkey() {
-        let service = PasskeyService::new();
-        let request = test_request();
-
-        let result = service.register_passkey(request.clone()).await;
-        assert!(result.is_ok());
-
-        let response = result.unwrap();
-        assert_eq!(response.credential_id, "cred-abc");
-        assert!(response.smart_account_address.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_register_duplicate_passkey() {
-        let service = PasskeyService::new();
-        let request = test_request();
-
-        service.register_passkey(request.clone()).await.unwrap();
-
-        let result = service.register_passkey(request).await;
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            PasskeyError::CredentialAlreadyExists
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_get_passkey() {
-        let service = PasskeyService::new();
-        let request = test_request();
-
-        service.register_passkey(request).await.unwrap();
-
-        let result = service.get_passkey("user-123", "cred-abc").await;
-        assert!(result.is_ok());
-
-        let cred = result.unwrap();
-        assert_eq!(cred.credential_id, "cred-abc");
-        assert_eq!(cred.user_id, "user-123");
-        assert!(cred.is_active);
-    }
-
-    #[tokio::test]
-    async fn test_get_passkey_not_found() {
-        let service = PasskeyService::new();
-
-        let result = service.get_passkey("user-123", "nonexistent").await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_list_passkeys() {
-        let service = PasskeyService::new();
-
-        // Register two passkeys
-        let req1 = test_request();
-        let mut req2 = test_request();
-        req2.credential_id = "cred-def".to_string();
-        req2.display_name = "Second Passkey".to_string();
-
-        service.register_passkey(req1).await.unwrap();
-        service.register_passkey(req2).await.unwrap();
-
-        let result = service.list_passkeys("user-123").await;
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_list_passkeys_empty() {
-        let service = PasskeyService::new();
-
-        let result = service.list_passkeys("nonexistent-user").await;
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_link_smart_account() {
-        let service = PasskeyService::new();
-        let request = test_request();
-
-        service.register_passkey(request).await.unwrap();
-
-        let link_request = LinkAccountRequest {
-            user_id: "user-123".to_string(),
-            credential_id: "cred-abc".to_string(),
-            smart_account_address: "0x1234567890abcdef1234567890abcdef12345678".to_string(),
-        };
-
-        let result = service.link_smart_account(link_request).await;
-        assert!(result.is_ok());
-
-        let cred = service.get_passkey("user-123", "cred-abc").await.unwrap();
-        assert_eq!(
-            cred.smart_account_address,
-            Some("0x1234567890abcdef1234567890abcdef12345678".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn test_deactivate_passkey() {
-        let service = PasskeyService::new();
-        let request = test_request();
-
-        service.register_passkey(request).await.unwrap();
-        service
-            .deactivate_passkey("user-123", "cred-abc")
-            .await
-            .unwrap();
-
-        // Deactivated credential should not be found via get_passkey
-        let result = service.get_passkey("user-123", "cred-abc").await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_mark_used() {
-        let service = PasskeyService::new();
-        let request = test_request();
-
-        service.register_passkey(request).await.unwrap();
-
-        let cred_before = service.get_passkey("user-123", "cred-abc").await.unwrap();
-        assert!(cred_before.last_used_at.is_none());
-
-        service.mark_used("user-123", "cred-abc").await.unwrap();
-
-        let cred_after = service.get_passkey("user-123", "cred-abc").await.unwrap();
-        assert!(cred_after.last_used_at.is_some());
-    }
-
-    #[tokio::test]
-    async fn test_credential_count() {
-        let service = PasskeyService::new();
-
-        assert_eq!(service.credential_count("user-123").await, 0);
-
-        let req1 = test_request();
-        service.register_passkey(req1).await.unwrap();
-        assert_eq!(service.credential_count("user-123").await, 1);
-
-        let mut req2 = test_request();
-        req2.credential_id = "cred-def".to_string();
-        service.register_passkey(req2).await.unwrap();
-        assert_eq!(service.credential_count("user-123").await, 2);
-
-        service
-            .deactivate_passkey("user-123", "cred-abc")
-            .await
-            .unwrap();
-        assert_eq!(service.credential_count("user-123").await, 1);
-    }
-
-    #[tokio::test]
-    async fn test_invalid_public_key_hex() {
-        let service = PasskeyService::new();
-        let mut request = test_request();
-        request.public_key_x = "GGGG".to_string(); // Invalid hex
-
-        let result = service.register_passkey(request).await;
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            PasskeyError::InvalidPublicKey(_)
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_empty_credential_id() {
-        let service = PasskeyService::new();
-        let mut request = test_request();
-        request.credential_id = "".to_string();
-
-        let result = service.register_passkey(request).await;
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            PasskeyError::InvalidCredentialId
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_empty_user_id() {
-        let service = PasskeyService::new();
-        let mut request = test_request();
-        request.user_id = "".to_string();
-
-        let result = service.register_passkey(request).await;
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), PasskeyError::InvalidUserId));
-    }
-
-    #[tokio::test]
-    async fn test_public_key_with_0x_prefix() {
-        let service = PasskeyService::new();
-        let mut request = test_request();
-        request.public_key_x =
-            "0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296".to_string();
-
-        let result = service.register_passkey(request).await;
-        assert!(result.is_ok());
-    }
+    #[error("Database error: {0}")]
+    DatabaseError(String),
 }

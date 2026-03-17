@@ -126,6 +126,9 @@ pub enum Error {
 
     #[error("Encryption error: {0}")]
     Encryption(String),
+
+    #[error("Configuration error: {0}")]
+    Config(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -210,6 +213,7 @@ impl Error {
             Error::Authentication(_) => "AUTHENTICATION_ERROR",
             Error::External(_) => "EXTERNAL_ERROR",
             Error::Encryption(_) => "ENCRYPTION_ERROR",
+            Error::Config(_) => "CONFIG_ERROR",
         }
     }
 

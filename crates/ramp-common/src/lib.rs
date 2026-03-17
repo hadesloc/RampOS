@@ -8,6 +8,7 @@ pub mod intent_test;
 pub mod ledger;
 pub mod licensing;
 pub mod resilience;
+pub mod secrets;
 pub mod telemetry;
 pub mod types;
 

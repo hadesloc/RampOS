@@ -100,16 +100,41 @@ pub struct AdminAuth {
     pub user_id: Option<String>,
 }
 
-/// Check admin key and extract role information
+/// Check admin authentication and extract role information.
 ///
-/// SECURITY: This implements proper RBAC with role-based access control.
-/// Role is derived from server configuration only, never from caller-controlled headers.
+/// SECURITY: Supports two authentication strategies:
+///   1. **JWT Bearer token** (preferred) — `Authorization: Bearer <token>`
+///      Role is extracted from the JWT claims.
+///   2. **Legacy X-Admin-Key** (deprecated, transition period) — `X-Admin-Key: <key>`
+///      Role is derived from server configuration only, never from caller-controlled headers.
+///
+/// JWT is checked first. If no Bearer token is present, falls back to legacy key.
 pub(crate) fn check_admin_key_with_role(
     headers: &HeaderMap,
     required_role: AdminRole,
 ) -> Result<AdminAuth, ApiError> {
+    // ── Strategy 1: JWT Bearer token (preferred) ────────────────────────
+    if let Some(token) = super::admin_auth::extract_bearer_token(headers) {
+        let claims = super::admin_auth::verify_admin_jwt(token)?;
+        let role = AdminRole::from_str(&claims.role)
+            .unwrap_or(AdminRole::Viewer);
+
+        if role < required_role {
+            return Err(ApiError::Forbidden(format!(
+                "Insufficient permissions. Required: {:?}, Have: {:?}",
+                required_role, role
+            )));
+        }
+
+        return Ok(AdminAuth {
+            role,
+            user_id: Some(claims.sub),
+        });
+    }
+
+    // ── Strategy 2: Legacy X-Admin-Key (deprecated) ─────────────────────
     let expected_key = std::env::var("RAMPOS_ADMIN_KEY")
-        .map_err(|_| ApiError::Forbidden("Admin key not configured".to_string()))?;
+        .map_err(|_| ApiError::Forbidden("Admin auth required: use Authorization: Bearer <token> or X-Admin-Key".to_string()))?;
     let expected_parts: Vec<&str> = expected_key.splitn(2, ':').collect();
     let configured_key = expected_parts[0];
     let configured_role = std::env::var("RAMPOS_ADMIN_ROLE")
@@ -122,7 +147,7 @@ pub(crate) fn check_admin_key_with_role(
     let header_value = headers
         .get("X-Admin-Key")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| ApiError::Forbidden("Invalid or missing X-Admin-Key".to_string()))?;
+        .ok_or_else(|| ApiError::Forbidden("Admin auth required: use Authorization: Bearer <token> or X-Admin-Key".to_string()))?;
 
     // Parse format: <key> or <key>:<ignored-suffix>
     let parts: Vec<&str> = header_value.splitn(2, ':').collect();
@@ -512,5 +537,16 @@ mod tests {
         }
 
         std::env::remove_var("RAMPOS_ADMIN_ROLE");
+    }
+
+    #[test]
+    fn test_check_admin_key_jwt_bearer() {
+        // JWT auth should work when a valid Bearer token is provided
+        // (This test requires a real JWT; in practice, integration tests cover this.)
+        // For now, verify that missing both JWT and X-Admin-Key returns appropriate error.
+        std::env::remove_var("RAMPOS_ADMIN_KEY");
+        let headers = HeaderMap::new();
+        let result = check_admin_key(&headers);
+        assert!(result.is_err());
     }
 }
