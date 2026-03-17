@@ -412,6 +412,42 @@ pub fn create_router(state: AppState) -> Router {
             get(handlers::admin::export_config_bundle),
         )
         .route("/extensions", get(handlers::admin::list_whitelisted_extension_actions))
+        // Provider routing
+        .route(
+            "/provider-routing/snapshot",
+            get(handlers::admin::get_provider_routing_snapshot),
+        )
+        .route(
+            "/provider-routing/evaluate",
+            post(handlers::admin::evaluate_provider_routing),
+        )
+        // Execution explainability
+        .route(
+            "/execution-explainability/explain",
+            post(handlers::admin::explain_route),
+        )
+        .route(
+            "/execution-explainability/compare",
+            post(handlers::admin::compare_routes),
+        )
+        // Commercial readiness
+        .route(
+            "/commercial-readiness/snapshot",
+            get(handlers::admin::get_commercial_readiness_snapshot),
+        )
+        .route(
+            "/commercial-readiness/check",
+            post(handlers::admin::check_extension_enablement),
+        )
+        // Intelligence sequencing
+        .route(
+            "/intelligence/snapshot",
+            get(handlers::admin::get_intelligence_sequencing_snapshot),
+        )
+        .route(
+            "/intelligence/check-dependencies",
+            post(handlers::admin::check_package_dependencies),
+        )
         // Treasury control tower
         .route(
             "/treasury/workbench",
