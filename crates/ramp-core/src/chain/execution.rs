@@ -11,7 +11,6 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
 use super::solver::{ExecutionRoute, RouteAction};
-use super::{ChainError, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum StepStatus {
@@ -197,7 +196,7 @@ impl ExecutionEngine {
     }
 
     /// Attempt recovery from partial execution
-    pub fn recover(&self, result: &ExecutionResult, route: &ExecutionRoute) -> ExecutionResult {
+    pub fn recover(&self, result: &ExecutionResult, _route: &ExecutionRoute) -> ExecutionResult {
         let start = Instant::now();
         let exec_id = format!("{}-recovery", result.id);
 
@@ -240,6 +239,7 @@ impl ExecutionEngine {
     }
 
     /// Check if a step has timed out
+    #[cfg_attr(not(test), allow(dead_code))]
     fn is_timed_out(&self, step: &ExecutionStep) -> bool {
         if let Some(started_at) = step.started_at {
             if step.completed_at.is_none() {

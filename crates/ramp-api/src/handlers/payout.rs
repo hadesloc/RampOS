@@ -5,6 +5,7 @@ use axum::{
 };
 use ramp_common::types::*;
 use ramp_core::service::payout::{CreatePayoutRequest as ServiceRequest, PayoutService};
+#[allow(unused_imports)]
 use serde_json::json;
 use std::sync::Arc;
 use tracing::{info, instrument};

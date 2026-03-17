@@ -37,6 +37,7 @@ struct ParsedLpKey {
     secret: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, FromRow)]
 struct RegisteredLpKeyRow {
     lp_id: String,

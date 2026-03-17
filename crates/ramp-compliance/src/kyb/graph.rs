@@ -287,6 +287,7 @@ fn sample_reviews(scenario: Option<&str>) -> Vec<KybGraphReviewItem> {
     }]
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, FromRow)]
 struct KybEntityRow {
     id: String,
@@ -298,6 +299,7 @@ struct KybEntityRow {
     metadata: serde_json::Value,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, FromRow)]
 struct KybEdgeRow {
     id: String,

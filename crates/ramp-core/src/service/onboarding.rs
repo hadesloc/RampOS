@@ -295,7 +295,6 @@ pub(crate) fn validate_webhook_url(url: &str) -> Result<()> {
 mod tests {
     use super::*;
     use crate::test_utils::{MockLedgerRepository, MockTenantRepository};
-    use rust_decimal_macros::dec;
 
     #[tokio::test]
     async fn test_create_tenant() {
@@ -346,7 +345,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_generate_api_keys() {
+    async fn test_generate_api_credentials() {
         let tenant_repo = Arc::new(MockTenantRepository::new());
         let ledger_repo = Arc::new(MockLedgerRepository::new());
         let ledger_service = Arc::new(LedgerService::new(ledger_repo));
@@ -358,9 +357,9 @@ mod tests {
             .unwrap();
         let tenant_id = TenantId::new(tenant.id);
 
-        let keys = service.generate_api_keys(&tenant_id).await.unwrap();
-        assert!(keys.public_key.starts_with("ramp_"));
-        assert!(keys.secret_key.starts_with("ramp_secret_"));
+        let credentials = service.generate_api_credentials(&tenant_id).await.unwrap();
+        assert!(credentials.api_key.starts_with("ramp_"));
+        assert!(credentials.api_secret.starts_with("ramp_secret_"));
     }
 
     #[tokio::test]

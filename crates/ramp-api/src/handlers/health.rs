@@ -1,5 +1,6 @@
 use axum::Json;
 use chrono::Utc;
+#[allow(unused_imports)]
 use serde_json::json;
 
 use crate::dto::HealthResponse;

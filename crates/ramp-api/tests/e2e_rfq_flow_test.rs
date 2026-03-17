@@ -14,7 +14,7 @@
 
 use ramp_common::types::TenantId;
 use ramp_core::event::InMemoryEventPublisher;
-use ramp_core::repository::{PgRfqRepository, RfqRepository};
+use ramp_core::repository::PgRfqRepository;
 use ramp_core::service::rfq::{CreateRfqRequest, RfqService, SubmitBidRequest};
 use rust_decimal_macros::dec;
 use sqlx::PgPool;

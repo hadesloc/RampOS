@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{info, instrument};
 
+#[allow(unused_imports)]
 use serde_json::json;
 
 use ramp_common::types::IntentId;

@@ -4,6 +4,7 @@ use axum::{
 };
 use ramp_common::types::*;
 use ramp_core::service::ledger::LedgerService;
+#[allow(unused_imports)]
 use serde_json::json;
 use std::sync::Arc;
 

@@ -10,7 +10,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use ramp_common::types::CryptoSymbol;
@@ -53,6 +53,7 @@ pub struct LockedRate {
 }
 
 /// Simulated price source entry
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct PriceSource {
     name: String,

@@ -8,6 +8,7 @@ use ramp_core::service::payin::{
     ConfirmPayinRequest as ServiceConfirmRequest, CreatePayinRequest as ServiceRequest,
     PayinService,
 };
+#[allow(unused_imports)]
 use serde_json::json;
 use std::sync::Arc;
 use tracing::{info, instrument};

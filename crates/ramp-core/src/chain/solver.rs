@@ -454,6 +454,7 @@ impl IntentSolver {
     }
 
     /// Generate cache key
+    #[cfg_attr(not(test), allow(dead_code))]
     fn cache_key(intent: &Intent) -> String {
         Self::cache_key_with_policy(intent, None)
     }

@@ -56,6 +56,7 @@ impl WebhookEventType {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn build_catalog_payload(event: &WebhookEventRow) -> Result<serde_json::Value> {
     let catalog_entry = EventCatalog::current()
         .find(&event.event_type)

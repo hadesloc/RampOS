@@ -22,12 +22,9 @@ use ramp_core::service::{
     ledger::LedgerService, payin::PayinService, payout::PayoutService, trade::TradeService,
 };
 use ramp_core::test_utils::*;
-use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::sync::{Arc, Mutex, OnceLock};
 use tower::ServiceExt;
-
-const TEST_API_KEY: &str = "admin_auth_test_api_key";
 
 fn env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();

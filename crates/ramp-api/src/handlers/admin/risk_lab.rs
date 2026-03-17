@@ -544,7 +544,6 @@ mod tests {
     use super::*;
     use crate::middleware::tenant::{TenantContext, TenantTier};
     use crate::router::AppState;
-    use chrono::Utc;
     use ramp_common::types::TenantId;
     use ramp_compliance::{
         case::CaseManager, reports::ReportGenerator, storage::MockDocumentStorage, InMemoryCaseStore,

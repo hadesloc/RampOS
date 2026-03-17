@@ -136,6 +136,7 @@ impl BridgeTransferStatus {
 // ---- 1inch Swap Backend ----
 
 /// 1inch API response for quote endpoint
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct OneInchQuoteResponse {
@@ -147,6 +148,7 @@ struct OneInchQuoteResponse {
 }
 
 /// 1inch API response for swap endpoint
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct OneInchSwapResponse {
@@ -154,6 +156,7 @@ struct OneInchSwapResponse {
     tx: OneInchTxData,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct OneInchTxData {
@@ -351,6 +354,7 @@ struct ParaSwapPriceResponse {
     price_route: ParaSwapPriceRoute,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ParaSwapPriceRoute {
@@ -366,6 +370,7 @@ struct ParaSwapPriceRoute {
 }
 
 /// ParaSwap transaction build response
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ParaSwapTxResponse {
@@ -822,6 +827,7 @@ struct AcrossSuggestedFeesResponse {
     estimated_fill_time_secs: Option<u64>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AcrossFee {
@@ -832,6 +838,7 @@ struct AcrossFee {
 }
 
 /// Across deposit status response
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AcrossDepositStatusResponse {

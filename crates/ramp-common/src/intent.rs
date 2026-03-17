@@ -1,7 +1,7 @@
 use crate::types::*;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use tracing::{error, warn};
+use tracing::error;
 
 /// Error type for invalid state string parsing
 #[derive(Debug, Clone, PartialEq, Eq)]

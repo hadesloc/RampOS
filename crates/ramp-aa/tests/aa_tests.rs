@@ -10,7 +10,7 @@
 //! - EIP-7702 authorization, delegation, session management
 //! - Types and serialization
 
-use alloy::primitives::{Address, Bytes, U256};
+use ramp_aa::primitives::{Address, Bytes, U256};
 use ramp_aa::*;
 use ramp_common::types::{TenantId, UserId};
 use std::collections::HashMap;

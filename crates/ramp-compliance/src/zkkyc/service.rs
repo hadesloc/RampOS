@@ -59,6 +59,7 @@ pub struct VerificationResult {
 }
 
 /// Internal record of a verified user.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct VerifiedUser {
     commitment_hash: String,

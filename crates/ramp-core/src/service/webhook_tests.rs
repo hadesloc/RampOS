@@ -5,7 +5,6 @@ use ramp_common::{
     types::{EventId, IntentId, TenantId},
     Result,
 };
-use serde_json::Value;
 
 use crate::repository::{
     tenant::{TenantRepository, TenantRow},

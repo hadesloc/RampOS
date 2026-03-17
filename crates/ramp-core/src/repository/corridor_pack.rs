@@ -243,6 +243,7 @@ struct CorridorPackRow {
     metadata: serde_json::Value,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, FromRow)]
 struct EndpointRow {
     id: String,
@@ -259,6 +260,7 @@ struct EndpointRow {
     metadata: serde_json::Value,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, FromRow)]
 struct FeeProfileRow {
     id: String,
@@ -271,6 +273,7 @@ struct FeeProfileRow {
     metadata: serde_json::Value,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, FromRow)]
 struct CutoffPolicyRow {
     id: String,
@@ -283,6 +286,7 @@ struct CutoffPolicyRow {
     metadata: serde_json::Value,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, FromRow)]
 struct ComplianceHookRow {
     id: String,
@@ -294,6 +298,7 @@ struct ComplianceHookRow {
     metadata: serde_json::Value,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, FromRow)]
 struct RolloutScopeRow {
     id: String,
@@ -307,6 +312,7 @@ struct RolloutScopeRow {
     metadata: serde_json::Value,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, FromRow)]
 struct EligibilityRuleRow {
     id: String,

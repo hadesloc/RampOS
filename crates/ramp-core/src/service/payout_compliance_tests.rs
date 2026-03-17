@@ -1030,7 +1030,7 @@ async fn test_payout_sanctions_screening_before_balance_check() {
 /// Sanctions check interaction: after a Tier0 user gets upgraded to Tier1, payouts should work.
 #[tokio::test]
 async fn test_payout_sanctions_cleared_after_tier_upgrade() {
-    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+    let (service, _intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
 
     // Start as Tier0
     user_repo.add_user(make_active_user("user_upg", "tenant_upg", 0));
@@ -1149,7 +1149,7 @@ async fn test_payout_full_reversal_ledger_balance() {
 /// Velocity across multiple tenants: payouts for different tenants should have independent limits.
 #[tokio::test]
 async fn test_payout_velocity_independent_per_tenant() {
-    let (service, intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
+    let (service, _intent_repo, ledger_repo, user_repo, _event_publisher) = setup_payout_service();
 
     // Setup two tenants with same user ID but different tenant IDs
     user_repo.add_user(make_active_user("user_mt", "tenant_A", 1));
@@ -1652,7 +1652,7 @@ async fn test_payout_zero_amount_handling() {
     let result = service.create_payout(req).await;
 
     match result {
-        Ok(res) => {
+        Ok(_res) => {
             // If zero-amount is accepted, verify ledger integrity
             let txs = ledger_repo.transactions.lock().unwrap();
             for tx in txs.iter() {

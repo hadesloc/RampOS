@@ -1,7 +1,6 @@
 use alloy::primitives::{keccak256, Address, Bytes, U256};
 use async_trait::async_trait;
 use chrono::Utc;
-use k256::ecdsa::signature::hazmat::PrehashVerifier;
 use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use ramp_common::{types::TenantId, Result};

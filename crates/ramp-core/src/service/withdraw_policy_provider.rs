@@ -89,7 +89,6 @@ mod tests {
     use super::*;
     use crate::repository::intent::IntentRow;
     use crate::test_utils::MockIntentRepository;
-    use chrono::Duration;
     use rust_decimal_macros::dec;
 
     #[tokio::test]

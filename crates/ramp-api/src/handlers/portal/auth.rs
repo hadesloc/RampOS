@@ -12,7 +12,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
+use axum_extra::extract::cookie::{Cookie, CookieJar};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use uuid::Uuid;
@@ -24,8 +24,6 @@ use crate::router::AppState;
 // Cookie configuration constants
 const AUTH_COOKIE_NAME: &str = "auth_token";
 const REFRESH_COOKIE_NAME: &str = "refresh_token";
-const COOKIE_MAX_AGE_SECS: i64 = 86400; // 24 hours
-const REFRESH_COOKIE_MAX_AGE_SECS: i64 = 604800; // 7 days
 
 // ============================================================================
 // DTOs
@@ -49,15 +47,6 @@ pub struct AuthUser {
 pub struct AuthResponse {
     pub user: AuthUser,
     pub expires_at: i64,
-}
-
-/// Internal session data (not exposed to client)
-#[derive(Debug, Clone)]
-struct AuthSessionInternal {
-    access_token: String,
-    refresh_token: String,
-    expires_at: i64,
-    user: AuthUser,
 }
 
 #[derive(Debug, Clone, Deserialize, Validate)]
@@ -448,38 +437,6 @@ pub async fn check_session(
 // Helper Functions
 // ============================================================================
 
-/// Create auth cookie with security flags
-fn create_auth_cookie(name: &str, value: String, max_age_secs: i64) -> Cookie<'static> {
-    let is_secure = std::env::var("COOKIE_SECURE")
-        .map(|v| v == "true" || v == "1")
-        .unwrap_or(true); // Default to secure in production
-
-    Cookie::build((name.to_string(), value))
-        .path("/")
-        .http_only(true)
-        .secure(is_secure)
-        .same_site(SameSite::Strict)
-        .max_age(time::Duration::seconds(max_age_secs))
-        .build()
-}
-
-/// Set auth tokens as httpOnly cookies
-fn set_auth_cookies(jar: CookieJar, session: &AuthSessionInternal) -> CookieJar {
-    let auth_cookie = create_auth_cookie(
-        AUTH_COOKIE_NAME,
-        session.access_token.clone(),
-        COOKIE_MAX_AGE_SECS,
-    );
-
-    let refresh_cookie = create_auth_cookie(
-        REFRESH_COOKIE_NAME,
-        session.refresh_token.clone(),
-        REFRESH_COOKIE_MAX_AGE_SECS,
-    );
-
-    jar.add(auth_cookie).add(refresh_cookie)
-}
-
 /// Clear auth cookies by setting them with max_age = 0
 fn clear_auth_cookies(jar: CookieJar) -> CookieJar {
     let auth_cookie = Cookie::build((AUTH_COOKIE_NAME.to_string(), String::new()))
@@ -525,15 +482,5 @@ mod tests {
     fn test_generate_random_bytes() {
         let bytes = generate_random_bytes(32);
         assert_eq!(bytes.len(), 32);
-    }
-
-    #[test]
-    fn test_create_auth_cookie() {
-        std::env::set_var("COOKIE_SECURE", "false");
-        let cookie = create_auth_cookie("test_cookie", "test_value".to_string(), 3600);
-        assert_eq!(cookie.name(), "test_cookie");
-        assert_eq!(cookie.value(), "test_value");
-        assert!(cookie.http_only().unwrap_or(false));
-        assert_eq!(cookie.same_site(), Some(SameSite::Strict));
     }
 }

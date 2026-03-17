@@ -208,6 +208,7 @@ struct PartnerRow {
     metadata: serde_json::Value,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, FromRow)]
 struct CapabilityRow {
     id: String,
@@ -222,6 +223,7 @@ struct CapabilityRow {
     metadata: serde_json::Value,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, FromRow)]
 struct RolloutScopeRow {
     id: String,
@@ -236,6 +238,7 @@ struct RolloutScopeRow {
     approval_reference: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, FromRow)]
 struct HealthSignalRow {
     id: String,
@@ -248,6 +251,7 @@ struct HealthSignalRow {
     observed_at: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, FromRow)]
 struct CredentialReferenceRow {
     id: String,
@@ -259,6 +263,7 @@ struct CredentialReferenceRow {
     rotation_metadata: serde_json::Value,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, FromRow)]
 struct ApprovalReferenceRow {
     id: String,

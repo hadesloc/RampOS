@@ -279,6 +279,7 @@ fn extract_cookies(response: &axum::http::Response<Body>) -> Vec<String> {
         .collect()
 }
 
+#[allow(dead_code)]
 fn get_cookie_value(cookies: &[String], name: &str) -> Option<String> {
     for cookie in cookies {
         if cookie.starts_with(&format!("{}=", name)) {
