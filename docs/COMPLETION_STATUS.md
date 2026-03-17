@@ -1,88 +1,70 @@
 # RampOS Project Completion Status
 
-_Last updated: 2026-03-11_
+_Last updated: 2026-03-17_
 
 ---
 
-## ✅ RFQ Auction Layer — COMPLETED (2026-03-08)
+## ✅ Phase 1: Bank-Grade Core Hardening — COMPLETED (2026-03-17)
 
-Implemented a full bidirectional LP auction market, enabling competitive price discovery for USDT↔VND without modifying any existing payin/offramp code.
+Shipped JWT admin authentication, secrets abstraction, passkey PostgreSQL migration, production readiness gate, and 16 E2E tests.
 
-### New Files Created
+### New Files
 
 | File | Description |
 |------|-------------|
-| `migrations/033_rfq_auction.sql` | Tables: `rfq_requests`, `rfq_bids` — with RLS, indexes, trigger |
-| `migrations/034_lp_keys.sql` | Table: `registered_lp_keys` — LP credential store with key_hash |
-| `crates/ramp-core/src/repository/rfq.rs` | `RfqRepository` trait + `PgRfqRepository` + `InMemoryRfqRepository` (test) |
-| `crates/ramp-core/src/service/rfq.rs` | `RfqService` with hardened matching, expiry handling, stale-bid cleanup, and regression tests |
-| `crates/ramp-api/src/handlers/portal/rfq.rs` | Portal: create/get/accept/cancel RFQ |
-| `crates/ramp-api/src/handlers/admin/rfq.rs` | Admin: list open RFQs, manual finalize |
-| `crates/ramp-api/src/handlers/lp/rfq.rs` | LP: submit bid with DB-backed `registered_lp_keys` auth |
-| `crates/ramp-api/src/handlers/lp/mod.rs` | LP module root |
+| `migrations/049_admin_users.sql` | `admin_users`, `refresh_tokens`, `admin_auth_audit_log` |
+| `migrations/050_passkey_credentials.sql` | PostgreSQL-backed passkey storage |
+| `crates/ramp-api/src/handlers/admin/admin_auth.rs` | JWT login/refresh/logout, argon2id, lockout |
+| `crates/ramp-api/src/handlers/admin/readiness_gate.rs` | 7-gate production readiness endpoint |
+| `crates/ramp-common/src/secrets.rs` | `SecretProvider` trait + `EnvSecretProvider` |
+| `tests/e2e_rfq_flow_test.rs` | 3 DB-gated RFQ auction tests |
+| `tests/e2e_admin_auth_test.rs` | 7 admin auth tests + 1 DB-gated |
+| `tests/e2e_webhook_replay_test.rs` | 6 webhook replay edge case tests |
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| `crates/ramp-core/src/event.rs` | Added `publish_rfq_created`, `publish_rfq_matched` to trait + 2 impls |
-| `crates/ramp-core/src/repository/mod.rs` | Export `rfq` module |
-| `crates/ramp-core/src/service/mod.rs` | Export `rfq` module |
-| `crates/ramp-api/src/router.rs` | Added `event_publisher` field to `AppState`, mounted 4 route groups |
-| `crates/ramp-api/src/main.rs` | Wire `event_publisher` to `AppState`, added RFQ expiry background job (60s) |
-| `crates/ramp-api/src/handlers/mod.rs` | Added `pub mod lp` |
-| `crates/ramp-api/src/handlers/admin/mod.rs` | Added `pub mod rfq` |
-| `crates/ramp-api/src/handlers/portal/mod.rs` | Added `pub mod rfq` |
+| `handlers/admin/tier.rs` | Dual JWT + legacy X-Admin-Key auth |
+| `handlers/admin/mod.rs` | Registered `admin_auth`, `readiness_gate` modules |
+| `router.rs` | Wired readiness + auth routes |
+| `ramp-common/error.rs` | Added `Error::Config` variant |
+| `ramp-common/lib.rs` | Registered `secrets` module |
+| `ramp-core/service/passkey.rs` | Rewritten: HashMap → PostgreSQL (sqlx) |
 
-### API Routes Added
+### Security Controls Implemented
 
-```
-POST   /v1/portal/rfq               Create RFQ (OFFRAMP or ONRAMP, Portal JWT)
-GET    /v1/portal/rfq/:id           View RFQ + bids + best rate (Portal JWT)
-POST   /v1/portal/rfq/:id/accept    Accept best bid → MATCHED (Portal JWT)
-POST   /v1/portal/rfq/:id/cancel    Cancel open RFQ (Portal JWT)
-POST   /v1/lp/rfq/:rfq_id/bid       LP submit bid (X-LP-Key: lp_id:tenant_id:secret)
-GET    /v1/admin/rfq/open           List open auctions, filter by direction (Admin Key)
-POST   /v1/admin/rfq/:id/finalize   Manual trigger matching (Admin Key)
-```
+| Control | Detail |
+|---------|--------|
+| Password hashing | argon2id with random salt |
+| Refresh tokens | SHA-256 hashed in DB, never stored plaintext |
+| Account lockout | 5 failures → 30 min lockout |
+| JWT validation | sub/exp/iat/token_type claims |
+| Constant-time auth | `subtle::ConstantTimeEq` for legacy path |
+| Audit logging | IP + User-Agent on all auth events |
+| Email enumeration | Generic error messages |
 
-### Architecture Details
+---
 
-- **Bidirectional logic**: OFFRAMP selects `MAX(exchange_rate)` — ONRAMP selects `MIN(exchange_rate)`
-- **Event-driven**: `rfq.created` event via NATS notifies LPs; `rfq.matched` signals completion
-- **Real EventPublisher**: all handlers use `app_state.event_publisher` (NATS in prod, InMemory in dev)
-- **Expiry job**: background tokio task runs every 60s — `UPDATE rfq_requests SET state='EXPIRED' WHERE state='OPEN' AND expires_at <= NOW()`
-- **LP Auth**: `X-LP-Key` now validates against `registered_lp_keys` with secret-hash, active/expiry, direction permissions, and optional max-bid caps
-- **Bid validation**: `vnd_amount` must match RFQ economics; ONRAMP bids cannot exceed request budget
-- **Consistency hardening**: detail, portal accept, and admin finalize all use the same best-price rule; stale bids are moved out of `PENDING` during service reads
-- **Tenant isolation**: RLS policies on all new tables
-- **Non-destructive**: Zero changes to existing `/v1/portal/offramp/*` or payin flows
+## ✅ RFQ Auction Layer — COMPLETED (2026-03-08)
+
+Bidirectional LP auction market (USDT↔VND) with competitive price discovery.
+
+| Component | Detail |
+|-----------|--------|
+| Tables | `rfq_requests`, `rfq_bids`, `registered_lp_keys` |
+| Matching | OFFRAMP: `MAX(rate)`, ONRAMP: `MIN(rate)` |
+| LP Auth | `X-LP-Key` against `registered_lp_keys` |
+| Events | `rfq.created`, `rfq.matched` via NATS |
+| Expiry | Background job every 60s |
 
 ---
 
 ## Previously Completed
 
-### Core Services — DONE
-- Pay-in, Pay-out, Trade with full lifecycle
-- Double-entry ledger (ramp-ledger)
-- Compliance engine: KYC/AML/KYT, case management, SBV reporting
-- Webhook delivery with retry, HMAC signing, DLQ
-- Account Abstraction (ERC-4337)
-- Vietnam AML compliance (Luật AML 2022)
-
-### Security — DONE
-- Repository sanitization (no leaked secrets)
-- AES-256-GCM encryption at rest
-- HMAC-SHA256 webhook signatures
-- JWT auth with role-based access
-- Row Level Security on all tenant tables
-
-### Infrastructure — DONE
-- Kubernetes manifests (base + overlays)
-- PostgreSQL HA with PgBouncer
-- Automated S3 backups
-- Prometheus + Grafana monitoring
-- ArgoCD GitOps deployment
+- **Core Services**: Pay-in/out, Trade, Ledger, Compliance, Webhooks, AA
+- **Security**: AES-256-GCM, HMAC-SHA256, JWT RBAC, RLS
+- **Infrastructure**: K8s, PgBouncer, S3 backups, Prometheus, ArgoCD
 
 ---
 
@@ -90,17 +72,16 @@ POST   /v1/admin/rfq/:id/finalize   Manual trigger matching (Admin Key)
 
 | Priority | Task | Est. |
 |----------|------|------|
-| High | Run `sqlx migrate run` to apply migrations 033-034 | 5 min |
-| Medium | Frontend: RFQ auction UI for user portal | 1-2 days |
-| Medium | LP dashboard: view open RFQs, submit bids | 1 day |
-| Low | Integration tests for RFQ flow e2e | 2-4h |
-| Low | Atomic finalize transaction for RFQ lifecycle | 4-8h |
+| High | Phase 2: Multi-tenant isolation, Vault secrets, rate limiting | 90 days |
+| Medium | Frontend: RFQ auction UI | 1-2 days |
+| Medium | Phase 3: Horizontal scaling, blue-green, DR | 90 days |
+| Low | Phase 4: SOC 2, pen testing, bug bounty | 90 days |
 
-## Estimated Project Completion
+## Estimated Completion
 
-**Previous (before RFQ): 95%**
-**Current: 98%**
-
-The remaining 2%:
-- Frontend RFQ UI (1%)
-- E2E integration tests / transaction-level hardening (1%)
+| Phase | Status |
+|-------|--------|
+| Phase 1 (Core Hardening) | ✅ Complete |
+| Phase 2 (Multi-tenant) | 🔲 Planned |
+| Phase 3 (Scale) | 🔲 Planned |
+| Phase 4 (Compliance) | 🔲 Planned |
