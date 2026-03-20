@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">RampOS</h1>
   <p align="center">
-    <strong>Bring Your Own Rails (BYOR) — Crypto/Fiat Exchange Infrastructure</strong>
+    <strong>The On/Off Ramp Orchestration Layer — Fiat ↔ Crypto Infrastructure for Exchanges, Wallets & Fintech Apps</strong>
   </p>
 </p>
 
@@ -29,9 +29,18 @@
 
 ## Overview
 
-RampOS is a **production-grade orchestration layer** for crypto/fiat exchanges. It handles the entire transaction lifecycle — from fiat deposit to crypto trading to fiat withdrawal — with built-in compliance, account abstraction, and multi-tenant isolation.
+RampOS is a **production-grade on/off ramp orchestration layer** that lets any exchange, wallet, or fintech app convert between fiat and crypto. It handles the entire ramp lifecycle — **fiat deposit (on-ramp) → custody → crypto delivery** and **crypto receipt → settlement → fiat withdrawal (off-ramp)** — with built-in compliance, LP auction pricing, and multi-tenant isolation.
 
 Built with **Rust** for performance and memory safety, **Solidity** for on-chain logic, and **Next.js** for the admin dashboard.
+
+### 💡 Why On/Off Ramp?
+
+The **on/off ramp** is the critical bridge between traditional finance and crypto. Every user who wants to enter or exit the crypto economy must go through a ramp. RampOS provides this infrastructure as a turnkey platform:
+
+- **On-Ramp (Fiat → Crypto)**: User deposits VND via bank transfer → AML screening → LP auction for best rate → crypto delivered to wallet
+- **Off-Ramp (Crypto → Fiat)**: User sends crypto → KYT screening → LP auction market → VND settled to bank account
+- **RFQ Auction Market**: Liquidity Providers compete in real-time auctions to offer the best exchange rates
+- **White-Label Ready**: Any exchange or wallet can embed RampOS as their ramp layer via SDK or widget
 
 ### 🆕 Recent Updates (March 2026)
 - **RFQ Auction Layer**: Bidirectional LP price discovery for VND/USDT (Completed 2026-03-08).
@@ -43,9 +52,11 @@ Built with **Rust** for performance and memory safety, **Solidity** for on-chain
 
 ### Key Principles
 
+- **On/Off Ramp First** — Purpose-built for fiat↔crypto conversion at scale
 - **BYOR (Bring Your Own Rails)** — Keep your banking relationships, plug any bank/PSP
 - **Zero Liability** — RampOS never holds customer funds
 - **Compliance-First** — FATF Travel Rule & Vietnam AML Law 2022
+- **RFQ-Driven Pricing** — LP auction market ensures best rates for every conversion
 - **Intent-Based** — All operations are signed, auditable intents
 - **Double-Entry Ledger** — Financial-grade accounting with complete audit trail
 
@@ -102,33 +113,22 @@ Built with **Rust** for performance and memory safety, **Solidity** for on-chain
 
 ## Features
 
-### 🎯 Intent Engine (`ramp-core/intents`) — The Core of RampOS
+### 🏦 On/Off Ramp Engine — The Core of RampOS
 
-RampOS is built around a **declarative Intent System** — users express *what* they want to do, and the engine figures out *how* to execute it optimally:
+RampOS is built around the **on/off ramp lifecycle** — converting between fiat and crypto with compliance, escrow, and LP auction pricing at every step:
 
 ```
-User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
-     ↓ IntentSolver evaluates all routes
-     ↓ Route A: Bridge USDC → Arbitrum, then Swap (score: 0.82)
-     ↓ Route B: Swap USDC→USDT on Ethereum, then Bridge (score: 0.71)
-     ↓ Selects Route A → generates ExecutionPlan
-     ↓ WorkflowEngine persists & executes each step durably
+ON-RAMP:  User deposits VND → AML check → Escrow → RFQ auction → LP fills → Crypto delivered
+OFF-RAMP: User sends crypto → KYT screen → RFQ auction → LP buys → VND settled to bank
 ```
 
-**4 Intent Action Types:**
-| Action | Same-chain | Cross-chain | Steps |
-|--------|-----------|-------------|-------|
-| `Swap` | Direct DEX swap | Bridge+Swap or Swap+Bridge (auto-selected) | 2–5 |
-| `Bridge` | — | Across / Stargate (auto provider) | 3 |
-| `Send` | Direct transfer | Bridge+Transfer | 1–4 |
-| `Stake` | Direct stake | Bridge+Stake | 2–5 |
-
-**Smart Route Optimization:**
-- Gas cost estimation per chain (Ethereum, Arbitrum, Base, Optimism, Polygon)
-- Time estimation with bridge wait periods (5min L2→L2, 10min L1→L2, 1hr L2→L1)
-- Composite scoring: 40% gas efficiency + 40% speed + 20% fewest steps
-- Slippage-aware: configurable `max_slippage_bps` (default 0.5%), MEV protection
-- Constraint enforcement: max gas USD, max steps, execution deadline
+**Ramp Flow Types:**
+| Flow | Direction | Key Steps |
+|------|-----------|----------|
+| `Pay-in` | Fiat → Crypto (On-Ramp) | Bank deposit → AML → Escrow → LP match → Crypto credit |
+| `Pay-out` | Crypto → Fiat (Off-Ramp) | Compliance gate → Ledger debit → Bank transfer → Confirmation |
+| `RFQ Auction` | Both directions | LP bid competition → Best price selection → Settlement |
+| `Withdraw` | Fiat withdrawal | Policy check → Debit → Rails transfer → Confirmation |
 
 **Dual-Mode Workflow Engine:**
 - **InProcess mode** (dev/test) — Tokio async tasks + optional PostgreSQL state persistence for crash recovery
@@ -139,6 +139,17 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 - Every multi-step workflow has compensation steps for automatic rollback on failure
 - Escrow-based intermediate state ensures no fund loss during partial failures
 - `compensation.rs` handles saga-pattern rollback across all transaction types
+
+### 🎯 DeFi Intent Engine (`ramp-core/intents`)
+
+Beyond on/off ramp, RampOS also supports a **declarative Intent System** for DeFi operations — users express *what* they want to do, and the engine figures out *how* to execute it optimally:
+
+| Action | Same-chain | Cross-chain | Steps |
+|--------|-----------|-------------|-------|
+| `Swap` | Direct DEX swap | Bridge+Swap or Swap+Bridge (auto-selected) | 2–5 |
+| `Bridge` | — | Across / Stargate (auto provider) | 3 |
+| `Send` | Direct transfer | Bridge+Transfer | 1–4 |
+| `Stake` | Direct stake | Bridge+Stake | 2–5 |
 
 ### 🔧 Core Services (`ramp-core/service`)
 
@@ -203,14 +214,6 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 | `ZkKycRegistry.sol` | Zero-Knowledge KYC status registry |
 | `ZkKycVerifier.sol` | ZK-proof verifier for privacy-preserving compliance |
 
-### 🌐 Multi-Chain Support (`ramp-core/chain`)
-- **EVM Chains** — Ethereum, Polygon, Arbitrum, Base, BSC
-- **Solana** — Native SOL and SPL token support
-- **TON** — The Open Network integration
-- **Cross-Chain** — Bridge support via Across and Stargate protocols
-- **DEX Aggregation** — Swap routing across multiple DEXes
-- **Oracle Integration** — Chainlink price feeds with fallback providers
-
 ### 🔐 Custody & Key Management (`ramp-core/custody`)
 - **MPC Signing** — Multi-Party Computation key generation and transaction signing
 - **Policy Engine** — Configurable approval policies per operation type
@@ -219,6 +222,14 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 ### 💰 Billing & Metering (`ramp-core/billing`)
 - **Usage Metering** — Track API calls, transaction volume per tenant
 - **Stripe Integration** — Automated billing based on metered usage
+
+### 🌐 Multi-Chain Support (`ramp-core/chain`)
+- **EVM Chains** — Ethereum, Polygon, Arbitrum, Base, BSC
+- **Solana** — Native SOL and SPL token support
+- **TON** — The Open Network integration
+- **Cross-Chain** — Bridge support via Across and Stargate protocols
+- **DEX Aggregation** — Swap routing across multiple DEXes
+- **Oracle Integration** — Chainlink price feeds with fallback providers
 
 ### 🖥️ Frontend Applications
 
@@ -250,18 +261,65 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 - Transaction history
 - Account settings
 
-#### Embeddable Widget
-- Drop-in on-ramp/off-ramp widget for any dApp
-- Headless mode and server-driven configuration
-- CDN-ready distribution
+#### Embeddable On/Off Ramp Widget
+- **Drop-in ramp widget** for any dApp, wallet, or exchange — add fiat↔crypto in minutes
+- Supports both on-ramp (buy crypto) and off-ramp (sell crypto) flows
+- Headless mode for custom UI + server-driven configuration for tenant branding
+- Automatic KYC tier enforcement and compliance gating
+- CDN-ready distribution with iframe or React component embedding
 
----
+```
+  Your dApp / Wallet / Exchange
+  ┌─────────────────────────────────┐
+  │                                 │
+  │   ┌─────────────────────────┐   │
+  │   │  RampOS Widget (iframe) │   │
+  │   │                         │   │
+  │   │  [Buy Crypto]  Amount:  │   │
+  │   │  100 USDT = 2,600,000₫  │   │
+  │   │  Rate by: LP Acme ✅    │   │
+  │   │                         │   │
+  │   │  [Confirm Purchase →]   │   │
+  │   └─────────────────────────┘   │
+  │                                 │
+  └─────────────────────────────────┘
+  Powered by RampOS RFQ Auction Engine
+```
 
 ---
 
 ## Architecture
 
-### 1. Overall System Architecture
+### 1. On/Off Ramp Flow Overview
+
+```
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                     RampOS On/Off Ramp Flow                            │
+  │                                                                       │
+  │   ON-RAMP (Fiat → Crypto)                                             │
+  │   ═══════════════════════                                             │
+  │   User          Bank         RampOS              LP Pool    Wallet    │
+  │    │              │             │                    │          │      │
+  │    │─── Deposit ──►│── Webhook ──►│── AML Check ──►  │          │      │
+  │    │              │             │── RFQ Auction ──►  │          │      │
+  │    │              │             │◄── LP Bid (best) ──│          │      │
+  │    │              │             │── Escrow+Settle ──►│── Crypto►│      │
+  │    │◄──────────── Confirmation + Receipt ───────────────────────│      │
+  │                                                                       │
+  │   OFF-RAMP (Crypto → Fiat)                                            │
+  │   ════════════════════════                                            │
+  │   User        Wallet       RampOS              LP Pool     Bank      │
+  │    │             │            │                    │          │        │
+  │    │── Send ────►│── Receive ─►│── KYT Screen ──►  │          │        │
+  │    │             │            │── RFQ Auction ──►  │          │        │
+  │    │             │            │◄── LP Bid (best) ──│          │        │
+  │    │             │            │── Settle+Transfer────────────►│        │
+  │    │◄──────────── VND in Bank Account ────────────────────────│        │
+  │                                                                       │
+  └─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2. Overall System Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
@@ -279,7 +337,7 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 │  └────────────────┘             │  ┌──────────┐  ┌──────────┐  ┌──────────┐  │  │
 │                                 │  │  Intent  │  │ Workflow │  │ Service  │  │  │
 │  ┌────────────────┐   iframe    │  │  Engine  │  │  Engine  │  │  Layer   │  │  │
-│  │  Embeddable    │◄──────────  │  │ (Solver) │  │(Temporal)│  │(15 svcs) │  │  │
+│  │  Embeddable    │◄──────────  │  │ (Solver) │  │(Temporal)│  │(51 svcs) │  │  │
 │  │  Widget        │             │  └────┬─────┘  └────┬─────┘  └────┬─────┘  │  │
 │  └────────────────┘             │       └─────────────┴─────────────┘        │  │
 │                                 │                      │                       │  │
@@ -308,7 +366,7 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 
 ---
 
-### 2. Intent Lifecycle — From Request to Execution
+### 3. Intent Lifecycle — From Request to Execution
 
 ```
   Tenant / User
@@ -381,7 +439,7 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 
 ---
 
-### 3. Pay-in Flow (Fiat → Crypto)
+### 4. Pay-in Flow (Fiat → Crypto)
 
 ```
   User (on exchange)            RampOS                        Bank / Blockchain
@@ -417,7 +475,7 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 
 ---
 
-### 4. Pay-out Flow (Crypto → Fiat) with Compliance Gate
+### 5. Pay-out Flow (Crypto → Fiat) with Compliance Gate
 
 ```
   User (withdrawal request)
@@ -462,7 +520,7 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 
 ---
 
-### 5. Infrastructure Stack
+### 6. Infrastructure Stack
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -508,7 +566,7 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 
 | Crate | Description | Key Dependencies |
 |-------|-------------|-----------------|
-| `ramp-api` | REST API Gateway — 35 admin + 9 portal + 2 LP handlers | Axum 0.7, Tower, OpenTelemetry |
+| `ramp-api` | REST API Gateway — 39 admin + 9 portal + 2 LP handlers | Axum 0.7, Tower, OpenTelemetry |
 | `ramp-core` | Business logic, state machine, 51 service + 19 repository modules | Tokio, SQLx, async-nats |
 | `ramp-ledger` | Double-entry accounting | rust_decimal |
 | `ramp-compliance` | KYC/AML/KYT/Travel Rule, 75 modules | Fuzz testing, report generation |
@@ -521,7 +579,7 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 ```
 rampos/
 ├── crates/                # 7 Rust workspace crates
-│   ├── ramp-api/           # HTTP API (Axum) — 35 admin + 9 portal + 2 LP handlers
+│   ├── ramp-api/           # HTTP API (Axum) — 39 admin + 9 portal + 2 LP handlers
 │   ├── ramp-core/          # Business logic — 51 service + 19 repository modules
 │   │   ├── billing/         # Metering, Stripe
 │   │   ├── bridge/          # Across, Stargate
@@ -568,7 +626,7 @@ rampos/
 ├── packages/widget/        # Embeddable widget (headless + server-driven)
 ├── frontend/               # Admin Dashboard (Next.js 15)
 ├── frontend-landing/       # Marketing site
-├── migrations/             # 49 up + 32 down PostgreSQL migrations
+├── migrations/             # 55 PostgreSQL migrations
 ├── k8s/                    # Kubernetes (Kustomize)
 │   ├── base/               # Core manifests, HA Postgres, PgBouncer
 │   ├── jobs/               # Backup jobs (Postgres, Redis, NATS → S3)

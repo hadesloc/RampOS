@@ -1,7 +1,7 @@
 # RampOS Database Schema Documentation
 
 **Database**: PostgreSQL 15+
-**Last Updated**: 2026-02-02
+**Last Updated**: 2026-03-20
 **Version**: 1.0
 
 ---
@@ -769,3 +769,171 @@ $$ LANGUAGE plpgsql;
 
 - [Migration History](./migrations.md)
 - [Row Level Security](./rls.md)
+
+---
+
+## Extended Tables (Migrations 002–055)
+
+> The tables below were added incrementally via migrations 002–055. They extend the 16 core tables documented above.
+
+### Compliance & Risk Domain
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `aml_rule_versions` | 003 | Versioned AML rule configurations per tenant (DRAFT/ACTIVE/SHADOW/ARCHIVED) |
+| `risk_score_history` | 004 | Historical user risk score snapshots with triggered rules |
+| `case_notes` | 005 | Notes and comments on AML cases |
+| `compliance_transactions` | 007 | Transactions tracked for velocity/limit checks |
+| `compliance_audit_trail` | 020 | Immutable compliance event log with hash chain |
+| `rescreening_runs` | 039 | Scheduled KYC/PEP/sanctions rescreening batch results |
+
+### Account Abstraction (AA)
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `smart_accounts` | 010 | ERC-4337 smart account registry — address, owner, chain, factory, deployment status |
+
+### Banking & Payments
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `bank_confirmations` | 012 | Bank webhook confirmation records for pay-in matching |
+| `offramp_intents` | 027 | Off-ramp (crypto→VND) intent lifecycle with state machine |
+| `settlements` | 032 | Settlement records linking offramp_intents to bank transfers |
+
+### RFQ Auction System
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `rfq_requests` | 033 | Request-for-quote broadcasts — bidirectional (OFFRAMP / ONRAMP), state: OPEN→MATCHED/EXPIRED |
+| `rfq_bids` | 033 | LP price quotes with exchange rate, validity window, state: PENDING→ACCEPTED/REJECTED |
+| `lp_keys` | 034 | LP authentication keys for the RFQ system |
+| `lp_reliability_snapshots` | 036 | LP performance scoring: fill rate, SLA adherence, reliability |
+
+### Licensing & Regulatory
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `tenant_license_status` | 022 | Per-tenant regulatory license tracking (Vietnam) |
+| `licensing_requirements` | 022 | Regulatory requirement items with completion status |
+
+### Portal & Authentication
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `portal_users` | 024 | End-user accounts with WebAuthn/passkey credentials |
+| `portal_kyc_cases` | 025 | Portal-initiated KYC verification cases |
+| `portal_kyc_documents` | 025 | KYC document uploads (ID, selfie, proof of address) |
+| `magic_link_tokens` | 028 | Passwordless login tokens |
+| `refresh_tokens` | 029 | JWT refresh token storage |
+| `admin_users` | 049 | Admin dashboard user accounts with RBAC |
+| `admin_refresh_tokens` | 049 | Admin JWT refresh tokens |
+| `admin_auth_audit_log` | 049 | Admin authentication audit trail |
+| `passkey_credentials` | 050 | WebAuthn/FIDO2 passkey credential storage |
+
+### Webhook System
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `webhook_configs` | 026 | Per-tenant webhook configuration (URL, events, secret) |
+
+### Enterprise Features
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `custom_domains` | 017 | Per-tenant custom domain with DNS and SSL management |
+| `sso_configs` | 018 | Enterprise SSO provider configuration (OIDC/SAML) |
+| `usage_events` | 019 | API usage metering events for billing |
+| `tenant_rate_limits` | 030 | Tiered per-tenant rate limit configuration |
+| `tenant_api_versions` | 031 | Per-tenant API version pinning |
+| `user_transaction_limits` | 021 | User-level VND transaction limits per tier |
+
+### Sandbox & Testing
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `sandbox_presets` | 035 | Programmable sandbox test scenarios |
+
+### Travel Rule (FATF R.16)
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `travel_rule_policies` | 037 | Policy-driven disclosure rules per jurisdiction/direction/asset |
+| `travel_rule_vasps` | 037 | VASP registry with interoperability status |
+| `travel_rule_disclosures` | 037 | Disclosure records linking intents to originator/beneficiary VASPs |
+| `travel_rule_transport_attempts` | 037 | Protocol transport attempts (TRISA, OpenVASP, etc.) with retry |
+| `travel_rule_exception_queue` | 037 | Exception queue for failed/blocked disclosures |
+
+### Risk Lab & Replay
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `risk_lab_replay_metadata` | 038 | AML rule replay audit records for shadow scoring |
+
+### KYC Passport (Cross-Tenant)
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `kyc_passport_vault` | 040 | Cross-tenant KYC attestation vault |
+| `kyc_passport_consent_grants` | 040 | User consent grants for KYC sharing between tenants |
+
+### KYB Corporate Graph
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `kyb_entities` | 041 | Corporate entities for business verification |
+| `kyb_ownership_edges` | 041 | Ownership relationship graph edges |
+| `kyb_evidence_packages` | 047 | Document evidence packages per entity |
+| `kyb_evidence_sources` | 047 | Individual evidence documents with provenance |
+| `kyb_ubo_evidence_links` | 047 | Links between UBO entities and evidence |
+
+### Governance & Configuration
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `config_bundle_exports` | 042 | Tenant configuration snapshot exports |
+| `whitelisted_extension_actions` | 042 | Allowed extension actions per tenant |
+
+### Partner Registry
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `partners` | 043 | Partner profiles with lifecycle management |
+| `partner_capabilities` | 043 | Declared capabilities per partner |
+| `partner_health_signals` | 043 | Real-time partner health monitoring |
+| `partner_rollout_scopes` | 043 | Geographic/product rollout scoping |
+| `partner_approval_references` | 043 | Approval workflow references |
+| `credential_references` | 043 | Partner credential lifecycle |
+
+### Corridor Packs
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `corridor_packs` | 044 | Payment corridor definitions (e.g., VND↔USDT) |
+| `corridor_fee_profiles` | 044 | Fee schedules per corridor |
+| `corridor_eligibility_rules` | 044 | KYC/geo eligibility per corridor |
+| `corridor_compliance_hooks` | 044 | Compliance check hooks per corridor |
+| `corridor_cutoff_policies` | 044 | Daily cutoff and settlement timing |
+| `corridor_rollout_scopes` | 044 | Geographic rollout per corridor |
+| `corridor_pack_endpoints` | 044 | API endpoint configuration per corridor |
+
+### Provider Routing
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `payment_method_capabilities` | 045 | Method-family capability declarations per partner/corridor |
+| `provider_routing_policies` | 046 | Multi-dimensional routing with scorecard and fallback ordering |
+
+### Treasury & Settlement
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `treasury_evidence_imports` | 048 | External bank balance imports for treasury reconciliation |
+
+### Onchain Monitoring
+
+| Table | Migration | Description |
+|-------|-----------|-------------|
+| `wallet_attestations` | 051 | On-chain wallet ownership attestation records |
+| `onchain_observations` | 055 | Blockchain event observations for deposit/withdrawal tracking |
+

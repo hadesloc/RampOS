@@ -2,7 +2,7 @@
 
 ## Overview
 
-RampOS is a "Bring Your Own Rails" (BYOR) crypto/fiat exchange infrastructure. It provides the core orchestrator, compliance engine, and ledger for operating an exchange, while allowing the operator to plug in their own banking rails and custody providers.
+RampOS is an **on/off ramp orchestration layer** (BYOR — Bring Your Own Rails) for fiat↔crypto conversion. It provides the core orchestrator, compliance engine, LP auction market, and double-entry ledger for operating on-ramp (fiat→crypto) and off-ramp (crypto→fiat) flows, while allowing the operator to plug in their own banking rails and custody providers.
 
 ## High-Level Architecture
 

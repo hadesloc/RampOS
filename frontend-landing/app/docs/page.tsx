@@ -62,7 +62,7 @@ const i18n: Record<Lang, {
 }> = {
   en: {
     pageTitle: 'Documentation',
-    pageDesc: 'Everything you need to integrate, deploy, and operate RampOS — from first API call to production at scale.',
+    pageDesc: 'Everything you need to integrate, deploy, and operate RampOS — the on/off ramp orchestration layer for fiat↔crypto conversion.',
     searchPlaceholder: 'Search docs...',
     docsLabel: 'docs',
     footerNote: 'All documentation is open source.',
@@ -77,7 +77,7 @@ const i18n: Record<Lang, {
   },
   vi: {
     pageTitle: 'Tài liệu',
-    pageDesc: 'Mọi thứ bạn cần để tích hợp, triển khai và vận hành RampOS — từ lệnh API đầu tiên đến production quy mô lớn.',
+    pageDesc: 'Mọi thứ bạn cần để tích hợp, triển khai và vận hành RampOS — tầng điều phối on/off ramp cho chuyển đổi fiat↔crypto.',
     searchPlaceholder: 'Tìm kiếm tài liệu...',
     docsLabel: 'tài liệu',
     footerNote: 'Toàn bộ tài liệu là mã nguồn mở.',
@@ -102,7 +102,7 @@ const sectionsEn: DocSection[] = [
   {
     id: 'getting-started',
     title: 'Getting Started',
-    description: 'Quick start guide, core concepts, and first steps with RampOS.',
+    description: 'Set up your on/off ramp integration — from first API call to live fiat↔crypto conversion.',
     icon: BookOpen,
     color: 'text-emerald-400',
     docs: [
@@ -114,11 +114,12 @@ const sectionsEn: DocSection[] = [
   {
     id: 'architecture',
     title: 'Architecture',
-    description: 'System design, state machines, ledger model, and compliance engine internals.',
+    description: 'On/off ramp architecture: payment flows, state machines, ledger model, and compliance engine.',
     icon: Layers,
     color: 'text-cyan-400',
     docs: [
       { title: 'System Overview', path: 'docs/architecture/overview.md', description: 'High-level architecture, crate structure, data flow' },
+      { title: 'RFQ Auction System', path: 'docs/architecture/rfq-auction.md', description: 'Bidirectional LP auction, direction-aware matching, reliability scoring' },
       { title: 'State Machines', path: 'docs/architecture/state-machine.md', description: 'Pay-in, pay-out, trade, and RFQ state transitions' },
       { title: 'Double-Entry Ledger', path: 'docs/architecture/ledger.md', description: 'Accounting model, journal entries, reconciliation' },
       { title: 'Compliance Engine', path: 'docs/architecture/compliance.md', description: 'KYC/AML pipeline, risk scoring, case management' },
@@ -128,12 +129,13 @@ const sectionsEn: DocSection[] = [
   {
     id: 'api-reference',
     title: 'API Reference',
-    description: 'REST API endpoints, authentication, rate limiting, webhooks, and event catalog.',
+    description: 'On/off ramp API: pay-in, pay-out, RFQ auction, webhooks, and authentication.',
     icon: Server,
     color: 'text-blue-400',
     docs: [
       { title: 'API Overview', path: 'docs/api/README.md', description: 'Base URL, authentication, headers, versioning' },
       { title: 'Full API Documentation', path: 'docs/API.md', description: 'Complete endpoint reference with request/response examples' },
+      { title: 'Portal API', path: 'docs/api/portal.md', description: 'User-facing endpoints: auth, KYC, wallet, transactions, off-ramp' },
       { title: 'Endpoints Reference', path: 'docs/api/endpoints.md', description: 'All admin, portal, and LP endpoints' },
       { title: 'Authentication', path: 'docs/api/authentication.md', description: 'JWT, API keys, LP keys, admin auth' },
       { title: 'Rate Limiting', path: 'docs/api/rate-limiting.md', description: 'Per-tenant limits, sliding window, override config' },
@@ -147,7 +149,7 @@ const sectionsEn: DocSection[] = [
     icon: Database,
     color: 'text-amber-400',
     docs: [
-      { title: 'Schema Reference', path: 'docs/database/schema.md', description: '49 tables, indexes, constraints, and relationships' },
+      { title: 'Schema Reference', path: 'docs/database/schema.md', description: '96 tables across 55 migrations, indexes, constraints, and relationships' },
       { title: 'Migrations Guide', path: 'docs/database/migrations.md', description: 'Migration system, ordering, up/down scripts' },
       { title: 'Row-Level Security', path: 'docs/database/rls.md', description: 'Tenant isolation policies, fail-closed design' },
     ],
@@ -214,7 +216,6 @@ const sectionsEn: DocSection[] = [
       { title: 'Kubernetes', path: 'docs/deployment/kubernetes.md', description: 'Kustomize, HPA, PDB, network policies' },
       { title: 'CI/CD Pipeline', path: 'docs/deployment/ci-cd.md', description: 'GitHub Actions, ArgoCD, drift detection' },
       { title: 'Deployment Guide', path: 'docs/DEPLOY.md', description: 'Step-by-step production deployment' },
-      { title: 'Deployment Checklist', path: 'docs/DEPLOYMENT_CHECKLIST.md', description: 'Pre-launch verification checklist' },
     ],
   },
   {
@@ -257,8 +258,6 @@ const sectionsEn: DocSection[] = [
       { title: 'Threat Model', path: 'docs/security/threat-model.md', description: 'Attack vectors, risk assessment, mitigations' },
       { title: 'Security Hardening', path: 'docs/security/hardening.md', description: 'Infrastructure and application hardening guide' },
       { title: 'Audit Report', path: 'docs/security/audit-report.md', description: 'Comprehensive security audit findings' },
-      { title: 'Remediation Plan', path: 'docs/security/remediation-plan.md', description: 'Issue tracking and fix timeline' },
-      { title: 'Roadmap & Hardening', path: 'docs/recent-roadmap-and-security-hardening-2026-03.md', description: 'March 2026 security hardening report' },
     ],
   },
   {
@@ -272,8 +271,6 @@ const sectionsEn: DocSection[] = [
       { title: 'Runbook', path: 'docs/operations/runbook-skeleton.md', description: 'Operational procedures for common scenarios' },
       { title: 'Disaster Recovery', path: 'docs/operations/disaster-recovery-plan.md', description: 'Backup, restore, and failover procedures' },
       { title: 'Release Checklist', path: 'docs/operations/release-checklist.md', description: 'Pre-release verification steps' },
-      { title: 'Staging Validation', path: 'docs/operations/staging-validation-plan.md', description: 'QA matrix for staging environments' },
-      { title: 'Bank-Grade Signoff', path: 'docs/operations/bank-grade-signoff-ledger.md', description: 'Financial institution signoff requirements' },
     ],
   },
   {
@@ -320,7 +317,7 @@ const sectionsVi: DocSection[] = [
   {
     id: 'getting-started',
     title: 'Bắt đầu',
-    description: 'Hướng dẫn khởi động nhanh, khái niệm cốt lõi và các bước đầu tiên với RampOS.',
+    description: 'Thiết lập tích hợp on/off ramp — từ lệnh API đầu tiên đến chuyển đổi fiat↔crypto.',
     icon: BookOpen,
     color: 'text-emerald-400',
     docs: [
@@ -332,11 +329,12 @@ const sectionsVi: DocSection[] = [
   {
     id: 'architecture',
     title: 'Kiến trúc',
-    description: 'Thiết kế hệ thống, máy trạng thái, mô hình sổ cái và nội bộ engine compliance.',
+    description: 'Kiến trúc on/off ramp: luồng thanh toán, máy trạng thái, sổ cái và engine compliance.',
     icon: Layers,
     color: 'text-cyan-400',
     docs: [
       { title: 'Tổng quan hệ thống', path: 'docs/architecture/overview.md', description: 'Kiến trúc tổng thể, cấu trúc crate, luồng dữ liệu' },
+      { title: 'Hệ thống Đấu giá RFQ', path: 'docs/architecture/rfq-auction.md', description: 'Đấu giá LP hai chiều, matching theo hướng, chấm điểm LP' },
       { title: 'Máy trạng thái', path: 'docs/architecture/state-machine.md', description: 'Chuyển trạng thái pay-in, pay-out, trade và RFQ' },
       { title: 'Sổ cái kép', path: 'docs/architecture/ledger.md', description: 'Mô hình kế toán, bút toán, đối soát' },
       { title: 'Engine Compliance', path: 'docs/architecture/compliance.md', description: 'Pipeline KYC/AML, chấm điểm rủi ro, quản lý vụ việc' },
@@ -346,12 +344,13 @@ const sectionsVi: DocSection[] = [
   {
     id: 'api-reference',
     title: 'Tham chiếu API',
-    description: 'Endpoint REST API, xác thực, giới hạn tốc độ, webhooks và danh mục sự kiện.',
+    description: 'API on/off ramp: pay-in, pay-out, đấu giá RFQ, webhooks và xác thực.',
     icon: Server,
     color: 'text-blue-400',
     docs: [
       { title: 'Tổng quan API', path: 'docs/api/README.md', description: 'URL cơ sở, xác thực, headers, phiên bản' },
       { title: 'Tài liệu API đầy đủ', path: 'docs/API.md', description: 'Tham chiếu endpoint đầy đủ với ví dụ request/response' },
+      { title: 'API Portal', path: 'docs/api/portal.md', description: 'Endpoints người dùng: xác thực, KYC, ví, giao dịch, off-ramp' },
       { title: 'Tham chiếu Endpoints', path: 'docs/api/endpoints.md', description: 'Tất cả admin, portal và LP endpoints' },
       { title: 'Xác thực', path: 'docs/api/authentication.md', description: 'JWT, API keys, LP keys, admin auth' },
       { title: 'Giới hạn tốc độ', path: 'docs/api/rate-limiting.md', description: 'Giới hạn per-tenant, cửa sổ trượt, cấu hình ghi đè' },
@@ -365,7 +364,7 @@ const sectionsVi: DocSection[] = [
     icon: Database,
     color: 'text-amber-400',
     docs: [
-      { title: 'Tham chiếu Schema', path: 'docs/database/schema.md', description: '49 bảng, indexes, ràng buộc và quan hệ' },
+      { title: 'Tham chiếu Schema', path: 'docs/database/schema.md', description: '96 bảng trên 55 migrations, indexes, ràng buộc và quan hệ' },
       { title: 'Hướng dẫn Migrations', path: 'docs/database/migrations.md', description: 'Hệ thống migration, thứ tự, script up/down' },
       { title: 'Row-Level Security', path: 'docs/database/rls.md', description: 'Chính sách phân lập tenant, thiết kế fail-closed' },
     ],
@@ -432,7 +431,6 @@ const sectionsVi: DocSection[] = [
       { title: 'Kubernetes', path: 'docs/deployment/kubernetes.md', description: 'Kustomize, HPA, PDB, network policies' },
       { title: 'CI/CD Pipeline', path: 'docs/deployment/ci-cd.md', description: 'GitHub Actions, ArgoCD, phát hiện drift' },
       { title: 'Hướng dẫn triển khai', path: 'docs/DEPLOY.md', description: 'Triển khai production từng bước' },
-      { title: 'Checklist triển khai', path: 'docs/DEPLOYMENT_CHECKLIST.md', description: 'Danh sách kiểm tra trước khi ra mắt' },
     ],
   },
   {
@@ -475,8 +473,6 @@ const sectionsVi: DocSection[] = [
       { title: 'Threat Model', path: 'docs/security/threat-model.md', description: 'Vectơ tấn công, đánh giá rủi ro, giảm thiểu' },
       { title: 'Hardening bảo mật', path: 'docs/security/hardening.md', description: 'Hướng dẫn hardening hạ tầng và ứng dụng' },
       { title: 'Báo cáo Audit', path: 'docs/security/audit-report.md', description: 'Kết quả audit bảo mật toàn diện' },
-      { title: 'Kế hoạch khắc phục', path: 'docs/security/remediation-plan.md', description: 'Theo dõi vấn đề và timeline sửa chữa' },
-      { title: 'Roadmap & Hardening', path: 'docs/recent-roadmap-and-security-hardening-2026-03.md', description: 'Báo cáo hardening bảo mật tháng 3/2026' },
     ],
   },
   {
@@ -490,8 +486,6 @@ const sectionsVi: DocSection[] = [
       { title: 'Runbook', path: 'docs/operations/runbook-skeleton.md', description: 'Quy trình vận hành cho các tình huống phổ biến' },
       { title: 'Khôi phục thảm họa', path: 'docs/operations/disaster-recovery-plan.md', description: 'Quy trình backup, restore và failover' },
       { title: 'Checklist phát hành', path: 'docs/operations/release-checklist.md', description: 'Các bước xác minh trước phát hành' },
-      { title: 'Xác thực Staging', path: 'docs/operations/staging-validation-plan.md', description: 'Ma trận QA cho môi trường staging' },
-      { title: 'Signoff cấp Ngân hàng', path: 'docs/operations/bank-grade-signoff-ledger.md', description: 'Yêu cầu chấp thuận từ tổ chức tài chính' },
     ],
   },
   {

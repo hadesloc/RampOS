@@ -1,6 +1,6 @@
 # RampOS Documentation
 
-Welcome to the RampOS documentation. This guide will help you understand, integrate, and operate RampOS.
+Welcome to the RampOS documentation. This guide will help you integrate, deploy, and operate RampOS — the on/off ramp orchestration layer for fiat↔crypto conversion.
 
 ---
 
@@ -43,15 +43,15 @@ Welcome to the RampOS documentation. This guide will help you understand, integr
 
 ### Intent-Based Architecture
 
-RampOS uses an intent-based architecture where all operations are represented as intents:
+RampOS uses an intent-based architecture where all on/off ramp operations are represented as intents:
 
 ```
-User Request -> Intent Created -> Validated -> Processed -> Completed
+User Request -> Intent Created -> Compliance Check -> Escrow -> LP Auction -> Settled
 ```
 
 **Intent Types:**
-- `PayinVnd`: VND deposit from bank
-- `PayoutVnd`: VND withdrawal to bank
+- `PayinVnd`: On-ramp — VND deposit from bank → crypto credit
+- `PayoutVnd`: Off-ramp — crypto → VND withdrawal to bank
 - `TradeExecuted`: Crypto/VND trade record
 - `DepositOnchain`: Crypto deposit
 - `WithdrawOnchain`: Crypto withdrawal
@@ -293,4 +293,4 @@ See [Security Guide](SECURITY.md) for details.
 
 This documentation is for RampOS v1.0.0.
 
-Last updated: 2026-02-02
+Last updated: 2026-03-20

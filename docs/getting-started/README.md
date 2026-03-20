@@ -1,14 +1,15 @@
 # Getting Started with RampOS
 
-Welcome to RampOS - the complete orchestration layer for crypto/VND exchanges in Vietnam. This guide will help you integrate RampOS into your application in less than 5 minutes.
+Welcome to RampOS — the on/off ramp orchestration layer for fiat↔crypto conversion. This guide will help you integrate RampOS into your application in less than 5 minutes.
 
 ## What is RampOS?
 
-RampOS provides a unified API for:
-- **Pay-In (Deposits)**: Accept VND deposits via bank transfer
-- **Pay-Out (Withdrawals)**: Send VND to user bank accounts
-- **Compliance**: Built-in KYC/AML verification
-- **Ledger**: Double-entry accounting for all transactions
+RampOS provides a unified on/off ramp API for:
+- **On-Ramp (Pay-In)**: Accept fiat deposits via bank transfer → convert to crypto
+- **Off-Ramp (Pay-Out)**: Convert crypto → send fiat to user bank accounts
+- **RFQ Auction**: LP marketplace for competitive exchange rates
+- **Compliance**: Built-in KYC/AML/KYT verification
+- **Ledger**: Double-entry accounting for all ramp transactions
 - **Account Abstraction**: Modern wallet UX with gasless transactions
 
 ## Prerequisites

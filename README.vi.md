@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">RampOS</h1>
   <p align="center">
-    <strong>Bring Your Own Rails (BYOR) — Hạ Tầng Sàn Giao Dịch Crypto/Tiền Pháp Định</strong>
+    <strong>Tầng Điều Phối On/Off Ramp — Hạ Tầng Fiat ↔ Crypto cho Sàn Giao Dịch, Ví & Ứng Dụng Fintech</strong>
   </p>
 </p>
 
@@ -28,15 +28,26 @@
 
 ## Tổng quan
 
-RampOS là một **lớp điều phối cấp production** cho các sàn giao dịch crypto/tiền pháp định. Hệ thống xử lý toàn bộ vòng đời giao dịch — từ nạp tiền pháp định, giao dịch crypto, đến rút tiền pháp định — với tính năng compliance tích hợp, account abstraction và phân tách multi-tenant.
+RampOS là một **tầng điều phối on/off ramp cấp production** cho phép bất kỳ sàn giao dịch, ví hay ứng dụng fintech nào chuyển đổi giữa tiền pháp định và crypto. Hệ thống xử lý toàn bộ vòng đời ramp — **nạp tiền pháp định (on-ramp) → lưu ký → giao crypto** và **nhận crypto → quyết toán → rút tiền pháp định (off-ramp)** — với compliance tích hợp, định giá đấu giá LP, và phân tách multi-tenant.
 
 Được xây dựng bằng **Rust** để đảm bảo hiệu năng và an toàn bộ nhớ, **Solidity** cho logic on-chain, và **Next.js** cho dashboard quản trị.
 
+### 💡 Tại sao On/Off Ramp?
+
+**On/off ramp** là cầu nối then chốt giữa tài chính truyền thống và crypto. Mọi người dùng muốn vào hoặc ra khỏi nền kinh tế crypto đều phải đi qua ramp. RampOS cung cấp hạ tầng này dưới dạng nền tảng chìa khóa trao tay:
+
+- **On-Ramp (Tiền pháp định → Crypto)**: Người dùng nạp VND qua chuyển khoản → sàng lọc AML → đấu giá LP lấy tỷ giá tốt nhất → crypto giao vào ví
+- **Off-Ramp (Crypto → Tiền pháp định)**: Người dùng gửi crypto → sàng lọc KYT → thị trường đấu giá LP → VND quyết toán vào tài khoản ngân hàng
+- **Thị trường Đấu giá RFQ**: Nhà cung cấp thanh khoản cạnh tranh trong đấu giá thời gian thực để đưa ra tỷ giá tốt nhất
+- **Sẵn sàng White-Label**: Bất kỳ sàn hay ví nào cũng có thể nhúng RampOS làm tầng ramp qua SDK hoặc widget
+
 ### Nguyên tắc cốt lõi
 
+- **On/Off Ramp First** — Được xây dựng chuyên biệt cho chuyển đổi tiền pháp định↔crypto quy mô lớn
 - **BYOR (Bring Your Own Rails)** — Giữ quan hệ ngân hàng của bạn, kết nối với bất kỳ ngân hàng/PSP nào
 - **Zero Liability** — RampOS không bao giờ giữ tiền của khách hàng
 - **Compliance-First** — Tuân thủ FATF Travel Rule & Luật AML Việt Nam 2022
+- **Định giá RFQ** — Thị trường đấu giá LP đảm bảo tỷ giá tốt nhất cho mọi chuyển đổi
 - **Intent-Based** — Mọi thao tác đều là intent có chữ ký và có thể kiểm toán
 - **Sổ cái kép** — Kế toán chuẩn tài chính với đường mòn kiểm toán đầy đủ
 
@@ -93,33 +104,22 @@ RampOS là một **lớp điều phối cấp production** cho các sàn giao d�
 
 ## Tính năng
 
-### 🎯 Intent Engine (`ramp-core/intents`) — Trái tim của RampOS
+### 🏦 On/Off Ramp Engine — Trái tim của RampOS
 
-RampOS được xây dựng xung quanh **hệ thống Intent khai báo** — người dùng nêu *điều họ muốn làm*, engine tự tìm ra *cách thực hiện tốt nhất*:
+RampOS được xây dựng xung quanh **vòng đời on/off ramp** — chuyển đổi giữa tiền pháp định và crypto với compliance, escrow, và định giá đấu giá LP ở mỗi bước:
 
 ```
-Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
-     ↓ IntentSolver đánh giá tất cả các route
-     ↓ Route A: Bridge USDC → Arbitrum, rồi Swap (điểm: 0.82)
-     ↓ Route B: Swap USDC→USDT trên Ethereum, rồi Bridge (điểm: 0.71)
-     ↓ Chọn Route A → tạo ExecutionPlan
-     ↓ WorkflowEngine lưu trữ & thực thi từng bước một cách bền vững
+ON-RAMP:  Người dùng nạp VND → Kiểm tra AML → Escrow → Đấu giá RFQ → LP Fill → Crypto được giao
+OFF-RAMP: Người dùng gửi crypto → Sàng lọc KYT → Đấu giá RFQ → LP Mua → VND quyết toán vào ngân hàng
 ```
 
-**4 loại action Intent:**
-| Action | Cùng chuỗi | Khác chuỗi | Số bước |
-|--------|------------|------------|---------|
-| `Swap` | Swap DEX trực tiếp | Bridge+Swap hoặc Swap+Bridge (tự chọn) | 2–5 |
-| `Bridge` | — | Across / Stargate (tự chọn provider) | 3 |
-| `Send` | Chuyển trực tiếp | Bridge+Chuyển | 1–4 |
-| `Stake` | Stake trực tiếp | Bridge+Stake | 2–5 |
-
-**Tối ưu hóa Route thông minh:**
-- Ước tính phí gas theo từng chuỗi (Ethereum, Arbitrum, Base, Optimism, Polygon)
-- Ước tính thời gian bridge (5 phút L2→L2, 10 phút L1→L2, 1 giờ L2→L1)
-- Chấm điểm tổng hợp: 40% tiết kiệm gas + 40% tốc độ + 20% ít bước nhất
-- Slippage configurable `max_slippage_bps` (mặc định 0.5%), bảo vệ MEV
-- Ràng buộc: max gas USD, max số bước, deadline thực thi
+**Các loại luồng Ramp:**
+| Luồng | Hướng | Các bước chính |
+|-------|-------|---------------|
+| `Pay-in` | Tiền pháp định → Crypto (On-Ramp) | Nạp ngân hàng → AML → Escrow → LP match → Ghi có crypto |
+| `Pay-out` | Crypto → Tiền pháp định (Off-Ramp) | Cổng compliance → Trừ sổ cái → Chuyển ngân hàng → Xác nhận |
+| `Đấu giá RFQ` | Hai chiều | LP cạnh tranh bid → Chọn giá tốt nhất → Quyết toán |
+| `Rút tiền` | Rút tiền pháp định | Kiểm tra policy → Trừ nợ → Chuyển rails → Xác nhận |
 
 **Workflow Engine hai chế độ:**
 - **Chế độ InProcess** (dev/test) — Tokio async tasks + lưu trữ state PostgreSQL tùy chọn để khôi phục sau crash
@@ -130,6 +130,17 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 - Mỗi workflow nhiều bước đều có bước bù đắp để rollback tự động khi thất bại
 - Escrow đảm bảo không mất tiền trong khi thực hiện một phần
 - `compensation.rs` xử lý rollback theo mô hình saga cho tất cả loại giao dịch
+
+### 🎯 DeFi Intent Engine (`ramp-core/intents`)
+
+Ngoài on/off ramp, RampOS còn hỗ trợ **hệ thống Intent khai báo** cho các thao tác DeFi — người dùng nêu *điều họ muốn làm*, engine tự tìm ra *cách thực hiện tốt nhất*:
+
+| Action | Cùng chuỗi | Khác chuỗi | Số bước |
+|--------|------------|------------|---------|
+| `Swap` | Swap DEX trực tiếp | Bridge+Swap hoặc Swap+Bridge (tự chọn) | 2–5 |
+| `Bridge` | — | Across / Stargate (tự chọn provider) | 3 |
+| `Send` | Chuyển trực tiếp | Bridge+Chuyển | 1–4 |
+| `Stake` | Stake trực tiếp | Bridge+Stake | 2–5 |
 
 ### 🔧 Các service lõi (`ramp-core/service`)
 
@@ -202,14 +213,6 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 | `ZkKycRegistry.sol` | Registry trạng thái KYC Zero-Knowledge |
 | `ZkKycVerifier.sol` | Xác minh ZK-proof cho compliance bảo vệ quyền riêng tư |
 
-### 🌐 Hỗ trợ đa chuỗi (`ramp-core/chain`)
-- **Chuỗi EVM** — Ethereum, Polygon, Arbitrum, Base, BSC
-- **Solana** — SOL gốc và hỗ trợ SPL token
-- **TON** — Tích hợp The Open Network
-- **Cross-Chain** — Hỗ trợ bridge qua Across và Stargate
-- **Tổng hợp DEX** — Định tuyến swap qua nhiều DEX
-- **Tích hợp Oracle** — Chainlink price feeds với fallback provider
-
 ### 🔐 Custody & Quản lý khóa (`ramp-core/custody`)
 - **Ký MPC** — Tạo khóa Multi-Party Computation và ký giao dịch
 - **Policy Engine** — Chính sách phê duyệt cấu hình được theo loại thao tác
@@ -218,6 +221,14 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 ### 💰 Thanh toán & Đo lường (`ramp-core/billing`)
 - **Đo lường sử dụng** — Theo dõi lời gọi API, khối lượng giao dịch per tenant
 - **Tích hợp Stripe** — Thanh toán tự động dựa trên sử dụng đo lường
+
+### 🌐 Hỗ trợ đa chuỗi (`ramp-core/chain`)
+- **Chuỗi EVM** — Ethereum, Polygon, Arbitrum, Base, BSC
+- **Solana** — SOL gốc và hỗ trợ SPL token
+- **TON** — Tích hợp The Open Network
+- **Cross-Chain** — Hỗ trợ bridge qua Across và Stargate
+- **Tổng hợp DEX** — Định tuyến swap qua nhiều DEX
+- **Tích hợp Oracle** — Chainlink price feeds với fallback provider
 
 ### 🖥️ Ứng dụng Frontend
 
@@ -237,16 +248,65 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 - Lịch sử giao dịch
 - Cài đặt tài khoản
 
-#### Widget nhúng
-- Widget on-ramp/off-ramp nhúng được cho bất kỳ dApp nào
-- Chế độ headless và cấu hình server-driven
-- Phân phối sẵn sàng CDN
+#### Widget Nhúng On/Off Ramp
+- **Widget ramp nhúng nhanh** cho bất kỳ dApp, ví, hay sàn giao dịch — thêm fiat↔crypto trong vài phút
+- Hỗ trợ cả on-ramp (mua crypto) và off-ramp (bán crypto)
+- Chế độ headless cho UI tùy chỉnh + cấu hình server-driven cho thương hiệu tenant
+- Tự động kiểm tra tier KYC và cổng compliance
+- Phân phối sẵn sàng CDN với nhúng iframe hoặc React component
+
+```
+  dApp / Ví / Sàn của bạn
+  ┌─────────────────────────────────┐
+  │                                 │
+  │   ┌─────────────────────────┐   │
+  │   │  RampOS Widget (iframe) │   │
+  │   │                         │   │
+  │   │  [Mua Crypto]  Số tiền: │   │
+  │   │  100 USDT = 2,600,000₫  │   │
+  │   │  Tỷ giá: LP Acme ✅      │   │
+  │   │                         │   │
+  │   │  [Xác nhận mua →]      │   │
+  │   └─────────────────────────┘   │
+  │                                 │
+  └─────────────────────────────────┘
+  Vận hành bởi RampOS RFQ Auction Engine
+```
 
 ---
 
 ## Kiến trúc
 
-### 1. Kiến trúc hệ thống tổng thể
+### 1. Tổng quan Luồng On/Off Ramp
+
+```
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                  Luồng On/Off Ramp của RampOS                           │
+  │                                                                       │
+  │   ON-RAMP (Tiền pháp định → Crypto)                                    │
+  │   ════════════════════════════════                                    │
+  │   Người dùng    Ngân hàng    RampOS              LP Pool    Ví        │
+  │    │              │            │                    │         │        │
+  │    │─── Nạp tiền ─►│── Webhook ─►│── Kiểm tra AML ─►  │         │        │
+  │    │              │            │── Đấu giá RFQ ──►  │         │        │
+  │    │              │            │◄── LP Bid (tốt nhất)│         │        │
+  │    │              │            │── Escrow+Q.Toán ──►│──Crypto►│        │
+  │    │◄─────────── Xác nhận + Biên lai ────────────────────────│        │
+  │                                                                       │
+  │   OFF-RAMP (Crypto → Tiền pháp định)                                   │
+  │   ═════════════════════════════════                                   │
+  │   Người dùng   Ví          RampOS              LP Pool    Ngân hàng  │
+  │    │            │             │                    │          │        │
+  │    │── Gửi ────►│── Nhận ────►│── Sàng lọc KYT ─►  │          │        │
+  │    │            │             │── Đấu giá RFQ ──►  │          │        │
+  │    │            │             │◄── LP Bid (tốt nhất)│          │        │
+  │    │            │             │── Q.Toán+Chuyển ────────────►│        │
+  │    │◄─────────── VND vào tài khoản ngân hàng ────────────────│        │
+  │                                                                       │
+  └─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2. Kiến trúc hệ thống tổng thể
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
@@ -292,7 +352,7 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 
 ---
 
-### 2. Vòng đời Intent — Từ yêu cầu đến thực thi
+### 3. Vòng đời Intent — Từ yêu cầu đến thực thi
 
 ```
   Tenant / Người dùng
@@ -365,7 +425,7 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 
 ---
 
-### 3. Luồng Pay-in (Tiền pháp định → Crypto)
+### 4. Luồng Pay-in (Tiền pháp định → Crypto)
 
 ```
   Người dùng (trên sàn)       RampOS                        Ngân hàng / Blockchain
@@ -401,7 +461,7 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 
 ---
 
-### 4. Luồng Pay-out (Crypto → Tiền pháp định) với Cổng Compliance
+### 5. Luồng Pay-out (Crypto → Tiền pháp định) với Cổng Compliance
 
 ```
   Người dùng (yêu cầu rút tiền)
@@ -446,7 +506,7 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 
 ---
 
-### 5. Hạ tầng Production
+### 6. Hạ tầng Production
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -492,7 +552,7 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 
 | Crate | Mô tả | Phụ thuộc chính |
 |-------|-------------|-----------------|
-| `ramp-api` | API Gateway REST — 35 admin + 9 portal + 2 LP handlers | Axum 0.7, Tower, OpenTelemetry |
+| `ramp-api` | API Gateway REST — 39 admin + 9 portal + 2 LP handlers | Axum 0.7, Tower, OpenTelemetry |
 | `ramp-core` | Logic nghiệp vụ, state machine, 51 service + 19 repository modules | Tokio, SQLx, async-nats |
 | `ramp-ledger` | Kế toán sổ cái kép | rust_decimal |
 | `ramp-compliance` | KYC/AML/KYT/Travel Rule, 75 modules | Fuzz testing, tạo báo cáo |
@@ -505,7 +565,7 @@ Intent của user: "Swap 1000 USDC trên Ethereum → USDT trên Arbitrum"
 ```
 rampos/
 ├── crates/                # 7 Rust workspace crates
-│   ├── ramp-api/           # HTTP API (Axum) — 35 admin + 9 portal + 2 LP handlers
+│   ├── ramp-api/           # HTTP API (Axum) — 39 admin + 9 portal + 2 LP handlers
 │   ├── ramp-core/          # Logic nghiệp vụ — 51 service + 19 repository modules
 │   │   ├── billing/         # Đo lường, Stripe
 │   │   ├── bridge/          # Across, Stargate
@@ -551,7 +611,7 @@ rampos/
 ├── packages/widget/        # Widget nhúng
 ├── frontend/               # Dashboard Admin (Next.js 15)
 ├── frontend-landing/       # Trang marketing
-├── migrations/             # 49 up + 32 down PostgreSQL migrations
+├── migrations/             # 55 PostgreSQL migrations
 ├── k8s/                    # Kubernetes (Kustomize)
 │   ├── base/               # Manifests lõi, Postgres HA, PgBouncer
 │   ├── jobs/               # Backup jobs (Postgres, Redis, NATS → S3)

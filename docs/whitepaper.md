@@ -397,16 +397,9 @@ RampOS khuyến nghị:
 
 ---
 
-Nếu bạn muốn, mình sẽ viết tiếp **Whitepaper v1.1 dạng “tài liệu bàn giao kỹ thuật”** (siêu chi tiết) gồm:
+> **Phiên bản tiếp theo (v1.1)** sẽ bổ sung: JSON Schema đầy đủ cho API + webhook signing spec, DB schema chi tiết (DDL), bộ AML rules mặc định per-tenant, và AA kit spec (bundler/paymaster/policy chống abuse).
 
-1. **JSON Schema** đầy đủ cho toàn bộ API + webhook signing spec
-2. **DB schema** chi tiết (DDL) cho ledger & recon
-3. **Bộ AML rules mặc định** + cách cấu hình per-tenant
-4. **AA kit spec**: bundler/paymaster, policy chống abuse, mô hình phí gasless
-
-Bạn muốn “whitepaper kỹ thuật” tập trung nhiều hơn vào **(A) kiến trúc backend & vận hành**, hay **(B) AA/multi-chain & wallet UX**?
-
-[1]: https://baochinhphu.vn/bat-dau-tiep-nhan-ho-so-cap-phep-thi-truong-tai-san-ma-hoa-tu-ngay-20-1-102260120185611897.htm?utm_source=chatgpt.com "Bắt đầu tiếp nhận hồ sơ cấp phép thị trường tài sản mã hóa từ ngày 20/1"
+[1]: https://baochinhphu.vn/bat-dau-tiep-nhan-ho-so-cap-phep-thi-truong-tai-san-ma-hoa-tu-ngay-20-1-102260120185611897.htm?utm_source=chatgpt.com "Bắt đầu tiếp nhận hồ số cấp phép thị trường tài sản mã hóa từ ngày 20/1"
 [2]: https://xaydungchinhsach.chinhphu.vn/toan-van-nghi-quyet-so-5-2025-nq-cp-ve-trien-khai-thi-diem-thi-truong-tai-san-ma-hoa-tai-viet-nam-119250909184045221.htm "TOÀN VĂN: Nghị quyết số 05/2025/NQ-CP về triển khai thí điểm thị trường tài sản mã hóa tại Việt Nam"
 [3]: https://eips.ethereum.org/EIPS/eip-4337?utm_source=chatgpt.com "ERC-4337: Account Abstraction Using Alt Mempool"
 [4]: https://eips.ethereum.org/EIPS/eip-7702?utm_source=chatgpt.com "EIP-7702: Set Code for EOAs"
