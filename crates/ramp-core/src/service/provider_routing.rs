@@ -5,8 +5,10 @@
 //! compliance productization on current seams.
 
 use ramp_common::Result;
+use ramp_compliance::provider_routing::ProviderRoutingPolicy;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::str::FromStr;
 
 /// A single routing policy rule that determines which compliance provider to use.
@@ -39,12 +41,15 @@ pub struct ProviderRoutingDecision {
     pub evaluation_context: ProviderRoutingContext,
     pub fallback_used: bool,
     pub explanation: String,
+    pub provenance: serde_json::Value,
 }
 
 /// Context used when evaluating provider routing rules.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderRoutingContext {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_family: Option<String>,
     pub corridor_code: Option<String>,
     pub entity_type: Option<String>,
     pub risk_tier: Option<String>,
@@ -78,6 +83,7 @@ pub struct ProviderRoutingSnapshot {
     pub source: String,
     pub rules: Vec<ProviderRoutingRule>,
     pub institutional_records: Vec<InstitutionalComplianceRecord>,
+    pub provenance: serde_json::Value,
 }
 
 /// Provider routing service — evaluates policy rules and tracks institutional compliance.
@@ -105,10 +111,7 @@ impl ProviderRoutingService {
     }
 
     /// Evaluate routing rules against a context and return the best match.
-    pub fn evaluate(
-        &self,
-        context: &ProviderRoutingContext,
-    ) -> Result<ProviderRoutingDecision> {
+    pub fn evaluate(&self, context: &ProviderRoutingContext) -> Result<ProviderRoutingDecision> {
         let mut candidates: Vec<&ProviderRoutingRule> = self
             .rules
             .iter()
@@ -129,6 +132,7 @@ impl ProviderRoutingService {
                     "Matched rule '{}' (priority {}) for provider '{}'",
                     best.rule_id, best.priority, best.provider_key
                 ),
+                provenance: derive_rule_provenance(best),
             })
         } else {
             // Fallback: return default provider
@@ -140,22 +144,68 @@ impl ProviderRoutingService {
                 evaluation_context: context.clone(),
                 fallback_used: true,
                 explanation: "No matching rule found; using default fallback provider".to_string(),
+                provenance: serde_json::json!({
+                    "mode": "fallback",
+                    "sourceClass": "bounded_fallback",
+                    "reason": "no_matching_rule"
+                }),
             })
+        }
+    }
+
+    pub fn from_policies(policies: Vec<ProviderRoutingPolicy>) -> Self {
+        Self {
+            rules: policies.into_iter().map(rule_from_policy).collect(),
+            institutional_records: Vec::new(),
+        }
+    }
+
+    pub fn decision_from_policy(
+        policy: &ProviderRoutingPolicy,
+        context: &ProviderRoutingContext,
+    ) -> ProviderRoutingDecision {
+        let selected_provider_key = primary_provider_key(policy);
+        ProviderRoutingDecision {
+            selected_provider_class: policy.provider_family.as_str().to_string(),
+            matched_rule_id: policy.policy_id.clone(),
+            match_priority: 0,
+            evaluation_context: context.clone(),
+            fallback_used: false,
+            explanation: format!(
+                "Matched authoritative policy '{}' for provider '{}'",
+                policy.policy_id, selected_provider_key
+            ),
+            provenance: serde_json::json!({
+                "policyId": policy.policy_id,
+                "policyName": policy.policy_name,
+                "tenantId": policy.tenant_id,
+                "lifecycleState": policy.lifecycle_state,
+                "providerFamily": policy.provider_family.as_str(),
+                "sourceClass": "persisted_registry",
+                "source": "provider_routing_policies",
+                "fallbackOrder": policy.fallback_order,
+                "providerWeights": policy.provider_weights,
+                "scorecard": policy.scorecard,
+                "metadata": policy.metadata,
+            }),
+            selected_provider_key,
         }
     }
 
     /// Get snapshot of all routing state for operator inspection.
     pub fn snapshot(&self) -> ProviderRoutingSnapshot {
+        let source = if self.rules.is_empty() {
+            "fallback"
+        } else {
+            "registry"
+        }
+        .to_string();
         ProviderRoutingSnapshot {
             action_mode: "policy_routed".to_string(),
-            source: if self.rules.is_empty() {
-                "fallback"
-            } else {
-                "registry"
-            }
-            .to_string(),
+            source: source.clone(),
             rules: self.rules.clone(),
             institutional_records: self.institutional_records.clone(),
+            provenance: derive_snapshot_provenance(&self.rules, &source),
         }
     }
 
@@ -166,24 +216,116 @@ impl ProviderRoutingService {
     ) -> Vec<&InstitutionalComplianceRecord> {
         self.institutional_records
             .iter()
-            .filter(|rec| {
-                entity_type.map_or(true, |et| rec.entity_type.eq_ignore_ascii_case(et))
-            })
+            .filter(|rec| entity_type.map_or(true, |et| rec.entity_type.eq_ignore_ascii_case(et)))
             .collect()
     }
 }
 
-fn matches_context(rule: &ProviderRoutingRule, context: &ProviderRoutingContext) -> bool {
-    rule.corridor_code
-        .as_ref()
-        .map_or(true, |code| context.corridor_code.as_deref() == Some(code.as_str()))
-        && rule.entity_type.as_ref().map_or(true, |et| {
-            context.entity_type.as_deref() == Some(et.as_str())
+fn primary_provider_key(policy: &ProviderRoutingPolicy) -> String {
+    if let Some(first) = policy.fallback_order.first() {
+        return first.clone();
+    }
+
+    policy
+        .provider_weights
+        .as_object()
+        .and_then(|weights| {
+            weights
+                .iter()
+                .filter_map(|(provider, weight)| weight.as_i64().map(|value| (provider, value)))
+                .max_by_key(|(_, value)| *value)
+                .map(|(provider, _)| provider.to_string())
         })
-        && rule
-            .risk_tier
-            .as_ref()
-            .map_or(true, |rt| context.risk_tier.as_deref() == Some(rt.as_str()))
+        .unwrap_or_else(|| format!("{}_unassigned", policy.provider_family.as_str()))
+}
+
+fn rule_from_policy(policy: ProviderRoutingPolicy) -> ProviderRoutingRule {
+    ProviderRoutingRule {
+        rule_id: policy.policy_id.clone(),
+        priority: 0,
+        corridor_code: policy.corridor_code.clone(),
+        entity_type: policy.entity_type.clone(),
+        risk_tier: policy.risk_tier.clone(),
+        amount_min: policy.amount_min.map(|value| value.normalize().to_string()),
+        amount_max: policy.amount_max.map(|value| value.normalize().to_string()),
+        asset: policy.asset_code.clone(),
+        partner_id: policy.partner_key.clone(),
+        provider_key: primary_provider_key(&policy),
+        provider_class: policy.provider_family.as_str().to_string(),
+        enabled: policy.lifecycle_state.eq_ignore_ascii_case("active"),
+        metadata: serde_json::json!({
+            "policyId": policy.policy_id,
+            "policyName": policy.policy_name,
+            "tenantId": policy.tenant_id,
+            "providerFamily": policy.provider_family.as_str(),
+            "lifecycleState": policy.lifecycle_state,
+            "sourceClass": "persisted_registry",
+            "source": "provider_routing_policies",
+            "fallbackOrder": policy.fallback_order,
+            "providerWeights": policy.provider_weights,
+            "scorecard": policy.scorecard,
+            "metadata": policy.metadata,
+        }),
+    }
+}
+
+fn derive_rule_provenance(rule: &ProviderRoutingRule) -> serde_json::Value {
+    let mut provenance = match rule.metadata.clone() {
+        serde_json::Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+    provenance
+        .entry("policyId".to_string())
+        .or_insert_with(|| serde_json::Value::String(rule.rule_id.clone()));
+    provenance
+        .entry("sourceClass".to_string())
+        .or_insert_with(|| serde_json::Value::String("registry_rules".to_string()));
+    provenance
+        .entry("selectedProviderKey".to_string())
+        .or_insert_with(|| serde_json::Value::String(rule.provider_key.clone()));
+    provenance
+        .entry("selectedProviderClass".to_string())
+        .or_insert_with(|| serde_json::Value::String(rule.provider_class.clone()));
+    serde_json::Value::Object(provenance)
+}
+
+fn derive_snapshot_provenance(rules: &[ProviderRoutingRule], source: &str) -> serde_json::Value {
+    let source_class = rules
+        .iter()
+        .filter_map(|rule| {
+            rule.metadata
+                .get("sourceClass")
+                .and_then(|value| value.as_str())
+        })
+        .next()
+        .unwrap_or_else(|| {
+            if source == "registry" {
+                "registry_rules"
+            } else {
+                "bounded_fallback"
+            }
+        });
+    let provider_families: BTreeSet<String> = rules
+        .iter()
+        .map(|rule| rule.provider_class.clone())
+        .collect();
+
+    serde_json::json!({
+        "sourceClass": source_class,
+        "policyCount": rules.len(),
+        "providerFamilies": provider_families.into_iter().collect::<Vec<_>>(),
+    })
+}
+
+fn matches_context(rule: &ProviderRoutingRule, context: &ProviderRoutingContext) -> bool {
+    rule.corridor_code.as_ref().map_or(true, |code| {
+        context.corridor_code.as_deref() == Some(code.as_str())
+    }) && rule.entity_type.as_ref().map_or(true, |et| {
+        context.entity_type.as_deref() == Some(et.as_str())
+    }) && rule
+        .risk_tier
+        .as_ref()
+        .map_or(true, |rt| context.risk_tier.as_deref() == Some(rt.as_str()))
         && rule
             .asset
             .as_ref()
@@ -198,7 +340,11 @@ fn matches_context(rule: &ProviderRoutingRule, context: &ProviderRoutingContext)
 /// If the context has no amount, amount-bounded rules do not match.
 /// If the amounts cannot be parsed as Decimal, the bound is ignored.
 fn matches_amount_bounds(rule: &ProviderRoutingRule, context: &ProviderRoutingContext) -> bool {
-    let context_amount = match context.amount.as_deref().and_then(|a| Decimal::from_str(a).ok()) {
+    let context_amount = match context
+        .amount
+        .as_deref()
+        .and_then(|a| Decimal::from_str(a).ok())
+    {
         Some(amt) => amt,
         None => {
             // No context amount: match only if rule has no amount bounds
@@ -265,6 +411,7 @@ mod tests {
         let service = ProviderRoutingService::with_rules(sample_rules());
         let decision = service
             .evaluate(&ProviderRoutingContext {
+                provider_family: None,
                 corridor_code: Some("USDT_VN_OFFRAMP".to_string()),
                 entity_type: Some("individual".to_string()),
                 risk_tier: None,
@@ -285,6 +432,7 @@ mod tests {
         let service = ProviderRoutingService::with_rules(sample_rules());
         let decision = service
             .evaluate(&ProviderRoutingContext {
+                provider_family: None,
                 corridor_code: Some("USDT_HK_OFFRAMP".to_string()),
                 entity_type: Some("institution".to_string()),
                 risk_tier: None,
@@ -304,6 +452,7 @@ mod tests {
         let service = ProviderRoutingService::new();
         let decision = service
             .evaluate(&ProviderRoutingContext {
+                provider_family: None,
                 corridor_code: None,
                 entity_type: None,
                 risk_tier: None,
@@ -391,6 +540,7 @@ mod tests {
         // Within bounds: should match
         let in_bounds = service
             .evaluate(&ProviderRoutingContext {
+                provider_family: None,
                 corridor_code: None,
                 entity_type: None,
                 risk_tier: None,
@@ -406,6 +556,7 @@ mod tests {
         // Below min: should NOT match, fallback
         let below = service
             .evaluate(&ProviderRoutingContext {
+                provider_family: None,
                 corridor_code: None,
                 entity_type: None,
                 risk_tier: None,
@@ -420,6 +571,7 @@ mod tests {
         // Above max: should NOT match, fallback
         let above = service
             .evaluate(&ProviderRoutingContext {
+                provider_family: None,
                 corridor_code: None,
                 entity_type: None,
                 risk_tier: None,
@@ -454,6 +606,7 @@ mod tests {
         // No amount in context: amount-bounded rule should NOT match
         let decision = service
             .evaluate(&ProviderRoutingContext {
+                provider_family: None,
                 corridor_code: None,
                 entity_type: None,
                 risk_tier: None,
@@ -464,5 +617,78 @@ mod tests {
             })
             .expect("should evaluate");
         assert!(decision.fallback_used);
+    }
+
+    #[test]
+    fn evaluate_exposes_matched_rule_provenance() {
+        let service = ProviderRoutingService::with_rules(vec![ProviderRoutingRule {
+            rule_id: "provider_policy_vn_sg".to_string(),
+            priority: 1,
+            corridor_code: Some("VN_SG_PAYOUT".to_string()),
+            entity_type: Some("business".to_string()),
+            risk_tier: Some("high".to_string()),
+            amount_min: Some("100".to_string()),
+            amount_max: Some("5000".to_string()),
+            asset: Some("USDT".to_string()),
+            partner_id: Some("partner_scb".to_string()),
+            provider_key: "notabene".to_string(),
+            provider_class: "travel_rule".to_string(),
+            enabled: true,
+            metadata: serde_json::json!({
+                "policyId": "provider_policy_vn_sg",
+                "tenantId": "tenant_provider_policy",
+                "sourceClass": "persisted_registry",
+                "lifecycleState": "active",
+            }),
+        }]);
+
+        let decision = service
+            .evaluate(&ProviderRoutingContext {
+                provider_family: None,
+                corridor_code: Some("VN_SG_PAYOUT".to_string()),
+                entity_type: Some("business".to_string()),
+                risk_tier: Some("high".to_string()),
+                amount: Some("1000".to_string()),
+                asset: Some("USDT".to_string()),
+                partner_id: Some("partner_scb".to_string()),
+                tenant_id: Some("tenant_provider_policy".to_string()),
+            })
+            .expect("should evaluate");
+        let payload = serde_json::to_value(decision).expect("decision should serialize");
+
+        assert_eq!(
+            payload["provenance"]["policyId"], "provider_policy_vn_sg",
+            "matched decision must expose authoritative persisted provenance"
+        );
+        assert_eq!(payload["provenance"]["sourceClass"], "persisted_registry");
+    }
+
+    #[test]
+    fn snapshot_exposes_top_level_provenance_for_registry_rules() {
+        let service = ProviderRoutingService::with_rules(vec![ProviderRoutingRule {
+            rule_id: "provider_policy_vn_sg".to_string(),
+            priority: 1,
+            corridor_code: Some("VN_SG_PAYOUT".to_string()),
+            entity_type: Some("business".to_string()),
+            risk_tier: Some("high".to_string()),
+            amount_min: Some("100".to_string()),
+            amount_max: Some("5000".to_string()),
+            asset: Some("USDT".to_string()),
+            partner_id: Some("partner_scb".to_string()),
+            provider_key: "notabene".to_string(),
+            provider_class: "travel_rule".to_string(),
+            enabled: true,
+            metadata: serde_json::json!({
+                "policyId": "provider_policy_vn_sg",
+                "tenantId": "tenant_provider_policy",
+                "sourceClass": "persisted_registry",
+                "providerFamily": "travel_rule",
+            }),
+        }]);
+
+        let payload = serde_json::to_value(service.snapshot()).expect("snapshot should serialize");
+
+        assert_eq!(payload["provenance"]["sourceClass"], "persisted_registry");
+        assert_eq!(payload["provenance"]["policyCount"], 1);
     }
 }

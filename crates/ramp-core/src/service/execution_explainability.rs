@@ -5,8 +5,18 @@
 //! and solver seams. Delivers FR-017.
 
 use ramp_common::Result;
+use ramp_compliance::provider_routing::{
+    ProviderFamily, ProviderRoutingPolicyStore, ProviderRoutingQuery,
+};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
+use std::collections::BTreeMap;
+
+use crate::repository::rfq::LpReliabilitySnapshotRow;
+use crate::repository::{CorridorPackRepository, PgCorridorPackRepository};
+use crate::service::treasury::TreasuryService;
+use crate::service::treasury_evidence::{TreasuryEvidenceImportQuery, TreasuryEvidenceImportStore};
 
 /// Input signals consumed for route explainability scoring.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,6 +27,8 @@ pub struct RouteExplainabilityInput {
     pub lp_id: String,
     pub direction: String,
     pub asset: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_family: Option<String>,
     /// LP reliability score (0-100) from LpReliabilitySnapshotRow.
     pub lp_reliability_score: Option<Decimal>,
     /// LP fill rate from reliability snapshot.
@@ -60,6 +72,7 @@ pub struct RouteExplainabilityResult {
     pub eligible: bool,
     pub ineligibility_reasons: Vec<String>,
     pub summary: String,
+    pub provenance: serde_json::Value,
 }
 
 /// Comparison of multiple route candidates with ranking.
@@ -72,6 +85,7 @@ pub struct RouteComparisonSnapshot {
     pub candidates: Vec<RouteExplainabilityResult>,
     pub winning_route_id: Option<String>,
     pub explanation: String,
+    pub provenance: serde_json::Value,
 }
 
 /// Configuration for rate normalization — parameterized instead of hardcoded.
@@ -122,6 +136,11 @@ pub struct ExecutionExplainabilityService {
     weights: ExplainabilityWeights,
 }
 
+struct ResolvedRouteExplainabilityInput {
+    input: RouteExplainabilityInput,
+    provenance: serde_json::Value,
+}
+
 impl ExecutionExplainabilityService {
     pub fn new() -> Self {
         Self {
@@ -153,7 +172,9 @@ impl ExecutionExplainabilityService {
             contribution: rate_contribution,
             explanation: format!(
                 "Rate {} normalized to score {:.2} (direction: {}, baseline: {}, spread: {})",
-                input.quoted_rate, rate_score, input.direction,
+                input.quoted_rate,
+                rate_score,
+                input.direction,
                 self.weights.rate_normalization.baseline,
                 self.weights.rate_normalization.spread,
             ),
@@ -195,8 +216,8 @@ impl ExecutionExplainabilityService {
         // Adjust based on whether float covers the quoted VND amount
         let treasury_score = match input.treasury_float_available {
             Some(float) if float > Decimal::ZERO => {
-                let coverage_ratio = (float / input.quoted_vnd_amount.max(Decimal::ONE))
-                    .min(Decimal::from(2));
+                let coverage_ratio =
+                    (float / input.quoted_vnd_amount.max(Decimal::ONE)).min(Decimal::from(2));
                 // Scale: 2x coverage = full score, <1x = reduced
                 (treasury_base * coverage_ratio / Decimal::from(2)).min(Decimal::from(100))
             }
@@ -277,7 +298,20 @@ impl ExecutionExplainabilityService {
             eligible,
             ineligibility_reasons,
             summary,
+            provenance: request_only_provenance(),
         }
+    }
+
+    pub async fn explain_route_from_pool(
+        &self,
+        pool: PgPool,
+        tenant_id: &str,
+        input: &RouteExplainabilityInput,
+    ) -> Result<RouteExplainabilityResult> {
+        let resolved = self.resolve_runtime_input(&pool, tenant_id, input).await?;
+        let mut result = self.explain_route(&resolved.input);
+        result.provenance = resolved.provenance;
+        Ok(result)
     }
 
     /// Compare multiple route candidates and rank them by composite score.
@@ -287,8 +321,10 @@ impl ExecutionExplainabilityService {
         direction: &str,
         inputs: &[RouteExplainabilityInput],
     ) -> Result<RouteComparisonSnapshot> {
-        let mut candidates: Vec<RouteExplainabilityResult> =
-            inputs.iter().map(|input| self.explain_route(input)).collect();
+        let mut candidates: Vec<RouteExplainabilityResult> = inputs
+            .iter()
+            .map(|input| self.explain_route(input))
+            .collect();
 
         // Sort by composite score descending, eligible first
         candidates.sort_by(|a, b| {
@@ -305,8 +341,7 @@ impl ExecutionExplainabilityService {
         let explanation = match &winning_route_id {
             Some(winner) => format!(
                 "Best route: {} (score {:.4})",
-                winner,
-                candidates[0].composite_score
+                winner, candidates[0].composite_score
             ),
             None => "No eligible route found".to_string(),
         };
@@ -318,6 +353,65 @@ impl ExecutionExplainabilityService {
             candidates,
             winning_route_id,
             explanation,
+            provenance: serde_json::json!({
+                "sourceClass": "request_only",
+                "candidateCount": inputs.len(),
+            }),
+        })
+    }
+
+    pub async fn compare_routes_from_pool(
+        &self,
+        pool: PgPool,
+        tenant_id: &str,
+        corridor_code: Option<&str>,
+        direction: &str,
+        inputs: &[RouteExplainabilityInput],
+    ) -> Result<RouteComparisonSnapshot> {
+        let mut candidates = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            candidates.push(
+                self.explain_route_from_pool(pool.clone(), tenant_id, input)
+                    .await?,
+            );
+        }
+
+        candidates.sort_by(|a, b| {
+            b.eligible
+                .cmp(&a.eligible)
+                .then_with(|| b.composite_score.cmp(&a.composite_score))
+        });
+
+        let winning_route_id = candidates
+            .first()
+            .filter(|candidate| candidate.eligible)
+            .map(|candidate| candidate.route_id.clone());
+        let explanation = match &winning_route_id {
+            Some(winner) => format!(
+                "Best route: {} (score {:.4})",
+                winner, candidates[0].composite_score
+            ),
+            None => "No eligible route found".to_string(),
+        };
+
+        Ok(RouteComparisonSnapshot {
+            action_mode: "explainability".to_string(),
+            corridor_code: corridor_code.map(ToOwned::to_owned),
+            direction: direction.to_string(),
+            candidates: candidates.clone(),
+            winning_route_id,
+            explanation,
+            provenance: serde_json::json!({
+                "sourceClass": "runtime_composed",
+                "candidateCount": candidates.len(),
+                "sources": {
+                    "liquidity": "lp_reliability_snapshots",
+                    "treasury": "treasury_evidence_imports",
+                    "corridor": "corridor_packs",
+                    "compliance": "provider_routing_policies",
+                },
+                "tenantId": tenant_id,
+            }),
         })
     }
 }
@@ -325,6 +419,162 @@ impl ExecutionExplainabilityService {
 impl Default for ExecutionExplainabilityService {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+fn request_only_provenance() -> serde_json::Value {
+    serde_json::json!({
+        "sourceClass": "request_only",
+        "sources": {
+            "liquidity": "request",
+            "treasury": "request",
+            "corridor": "request",
+            "compliance": "request",
+        }
+    })
+}
+
+impl ExecutionExplainabilityService {
+    async fn resolve_runtime_input(
+        &self,
+        pool: &PgPool,
+        tenant_id: &str,
+        input: &RouteExplainabilityInput,
+    ) -> Result<ResolvedRouteExplainabilityInput> {
+        let mut resolved = input.clone();
+        let mut sources = BTreeMap::<&str, &str>::from([
+            ("liquidity", "request"),
+            ("treasury", "request"),
+            ("corridor", "request"),
+            ("compliance", "request"),
+        ]);
+
+        if let Some(snapshot) =
+            load_latest_lp_reliability(pool, tenant_id, &input.lp_id, &input.direction).await?
+        {
+            resolved.lp_reliability_score = snapshot.reliability_score;
+            resolved.lp_fill_rate = Some(snapshot.fill_rate);
+            resolved.lp_dispute_rate = Some(snapshot.dispute_rate);
+            sources.insert("liquidity", "lp_reliability_snapshots");
+        }
+
+        if let Some(float_available) = load_treasury_float(pool, tenant_id, &input.asset).await? {
+            resolved.treasury_float_available = Some(float_available);
+            resolved.treasury_stress_active = float_available < input.quoted_vnd_amount;
+            sources.insert("treasury", "treasury_evidence_imports");
+        }
+
+        if let Some(corridor_code) = input.corridor_code.as_deref() {
+            let corridor_repo = PgCorridorPackRepository::new(pool.clone());
+            if let Some(corridor) = corridor_repo
+                .get_corridor_pack(Some(tenant_id), corridor_code)
+                .await?
+            {
+                resolved.corridor_policy_eligible =
+                    corridor.lifecycle_state.eq_ignore_ascii_case("active")
+                        && corridor.rollout_state.eq_ignore_ascii_case("active")
+                        && corridor.eligibility_state.eq_ignore_ascii_case("eligible");
+                sources.insert("corridor", "corridor_packs");
+            }
+        }
+
+        if let Some(provider_family) = input
+            .provider_family
+            .as_deref()
+            .and_then(parse_provider_family)
+        {
+            let store = ProviderRoutingPolicyStore::new(pool.clone());
+            let query = ProviderRoutingQuery {
+                provider_family,
+                corridor_code: input.corridor_code.clone(),
+                entity_type: None,
+                risk_tier: None,
+                partner_key: Some(input.lp_id.clone()),
+                asset_code: Some(input.asset.clone()),
+                amount: Some(input.quoted_vnd_amount),
+            };
+            resolved.compliance_eligible = store
+                .select_policy(Some(tenant_id), &query)
+                .await
+                .map_err(|error| ramp_common::Error::Database(error.to_string()))?
+                .is_some();
+            sources.insert("compliance", "provider_routing_policies");
+        }
+
+        Ok(ResolvedRouteExplainabilityInput {
+            input: resolved,
+            provenance: serde_json::json!({
+                "sourceClass": "runtime_composed",
+                "sources": sources,
+                "tenantId": tenant_id,
+            }),
+        })
+    }
+}
+
+async fn load_latest_lp_reliability(
+    pool: &PgPool,
+    tenant_id: &str,
+    lp_id: &str,
+    direction: &str,
+) -> Result<Option<LpReliabilitySnapshotRow>> {
+    sqlx::query_as::<_, LpReliabilitySnapshotRow>(
+        r#"
+        SELECT *
+        FROM lp_reliability_snapshots
+        WHERE tenant_id = $1
+          AND lp_id = $2
+          AND direction = $3
+        ORDER BY window_ended_at DESC, updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(lp_id)
+    .bind(direction)
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| ramp_common::Error::Database(error.to_string()))
+}
+
+async fn load_treasury_float(
+    pool: &PgPool,
+    tenant_id: &str,
+    asset: &str,
+) -> Result<Option<Decimal>> {
+    let store = TreasuryEvidenceImportStore::new(pool.clone());
+    let records = store
+        .list_imports(&TreasuryEvidenceImportQuery {
+            tenant_id: tenant_id.to_string(),
+            source_family: None,
+            asset_code: Some(asset.to_string()),
+            account_scope: None,
+        })
+        .await
+        .map_err(|error| ramp_common::Error::Database(error.to_string()))?;
+    if records.is_empty() {
+        return Ok(None);
+    }
+
+    let float_slices = TreasuryService::float_slices_from_evidence(&records);
+    let total = float_slices
+        .into_iter()
+        .filter(|slice| slice.asset.eq_ignore_ascii_case(asset))
+        .filter_map(|slice| slice.available.parse::<Decimal>().ok())
+        .fold(Decimal::ZERO, |acc, value| acc + value);
+
+    Ok(Some(total))
+}
+
+fn parse_provider_family(value: &str) -> Option<ProviderFamily> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "kyc" => Some(ProviderFamily::Kyc),
+        "kyb" => Some(ProviderFamily::Kyb),
+        "kyt" => Some(ProviderFamily::Kyt),
+        "sanctions" => Some(ProviderFamily::Sanctions),
+        "adverse_media" => Some(ProviderFamily::AdverseMedia),
+        "travel_rule" => Some(ProviderFamily::TravelRule),
+        _ => None,
     }
 }
 
@@ -356,13 +606,19 @@ fn normalize_rate_score(
 mod tests {
     use super::*;
 
-    fn sample_input(route_id: &str, lp_id: &str, rate: u32, eligible: bool) -> RouteExplainabilityInput {
+    fn sample_input(
+        route_id: &str,
+        lp_id: &str,
+        rate: u32,
+        eligible: bool,
+    ) -> RouteExplainabilityInput {
         RouteExplainabilityInput {
             route_id: route_id.to_string(),
             corridor_code: Some("USDT_VN_OFFRAMP".to_string()),
             lp_id: lp_id.to_string(),
             direction: "OFFRAMP".to_string(),
             asset: "USDT".to_string(),
+            provider_family: None,
             lp_reliability_score: Some(Decimal::from(85)),
             lp_fill_rate: Some(Decimal::new(9500, 4)),
             lp_dispute_rate: Some(Decimal::new(100, 4)),

@@ -221,7 +221,8 @@ fn row_to_policy(row: ProviderRoutingPolicyRow) -> Result<ProviderRoutingPolicy,
     Ok(ProviderRoutingPolicy {
         policy_id: row.id,
         tenant_id: row.tenant_id,
-        provider_family: parse_provider_family(&row.provider_family).map_err(sqlx::Error::Decode)?,
+        provider_family: parse_provider_family(&row.provider_family)
+            .map_err(sqlx::Error::Decode)?,
         policy_name: row.policy_name,
         corridor_code: row.corridor_code,
         entity_type: row.entity_type,
@@ -263,10 +264,22 @@ fn parse_provider_family(
 
 fn evaluate_policy_match(policy: &ProviderRoutingPolicy, query: &ProviderRoutingQuery) -> i32 {
     let mut score = 0;
-    score += string_match_score(policy.corridor_code.as_deref(), query.corridor_code.as_deref(), 8);
-    score += string_match_score(policy.entity_type.as_deref(), query.entity_type.as_deref(), 5);
+    score += string_match_score(
+        policy.corridor_code.as_deref(),
+        query.corridor_code.as_deref(),
+        8,
+    );
+    score += string_match_score(
+        policy.entity_type.as_deref(),
+        query.entity_type.as_deref(),
+        5,
+    );
     score += string_match_score(policy.risk_tier.as_deref(), query.risk_tier.as_deref(), 5);
-    score += string_match_score(policy.partner_key.as_deref(), query.partner_key.as_deref(), 6);
+    score += string_match_score(
+        policy.partner_key.as_deref(),
+        query.partner_key.as_deref(),
+        6,
+    );
     score += string_match_score(policy.asset_code.as_deref(), query.asset_code.as_deref(), 4);
 
     if matches_amount(policy.amount_min, policy.amount_max, query.amount) {
@@ -278,10 +291,17 @@ fn evaluate_policy_match(policy: &ProviderRoutingPolicy, query: &ProviderRouting
     score
 }
 
-fn string_match_score(policy_value: Option<&str>, query_value: Option<&str>, exact_score: i32) -> i32 {
+fn string_match_score(
+    policy_value: Option<&str>,
+    query_value: Option<&str>,
+    exact_score: i32,
+) -> i32 {
     match (policy_value, query_value) {
         (Some(policy_value), Some(query_value))
-            if policy_value.eq_ignore_ascii_case(query_value) => exact_score,
+            if policy_value.eq_ignore_ascii_case(query_value) =>
+        {
+            exact_score
+        }
         (Some(_), Some(_)) => -100,
         (None, _) => 1,
         (Some(_), None) => 0,
@@ -459,6 +479,9 @@ mod tests {
             .expect("policy should match");
 
         assert_eq!(selected.policy_id, "provider_policy_vn_sg");
-        assert_eq!(selected.fallback_order, vec!["notabene".to_string(), "trisa".to_string()]);
+        assert_eq!(
+            selected.fallback_order,
+            vec!["notabene".to_string(), "trisa".to_string()]
+        );
     }
 }
