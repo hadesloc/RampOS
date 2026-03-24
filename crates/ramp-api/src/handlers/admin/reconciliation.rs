@@ -39,6 +39,16 @@ pub struct ReconciliationWorkbenchResponse {
     pub export_formats: Vec<String>,
     pub incident_link_hint: String,
     pub gated_actions: Vec<ReconciliationGatedAction>,
+    pub provenance: ReconciliationWorkbenchProvenance,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconciliationWorkbenchProvenance {
+    pub evidence_source: String,
+    pub lineage_mode: String,
+    pub live_read_default: bool,
+    pub scenario: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -61,6 +71,7 @@ pub async fn get_reconciliation_workbench(
 
     let (snapshot, _) = build_workbench(query.scenario.as_deref());
     let gated_actions = build_gated_actions(&snapshot);
+    let provenance = build_workbench_provenance(query.scenario.as_deref());
     info!("Admin: loading reconciliation workbench");
 
     Ok(Json(ReconciliationWorkbenchResponse {
@@ -69,6 +80,7 @@ pub async fn get_reconciliation_workbench(
         export_formats: vec!["json".to_string(), "csv".to_string()],
         incident_link_hint: "/v1/admin/incidents/timeline".to_string(),
         gated_actions,
+        provenance,
     }))
 }
 
@@ -199,6 +211,25 @@ fn build_gated_actions(snapshot: &ReconciliationWorkbenchSnapshot) -> Vec<Reconc
                     .to_string(),
         })
         .collect()
+}
+
+fn build_workbench_provenance(
+    scenario: Option<&str>,
+) -> ReconciliationWorkbenchProvenance {
+    match scenario {
+        Some(selected) => ReconciliationWorkbenchProvenance {
+            evidence_source: "fixture_preview".to_string(),
+            lineage_mode: "bounded_preview".to_string(),
+            live_read_default: false,
+            scenario: Some(selected.to_string()),
+        },
+        None => ReconciliationWorkbenchProvenance {
+            evidence_source: "live_evidence_default".to_string(),
+            lineage_mode: "evidence_linked".to_string(),
+            live_read_default: true,
+            scenario: None,
+        },
+    }
 }
 
 fn stabilize_snapshot_ids(snapshot: &mut ReconciliationWorkbenchSnapshot, scenario: &str) {

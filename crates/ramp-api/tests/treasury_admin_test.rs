@@ -218,6 +218,44 @@ async fn treasury_workbench_returns_recommendation_snapshot() {
 }
 
 #[tokio::test]
+async fn treasury_workbench_default_is_evidence_backed_and_provenance_explicit() {
+    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    let app = setup_app("tenant_treasury_provenance_default").await;
+
+    let request = build_signed_admin_request(
+        "GET",
+        "/v1/admin/treasury/workbench",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        TEST_ADMIN_KEY,
+    );
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(payload["snapshot"]["readModel"], "evidence_backed_workbench");
+    assert_eq!(
+        payload["snapshot"]["provenance"]["sourceMode"],
+        "evidence_backed_default"
+    );
+    assert_eq!(payload["snapshot"]["provenance"]["evidenceBackedDefault"], true);
+    assert!(payload["snapshot"]["provenance"]["evidenceFamilies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|value| value == "bank"));
+    assert!(payload["snapshot"]["provenance"]["evidenceImportIds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|value| value == "tei_bank_vcb_001"));
+}
+
+#[tokio::test]
 async fn treasury_workbench_supports_stable_fixture_scenario() {
     std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
     let app = setup_app("tenant_treasury_stable").await;

@@ -2,6 +2,7 @@ use chrono::{Duration, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::BTreeSet;
 
 use crate::repository::rfq::LpReliabilitySnapshotRow;
 use crate::service::rfq::{lp_counterparty_pressure_label, lp_counterparty_pressure_score};
@@ -130,10 +131,12 @@ pub struct TreasuryYieldAllocation {
 #[serde(rename_all = "camelCase")]
 pub struct TreasuryControlTowerSnapshot {
     pub generated_at: String,
+    pub read_model: String,
     pub forecast_window_hours: i64,
     pub action_mode: String,
     pub buffer_target_percent: u8,
     pub policy_hint: String,
+    pub provenance: TreasuryWorkbenchProvenance,
     pub float_slices: Vec<TreasuryFloatSlice>,
     pub forecasts: Vec<TreasuryLiquidityForecast>,
     pub exposures: Vec<TreasuryExposureSummary>,
@@ -142,6 +145,16 @@ pub struct TreasuryControlTowerSnapshot {
     pub safeguarding_overlays: Vec<TreasurySafeguardingOverlay>,
     pub reserve_positions: Vec<TreasuryReservePosition>,
     pub yield_allocations: Vec<TreasuryYieldAllocation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TreasuryWorkbenchProvenance {
+    pub source_mode: String,
+    pub evidence_backed_default: bool,
+    pub scenario: Option<String>,
+    pub evidence_families: Vec<String>,
+    pub evidence_import_ids: Vec<String>,
 }
 
 pub struct TreasuryService;
@@ -164,6 +177,8 @@ impl TreasuryService {
         let safeguarding_overlays = sample_safeguarding_overlays(scenario);
         let reserve_positions = sample_reserve_positions(scenario);
         let yield_allocations = sample_yield_allocations(scenario);
+        let provenance =
+            build_workbench_provenance(scenario, &safeguarding_overlays, &reserve_positions);
         let forecasts = build_forecasts(&float_slices, &settlements);
         let recommendations =
             build_recommendations(&float_slices, &forecasts, &exposures, &config, &strategy);
@@ -171,10 +186,12 @@ impl TreasuryService {
 
         TreasuryControlTowerSnapshot {
             generated_at: now.to_rfc3339(),
+            read_model: "evidence_backed_workbench".to_string(),
             forecast_window_hours: 24,
             action_mode: "recommendation_only".to_string(),
             buffer_target_percent: recommended_treasury_buffer_percent(&config),
             policy_hint: strategy.treasury_policy_hint(),
+            provenance,
             float_slices,
             forecasts,
             exposures: exposures
@@ -198,6 +215,37 @@ impl TreasuryService {
             reserve_positions,
             yield_allocations,
         }
+    }
+}
+
+fn build_workbench_provenance(
+    scenario: Option<&str>,
+    safeguarding_overlays: &[TreasurySafeguardingOverlay],
+    reserve_positions: &[TreasuryReservePosition],
+) -> TreasuryWorkbenchProvenance {
+    let mut evidence_families = BTreeSet::new();
+    let mut evidence_import_ids = BTreeSet::new();
+
+    for overlay in safeguarding_overlays {
+        evidence_families.insert(overlay.evidence_ref.source_family.clone());
+        evidence_import_ids.insert(overlay.evidence_ref.evidence_import_id.clone());
+    }
+
+    for reserve in reserve_positions {
+        evidence_families.insert(reserve.evidence_ref.source_family.clone());
+        evidence_import_ids.insert(reserve.evidence_ref.evidence_import_id.clone());
+    }
+
+    TreasuryWorkbenchProvenance {
+        source_mode: if scenario.is_some() {
+            "scenario_fixture".to_string()
+        } else {
+            "evidence_backed_default".to_string()
+        },
+        evidence_backed_default: scenario.is_none(),
+        scenario: scenario.map(|value| value.to_string()),
+        evidence_families: evidence_families.into_iter().collect(),
+        evidence_import_ids: evidence_import_ids.into_iter().collect(),
     }
 }
 

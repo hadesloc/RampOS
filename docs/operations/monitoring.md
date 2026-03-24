@@ -167,6 +167,42 @@ kubectl apply -k k8s/monitoring/
     description: "Intent failure rate is {{ $value }} per second."
 ```
 
+### Security Alerts
+
+These alerts are currently derived from existing HTTP request metrics and status labels. They are a baseline operator-security slice on top of the existing reliability alerts, not a substitute for deeper identity- or key-specific detection.
+
+```yaml
+- alert: AuthFailureSpike
+  expr: sum(rate(http_requests_total{path=~"/v1/auth/.*",status=~"401|403"}[5m])) > 5
+  for: 10m
+  labels:
+    severity: warning
+    category: security
+  annotations:
+    summary: "Spike in authentication failures"
+    description: "Authentication endpoints are returning 401/403 at {{ $value }} requests per second for more than 10 minutes."
+
+- alert: AdminAuthorizationDenialSpike
+  expr: sum(rate(http_requests_total{path=~"/v1/admin/.*",status="403"}[5m])) > 2
+  for: 10m
+  labels:
+    severity: warning
+    category: security
+  annotations:
+    summary: "Spike in admin authorization denials"
+    description: "Admin surfaces are returning 403 responses at {{ $value }} requests per second for more than 10 minutes."
+
+- alert: RateLimitAbuseSpike
+  expr: sum(rate(http_requests_total{status="429"}[5m])) > 10
+  for: 10m
+  labels:
+    severity: warning
+    category: security
+  annotations:
+    summary: "Spike in rate-limited requests"
+    description: "HTTP 429 responses are occurring at {{ $value }} requests per second for more than 10 minutes, indicating possible abuse or brute-force pressure."
+```
+
 ### Infrastructure Alerts
 
 ```yaml
@@ -196,6 +232,8 @@ kubectl apply -k k8s/monitoring/
 | `critical` | Immediate | PagerDuty + Slack |
 | `warning` | 15 minutes | Slack |
 | `info` | Next business day | Email |
+
+Security alerts should page or escalate through the same Alertmanager pipeline as reliability alerts, but operators should classify them separately from normal availability noise.
 
 ## Grafana Dashboards
 

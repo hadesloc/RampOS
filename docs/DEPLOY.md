@@ -2,6 +2,8 @@
 
 This guide covers deployment procedures for Staging and Production environments.
 
+The canonical workflow inventory for the current repo is [docs/operations/ci-release-workflow-map.md](docs/operations/ci-release-workflow-map.md). Use that map when deployment docs and `.github/workflows/` diverge.
+
 ## Environments
 
 | Environment | Branch | URL | Replicas | Database |
@@ -36,11 +38,8 @@ This guide covers deployment procedures for Staging and Production environments.
    git merge main
    git push origin staging
    ```
-2. The GitHub Action `deploy-staging.yaml` will:
-   - Build Docker image
-   - Push to registry
-   - Apply k8s manifests
-   - Run smoke tests
+2. The current canonical deployment path is `.github/workflows/deploy.yaml`, specifically its `deploy-staging` job when staging is selected through the shared multi-environment deploy flow.
+3. The repo still contains both `deploy-staging.yaml` and `deploy-staging.yml`, but treat them as overlapping staging candidates rather than the authoritative default path until they are consolidated.
 
 ### Manual Deployment
 
@@ -74,6 +73,8 @@ This guide covers deployment procedures for Staging and Production environments.
    ```
 
 ## Production Deployment
+
+For the current repo state, treat `.github/workflows/deploy.yaml` as the default release and environment-deploy workflow, and `.github/workflows/deploy-prod.yml` as the production-only manual override path.
 
 ### 1. Create Namespace and Secrets
 

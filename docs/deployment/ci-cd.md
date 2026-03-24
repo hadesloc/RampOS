@@ -2,6 +2,8 @@
 
 This guide covers the Continuous Integration and Continuous Deployment pipelines for RampOS using GitHub Actions and ArgoCD.
 
+The canonical workflow inventory for the current repo lives in [../operations/ci-release-workflow-map.md](../operations/ci-release-workflow-map.md). Use that map when this guide and `.github/workflows/` diverge.
+
 ## Pipeline Overview
 
 ```
@@ -32,9 +34,11 @@ This guide covers the Continuous Integration and Continuous Deployment pipelines
 
 ## GitHub Actions Workflows
 
-### 1. CI Workflow (`ci.yaml`)
+### 1. CI Workflow (`ci.yml`)
 
 **Trigger**: Push or PR to `main` branch
+
+This is the canonical repo-wide CI workflow for the current repo state.
 
 **Jobs**:
 
@@ -125,79 +129,67 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-### 2. CD Workflow (`cd.yaml`)
+### 2. Deployment Workflow (`deploy.yaml`)
 
-**Trigger**: Push to `main` branch or version tags (`v*`)
+**Trigger**: Push to `main` or `develop`, version tags (`v*`), PR close on `main`, or manual dispatch
 
 **Jobs**:
 
 | Job | Purpose | Duration |
 |-----|---------|----------|
-| `build-and-push` | Build and push Docker image to GHCR | ~10 min |
-| `deploy` | Update kustomization image tag | ~1 min |
+| `build` | Build and push Docker image to GHCR with provenance and SBOM | ~10 min |
+| `deploy-dev` | Deploy to dev or manual dev override | ~2-5 min |
+| `deploy-staging` | Deploy to staging or manual staging override | ~2-5 min |
+| `deploy-production` | Deploy to production when explicitly selected | ~2-5 min |
 
 ```yaml
-name: CD
+name: Deploy
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main, develop]
     tags: [ "v*" ]
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  pull_request:
+    branches: [main]
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
 
 jobs:
-  build-and-push:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Log in to Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=sha,format=long
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-  deploy:
-    needs: build-and-push
+  deploy-dev:
+    needs: [build]
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Update image tag in kustomization
-        if: github.ref == 'refs/heads/main'
-        run: |
-          cd k8s/overlays/prod
-          kustomize edit set image ghcr.io/rampos/rampos=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+  deploy-staging:
+    needs: [build]
+    runs-on: ubuntu-latest
+  deploy-production:
+    needs: [build]
+    runs-on: ubuntu-latest
 ```
 
-### 3. Staging Deployment (`deploy-staging.yaml`)
+`cd.yaml` still exists in the repo, but it overlaps with `deploy.yaml` and should be treated as a legacy or duplicate candidate rather than the canonical release path.
 
-**Trigger**: Push to `staging` branch or manual dispatch
+### 3. Staging Deployment Notes
+
+The repo currently contains overlapping staging workflows:
+
+- `deploy.yaml` job `deploy-staging`
+- `deploy-staging.yaml`
+- `deploy-staging.yml`
+
+For readiness and documentation purposes, treat `deploy.yaml` as the canonical staging path and treat the dedicated `deploy-staging.*` files as overlap pending consolidation.
+
+**Trigger**: `deploy.yaml` can deploy staging from `main` or manual dispatch. The dedicated `deploy-staging.*` files remain in the repo but are not both authoritative.
 
 **Features**:
 - Docker layer caching with GitHub Actions cache

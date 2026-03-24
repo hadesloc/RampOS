@@ -39,6 +39,37 @@ spec:
         summary: "Spike in Failed Intents"
         description: "Intent failure rate is {{ $value }} per second."
 
+    # Security Alerts
+    - alert: AuthFailureSpike
+      expr: sum(rate(http_requests_total{path=~"/v1/auth/.*",status=~"401|403"}[5m])) > 5
+      for: 10m
+      labels:
+        severity: warning
+        category: security
+      annotations:
+        summary: "Spike in authentication failures"
+        description: "Authentication endpoints are returning 401/403 at {{ $value }} requests per second for more than 10 minutes."
+
+    - alert: AdminAuthorizationDenialSpike
+      expr: sum(rate(http_requests_total{path=~"/v1/admin/.*",status="403"}[5m])) > 2
+      for: 10m
+      labels:
+        severity: warning
+        category: security
+      annotations:
+        summary: "Spike in admin authorization denials"
+        description: "Admin surfaces are returning 403 responses at {{ $value }} requests per second for more than 10 minutes."
+
+    - alert: RateLimitAbuseSpike
+      expr: sum(rate(http_requests_total{status="429"}[5m])) > 10
+      for: 10m
+      labels:
+        severity: warning
+        category: security
+      annotations:
+        summary: "Spike in rate-limited requests"
+        description: "HTTP 429 responses are occurring at {{ $value }} requests per second for more than 10 minutes, indicating possible abuse or brute-force pressure."
+
     # Infrastructure Alerts
     - alert: HighPodRestarts
       expr: increase(kube_pod_container_status_restarts_total[15m]) > 3

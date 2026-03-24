@@ -2,6 +2,8 @@
 
 This checklist fails closed. If a required artifact or evidence file is missing, the release candidate does not advance.
 
+For the March 2026 execution cycle, treat [internal-readiness-package.md](internal-readiness-package.md) as the canonical internal gate for planning and internal review. This checklist and the bank-grade ledger remain the stricter downstream promotion path.
+
 ## 1. Freeze The Candidate
 
 - Record the candidate SHA and use it as `--release-candidate <sha>` for all `scripts/release_hardening.py` runs.
@@ -71,6 +73,7 @@ Blocking rules:
 - Confirm release, rollback, incident, and on-call runbooks are current for the candidate scope.
 - Confirm backup/restore and disaster recovery rehearsal evidence is current.
 - Confirm the independent security review ledger is linked and has no unresolved `high` or `critical` findings without explicit risk acceptance.
+- If external review is not complete for the current internal cycle, point to the explicit deferral statement in `docs/operations/internal-readiness-package.md` rather than implying the review already exists.
 
 Blocking rules:
 - Missing staging evidence blocks promotion.

@@ -132,8 +132,10 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 
 **Dual-Mode Workflow Engine:**
 - **InProcess mode** (dev/test) — Tokio async tasks + optional PostgreSQL state persistence for crash recovery
-- **Temporal mode** (production) — Full durable execution via Temporal server gRPC, automatic retries, workflow history, signal handling (e.g. manual bank confirmation)
-- **Automatic fallback** — If Temporal server is unreachable, seamlessly falls back to in-process
+- **Temporal submission mode** — Attempts remote Temporal submission when `TEMPORAL_URL` is configured, but the current repo does not yet prove a fully authoritative durable Temporal runtime
+- **Local fallback on submission failure** — If Temporal submission fails and fallback is configured, execution drops to the in-process worker; signal and cancellation guarantees remain local-first rather than authoritative remote semantics
+
+See [docs/operations/workflow-runtime-contract.md](docs/operations/workflow-runtime-contract.md) for the current runtime contract.
 
 **Compensation & Rollback:**
 - Every multi-step workflow has compensation steps for automatic rollback on failure
@@ -353,7 +355,7 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 │                            WorkflowEngine                                        │
 │                                                                                  │
 │  ┌──────────────────────────┐        ┌──────────────────────────────────────┐   │
-│  │  InProcess (dev/test)    │   OR   │  Temporal (production)               │   │
+│  │  InProcess (dev/test)    │   OR   │  Temporal submission mode            │   │
 │  │                          │        │                                      │   │
 │  │  Tokio async tasks       │        │  Durable execution (gRPC)            │   │
 │  │  PostgreSQL state store  │        │  Auto retry on failure               │   │
@@ -361,7 +363,7 @@ User Intent: "Swap 1000 USDC on Ethereum → USDT on Arbitrum"
 │  │                          │        │  Full workflow history               │   │
 │  └──────────────────────────┘        └──────────────────────────────────────┘   │
 │                                                                                  │
-│                    Automatic fallback if Temporal unreachable                   │
+│             Local fallback on Temporal submission failure when configured        │
 └──────────────────────────────────────┬──────────────────────────────────────────┘
                                        │
                          executes steps sequentially

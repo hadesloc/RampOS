@@ -234,7 +234,7 @@ Event Types:
 
 ## Workflow Orchestration
 
-Complex operations are handled as workflows using Temporal patterns:
+Complex operations are handled as workflows through the current in-process runtime, with a separate Temporal-submission abstraction under hardening. Do not read this section as proof that the repo already runs a fully authoritative durable Temporal runtime end to end.
 
 ```
                     +---> Issue Payment Instruction

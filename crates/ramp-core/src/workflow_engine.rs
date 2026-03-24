@@ -6,12 +6,16 @@
 //! - `InProcessEngine`: Executes workflows in-process using tokio tasks. Suitable for
 //!   development and testing. State is stored in memory (lost on restart).
 //!
-//! - `TemporalEngine`: Connects to a real Temporal server via gRPC for production use.
-//!   Provides durable execution, automatic retries, and workflow visibility.
+//! - `TemporalEngine`: Attempts remote Temporal submission and can fall back to local
+//!   in-process execution when the configured Temporal endpoint is unreachable.
 //!
 //! The engine is selected at startup based on the `TEMPORAL_URL` environment variable:
-//! - If `TEMPORAL_URL` is set: Uses `TemporalEngine` connected to that server.
+//! - If `TEMPORAL_URL` is set: Uses `TemporalEngine` in Temporal-submission mode.
 //! - Otherwise: Uses `InProcessEngine` for local development.
+//!
+//! The current runtime contract is documented in
+//! `docs/operations/workflow-runtime-contract.md`. Do not assume the Temporal path
+//! already provides a fully authoritative durable runtime.
 //!
 //! ## Workflow State Persistence
 //!
@@ -274,18 +278,14 @@ impl WorkflowEngine for InProcessEngine {
 // TemporalEngine - production engine connecting to real Temporal server
 // =============================================================================
 
-/// Temporal-backed workflow engine for production use.
+/// Temporal-shaped workflow engine for remote submission plus optional local fallback.
 ///
-/// Connects to a real Temporal server via gRPC and submits workflows for
-/// durable execution. This provides:
-/// - State persistence across restarts
-/// - Automatic retries with configurable policies
-/// - Workflow visibility and history
-/// - Signal handling for human-in-the-loop workflows
+/// Today this implementation:
+/// - attempts workflow submission against a configured Temporal endpoint
+/// - falls back to the local in-process worker when configured submission fails
+/// - does not yet provide authoritative remote signal or cancellation semantics
 ///
-/// Note: The Rust Temporal SDK (temporal-sdk-core) is still maturing.
-/// This implementation uses gRPC directly via tonic for workflow submission
-/// and falls back to polling the Temporal API for status queries.
+/// See `docs/operations/workflow-runtime-contract.md` for the operator-facing contract.
 pub struct TemporalEngine {
     config: TemporalWorkerConfig,
     /// Temporal server URL for gRPC connections
@@ -296,8 +296,7 @@ pub struct TemporalEngine {
     task_queue: String,
     /// Shutdown signal
     shutdown: Arc<tokio::sync::Notify>,
-    /// Fallback in-process worker for local execution
-    /// Used when Temporal server is unreachable
+    /// Fallback in-process worker for local execution when Temporal submission fails
     fallback_worker: Option<Arc<crate::temporal_worker::TemporalWorker>>,
     /// Track submitted workflows
     submitted: Arc<RwLock<std::collections::HashMap<String, WorkflowStatus>>>,
@@ -316,7 +315,7 @@ impl TemporalEngine {
         }
     }
 
-    /// Set a fallback in-process worker for when Temporal is unreachable
+    /// Set a fallback in-process worker for when Temporal submission is unreachable
     pub fn with_fallback(mut self, worker: Arc<crate::temporal_worker::TemporalWorker>) -> Self {
         self.fallback_worker = Some(worker);
         self
@@ -529,8 +528,8 @@ impl WorkflowEngine for TemporalEngine {
     }
 
     async fn signal(&self, signal: WorkflowSignal) -> Result<()> {
-        // For Temporal, signals would be sent via the Temporal API
-        // For now, if we have a fallback worker, use it
+        // Remote Temporal signal delivery is not implemented here yet.
+        // If we have a fallback worker, signal only that local execution path.
         if let Some(fallback) = &self.fallback_worker {
             return fallback.signal_workflow(signal).await;
         }
@@ -581,12 +580,10 @@ impl WorkflowEngine for TemporalEngine {
             "TemporalEngine started - workflows will be submitted to Temporal server"
         );
 
-        // If we have a fallback worker, run it for local activity execution
+        // If we have a fallback worker, run the local execution loop.
+        // This is not a real Temporal worker poll loop for remote tasks.
         if let Some(fallback) = &self.fallback_worker {
             info!("Running fallback in-process worker for activity execution");
-            // The run() on the fallback worker handles in-process execution
-            // In a real Temporal setup, the worker would poll the Temporal server
-            // for activity tasks instead
             return fallback.run().await;
         }
 
@@ -615,7 +612,7 @@ impl WorkflowEngine for TemporalEngine {
 
 /// Create the appropriate workflow engine based on environment configuration.
 ///
-/// - If `TEMPORAL_URL` is set: Creates a `TemporalEngine` connected to that server.
+/// - If `TEMPORAL_URL` is set: Creates a `TemporalEngine` in Temporal-submission mode.
 /// - Otherwise: Creates an `InProcessEngine` for local development.
 ///
 /// Both engines accept an optional `WorkflowStateRepository` for persistence.
@@ -655,6 +652,8 @@ mod tests {
     use crate::workflows::BankConfirmation;
     use ramp_compliance::aml::AmlEngine;
     use ramp_compliance::{case::CaseManager, InMemoryCaseStore, MockTransactionHistoryStore};
+    use tokio::io::AsyncWriteExt;
+    use tokio::net::TcpListener;
 
     fn create_test_worker() -> Arc<crate::temporal_worker::TemporalWorker> {
         let config = TemporalWorkerConfig::default();
@@ -677,6 +676,19 @@ mod tests {
             aml_engine,
             None,
         ))
+    }
+
+    async fn spawn_mock_temporal_response_server(response: &'static str) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            if let Ok((mut stream, _)) = listener.accept().await {
+                let _ = stream.write_all(response.as_bytes()).await;
+            }
+        });
+
+        format!("http://{}", address)
     }
 
     #[tokio::test]
@@ -784,6 +796,71 @@ mod tests {
         let result = engine.start_payin(input).await;
         assert!(result.is_ok());
         assert_eq!(engine.engine_type(), "temporal");
+    }
+
+    #[tokio::test]
+    async fn test_temporal_engine_rejected_submission_returns_error_without_fallback() {
+        let server_url = spawn_mock_temporal_response_server(
+            "HTTP/1.1 500 Internal Server Error\r\ncontent-length: 17\r\ncontent-type: text/plain\r\n\r\nrejected-by-test",
+        )
+        .await;
+
+        let config = TemporalWorkerConfig::default();
+        let engine = TemporalEngine::new(server_url, config);
+
+        let input = PayinWorkflowInput {
+            tenant_id: "tenant1".to_string(),
+            user_id: "user1".to_string(),
+            intent_id: "intent-rejected-1".to_string(),
+            amount_vnd: 1000000,
+            rails_provider: "VCB".to_string(),
+            reference_code: "REF-REJECTED".to_string(),
+            expires_at: "2026-01-24T00:00:00Z".to_string(),
+        };
+
+        let result = engine.start_payin(input).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_temporal_engine_signal_without_fallback_returns_ok() {
+        let config = TemporalWorkerConfig::default();
+        let engine = TemporalEngine::new("http://127.0.0.1:9".to_string(), config);
+
+        let signal = WorkflowSignal::Cancel {
+            intent_id: "intent-no-fallback-signal".to_string(),
+            reason: "signal-test".to_string(),
+        };
+
+        let result = engine.signal(signal).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_temporal_engine_status_defaults_to_running_when_query_fails() {
+        let config = TemporalWorkerConfig::default();
+        let engine = TemporalEngine::new("http://127.0.0.1:9".to_string(), config);
+
+        let status = engine.get_status("unknown-workflow").await.unwrap();
+        assert_eq!(status, WorkflowStatus::Running);
+    }
+
+    #[tokio::test]
+    async fn test_temporal_engine_cancel_marks_local_tracking_cancelled_without_fallback() {
+        let config = TemporalWorkerConfig::default();
+        let engine = TemporalEngine::new("http://127.0.0.1:9".to_string(), config);
+        let workflow_id = "payin-intent-cancelled-1".to_string();
+
+        engine
+            .submitted
+            .write()
+            .await
+            .insert(workflow_id.clone(), WorkflowStatus::Running);
+
+        engine.cancel(&workflow_id, "cancel-test").await.unwrap();
+
+        let status = engine.get_status(&workflow_id).await.unwrap();
+        assert_eq!(status, WorkflowStatus::Cancelled);
     }
 
     #[tokio::test]

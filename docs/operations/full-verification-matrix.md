@@ -76,6 +76,13 @@ Commands:
 - `cargo test -p ramp-core test_finalize_rfq_records_normalized_fill_and_cancel_metadata --lib -- --nocapture`
 - `cargo test -p ramp-core normalize_treasury_balances_clamps_negative_values --lib -- --nocapture`
 - `cargo test -p ramp-core db_gated_import_is_replay_safe_by_idempotency_key --lib -- --nocapture`
+- `cargo test -p ramp-core test_create_workflow_engine_in_process --lib -- --nocapture`
+- `cargo test -p ramp-core test_create_workflow_engine_temporal --lib -- --nocapture`
+- `cargo test -p ramp-core test_temporal_engine_fallback --lib -- --nocapture`
+- `cargo test -p ramp-core test_temporal_engine_rejected_submission_returns_error_without_fallback --lib -- --nocapture`
+- `cargo test -p ramp-core test_temporal_engine_signal_without_fallback_returns_ok --lib -- --nocapture`
+- `cargo test -p ramp-core test_temporal_engine_status_defaults_to_running_when_query_fails --lib -- --nocapture`
+- `cargo test -p ramp-core test_temporal_engine_cancel_marks_local_tracking_cancelled_without_fallback --lib -- --nocapture`
 
 ### `cli-certification`
 

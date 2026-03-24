@@ -12,6 +12,7 @@
   - Introduce corridor packs so international expansion becomes configuration, partner onboarding, and policy work rather than repeated custom engineering.
   - Replace synthetic treasury and reconciliation views with live-read evidence and audit-grade exports.
   - Add certification, compatibility, and operational controls so the product can serve international banking and enterprise customers safely.
+  - Use the workflow-engine contract terms `in-process runtime` and `Temporal submission mode` consistently until a fully authoritative durable Temporal runtime is actually implemented.
 - **Non-Goals**:
   - Rewrite the workflow engine, ledger core, compliance platform, adapter framework, or admin shell.
   - Deliver all global rails in one phase.

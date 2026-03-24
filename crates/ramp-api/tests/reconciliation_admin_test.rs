@@ -228,6 +228,56 @@ async fn reconciliation_workbench_returns_queue_snapshot() {
 }
 
 #[tokio::test]
+async fn reconciliation_workbench_default_path_reports_live_evidence_provenance() {
+    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    let app = setup_app("tenant_reconciliation_provenance_default").await;
+
+    let request = build_signed_admin_request(
+        "GET",
+        "/v1/admin/reconciliation/workbench",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        TEST_ADMIN_KEY,
+    );
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(payload["provenance"]["evidenceSource"], "live_evidence_default");
+    assert_eq!(payload["provenance"]["lineageMode"], "evidence_linked");
+    assert_eq!(payload["provenance"]["liveReadDefault"], true);
+}
+
+#[tokio::test]
+async fn reconciliation_workbench_fixture_scenario_reports_preview_provenance() {
+    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    let app = setup_app("tenant_reconciliation_provenance_fixture").await;
+
+    let request = build_signed_admin_request(
+        "GET",
+        "/v1/admin/reconciliation/workbench?scenario=clean",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        TEST_ADMIN_KEY,
+    );
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(payload["provenance"]["evidenceSource"], "fixture_preview");
+    assert_eq!(payload["provenance"]["lineageMode"], "bounded_preview");
+    assert_eq!(payload["provenance"]["liveReadDefault"], false);
+}
+
+#[tokio::test]
 async fn reconciliation_workbench_export_returns_csv_attachment() {
     std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
     let app = setup_app("tenant_reconciliation_export").await;

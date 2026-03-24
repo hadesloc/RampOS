@@ -2,6 +2,13 @@
 
 This directory contains security audit reports and remediation documentation for the project.
 
+## Current Cycle Status
+
+- The canonical internal gate for the March 2026 cycle is `docs/operations/internal-readiness-package.md`.
+- The current internal pre-signoff security bundle exists under `docs/security/reports/2026-03-13-rc-268670d74/`.
+- Independent external security review is still pending for the current release candidate.
+- Bank-grade signoff remains blocked until the external review and the remaining release blockers are closed.
+
 ## Index
 
 - [Audit Summary (2026-01-26)](audit-summary-2026-01-26.md) - Final executive summary of the security audit.

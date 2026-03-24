@@ -2,6 +2,8 @@
 
 This document outlines the security measures implemented in RampOS and serves as a checklist for security audits.
 
+For the March 2026 cycle, [docs/operations/internal-readiness-package.md](/C:/Users/hades/OneDrive/Desktop/p2p/.worktrees/uw-wp01-batch1/docs/operations/internal-readiness-package.md) is the canonical internal gate. It does not imply that independent external review is complete or that the current candidate is bank-grade ready.
+
 ## 1. Authentication & Authorization
 
 ### API Authentication
@@ -9,8 +11,8 @@ This document outlines the security measures implemented in RampOS and serves as
 - [x] JWT-based session management
 - [x] API keys hashed with SHA-256 before storage
 - [x] Token expiration and refresh mechanisms
-- [ ] Implement API key rotation capability
-- [ ] Add rate limiting per API key
+- [ ] API key rotation capability is not yet landed for this cycle
+- [ ] Per-API-key rate limiting is not yet landed; current enforced limits are per-tenant and per-endpoint
 
 ### Authorization
 - [x] Tenant isolation at database level
@@ -115,7 +117,7 @@ This document outlines the security measures implemented in RampOS and serves as
 ### Alerting
 - [x] OpenTelemetry integration
 - [x] Prometheus metrics
-- [ ] Security-specific alerts (brute force, unusual patterns)
+- [x] Baseline security-specific alerts defined for auth failure spikes, admin authorization denial spikes, and 429 abuse pressure on top of the reliability rules
 
 ## 9. Database Security
 
@@ -215,7 +217,7 @@ cargo sbom > sbom.json
 ### Detection
 - [x] Logging infrastructure in place
 - [x] Metrics collection
-- [x] SIEM integration (Planned for Phase 2)
+- [ ] SIEM integration is still planned and not deployed in the current cycle
 
 ### Incident Severity Levels
 1. **SEV-1 (Critical)**: Data breach, fund loss, total system outage.
@@ -259,6 +261,8 @@ cargo sbom > sbom.json
 ## Pre-Production Checklist
 
 Before going to production, verify:
+
+- [ ] Internal readiness is complete, but do not treat that as bank-grade signoff
 
 - [ ] All items marked [x] are implemented
 - [ ] Penetration test completed

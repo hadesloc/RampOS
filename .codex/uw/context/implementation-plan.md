@@ -20,6 +20,17 @@
 **Dependencies**: [crates/ramp-api/src/main.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-api/src/main.rs), [docs/plans/2026-03-12-global-bank-grade-onofframp-plan.md](/C:/Users/hades/OneDrive/Desktop/p2p/docs/plans/2026-03-12-global-bank-grade-onofframp-plan.md), `.codex/uw/context/*`
 **Risks**: If this epic is skipped, later epics may drift into rewrite behavior or break current public surfaces.
 
+**Repo Credibility Cleanup Order**:
+- `ramp-api` warning cleanup first
+- `ramp-core` warning cleanup second
+- `ramp-compliance` warning cleanup third
+- Source of truth: [docs/operations/warning-reduction-priorities.md](/C:/Users/hades/OneDrive/Desktop/p2p/docs/operations/warning-reduction-priorities.md)
+
+**Workflow Runtime Terminology**:
+- `in-process runtime` means local execution through the simulated `TemporalWorker`
+- `Temporal submission mode` means remote submission is attempted, with local fallback when configured submission fails
+- source of truth: [docs/operations/workflow-runtime-contract.md](/C:/Users/hades/OneDrive/Desktop/p2p/docs/operations/workflow-runtime-contract.md)
+
 ### Epic E2: Partner and Connector Governance
 **Goal**: Replace synthetic config and extension scaffolding with a persistent registry, config bundle governance, and secret indirection.
 **Dependencies**: [crates/ramp-core/src/service/config_bundle.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-core/src/service/config_bundle.rs), [crates/ramp-api/src/handlers/admin/extensions.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-api/src/handlers/admin/extensions.rs), [crates/ramp-api/src/handlers/admin/config_bundle.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-api/src/handlers/admin/config_bundle.rs), [migrations/](/C:/Users/hades/OneDrive/Desktop/p2p/migrations)

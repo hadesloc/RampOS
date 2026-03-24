@@ -4,6 +4,8 @@
 **Last Updated:** 2026-02-02
 **Classification:** Internal Use Only
 
+This guide is a hardening reference. It is not proof that the current cycle has completed independent external review or reached bank-grade signoff.
+
 ---
 
 ## Table of Contents
@@ -67,7 +69,7 @@
 
 ### Runtime Checklist
 
-- [ ] Security monitoring enabled (alerts configured)
+- [x] Reliability monitoring exists, and baseline security-specific alerts are defined for auth-failure, admin-denial, and 429 abuse spikes
 - [ ] Log aggregation active (no PII in logs)
 - [ ] Intrusion detection system running
 - [ ] Regular vulnerability scans scheduled

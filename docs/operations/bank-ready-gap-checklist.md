@@ -2,6 +2,7 @@
 
 ## Purpose
 - Convert the current feature-complete control plane into a bank-grade release candidate by tracking missing operational proof.
+- Use [internal-readiness-package.md](internal-readiness-package.md) as the canonical internal gate while these bank-grade gaps remain open.
 
 ## Gap Areas
 - `Release hardening`
@@ -34,3 +35,4 @@
 
 ## Exit Criteria
 - Every item above is either `done` with evidence or explicitly `waived` with named approver and expiry.
+- Independent external review may be deferred only for the internal March 2026 readiness gate. It remains required for bank-grade signoff.

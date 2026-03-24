@@ -2,6 +2,8 @@
 
 Use this ledger for one release candidate at a time. Do not mark a candidate as bank-grade until every required evidence category is attached, reviewed, and still fresh.
 
+For the March 2026 cycle, this ledger is not the canonical internal execution gate. Internal execution and dispatch should use [internal-readiness-package.md](internal-readiness-package.md), which explicitly defers independent external review for the internal gate while preserving this ledger as the stricter downstream promotion gate.
+
 ## Candidate Header
 
 | Field | Value |
