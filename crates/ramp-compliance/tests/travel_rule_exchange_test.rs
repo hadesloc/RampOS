@@ -3,10 +3,10 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use ramp_compliance::{
-    TransportRetryPolicy, TravelRuleExchangeDispatch, TravelRuleExchangeError,
-    TravelRuleExchangeRequest, TravelRuleExchangeResponse, TravelRuleExchangeService,
-    TravelRuleTransport, TravelRuleTransportError, TravelRuleTransportFactory,
-    TravelRuleTransportProfile, TransportAttemptStatus,
+    TransportAttemptStatus, TransportRetryPolicy, TravelRuleExchangeDispatch,
+    TravelRuleExchangeError, TravelRuleExchangeRequest, TravelRuleExchangeResponse,
+    TravelRuleExchangeService, TravelRuleTransport, TravelRuleTransportError,
+    TravelRuleTransportFactory, TravelRuleTransportProfile,
 };
 
 #[derive(Clone)]
@@ -15,9 +15,7 @@ struct ScriptedTransport {
 }
 
 impl ScriptedTransport {
-    fn new(
-        responses: Vec<Result<TravelRuleExchangeResponse, TravelRuleTransportError>>,
-    ) -> Self {
+    fn new(responses: Vec<Result<TravelRuleExchangeResponse, TravelRuleTransportError>>) -> Self {
         Self {
             responses: Arc::new(Mutex::new(VecDeque::from(responses))),
         }

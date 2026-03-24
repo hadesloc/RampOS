@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use crate::repository::{
     CorridorPackRecord, CorridorPackRepository, PgCorridorPackRepository,
-    UpsertCorridorComplianceHookRequest, UpsertCorridorEligibilityRuleRequest,
-    UpsertCorridorEndpointRequest, UpsertCorridorFeeProfileRequest, UpsertCorridorPackRequest,
-    UpsertCorridorRolloutScopeRequest, UpsertCorridorCutoffPolicyRequest,
+    UpsertCorridorComplianceHookRequest, UpsertCorridorCutoffPolicyRequest,
+    UpsertCorridorEligibilityRuleRequest, UpsertCorridorEndpointRequest,
+    UpsertCorridorFeeProfileRequest, UpsertCorridorPackRequest, UpsertCorridorRolloutScopeRequest,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,7 +52,10 @@ impl CorridorPackService {
         }
     }
 
-    pub async fn list_corridor_packs(&self, tenant_id: Option<&str>) -> Result<CorridorPackSnapshot> {
+    pub async fn list_corridor_packs(
+        &self,
+        tenant_id: Option<&str>,
+    ) -> Result<CorridorPackSnapshot> {
         if let Some(repository) = &self.repository {
             let corridor_packs = repository.list_corridor_packs(tenant_id).await?;
             if !corridor_packs.is_empty() {
@@ -86,12 +89,13 @@ impl CorridorPackService {
         &self,
         bundle: &UpsertCorridorPackBundle,
     ) -> Result<Option<CorridorPackRecord>> {
-        let repository = self
-            .repository
-            .as_ref()
-            .ok_or_else(|| ramp_common::Error::Internal("Corridor pack repository is not configured".to_string()))?;
+        let repository = self.repository.as_ref().ok_or_else(|| {
+            ramp_common::Error::Internal("Corridor pack repository is not configured".to_string())
+        })?;
 
-        repository.upsert_corridor_pack(&bundle.corridor_pack).await?;
+        repository
+            .upsert_corridor_pack(&bundle.corridor_pack)
+            .await?;
         for endpoint in &bundle.endpoints {
             repository.upsert_endpoint(endpoint).await?;
         }

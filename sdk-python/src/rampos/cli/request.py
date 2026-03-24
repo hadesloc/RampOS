@@ -101,12 +101,17 @@ def build_auth_headers(ctx: CliContext, *, require_operator: bool = False) -> di
     headers: dict[str, str] = {"Content-Type": "application/json"}
 
     if ctx.auth_mode == "admin":
-        if not ctx.admin_key:
-            raise CliAuthError("Missing admin key. Use a profile or set RAMPOS_ADMIN_KEY.")
-        role = "operator" if require_operator else (ctx.admin_role or "viewer")
-        headers["X-Admin-Key"] = f"{ctx.admin_key}:{role}"
-        if ctx.admin_user_id:
-            headers["X-Admin-User-Id"] = ctx.admin_user_id
+        if ctx.admin_jwt:
+            headers["X-Admin-Authorization"] = f"Bearer {ctx.admin_jwt}"
+        elif ctx.admin_key:
+            role = "operator" if require_operator else (ctx.admin_role or "viewer")
+            headers["X-Admin-Key"] = f"{ctx.admin_key}:{role}"
+            if ctx.admin_user_id:
+                headers["X-Admin-User-Id"] = ctx.admin_user_id
+        else:
+            raise CliAuthError(
+                "Missing admin JWT or legacy admin key. Use --admin-jwt / RAMPOS_ADMIN_JWT as canonical auth, or --admin-key / RAMPOS_ADMIN_KEY only as compatibility fallback."
+            )
     elif ctx.auth_mode == "api":
         if not ctx.api_key:
             raise CliAuthError("Missing API key. Use a profile or set RAMPOS_API_KEY.")

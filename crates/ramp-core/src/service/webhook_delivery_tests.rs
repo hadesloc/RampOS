@@ -691,7 +691,29 @@ async fn test_webhook_retry_worker_processes_pending() {
 }
 
 // ============================================================================
-// Test 20: Malformed v2 signature headers are rejected
+// Test 20: WebhookRetryWorker explicitly advertises single-worker bounds
+// ============================================================================
+#[test]
+fn test_webhook_retry_worker_exposes_single_worker_runtime_truth() {
+    let delivery_service = Arc::new(WebhookDeliveryService::new());
+    let worker = WebhookRetryWorker::new(delivery_service);
+
+    assert!(
+        worker.single_worker_bound(),
+        "worker should explicitly declare single-worker bounds"
+    );
+    assert!(
+        !worker.multi_instance_authoritative(),
+        "worker should explicitly declare that it is not authoritative for multi-instance runtime"
+    );
+    assert!(
+        worker.runtime_truth_note().contains("single-worker"),
+        "runtime truth note should describe the single-worker bound"
+    );
+}
+
+// ============================================================================
+// Test 21: Malformed v2 signature headers are rejected
 // ============================================================================
 #[test]
 fn test_malformed_v2_headers() {

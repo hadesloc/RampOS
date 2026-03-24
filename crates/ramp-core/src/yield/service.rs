@@ -73,12 +73,15 @@ impl YieldService {
         let mut grouped: HashMap<ProtocolId, TreasuryYieldAllocationSummary> = HashMap::new();
 
         for position in positions {
-            let entry = grouped.entry(position.protocol).or_insert(TreasuryYieldAllocationSummary {
-                protocol: position.protocol,
-                principal: U256::ZERO,
-                current_value: U256::ZERO,
-                accrued_yield: U256::ZERO,
-            });
+            let entry =
+                grouped
+                    .entry(position.protocol)
+                    .or_insert(TreasuryYieldAllocationSummary {
+                        protocol: position.protocol,
+                        principal: U256::ZERO,
+                        current_value: U256::ZERO,
+                        accrued_yield: U256::ZERO,
+                    });
             entry.principal += position.principal;
             entry.current_value += position.current_value;
             entry.accrued_yield += position.accrued_yield;

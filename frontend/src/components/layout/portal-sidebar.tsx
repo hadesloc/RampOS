@@ -10,6 +10,7 @@ import {
   ArrowUpFromLine,
   History,
   Settings,
+  Landmark,
   Menu,
   X,
   User,
@@ -59,6 +60,11 @@ export function PortalSidebar() {
           title: t('deposit'),
           href: "/portal/deposit",
           icon: ArrowDownToLine,
+        },
+        {
+          title: "Venue Funding",
+          href: "/portal/venues",
+          icon: Landmark,
         },
         {
           title: t('withdraw'),

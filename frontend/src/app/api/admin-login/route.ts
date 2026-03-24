@@ -2,15 +2,17 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
   ADMIN_SESSION_COOKIE,
+  AdminSession,
   constantTimeEqual,
   createAdminSessionToken,
 } from "@/lib/admin-auth";
 
 export async function POST(req: Request) {
-  const adminKey = process.env.RAMPOS_ADMIN_KEY;
-  if (!adminKey) {
+  const sessionSecret = process.env.RAMPOS_ADMIN_JWT_SECRET;
+  const apiUrl = (process.env.API_URL || "http://localhost:8080").replace(/\/$/, "");
+  if (!sessionSecret) {
     return NextResponse.json(
-      { message: "Admin key not configured" },
+      { message: "Admin auth not configured" },
       { status: 500 }
     );
   }
@@ -24,16 +26,47 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const key = typeof body?.key === "string" ? body.key : "";
-
-  // RAMPOS_ADMIN_KEY format is "key:role" - extract just the key part for comparison
-  const adminKeyOnly = adminKey.includes(":") ? adminKey.split(":")[0] : adminKey;
-
-  if (!constantTimeEqual(key, adminKeyOnly)) {
-    return NextResponse.json({ message: "Invalid admin key" }, { status: 401 });
+  const email = typeof body?.email === "string" ? body.email : "";
+  const password = typeof body?.password === "string" ? body.password : "";
+  if (!email || !password) {
+    return NextResponse.json({ message: "Missing credentials" }, { status: 400 });
   }
 
-  const token = createAdminSessionToken(adminKey);
+  const response = await fetch(`${apiUrl}/v1/admin/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ email, password }),
+  }).catch(() => null);
+
+  if (!response) {
+    return NextResponse.json({ message: "Login failed" }, { status: 502 });
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return NextResponse.json(
+      { message: payload?.message || "Invalid admin credentials" },
+      { status: response.status }
+    );
+  }
+
+  const session: AdminSession = {
+    accessToken: String(payload.accessToken || ""),
+    refreshToken: String(payload.refreshToken || ""),
+    accessTokenExpiresAt:
+      Math.floor(Date.now() / 1000) + Number(payload.expiresIn || 0),
+    refreshTokenExpiresAt: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
+    admin: payload.admin,
+  };
+
+  if (!session.accessToken || !session.refreshToken || !session.accessTokenExpiresAt) {
+    return NextResponse.json({ message: "Invalid login response" }, { status: 502 });
+  }
+
+  const token = createAdminSessionToken(sessionSecret, session);
   cookieStore.set({
     name: ADMIN_SESSION_COOKIE,
     value: token,
@@ -41,7 +74,7 @@ export async function POST(req: Request) {
     sameSite: "strict",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 8,
+    maxAge: 60 * 60 * 24 * 7,
   });
 
   return NextResponse.json({ ok: true });

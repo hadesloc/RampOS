@@ -28,7 +28,21 @@
       "value": "",
       "type": "secret",
       "enabled": true,
-      "description": "Admin API key for admin endpoints"
+      "description": "Deprecated legacy admin key fallback"
+    },
+    {
+      "key": "ADMIN_JWT",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Canonical admin access token (JWT)"
+    },
+    {
+      "key": "ADMIN_OPERATOR_JWT",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Canonical admin operator token (JWT for mutate endpoints)"
     },
     {
       "key": "TENANT_ID",

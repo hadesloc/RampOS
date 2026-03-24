@@ -540,9 +540,7 @@ mod tests {
             Some("https://vasp.example/travel-rule")
         );
         assert_eq!(
-            transport
-                .last_request_endpoint()
-                .as_deref(),
+            transport.last_request_endpoint().as_deref(),
             Some("https://vasp.example/travel-rule")
         );
     }

@@ -244,9 +244,9 @@ The main remaining debt is not emergency security work. It is cleanup and consis
 
 If continuing from the current state, the highest-value follow-up work is:
 
-1. remove tracked local artifact noise such as bytecode and temporary verification outputs from the repository snapshot
-2. do a repo-wide warning reduction pass, starting with `ramp-api`, `ramp-core`, and `ramp-compliance`
-3. tighten old test fixtures so they use the new secret-storage encoding helpers by default
-4. add a short docs index link from the main engineering docs to this report and related operator references
+1. close release-truth blockers first: staging evidence, refreshed Trivy evidence, residual `rsa` disposition, and named approvers
+2. keep the repo in signoff-closure posture until `docs/operations/bank-grade-signoff-ledger.md` is refreshed with attributable evidence
+3. only after signoff-truth reconciliation, resume the next approved UW mainline unit
+4. treat warning reduction and general hygiene as follow-on cleanup, not as the current release gate
 
 This repo is now materially safer than the initial post-build state, and the highest-severity audit findings from the recent pass have been addressed in code and in CI guardrails.

@@ -286,10 +286,7 @@ impl RfqService {
         };
 
         self.rfq_repo.create_bid(&bid).await?;
-        if let Err(error) = self
-            .ingest_quote_outcome(&req.tenant_id, &rfq, &bid)
-            .await
-        {
+        if let Err(error) = self.ingest_quote_outcome(&req.tenant_id, &rfq, &bid).await {
             warn!(
                 bid_id = %bid.id,
                 lp_id = %bid.lp_id,
@@ -343,19 +340,20 @@ impl RfqService {
 
         for bid in bids {
             let request = requests.iter().find(|row| row.id == bid.rfq_id);
-            let entry = exposures
-                .entry(bid.lp_id.clone())
-                .or_insert_with(|| CounterpartyExposureSignal {
-                    counterparty_id: bid.lp_id.clone(),
-                    asset: request
-                        .map(|row| row.crypto_asset.clone())
-                        .unwrap_or_else(|| "USDT".to_string()),
-                    gross_exposure: Decimal::ZERO,
-                    won_count: 0,
-                    quote_count: 0,
-                    reliability_score: None,
-                    dispute_rate: None,
-                });
+            let entry =
+                exposures
+                    .entry(bid.lp_id.clone())
+                    .or_insert_with(|| CounterpartyExposureSignal {
+                        counterparty_id: bid.lp_id.clone(),
+                        asset: request
+                            .map(|row| row.crypto_asset.clone())
+                            .unwrap_or_else(|| "USDT".to_string()),
+                        gross_exposure: Decimal::ZERO,
+                        won_count: 0,
+                        quote_count: 0,
+                        reliability_score: None,
+                        dispute_rate: None,
+                    });
 
             entry.quote_count += 1;
             entry.gross_exposure += bid.vnd_amount;
@@ -555,8 +553,7 @@ impl RfqService {
         winning_bid: &RfqBidRow,
     ) -> Result<()> {
         let governance = default_liquidity_governance_context(rfq, winning_bid);
-        let fill_signal =
-            normalize_fill_signal(rfq, winning_bid, &governance, Some(Decimal::ZERO));
+        let fill_signal = normalize_fill_signal(rfq, winning_bid, &governance, Some(Decimal::ZERO));
         let settlement_quality_signal = normalize_settlement_quality_signal(
             &winning_bid.lp_id,
             &rfq.direction,
@@ -707,7 +704,9 @@ impl RfqService {
             return Ok(None);
         }
 
-        Ok(pending_bids.into_iter().reduce(best_price_bid(&rfq.direction)))
+        Ok(pending_bids
+            .into_iter()
+            .reduce(best_price_bid(&rfq.direction)))
     }
 
     async fn expire_stale_pending_bids(&self, tenant_id: &TenantId, rfq_id: &str) -> Result<()> {
@@ -1557,7 +1556,10 @@ mod tests {
         let best = svc.get_best_bid(&tenant(), &rfq.id).await.unwrap();
         assert!(best.is_none());
 
-        let bids = repo.list_bids_for_request(&tenant(), &rfq.id).await.unwrap();
+        let bids = repo
+            .list_bids_for_request(&tenant(), &rfq.id)
+            .await
+            .unwrap();
         assert_eq!(bids.len(), 1);
         assert_eq!(bids[0].state, "EXPIRED");
     }
@@ -1610,7 +1612,10 @@ mod tests {
         assert_eq!(signal.partner_class, "liquidity_provider");
         assert_eq!(signal.corridor_code.as_deref(), Some("USDT_VN_OFFRAMP"));
         assert_eq!(signal.capability_family.as_deref(), Some("otc_desk"));
-        assert_eq!(signal.approval_reference.as_deref(), Some("apr_lp_norm_001"));
+        assert_eq!(
+            signal.approval_reference.as_deref(),
+            Some("apr_lp_norm_001")
+        );
         assert_eq!(signal.asset, "USDT");
         assert_eq!(signal.quoted_vnd_amount, Decimal::new(3_262_500, 0));
         assert_eq!(signal.quoted_rate, Decimal::new(26_100, 0));
@@ -1693,7 +1698,12 @@ mod tests {
         assert_eq!(result.winning_bid.id, winning_bid.id);
 
         let winner_snapshot = repo
-            .get_latest_reliability_snapshot(&tenant(), &winning_bid.lp_id, "OFFRAMP", "ROLLING_30D")
+            .get_latest_reliability_snapshot(
+                &tenant(),
+                &winning_bid.lp_id,
+                "OFFRAMP",
+                "ROLLING_30D",
+            )
             .await
             .unwrap()
             .unwrap();
@@ -1703,13 +1713,22 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(winner_snapshot.metadata["normalizedSignal"]["signalKind"], "fill");
+        assert_eq!(
+            winner_snapshot.metadata["normalizedSignal"]["signalKind"],
+            "fill"
+        );
         assert_eq!(
             winner_snapshot.metadata["normalizedSignal"]["partnerClass"],
             "liquidity_provider"
         );
-        assert_eq!(winner_snapshot.metadata["normalizedSignal"]["quotedRate"], "26000");
-        assert_eq!(loser_snapshot.metadata["normalizedSignal"]["signalKind"], "cancel");
+        assert_eq!(
+            winner_snapshot.metadata["normalizedSignal"]["quotedRate"],
+            "26000"
+        );
+        assert_eq!(
+            loser_snapshot.metadata["normalizedSignal"]["signalKind"],
+            "cancel"
+        );
         assert_eq!(
             loser_snapshot.metadata["normalizedSignal"]["cancelReason"],
             "rfq_rejected"

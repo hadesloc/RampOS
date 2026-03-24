@@ -851,12 +851,8 @@ mod tests {
             status_code: "94".to_string(),
         };
 
-        let record = canonicalize_napas_payment(
-            "TENANT1",
-            &payload,
-            Decimal::from(1_000_000_i64),
-            None,
-        );
+        let record =
+            canonicalize_napas_payment("TENANT1", &payload, Decimal::from(1_000_000_i64), None);
         assert_eq!(record.provider, "napas");
         assert_eq!(record.status_family.as_str(), "review");
     }

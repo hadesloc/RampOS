@@ -575,16 +575,17 @@ export default function DocsPage() {
     : sections
 
   return (
-    <main className="min-h-screen bg-black text-white">
-      {/* Background */}
-      <div className="fixed inset-0 z-0 opacity-30 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-900/40 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-fuchsia-900/30 blur-[120px]" />
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,#000_10%,transparent_100%)]" />
+    <main className="min-h-screen bg-[#050505] text-white">
+      {/* Background — Neon Horizon aurora */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div className="absolute top-[-15%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#00FF87]/5 blur-[180px] animate-pulse" style={{ animationDuration: '10s' }} />
+        <div className="absolute bottom-[-15%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#7B61FF]/5 blur-[180px] animate-pulse" style={{ animationDuration: '14s' }} />
+        <div className="absolute top-[30%] right-[20%] w-[30%] h-[30%] rounded-full bg-[#00D4FF]/4 blur-[150px] animate-pulse" style={{ animationDuration: '18s' }} />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[size:60px_60px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_30%,#000_10%,transparent_100%)]" />
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-black/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#050505]/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 py-4">
           <div className="flex items-center gap-4">
             <button
@@ -595,8 +596,12 @@ export default function DocsPage() {
             </button>
             <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
               <ArrowLeft className="w-4 h-4 text-gray-400" />
-              <span className="text-xl font-bold tracking-tight">RAMP OS</span>
-              <span className="text-xs font-mono px-2 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00FF87] opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00FF87]" />
+              </span>
+              <span className="text-xl font-bold tracking-tight font-display">RAMP·OS</span>
+              <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-[#00FF87]/10 text-[#00FF87] border border-[#00FF87]/20">
                 Docs
               </span>
             </Link>
@@ -659,7 +664,7 @@ export default function DocsPage() {
                   placeholder={t.searchPlaceholder}
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white/[0.03] border border-white/[0.06] rounded-xl text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#00FF87]/40 focus:ring-1 focus:ring-[#00FF87]/20 transition-all"
                 />
               </div>
             </div>
@@ -701,7 +706,7 @@ export default function DocsPage() {
             transition={{ duration: 0.4 }}
             className="mb-16"
           >
-            <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
+            <h1 className="text-4xl md:text-5xl font-display font-extrabold tracking-tight mb-4">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-200 to-gray-400">
                 {t.pageTitle}
               </span>
@@ -767,7 +772,7 @@ function QuickLink({ href, label }: { href: string; label: string }) {
   return (
     <a
       href={href}
-      className="text-sm px-4 py-2 rounded-full bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:text-white hover:border-white/20 transition-all"
+      className="text-sm px-4 py-2 rounded-full bg-white/[0.03] border border-white/[0.06] text-gray-300 hover:bg-white/[0.06] hover:text-white hover:border-white/[0.12] transition-all duration-300"
     >
       {label}
     </a>
@@ -788,7 +793,7 @@ function SectionCard({
   const Icon = section.icon
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden hover:border-white/10 transition-all duration-300">
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden hover:border-white/[0.1] transition-all duration-500 hover:shadow-[0_0_30px_rgba(0,212,255,0.05)]">
       {/* Header */}
       <button
         onClick={onToggle}
@@ -824,7 +829,7 @@ function SectionCard({
               rel="noopener noreferrer"
               className="flex items-start gap-4 px-6 py-4 hover:bg-white/[0.03] transition-colors group"
             >
-              <div className="w-1.5 h-1.5 rounded-full bg-white/20 mt-2 shrink-0 group-hover:bg-cyan-400 transition-colors" />
+              <div className="w-1.5 h-1.5 rounded-full bg-white/20 mt-2 shrink-0 group-hover:bg-[#00D4FF] transition-colors" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-gray-200 group-hover:text-white transition-colors">

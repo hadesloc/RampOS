@@ -16,6 +16,7 @@ pub struct OfframpIntentRow {
     pub id: String,
     pub tenant_id: String,
     pub user_id: String,
+    pub chain_id: Option<i64>,
     pub crypto_asset: String,
     pub crypto_amount: Decimal,
     pub exchange_rate: Decimal,
@@ -108,19 +109,20 @@ impl OfframpIntentRepository for PgOfframpIntentRepository {
         sqlx::query(
             r#"
             INSERT INTO offramp_intents (
-                id, tenant_id, user_id, crypto_asset, crypto_amount, exchange_rate,
+                id, tenant_id, user_id, chain_id, crypto_asset, crypto_amount, exchange_rate,
                 locked_rate_id, fees, net_vnd_amount, gross_vnd_amount, bank_account,
                 deposit_address, tx_hash, bank_reference, state, state_history,
                 created_at, updated_at, quote_expires_at
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-                $12, $13, $14, $15, $16, $17, $18, $19
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                $13, $14, $15, $16, $17, $18, $19, $20
             )
             "#,
         )
         .bind(&intent.id)
         .bind(&intent.tenant_id)
         .bind(&intent.user_id)
+        .bind(intent.chain_id)
         .bind(&intent.crypto_asset)
         .bind(intent.crypto_amount)
         .bind(intent.exchange_rate)
@@ -227,15 +229,16 @@ impl OfframpIntentRepository for PgOfframpIntentRepository {
             r#"
             UPDATE offramp_intents
             SET locked_rate_id = $1, deposit_address = $2, tx_hash = $3,
-                bank_reference = $4, state = $5, state_history = $6,
+                bank_reference = $4, chain_id = $5, state = $6, state_history = $7,
                 updated_at = NOW()
-            WHERE id = $7 AND tenant_id = $8
+            WHERE id = $8 AND tenant_id = $9
             "#,
         )
         .bind(&intent.locked_rate_id)
         .bind(&intent.deposit_address)
         .bind(&intent.tx_hash)
         .bind(&intent.bank_reference)
+        .bind(intent.chain_id)
         .bind(&intent.state)
         .bind(&intent.state_history)
         .bind(&intent.id)
@@ -395,6 +398,7 @@ mod tests {
             id: "ofr_test_001".to_string(),
             tenant_id: "tenant_1".to_string(),
             user_id: "user_1".to_string(),
+            chain_id: Some(137),
             crypto_asset: "USDT".to_string(),
             crypto_amount: Decimal::new(100, 0),
             exchange_rate: Decimal::new(25_000, 0),
@@ -416,6 +420,7 @@ mod tests {
         assert_eq!(intent.id, "ofr_test_001");
         assert_eq!(intent.tenant_id, "tenant_1");
         assert_eq!(intent.user_id, "user_1");
+        assert_eq!(intent.chain_id, Some(137));
         assert_eq!(intent.crypto_asset, "USDT");
         assert_eq!(intent.crypto_amount, Decimal::new(100, 0));
         assert_eq!(intent.exchange_rate, Decimal::new(25_000, 0));
@@ -464,6 +469,7 @@ mod tests {
             id: "ofr_transition_test".to_string(),
             tenant_id: "tenant_1".to_string(),
             user_id: "user_1".to_string(),
+            chain_id: Some(1),
             crypto_asset: "USDT".to_string(),
             crypto_amount: Decimal::new(100, 0),
             exchange_rate: Decimal::new(25_000, 0),
@@ -560,6 +566,7 @@ mod tests {
             id: "ofr_persist_001".to_string(),
             tenant_id: "tenant_persist".to_string(),
             user_id: "user_persist".to_string(),
+            chain_id: Some(1),
             crypto_asset: "ETH".to_string(),
             crypto_amount: Decimal::new(25, 1),         // 2.5 ETH
             exchange_rate: Decimal::new(50_000_000, 0), // 50M VND/ETH
@@ -608,6 +615,7 @@ mod tests {
         assert_eq!(restored.id, original.id);
         assert_eq!(restored.tenant_id, original.tenant_id);
         assert_eq!(restored.user_id, original.user_id);
+        assert_eq!(restored.chain_id, original.chain_id);
         assert_eq!(restored.crypto_asset, original.crypto_asset);
         assert_eq!(restored.crypto_amount, original.crypto_amount);
         assert_eq!(restored.exchange_rate, original.exchange_rate);

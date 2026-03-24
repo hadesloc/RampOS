@@ -4,8 +4,9 @@
  * User-facing API client for the portal application.
  * Handles authentication, KYC, deposits, withdrawals, and transactions.
  *
- * Security: Auth tokens are stored in httpOnly cookies (set by the server).
- * The client uses `credentials: 'include'` to send cookies with requests.
+ * Portal auth currently fails closed.
+ * Challenge/request endpoints exist, but end-to-end session issuance and
+ * validation are not fully enabled yet.
  */
 
 // API Configuration
@@ -108,6 +109,141 @@ export interface DepositInfo {
   network?: string;
   depositAddress?: string;
   qrCodeUrl?: string;
+}
+
+export interface VenueSummary {
+  venueKey: string;
+  displayName: string;
+  status: string;
+  supportsWalletFunding: boolean;
+}
+
+export interface VenueListResponse {
+  venues: VenueSummary[];
+}
+
+export interface VenueFundingConnectionRequest {
+  venueKey: string;
+  jurisdiction: string;
+  asset: string;
+  network: string;
+}
+
+export interface VenueFundingConnectionSummary {
+  id: string;
+  venueKey: string;
+  status: string;
+}
+
+export interface VenueFundingAccountSummary {
+  id: string;
+  network: string;
+  asset: string;
+  status: string;
+}
+
+export interface VenueFundingConnectionResponse {
+  id: string;
+  subjectType: string;
+  subjectId: string;
+  source: string;
+  connections: VenueFundingConnectionSummary[];
+  accounts: VenueFundingAccountSummary[];
+}
+
+export interface VenueFundingEligibilityReason {
+  code: string;
+  source: string;
+  message: string;
+}
+
+export interface VenueFundingSourceOfFunds {
+  action: string;
+  packageId: string | null;
+  source: string;
+}
+
+export interface VenueFundingEligibilityRequest {
+  venueKey: string;
+  jurisdiction: string;
+  asset: string;
+  network: string;
+  paymentMethodFamily?: string;
+  fundingSource?: string;
+  walletAttestationState?: string;
+  userTier?: string;
+  kybState?: string;
+  commercialExtensionId?: string;
+  action?: string;
+  connectionId?: string;
+}
+
+export interface VenueFundingEligibilityResponse {
+  subjectType: string;
+  subjectId: string;
+  decision: string;
+  source: string;
+  reasons: VenueFundingEligibilityReason[];
+  sourceOfFunds: VenueFundingSourceOfFunds;
+}
+
+export interface VenueFundingPrepareRequest {
+  venueKey: string;
+  jurisdiction: string;
+  asset: string;
+  network: string;
+  venueConnectionId: string;
+  venueAccountId: string;
+  walletAttestationId: string;
+  amount: string;
+  originIntentId?: string;
+  paymentMethodFamily?: string;
+  fundingSource?: string;
+  walletAttestationState?: string;
+  userTier?: string;
+  kybState?: string;
+  commercialExtensionId?: string;
+  action?: string;
+}
+
+export interface VenueFundingChecklistItem {
+  code: string;
+  status: string;
+  message: string;
+}
+
+export interface VenueFundingPrepareResponse {
+  id: string;
+  subjectType: string;
+  subjectId: string;
+  status: string;
+  eligibilityDecision: string;
+  source: string;
+  checklist: VenueFundingChecklistItem[];
+  sourceOfFunds: VenueFundingSourceOfFunds;
+}
+
+export interface VenueFundingStatusResponse {
+  id: string;
+  subjectType: string;
+  subjectId: string;
+  status: string;
+  eligibilityDecision: string;
+  source: string;
+  blockingReasons: VenueFundingEligibilityReason[];
+  sourceOfFunds: VenueFundingSourceOfFunds;
+}
+
+export interface VenueFundingSubmitResponse {
+  id: string;
+  subjectType: string;
+  subjectId: string;
+  status: string;
+  eligibilityDecision: string;
+  source: string;
+  nextAction: string;
+  walletTransferReference: string;
+  sourceOfFunds: VenueFundingSourceOfFunds;
 }
 
 export interface DepositRequest {
@@ -239,8 +375,8 @@ export const authApi = {
     });
   },
 
-  // Complete WebAuthn registration
-  // Server sets auth cookies, returns user info
+  // Complete WebAuthn registration.
+  // Current backend posture may reject this until completion/session flow is enabled.
   completeRegistration: async (
     email: string,
     credential: WebAuthnCredentialResponse
@@ -259,8 +395,8 @@ export const authApi = {
     });
   },
 
-  // Complete WebAuthn authentication
-  // Server sets auth cookies, returns user info
+  // Complete WebAuthn authentication.
+  // Current backend posture may reject this until completion/session flow is enabled.
   completeAuthentication: async (
     credential: WebAuthnCredentialResponse
   ): Promise<AuthResponse> => {
@@ -278,8 +414,8 @@ export const authApi = {
     });
   },
 
-  // Verify magic link token
-  // Server sets auth cookies, returns user info
+  // Verify magic link token.
+  // Current backend posture may reject this until verification/session flow is enabled.
   verifyMagicLink: async (token: string): Promise<AuthResponse> => {
     return portalRequest<AuthResponse>('/v1/auth/magic-link/verify', {
       method: 'POST',
@@ -287,8 +423,8 @@ export const authApi = {
     });
   },
 
-  // Refresh token (uses refresh token from cookie)
-  // Server sets new auth cookies, returns user info
+  // Refresh token.
+  // Current backend posture may reject this until session issuance is enabled.
   refreshToken: async (): Promise<AuthResponse> => {
     return portalRequest<AuthResponse>('/v1/auth/refresh', {
       method: 'POST',
@@ -302,12 +438,12 @@ export const authApi = {
     });
   },
 
-  // Get current user (uses auth token from cookie)
+  // Get current user.
   getMe: async (): Promise<AuthUser> => {
     return portalRequest<AuthUser>('/v1/auth/me');
   },
 
-  // Check session status (uses auth token from cookie)
+  // Check session status.
   checkSession: async (): Promise<SessionStatus> => {
     return portalRequest<SessionStatus>('/v1/auth/session');
   },
@@ -385,6 +521,83 @@ export const walletApi = {
   // Get deposit info
   getDepositInfo: async (method: 'VND_BANK' | 'CRYPTO'): Promise<DepositInfo> => {
     return portalRequest<DepositInfo>(`/v1/portal/wallet/deposit-info?method=${method}`);
+  },
+};
+
+export const venueFundingApi = {
+  listVenues: async (): Promise<VenueListResponse> => {
+    return portalRequest<VenueListResponse>('/v1/portal/venue-funding/venues');
+  },
+
+  connect: async (
+    data: VenueFundingConnectionRequest
+  ): Promise<VenueFundingConnectionResponse> => {
+    return portalRequest<VenueFundingConnectionResponse>('/v1/portal/venue-funding/connection', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getEligibility: async (
+    filters: VenueFundingEligibilityRequest
+  ): Promise<VenueFundingEligibilityResponse> => {
+    const searchParams = new URLSearchParams();
+    searchParams.set('venueKey', filters.venueKey);
+    searchParams.set('jurisdiction', filters.jurisdiction);
+    searchParams.set('asset', filters.asset);
+    searchParams.set('network', filters.network);
+
+    if (filters.paymentMethodFamily) {
+      searchParams.set('paymentMethodFamily', filters.paymentMethodFamily);
+    }
+    if (filters.fundingSource) {
+      searchParams.set('fundingSource', filters.fundingSource);
+    }
+    if (filters.walletAttestationState) {
+      searchParams.set('walletAttestationState', filters.walletAttestationState);
+    }
+    if (filters.userTier) {
+      searchParams.set('userTier', filters.userTier);
+    }
+    if (filters.kybState) {
+      searchParams.set('kybState', filters.kybState);
+    }
+    if (filters.commercialExtensionId) {
+      searchParams.set('commercialExtensionId', filters.commercialExtensionId);
+    }
+    if (filters.action) {
+      searchParams.set('action', filters.action);
+    }
+    if (filters.connectionId) {
+      searchParams.set('connectionId', filters.connectionId);
+    }
+
+    return portalRequest<VenueFundingEligibilityResponse>(
+      `/v1/portal/venue-funding/eligibility?${searchParams.toString()}`
+    );
+  },
+
+  prepare: async (
+    data: VenueFundingPrepareRequest
+  ): Promise<VenueFundingPrepareResponse> => {
+    return portalRequest<VenueFundingPrepareResponse>('/v1/portal/venue-funding/prepare', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  submit: async (
+    transferId: string,
+    walletTransferReference: string
+  ): Promise<VenueFundingSubmitResponse> => {
+    return portalRequest<VenueFundingSubmitResponse>(`/v1/portal/venue-funding/${transferId}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({ walletTransferReference }),
+    });
+  },
+
+  getStatus: async (transferId: string): Promise<VenueFundingStatusResponse> => {
+    return portalRequest<VenueFundingStatusResponse>(`/v1/portal/venue-funding/${transferId}/status`);
   },
 };
 
@@ -539,6 +752,7 @@ export const portalApi = {
   auth: authApi,
   kyc: kycApi,
   wallet: walletApi,
+  venueFunding: venueFundingApi,
   transaction: transactionApi,
   settings: settingsApi,
 };

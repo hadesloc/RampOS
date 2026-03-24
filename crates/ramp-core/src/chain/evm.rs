@@ -9,16 +9,18 @@
 //! - BSC
 //! - Avalanche
 
-use alloy::primitives::{Address, Bytes, B256, U256};
+use alloy::primitives::{keccak256, Address, Bytes, B256, U256};
 use alloy::providers::Provider;
+use alloy::rpc::types::Filter;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
 use super::{
-    Balance, Chain, ChainError, ChainId, ChainType, FeeEstimate, FeeOption, Result, TokenBalance,
-    Transaction, TxHash, TxState, TxStatus, UnifiedAddress,
+    Balance, Chain, ChainError, ChainId, ChainType, FeeEstimate, FeeOption, InboundTransferQuery,
+    NativeInboundTransferQuery, ObservedInboundTransfer, Result, TokenBalance, Transaction, TxHash,
+    TxState, TxStatus, UnifiedAddress,
 };
 
 /// EVM Chain configuration
@@ -135,6 +137,20 @@ impl EvmChainConfig {
         }
     }
 
+    /// Create config for Avalanche C-Chain
+    pub fn avalanche(rpc_url: &str) -> Self {
+        Self {
+            chain_id: ChainId::AVALANCHE,
+            name: "Avalanche C-Chain".to_string(),
+            rpc_url: rpc_url.to_string(),
+            native_symbol: "AVAX".to_string(),
+            is_testnet: false,
+            explorer_url: "https://snowtrace.io".to_string(),
+            eip1559: true,
+            block_time_secs: 2,
+        }
+    }
+
     /// Create config for Sepolia testnet
     pub fn sepolia(rpc_url: &str) -> Self {
         Self {
@@ -157,6 +173,8 @@ pub struct EvmChain {
 }
 
 impl EvmChain {
+    const ERC20_TRANSFER_EVENT: &'static str = "Transfer(address,address,uint256)";
+
     /// Create a new EVM chain instance
     pub fn new(config: EvmChainConfig) -> Result<Self> {
         let url: reqwest::Url = config
@@ -194,6 +212,59 @@ impl EvmChain {
         value
             .parse::<U256>()
             .map_err(|e| ChainError::Internal(e.to_string()))
+    }
+
+    fn parse_transfer_log(log: alloy::rpc::types::Log) -> Result<ObservedInboundTransfer> {
+        let topics = log.topics();
+        if topics.len() < 3 {
+            return Err(ChainError::Internal(
+                "ERC20 transfer log missing indexed topics".to_string(),
+            ));
+        }
+
+        let tx_hash = log.transaction_hash.ok_or_else(|| {
+            ChainError::Internal("Transfer log missing transaction hash".to_string())
+        })?;
+        let block_number = log
+            .block_number
+            .ok_or_else(|| ChainError::Internal("Transfer log missing block number".to_string()))?;
+        let amount = log.data().data.as_ref();
+        if amount.len() < 32 {
+            return Err(ChainError::Internal(
+                "ERC20 transfer log missing amount payload".to_string(),
+            ));
+        }
+
+        Ok(ObservedInboundTransfer {
+            tx_hash: TxHash(format!("{:#x}", tx_hash)),
+            from_address: format!("{:#x}", Self::topic_to_address(&topics[1])?),
+            to_address: format!("{:#x}", Self::topic_to_address(&topics[2])?),
+            amount: U256::from_be_slice(&amount[..32]).to_string(),
+            block_number,
+        })
+    }
+
+    fn topic_to_address(topic: &B256) -> Result<Address> {
+        let bytes = topic.as_slice();
+        if bytes.len() != 32 {
+            return Err(ChainError::Internal(
+                "Invalid ERC20 indexed topic width".to_string(),
+            ));
+        }
+        Ok(Address::from_slice(&bytes[12..]))
+    }
+
+    fn parse_native_transaction(tx: &alloy::rpc::types::Transaction) -> ObservedInboundTransfer {
+        ObservedInboundTransfer {
+            tx_hash: TxHash(format!("{:#x}", tx.hash)),
+            from_address: format!("{:#x}", tx.from),
+            to_address: tx
+                .to
+                .map(|address| format!("{:#x}", address))
+                .unwrap_or_else(|| "0x0000000000000000000000000000000000000000".to_string()),
+            amount: tx.value.to_string(),
+            block_number: tx.block_number.unwrap_or_default(),
+        }
     }
 }
 
@@ -584,6 +655,60 @@ impl Chain for EvmChain {
 
         Ok(block)
     }
+
+    async fn find_inbound_transfers(
+        &self,
+        query: &InboundTransferQuery,
+    ) -> Result<Vec<ObservedInboundTransfer>> {
+        let token_addr = Self::parse_address(&query.token_address)?;
+        let to_addr = Self::parse_address(&query.to_address)?;
+        let transfer_signature = keccak256(Self::ERC20_TRANSFER_EVENT.as_bytes());
+        let recipient_topic = B256::from(Self::abi_encode_address(to_addr));
+        let filter = Filter::new()
+            .address(token_addr)
+            .event_signature(transfer_signature)
+            .topic2(recipient_topic)
+            .from_block(query.from_block)
+            .to_block(query.to_block);
+
+        let logs = self
+            .provider
+            .get_logs(&filter)
+            .await
+            .map_err(|e| ChainError::RpcError(e.to_string()))?;
+
+        logs.into_iter()
+            .map(Self::parse_transfer_log)
+            .collect::<Result<Vec<_>>>()
+    }
+
+    async fn find_native_inbound_transfers(
+        &self,
+        query: &NativeInboundTransferQuery,
+    ) -> Result<Vec<ObservedInboundTransfer>> {
+        let to_addr = Self::parse_address(&query.to_address)?;
+        let mut transfers = Vec::new();
+
+        for block_number in query.from_block..=query.to_block {
+            let Some(block) = self
+                .provider
+                .get_block_by_number(block_number.into(), true)
+                .await
+                .map_err(|e| ChainError::RpcError(e.to_string()))?
+            else {
+                continue;
+            };
+
+            for tx in block.transactions.txns() {
+                if tx.to != Some(to_addr) || tx.value.is_zero() {
+                    continue;
+                }
+                transfers.push(Self::parse_native_transaction(tx));
+            }
+        }
+
+        Ok(transfers)
+    }
 }
 
 #[cfg(test)]
@@ -609,6 +734,10 @@ mod tests {
 
         let polygon = EvmChainConfig::polygon("https://polygon.example.com");
         assert_eq!(polygon.native_symbol, "MATIC");
+
+        let avalanche = EvmChainConfig::avalanche("https://avax.example.com");
+        assert_eq!(avalanche.chain_id, ChainId::AVALANCHE);
+        assert_eq!(avalanche.native_symbol, "AVAX");
     }
 
     #[test]
@@ -618,5 +747,88 @@ mod tests {
 
         let invalid = EvmChain::parse_address("invalid");
         assert!(invalid.is_err());
+    }
+
+    #[test]
+    fn test_topic_to_address() {
+        let address =
+            Address::parse_checksummed("0x1234567890123456789012345678901234567890", None).unwrap();
+        let topic = B256::from(EvmChain::abi_encode_address(address));
+        let parsed = EvmChain::topic_to_address(&topic).unwrap();
+        assert_eq!(parsed, address);
+    }
+
+    #[test]
+    fn test_parse_transfer_log() {
+        let from =
+            Address::parse_checksummed("0x1111111111111111111111111111111111111111", None).unwrap();
+        let to =
+            Address::parse_checksummed("0x2222222222222222222222222222222222222222", None).unwrap();
+        let transfer_signature = keccak256(EvmChain::ERC20_TRANSFER_EVENT.as_bytes());
+        let log = alloy::rpc::types::Log {
+            inner: alloy::primitives::Log::new_unchecked(
+                Address::ZERO,
+                vec![
+                    transfer_signature,
+                    B256::from(EvmChain::abi_encode_address(from)),
+                    B256::from(EvmChain::abi_encode_address(to)),
+                ],
+                Bytes::from(U256::from(100_000_000u64).to_be_bytes_vec()),
+            ),
+            block_hash: None,
+            block_number: Some(12345),
+            block_timestamp: None,
+            transaction_hash: Some(B256::repeat_byte(0xabu8)),
+            transaction_index: None,
+            log_index: None,
+            removed: false,
+        };
+
+        let parsed = EvmChain::parse_transfer_log(log).unwrap();
+        assert_eq!(
+            parsed.tx_hash.0,
+            format!("{:#x}", B256::repeat_byte(0xabu8))
+        );
+        assert_eq!(parsed.from_address, format!("{:#x}", from));
+        assert_eq!(parsed.to_address, format!("{:#x}", to));
+        assert_eq!(parsed.amount, "100000000");
+        assert_eq!(parsed.block_number, 12345);
+    }
+
+    #[test]
+    fn test_parse_native_transaction() {
+        let tx = alloy::rpc::types::Transaction {
+            hash: B256::repeat_byte(0xcdu8),
+            nonce: 7,
+            block_hash: Some(B256::repeat_byte(0x11)),
+            block_number: Some(456),
+            transaction_index: Some(0),
+            from: Address::parse_checksummed("0x1111111111111111111111111111111111111111", None)
+                .unwrap(),
+            to: Some(
+                Address::parse_checksummed("0x2222222222222222222222222222222222222222", None)
+                    .unwrap(),
+            ),
+            value: U256::from(1_500_000_000_000_000_000u128),
+            gas_price: Some(1),
+            gas: 21_000,
+            max_fee_per_gas: None,
+            max_priority_fee_per_gas: None,
+            max_fee_per_blob_gas: None,
+            input: Bytes::new(),
+            signature: None,
+            chain_id: Some(1),
+            blob_versioned_hashes: None,
+            access_list: None,
+            transaction_type: Some(0),
+            other: Default::default(),
+        };
+
+        let parsed = EvmChain::parse_native_transaction(&tx);
+        assert_eq!(parsed.tx_hash.0, format!("{:#x}", tx.hash));
+        assert_eq!(parsed.from_address, format!("{:#x}", tx.from));
+        assert_eq!(parsed.to_address, format!("{:#x}", tx.to.unwrap()));
+        assert_eq!(parsed.amount, "1500000000000000000");
+        assert_eq!(parsed.block_number, 456);
     }
 }

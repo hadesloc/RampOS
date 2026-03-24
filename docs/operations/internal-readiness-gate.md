@@ -63,7 +63,15 @@ Every release candidate must provide evidence for the following families. Each f
 
 **Release checklist**: [`docs/operations/release-checklist.md`](release-checklist.md)
 
-### 6. External Audit Deferral
+### 6. Workflow Runtime Truth
+
+| Evidence | Source | Freshness Rule | Pass Criterion |
+| --- | --- | --- | --- |
+| Workflow runtime contract | `docs/architecture/workflow-runtime-contract.md` reconciled to current code | Same SHA | Operators can explain whether runtime is in-process only, Temporal-adapter transitional, or fully durable |
+| Workflow readiness gate | `/v1/admin/readiness` `workflow_runtime` gate | Same SHA | Runtime mode and durability limits are explicit |
+| Env contract reconciliation | `TEMPORAL_URL` / `TEMPORAL_SERVER_URL` contract reviewed | Same SHA | No ambiguous operator guidance remains |
+
+### 7. External Audit Deferral
 
 > **This cycle explicitly defers external audit completion.**
 
@@ -102,7 +110,9 @@ Run rollback rehearsal (Family 4)
     ↓
 Collect release evidence (Family 5)
     ↓
-Record external audit deferral (Family 6)
+Record workflow runtime truth (Family 6)
+    ↓
+Record external audit deferral (Family 7)
     ↓
 Gate Decision → PASS / BLOCKED
     ↓
@@ -116,7 +126,7 @@ Record decision in bank-grade signoff ledger
 | Release candidate SHA | `268670d74` |
 | Freeze date | `2026-03-13` |
 | Gate status | `blocked` |
-| Blocking items | Stale Trivy evidence post-dependency-remediation, missing staging proof, missing external approvers |
+| Blocking items | Missing staging proof, stale Trivy evidence post-dependency-remediation, residual `rsa` advisory disposition, missing workflow-runtime operator truth, and missing named approvers for any required waivers or gate decisions |
 | Signoff ledger | [`docs/operations/bank-grade-signoff-ledger.md`](bank-grade-signoff-ledger.md) |
 
 ## References
@@ -132,5 +142,5 @@ Record decision in bank-grade signoff ledger
 
 ---
 
-Last updated: 2026-03-16
-Version: 1.0.0
+Last updated: 2026-03-18
+Version: 1.1.0

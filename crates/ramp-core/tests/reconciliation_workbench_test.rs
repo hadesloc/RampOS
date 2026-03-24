@@ -32,11 +32,20 @@ fn reconciliation_workbench_queue_surfaces_owner_root_cause_and_match_hints() {
     let queue = service.build_break_queue(&report, &settlements);
 
     assert_eq!(queue.len(), 1);
-    assert_eq!(queue[0].owner_lane, ReconciliationOwnerLane::SettlementOperations);
-    assert_eq!(queue[0].root_cause, ReconciliationRootCause::OffchainRecordingGap);
+    assert_eq!(
+        queue[0].owner_lane,
+        ReconciliationOwnerLane::SettlementOperations
+    );
+    assert_eq!(
+        queue[0].root_cause,
+        ReconciliationRootCause::OffchainRecordingGap
+    );
     assert_eq!(queue[0].age_bucket, ReconciliationAgeBucket::Fresh);
     assert_eq!(queue[0].suggested_matches.len(), 1);
-    assert_eq!(queue[0].suggested_matches[0].settlement_id, "stl_candidate_001");
+    assert_eq!(
+        queue[0].suggested_matches[0].settlement_id,
+        "stl_candidate_001"
+    );
     assert_eq!(
         queue[0].suggested_matches[0].confidence,
         ReconciliationMatchConfidence::High

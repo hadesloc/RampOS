@@ -19,7 +19,19 @@ vi.mock('lucide-react', () => ({
   Network: () => <div data-testid="icon-network" />,
   TrendingUp: () => <div data-testid="icon-trending" />,
   KeyRound: () => <div data-testid="icon-key-round" />,
-  Bell: () => <div data-testid="icon-bell" />,
+  Gavel: () => <div data-testid="icon-gavel" />,
+  Droplets: () => <div data-testid="icon-droplets" />,
+  FlaskConical: () => <div data-testid="icon-flask" />,
+  Banknote: () => <div data-testid="icon-banknote" />,
+  FileText: () => <div data-testid="icon-filetext" />,
+  FileCheck2: () => <div data-testid="icon-filecheck" />,
+  ShieldCheck: () => <div data-testid="icon-shieldcheck" />,
+  Landmark: () => <div data-testid="icon-landmark" />,
+  Radio: () => <div data-testid="icon-radio" />,
+  AlertTriangle: () => <div data-testid="icon-alerttriangle" />,
+  Activity: () => <div data-testid="icon-activity" />,
+  Scale: () => <div data-testid="icon-scale" />,
+  UserCheck: () => <div data-testid="icon-usercheck" />,
 }));
 
 // Mock usePathname
@@ -78,11 +90,12 @@ describe('Admin Sidebar', () => {
     render(<Sidebar />);
     expect(screen.getAllByText('Dashboard')[0]).toBeInTheDocument();
     expect(screen.getAllByText('Custody')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Venue Review')[0]).toBeInTheDocument();
   });
 
   it('renders title', () => {
     render(<Sidebar />);
-    expect(screen.getAllByText('RampOS')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('RAMP·OS')[0]).toBeInTheDocument();
   });
 
   it('displays user info', () => {

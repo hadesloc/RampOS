@@ -81,7 +81,10 @@ fn hash_lp_secret(secret: &str) -> String {
 }
 
 fn matches_key_hash(stored_hash: &str, candidate_secret: &str) -> bool {
-    let normalized = stored_hash.trim().trim_start_matches("\\x").to_ascii_lowercase();
+    let normalized = stored_hash
+        .trim()
+        .trim_start_matches("\\x")
+        .to_ascii_lowercase();
     normalized == hash_lp_secret(candidate_secret)
 }
 

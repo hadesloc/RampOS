@@ -55,8 +55,18 @@ RAMPOS__WEBHOOK__SIGNATURE_TOLERANCE_SECS=300
 # Logging
 RUST_LOG=info,ramp_api=debug,ramp_core=debug
 
-# Admin
-RAMPOS_ADMIN_KEY=change-me-in-production
+# Admin auth
+RAMPOS_ADMIN_JWT_SECRET=change-me-in-production
+RAMPOS_ADMIN_KEY=
+RAMPOS_OFFRAMP_SOLANA_CUSTODY_ADDRESS=
+
+# Frontend admin proxy
+API_URL=http://localhost:8080
+API_KEY=your_tenant_api_key
+API_SECRET=your_tenant_api_secret
+
+# Optional chain RPC overrides used by off-ramp background detect/confirm monitors
+AVALANCHE_RPC_URL=https://api.avax.network/ext/bc/C/rpc
 ```
 
 ### 3. Start Infrastructure Services
@@ -345,7 +355,12 @@ cargo clippy -- -D warnings
 | `RAMPOS__WEBHOOK__RETRY_INITIAL_DELAY_MS` | Initial retry delay | 1000 |
 | `RAMPOS__WEBHOOK__SIGNATURE_TOLERANCE_SECS` | Signature time tolerance | 300 |
 | `RUST_LOG` | Log level configuration | info |
-| `RAMPOS_ADMIN_KEY` | Admin API key | Required |
+| `RAMPOS_ADMIN_JWT_SECRET` | Admin JWT signing secret | Required |
+| `RAMPOS_ADMIN_KEY` | Legacy admin key compatibility fallback | Optional |
+| `RAMPOS_OFFRAMP_SOLANA_CUSTODY_ADDRESS` | Solana off-ramp custody address resolved from partner-registry env locator (`offramp_deposit_address_solana`) | Optional |
+| `API_URL` | Frontend-to-backend API base URL | http://localhost:8080 |
+| `API_KEY` | Frontend proxy tenant API key | Required for admin proxy |
+| `API_SECRET` | Frontend proxy tenant API secret | Required for admin proxy |
 
 ## Smart Contract Development
 
@@ -355,6 +370,14 @@ For smart contract development, additional environment variables are needed:
 # RPC URLs
 MAINNET_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY
 POLYGON_RPC_URL=https://polygon-mainnet.g.alchemy.com/v2/YOUR_KEY
+BSC_RPC_URL=https://bnb-mainnet.g.alchemy.com/v2/YOUR_KEY
+ARBITRUM_RPC_URL=https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
+BASE_RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_KEY
+OPTIMISM_RPC_URL=https://opt-mainnet.g.alchemy.com/v2/YOUR_KEY
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+RAMPOS_OFFRAMP_SOLANA_CUSTODY_ADDRESS=
+TON_API_URL=https://toncenter.com/api/v2
+TON_API_KEY=YOUR_TONCENTER_KEY
 SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
 
 # Deployment

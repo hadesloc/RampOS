@@ -1,5 +1,6 @@
 //! Settlement repository - SQL-backed persistence for settlements (F13)
 
+use crate::repository::set_rls_context;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ramp_common::{types::TenantId, Error, Result};
@@ -272,6 +273,83 @@ impl SettlementRepository for PgSettlementRepository {
             .map_err(|e| Error::Database(e.to_string()))?
         };
 
+        Ok(rows)
+    }
+
+    #[instrument(
+        skip(self),
+        fields(tenant_id = %tenant_id.0, offramp_intent_id = %offramp_intent_id)
+    )]
+    async fn list_by_offramp_in_tenant(
+        &self,
+        tenant_id: &TenantId,
+        offramp_intent_id: &str,
+    ) -> Result<Vec<SettlementRow>> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+        let rows = sqlx::query_as::<_, SettlementRow>(
+            r#"
+            SELECT s.*
+            FROM settlements s
+            INNER JOIN offramp_intents oi ON oi.id = s.offramp_intent_id
+            WHERE oi.tenant_id = $1
+              AND s.offramp_intent_id = $2
+            ORDER BY s.created_at DESC
+            "#,
+        )
+        .bind(&tenant_id.0)
+        .bind(offramp_intent_id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| Error::Database(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+        Ok(rows)
+    }
+
+    #[instrument(skip(self), fields(tenant_id = %tenant_id.0, bank_reference = %bank_reference))]
+    async fn list_by_bank_reference_in_tenant(
+        &self,
+        tenant_id: &TenantId,
+        bank_reference: &str,
+    ) -> Result<Vec<SettlementRow>> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+        let rows = sqlx::query_as::<_, SettlementRow>(
+            r#"
+            SELECT s.*
+            FROM settlements s
+            INNER JOIN offramp_intents oi ON oi.id = s.offramp_intent_id
+            WHERE oi.tenant_id = $1
+              AND s.bank_reference = $2
+            ORDER BY s.updated_at DESC, s.id DESC
+            "#,
+        )
+        .bind(&tenant_id.0)
+        .bind(bank_reference)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| Error::Database(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
         Ok(rows)
     }
 }

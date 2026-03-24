@@ -132,7 +132,6 @@ fn state_store() -> &'static RwLock<HashMap<String, TenantTravelRuleState>> {
     TRAVEL_RULE_STATE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-
 const REVIEW_META_KEY: &str = "_reviewState";
 const INTEROP_META_KEY: &str = "_interoperabilityState";
 const DISCLOSURE_MATCHED_POLICY_KEY: &str = "_matchedPolicyCode";
@@ -193,13 +192,21 @@ struct TravelRuleExceptionRow {
 }
 
 fn db_error(context: &str, error: sqlx::Error) -> ApiError {
-    ApiError::Internal(format!("Travel Rule persistence failed for {context}: {error}"))
+    ApiError::Internal(format!(
+        "Travel Rule persistence failed for {context}: {error}"
+    ))
 }
 
 fn sanitize_id(input: &str) -> String {
     input
         .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() { ch.to_ascii_lowercase() } else { '_' })
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -226,13 +233,17 @@ fn registry_metadata_for_storage(
     let mut map = metadata_map(metadata);
     map.insert(
         REVIEW_META_KEY.to_string(),
-        serde_json::to_value(review)
-            .map_err(|error| ApiError::Internal(format!("Travel Rule review serialization failed: {error}")))?,
+        serde_json::to_value(review).map_err(|error| {
+            ApiError::Internal(format!("Travel Rule review serialization failed: {error}"))
+        })?,
     );
     map.insert(
         INTEROP_META_KEY.to_string(),
-        serde_json::to_value(interoperability)
-            .map_err(|error| ApiError::Internal(format!("Travel Rule interoperability serialization failed: {error}")))?,
+        serde_json::to_value(interoperability).map_err(|error| {
+            ApiError::Internal(format!(
+                "Travel Rule interoperability serialization failed: {error}"
+            ))
+        })?,
     );
     Ok(Value::Object(map))
 }
@@ -249,7 +260,11 @@ fn disclosure_metadata_for_storage(record: &TravelRuleDisclosureRecord) -> Value
     );
     map.insert(
         DISCLOSURE_ACTION_KEY.to_string(),
-        record.action.clone().map(Value::String).unwrap_or(Value::Null),
+        record
+            .action
+            .clone()
+            .map(Value::String)
+            .unwrap_or(Value::Null),
     );
     map.insert(
         DISCLOSURE_MAX_FAILURES_KEY.to_string(),
@@ -294,14 +309,14 @@ fn disclosure_metadata_for_storage(record: &TravelRuleDisclosureRecord) -> Value
         DISCLOSURE_RETRY_RECOMMENDED_KEY.to_string(),
         Value::Bool(record.retry_recommended),
     );
-    map.insert(DISCLOSURE_TERMINAL_KEY.to_string(), Value::Bool(record.terminal));
+    map.insert(
+        DISCLOSURE_TERMINAL_KEY.to_string(),
+        Value::Bool(record.terminal),
+    );
     Value::Object(map)
 }
 
-fn exception_metadata_for_storage(
-    metadata: &Value,
-    resolved_by: Option<&str>,
-) -> Value {
+fn exception_metadata_for_storage(metadata: &Value, resolved_by: Option<&str>) -> Value {
     let mut map = metadata_map(metadata);
     map.insert(
         EXCEPTION_RESOLVED_BY_KEY.to_string(),
@@ -313,7 +328,10 @@ fn exception_metadata_for_storage(
 }
 
 fn parse_u32_control(metadata: &Value, key: &str) -> Option<u32> {
-    metadata.get(key).and_then(Value::as_u64).map(|value| value as u32)
+    metadata
+        .get(key)
+        .and_then(Value::as_u64)
+        .map(|value| value as u32)
 }
 
 fn parse_bool_control(metadata: &Value, key: &str) -> Option<bool> {
@@ -356,7 +374,9 @@ fn parse_review_status(value: &str) -> Result<ramp_compliance::VaspReviewStatus,
         "APPROVED" => Ok(ramp_compliance::VaspReviewStatus::Approved),
         "REJECTED" => Ok(ramp_compliance::VaspReviewStatus::Rejected),
         "SUSPENDED" => Ok(ramp_compliance::VaspReviewStatus::Suspended),
-        other => Err(ApiError::Internal(format!("Unsupported persisted review status '{other}'"))),
+        other => Err(ApiError::Internal(format!(
+            "Unsupported persisted review status '{other}'"
+        ))),
     }
 }
 
@@ -408,7 +428,9 @@ fn parse_disclosure_stage(value: &str) -> Result<DisclosureLifecycleStage, ApiEr
         "FAILED" => Ok(DisclosureLifecycleStage::Failed),
         "EXCEPTION" => Ok(DisclosureLifecycleStage::Exception),
         "WAIVED" => Ok(DisclosureLifecycleStage::Waived),
-        other => Err(ApiError::Internal(format!("Unsupported persisted disclosure stage '{other}'"))),
+        other => Err(ApiError::Internal(format!(
+            "Unsupported persisted disclosure stage '{other}'"
+        ))),
     }
 }
 
@@ -461,7 +483,9 @@ fn vasp_row_to_record(row: TravelRuleVaspRow) -> Result<VaspRegistryRecord, ApiE
         .metadata
         .get(INTEROP_META_KEY)
         .cloned()
-        .and_then(|value| serde_json::from_value::<ramp_compliance::VaspInteroperabilityState>(value).ok())
+        .and_then(|value| {
+            serde_json::from_value::<ramp_compliance::VaspInteroperabilityState>(value).ok()
+        })
         .unwrap_or_default();
     interoperability.status = parse_interoperability_status(&row.interoperability_status)?;
 
@@ -483,7 +507,9 @@ fn vasp_row_to_record(row: TravelRuleVaspRow) -> Result<VaspRegistryRecord, ApiE
     })
 }
 
-fn exception_row_to_record(row: TravelRuleExceptionRow) -> Result<TravelRuleExceptionRecord, ApiError> {
+fn exception_row_to_record(
+    row: TravelRuleExceptionRow,
+) -> Result<TravelRuleExceptionRecord, ApiError> {
     Ok(TravelRuleExceptionRecord {
         exception_id: row.id,
         disclosure_id: row.disclosure_id,
@@ -544,14 +570,21 @@ fn disclosure_row_to_record(
         direction: parse_direction(&row.direction)?,
         stage: parse_disclosure_stage(&row.lifecycle_stage)?,
         queue_status,
-        failure_count: parse_u32_control(&row.metadata, DISCLOSURE_FAILURE_COUNT_KEY).unwrap_or_default(),
-        max_failures_before_exception: parse_u32_control(&row.metadata, DISCLOSURE_MAX_FAILURES_KEY)
-            .unwrap_or(1),
+        failure_count: parse_u32_control(&row.metadata, DISCLOSURE_FAILURE_COUNT_KEY)
+            .unwrap_or_default(),
+        max_failures_before_exception: parse_u32_control(
+            &row.metadata,
+            DISCLOSURE_MAX_FAILURES_KEY,
+        )
+        .unwrap_or(1),
         attempt_count,
         transport_profile: row.transport_profile,
         matched_policy_code: parse_string_control(&row.metadata, DISCLOSURE_MATCHED_POLICY_KEY),
         action: parse_string_control(&row.metadata, DISCLOSURE_ACTION_KEY),
-        unmet_requirements: parse_string_vec_control(&row.metadata, DISCLOSURE_UNMET_REQUIREMENTS_KEY),
+        unmet_requirements: parse_string_vec_control(
+            &row.metadata,
+            DISCLOSURE_UNMET_REQUIREMENTS_KEY,
+        ),
         retry_recommended: parse_bool_control(&row.metadata, DISCLOSURE_RETRY_RECOMMENDED_KEY)
             .unwrap_or(false),
         terminal: parse_bool_control(&row.metadata, DISCLOSURE_TERMINAL_KEY).unwrap_or(false),
@@ -620,7 +653,12 @@ async fn fetch_disclosure_db(
     .fetch_optional(pool)
     .await
     .map_err(|error| db_error("load travel rule disclosure", error))?
-    .ok_or_else(|| ApiError::NotFound(format!("Travel Rule disclosure '{}' not found", disclosure_id)))?;
+    .ok_or_else(|| {
+        ApiError::NotFound(format!(
+            "Travel Rule disclosure '{}' not found",
+            disclosure_id
+        ))
+    })?;
 
     let latest_attempt = load_latest_attempt(pool, tenant_id, disclosure_id).await?;
     let exception = load_exception_for_disclosure(pool, tenant_id, disclosure_id).await?;
@@ -678,7 +716,8 @@ async fn create_registry_record_db(
 ) -> Result<VaspRegistryRecord, ApiError> {
     let record = VaspRegistryService::register(request)
         .map_err(|error| ApiError::Validation(error.to_string()))?;
-    let metadata = registry_metadata_for_storage(&record.metadata, &record.review, &record.interoperability)?;
+    let metadata =
+        registry_metadata_for_storage(&record.metadata, &record.review, &record.interoperability)?;
 
     sqlx::query(
         r#"
@@ -716,7 +755,9 @@ async fn create_registry_record_db(
     .bind(&record.endpoint_uri)
     .bind(&record.endpoint_public_key)
     .bind(review_status_to_value(record.review.status))
-    .bind(interoperability_status_to_value(record.interoperability.status))
+    .bind(interoperability_status_to_value(
+        record.interoperability.status,
+    ))
     .bind(record.supports_inbound)
     .bind(record.supports_outbound)
     .bind(metadata)
@@ -764,7 +805,11 @@ async fn update_registry_review_db(
     let record = vasp_row_to_record(existing)?;
     let updated = VaspRegistryService::apply_review_update(&record, request)
         .map_err(|error| ApiError::Validation(error.to_string()))?;
-    let metadata = registry_metadata_for_storage(&updated.metadata, &updated.review, &updated.interoperability)?;
+    let metadata = registry_metadata_for_storage(
+        &updated.metadata,
+        &updated.review,
+        &updated.interoperability,
+    )?;
 
     sqlx::query(
         r#"
@@ -823,7 +868,11 @@ async fn update_registry_interoperability_db(
     let record = vasp_row_to_record(existing)?;
     let updated = VaspRegistryService::apply_interoperability_update(&record, request)
         .map_err(|error| ApiError::Validation(error.to_string()))?;
-    let metadata = registry_metadata_for_storage(&updated.metadata, &updated.review, &updated.interoperability)?;
+    let metadata = registry_metadata_for_storage(
+        &updated.metadata,
+        &updated.review,
+        &updated.interoperability,
+    )?;
 
     sqlx::query(
         r#"
@@ -836,7 +885,9 @@ async fn update_registry_interoperability_db(
     )
     .bind(tenant_id)
     .bind(vasp_code)
-    .bind(interoperability_status_to_value(updated.interoperability.status))
+    .bind(interoperability_status_to_value(
+        updated.interoperability.status,
+    ))
     .bind(metadata)
     .execute(pool)
     .await
@@ -1062,11 +1113,19 @@ async fn retry_disclosure_db(
         )
         "#,
     )
-    .bind(format!("trta_{}_{}", sanitize_id(disclosure_id), attempt_number))
+    .bind(format!(
+        "trta_{}_{}",
+        sanitize_id(disclosure_id),
+        attempt_number
+    ))
     .bind(tenant_id)
     .bind(disclosure_id)
     .bind(i32::try_from(attempt_number).unwrap_or(i32::MAX))
-    .bind(next.transport_profile.clone().unwrap_or_else(|| "manual".to_string()))
+    .bind(
+        next.transport_profile
+            .clone()
+            .unwrap_or_else(|| "manual".to_string()),
+    )
     .bind(transport_status_to_value(simulated_status))
     .execute(pool)
     .await
@@ -1175,7 +1234,12 @@ async fn resolve_exception_db(
     .fetch_optional(pool)
     .await
     .map_err(|error| db_error("load travel rule exception", error))?
-    .ok_or_else(|| ApiError::NotFound(format!("Travel Rule exception '{}' not found", exception_id)))?;
+    .ok_or_else(|| {
+        ApiError::NotFound(format!(
+            "Travel Rule exception '{}' not found",
+            exception_id
+        ))
+    })?;
 
     if let Ok(disclosure) = fetch_disclosure_db(pool, tenant_id, &exception.disclosure_id).await {
         let resolved = DisclosureStateMachine::transition(&DisclosureTransitionRequest {
@@ -1249,7 +1313,6 @@ async fn resolve_exception_db(
     exception_row_to_record(row)
 }
 
-
 pub async fn list_registry(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1259,7 +1322,9 @@ pub async fn list_registry(
     super::tier::check_admin_key(&headers)?;
 
     if let Some(pool) = state.db_pool.as_ref() {
-        return Ok(Json(list_registry_db(pool, &tenant_ctx.tenant_id.0, &query).await?));
+        return Ok(Json(
+            list_registry_db(pool, &tenant_ctx.tenant_id.0, &query).await?,
+        ));
     }
 
     let state = state_store().read().await;
@@ -1342,7 +1407,13 @@ pub async fn update_registry_interoperability(
 
     if let Some(pool) = state.db_pool.as_ref() {
         return Ok(Json(
-            update_registry_interoperability_db(pool, &tenant_ctx.tenant_id.0, &vasp_code, &request).await?,
+            update_registry_interoperability_db(
+                pool,
+                &tenant_ctx.tenant_id.0,
+                &vasp_code,
+                &request,
+            )
+            .await?,
         ));
     }
 
@@ -1367,7 +1438,9 @@ pub async fn list_disclosures(
     super::tier::check_admin_key(&headers)?;
 
     if let Some(pool) = state.db_pool.as_ref() {
-        return Ok(Json(list_disclosures_db(pool, &tenant_ctx.tenant_id.0, &query).await?));
+        return Ok(Json(
+            list_disclosures_db(pool, &tenant_ctx.tenant_id.0, &query).await?,
+        ));
     }
 
     let state = state_store().read().await;
@@ -1394,7 +1467,9 @@ pub async fn create_disclosure(
     let _auth = super::tier::check_admin_key_operator(&headers)?;
 
     if let Some(pool) = state.db_pool.as_ref() {
-        return Ok(Json(create_disclosure_db(pool, &tenant_ctx.tenant_id.0, request).await?));
+        return Ok(Json(
+            create_disclosure_db(pool, &tenant_ctx.tenant_id.0, request).await?,
+        ));
     }
 
     ensure_object(&request.metadata, "metadata")?;
@@ -1564,7 +1639,9 @@ pub async fn list_exceptions(
     super::tier::check_admin_key(&headers)?;
 
     if let Some(pool) = state.db_pool.as_ref() {
-        return Ok(Json(list_exceptions_db(pool, &tenant_ctx.tenant_id.0, &query).await?));
+        return Ok(Json(
+            list_exceptions_db(pool, &tenant_ctx.tenant_id.0, &query).await?,
+        ));
     }
 
     let state = state_store().read().await;

@@ -6,27 +6,34 @@ use tracing::warn;
 
 pub mod audit;
 pub mod bank_confirmation;
+pub mod commercialization_pack;
 pub mod compliance;
 pub mod compliance_audit;
 pub mod corridor_pack;
 pub mod intent;
-pub mod payment_method_capability;
 pub mod ledger;
 pub mod license;
 pub mod licensing;
-pub mod partner_registry;
 pub mod offramp;
+pub mod onchain_observation;
+pub mod partner_registry;
+pub mod payment_method_capability;
 pub mod rfq;
 pub mod settlement;
 pub mod smart_account;
 pub mod tenant;
 pub mod user;
+pub mod venue_trust;
 pub mod webhook;
 
 pub use audit::PgAuditRepository;
 pub use bank_confirmation::{
     BankConfirmationRepository, BankConfirmationRow, BankConfirmationStatus,
     CreateBankConfirmationRequest, PgBankConfirmationRepository,
+};
+pub use commercialization_pack::{
+    CommercializationPackReferenceRecord, CommercializationPackRepository,
+    PgCommercializationPackRepository, UpsertCommercializationPackRequest,
 };
 pub use compliance::{ComplianceBreach, ComplianceRepository, SbvReportSchedule};
 pub use compliance_audit::{
@@ -42,10 +49,6 @@ pub use corridor_pack::{
     UpsertCorridorEndpointRequest, UpsertCorridorFeeProfileRequest, UpsertCorridorPackRequest,
     UpsertCorridorRolloutScopeRequest,
 };
-pub use payment_method_capability::{
-    PaymentMethodCapabilityRecord, PaymentMethodCapabilityRepository,
-    PgPaymentMethodCapabilityRepository, UpsertPaymentMethodCapabilityRequest,
-};
 pub use intent::IntentRepository;
 pub use ledger::LedgerRepository;
 pub use license::{
@@ -54,14 +57,22 @@ pub use license::{
     TenantLicenseDocumentRow, TenantLicenseRow,
 };
 pub use licensing::{LicensingRepository, PgLicensingRepository};
-pub use partner_registry::{
-    ApprovalReferenceRecord, CredentialReferenceRecord, PartnerCapabilityRecord, PartnerHealthSignalRecord,
-    PartnerRegistryRecord, PartnerRegistryRepository, PartnerRolloutScopeRecord,
-    PgPartnerRegistryRepository, UpsertApprovalReferenceRequest, UpsertCredentialReferenceRequest,
-    UpsertPartnerCapabilityRequest, UpsertPartnerHealthSignalRequest, UpsertPartnerRequest,
-    UpsertPartnerRolloutScopeRequest,
-};
 pub use offramp::{OfframpIntentRepository, OfframpIntentRow, PgOfframpIntentRepository};
+pub use onchain_observation::{
+    OnchainObservationRepository, OnchainObservationRow, OnchainObservationStatus,
+    PgOnchainObservationRepository, UpsertOnchainObservationRequest,
+};
+pub use partner_registry::{
+    ApprovalReferenceRecord, CredentialReferenceRecord, PartnerCapabilityRecord,
+    PartnerHealthSignalRecord, PartnerRegistryRecord, PartnerRegistryRepository,
+    PartnerRolloutScopeRecord, PgPartnerRegistryRepository, UpsertApprovalReferenceRequest,
+    UpsertCredentialReferenceRequest, UpsertPartnerCapabilityRequest,
+    UpsertPartnerHealthSignalRequest, UpsertPartnerRequest, UpsertPartnerRolloutScopeRequest,
+};
+pub use payment_method_capability::{
+    PaymentMethodCapabilityRecord, PaymentMethodCapabilityRepository,
+    PgPaymentMethodCapabilityRepository, UpsertPaymentMethodCapabilityRequest,
+};
 pub use rfq::{
     LpReliabilitySnapshotRow, PgRfqRepository, RfqBidRow, RfqDirection, RfqRepository,
     RfqRequestRow,
@@ -74,6 +85,16 @@ pub use smart_account::{
 };
 pub use tenant::TenantRepository;
 pub use user::UserRepository;
+pub use venue_trust::{
+    BeneficiaryProfileFilter, BeneficiaryProfileRecord, EnsureWalletAttestationRequest,
+    PgVenueTrustRepository,
+    SourceOfFundsPackageFilter, SourceOfFundsPackageRecord, UpsertBeneficiaryProfileRequest,
+    UpsertSourceOfFundsPackageRequest, UpsertVenueAccountRequest,
+    UpsertVenueConnectionRequest, UpsertVenueTransferRequest, VenueAccountFilter,
+    VenueAccountRecord, VenueConnectionFilter, VenueConnectionRecord, VenueTransferFilter,
+    VenueTransferRecord, VenueTrustRepository, WalletAttestationFilter,
+    WalletAttestationRecord,
+};
 pub use webhook::WebhookRepository;
 
 /// Shared database pool

@@ -201,6 +201,33 @@ pub enum TxState {
     NotFound,
 }
 
+/// Query for inbound token transfers on a chain.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InboundTransferQuery {
+    pub token_address: String,
+    pub to_address: String,
+    pub from_block: u64,
+    pub to_block: u64,
+}
+
+/// Observed inbound token transfer discovered from chain logs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ObservedInboundTransfer {
+    pub tx_hash: TxHash,
+    pub from_address: String,
+    pub to_address: String,
+    pub amount: String,
+    pub block_number: u64,
+}
+
+/// Query for inbound native-asset transfers on a chain.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NativeInboundTransferQuery {
+    pub to_address: String,
+    pub from_block: u64,
+    pub to_block: u64,
+}
+
 /// Fee estimation result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeeEstimate {
@@ -346,6 +373,28 @@ pub trait Chain: Send + Sync {
 
     /// Get current block number
     async fn get_block_number(&self) -> Result<u64>;
+
+    /// Find inbound token transfers in a bounded block window.
+    async fn find_inbound_transfers(
+        &self,
+        _query: &InboundTransferQuery,
+    ) -> Result<Vec<ObservedInboundTransfer>> {
+        Err(ChainError::NotSupported(format!(
+            "Inbound transfer lookup not supported on {}",
+            self.name()
+        )))
+    }
+
+    /// Find inbound native-asset transfers in a bounded block window.
+    async fn find_native_inbound_transfers(
+        &self,
+        _query: &NativeInboundTransferQuery,
+    ) -> Result<Vec<ObservedInboundTransfer>> {
+        Err(ChainError::NotSupported(format!(
+            "Native inbound transfer lookup not supported on {}",
+            self.name()
+        )))
+    }
 }
 
 /// Chain registry - manages multiple chains

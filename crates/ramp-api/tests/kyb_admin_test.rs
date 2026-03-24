@@ -5,11 +5,15 @@ use axum::{
 };
 use chrono::Utc;
 use hmac::{Hmac, Mac};
+use jsonwebtoken::{encode, EncodingKey, Header};
 use ramp_api::handlers::admin::{
     export_kyb_evidence_package, get_kyb_evidence_package, list_kyb_evidence_packages,
     KybEvidencePackageListQuery,
 };
-use ramp_api::middleware::{tenant::{TenantContext, TenantTier}, PortalAuthConfig};
+use ramp_api::middleware::{
+    tenant::{TenantContext, TenantTier},
+    PortalAuthConfig,
+};
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{
     case::CaseManager, reports::ReportGenerator, storage::MockDocumentStorage, InMemoryCaseStore,
@@ -29,7 +33,7 @@ type HmacSha256 = Hmac<Sha256>;
 
 const TEST_API_KEY: &str = "kyb_test_api_key";
 const TEST_API_SECRET: &str = "kyb_test_api_secret";
-const TEST_ADMIN_KEY: &str = "kyb_admin_key";
+const TEST_ADMIN_JWT_SECRET: &str = "kyb-admin-jwt-secret";
 
 struct TestApp {
     router: axum::Router,
@@ -38,7 +42,13 @@ struct TestApp {
     api_secret: String,
 }
 
-fn generate_signature(method: &str, path: &str, timestamp: &str, body: &str, secret: &str) -> String {
+fn generate_signature(
+    method: &str,
+    path: &str,
+    timestamp: &str,
+    body: &str,
+    secret: &str,
+) -> String {
     let message = format!("{method}\n{path}\n{timestamp}\n{body}");
     let mut mac =
         HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take any size key");
@@ -46,13 +56,31 @@ fn generate_signature(method: &str, path: &str, timestamp: &str, body: &str, sec
     hex::encode(mac.finalize().into_bytes())
 }
 
-fn build_signed_admin_request(
+fn make_admin_jwt(role: &str) -> String {
+    let claims = ramp_api::handlers::admin::admin_auth::AdminClaims {
+        sub: "kyb_admin_test_user".to_string(),
+        email: "kyb-admin@rampos.local".to_string(),
+        role: role.to_string(),
+        iat: Utc::now().timestamp(),
+        exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+        token_type: "access".to_string(),
+    };
+
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(TEST_ADMIN_JWT_SECRET.as_bytes()),
+    )
+    .expect("jwt should encode")
+}
+
+fn build_signed_admin_jwt_request(
     method: &str,
     uri: &str,
     body: &str,
     api_key: &str,
     api_secret: &str,
-    admin_key: &str,
+    admin_jwt: &str,
 ) -> Request<Body> {
     let timestamp = Utc::now().to_rfc3339();
     let path = uri.split('?').next().unwrap_or(uri);
@@ -64,7 +92,7 @@ fn build_signed_admin_request(
         .header("Authorization", format!("Bearer {api_key}"))
         .header("X-Timestamp", &timestamp)
         .header("X-Signature", signature)
-        .header("X-Admin-Key", admin_key)
+        .header("X-Admin-Authorization", format!("Bearer {admin_jwt}"))
         .body(Body::from(body.to_string()))
         .unwrap()
 }
@@ -181,8 +209,8 @@ async fn setup_app_with_pool(tenant_id: &str, db_pool: Option<PgPool>) -> TestAp
         metrics_registry: Arc::new(ramp_core::service::MetricsRegistry::new()),
         event_publisher,
         document_storage: None,
-            kyc_service: None,
-            kyt_service: None,
+        kyc_service: None,
+        kyt_service: None,
     };
 
     TestApp {
@@ -195,16 +223,17 @@ async fn setup_app_with_pool(tenant_id: &str, db_pool: Option<PgPool>) -> TestAp
 
 #[tokio::test]
 async fn kyb_reviews_list_items() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_kyb_reviews").await;
+    let admin_jwt = make_admin_jwt("viewer");
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/kyb/reviews",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -218,16 +247,17 @@ async fn kyb_reviews_list_items() {
 
 #[tokio::test]
 async fn kyb_graph_returns_detail() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_kyb_graph").await;
+    let admin_jwt = make_admin_jwt("viewer");
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/kyb/graph/biz_review_001",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -255,8 +285,9 @@ async fn kyb_reviews_read_db_backed_graph_when_pool_is_available() {
         .await
         .expect("migrations should succeed");
 
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app_with_pool("tenant_kyb_db", Some(pool.clone())).await;
+    let admin_jwt = make_admin_jwt("viewer");
 
     sqlx::query(
         r#"
@@ -339,48 +370,56 @@ async fn kyb_reviews_read_db_backed_graph_when_pool_is_available() {
     .await
     .expect("insert kyb edges");
 
-    let list_request = build_signed_admin_request(
+    let list_request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/kyb/reviews",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let list_response = app.router.clone().oneshot(list_request).await.unwrap();
     assert_eq!(list_response.status(), StatusCode::OK);
 
-    let list_body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
+    let list_body = to_bytes(list_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let list_payload: serde_json::Value = serde_json::from_slice(&list_body).unwrap();
     assert_eq!(list_payload["actionMode"], "review_only");
     assert_eq!(list_payload["queue"].as_array().unwrap().len(), 1);
     assert_eq!(list_payload["queue"][0]["entityId"], "biz_db_001");
     assert_eq!(list_payload["queue"][0]["reviewStatus"], "needs_review");
 
-    let detail_request = build_signed_admin_request(
+    let detail_request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/kyb/graph/biz_db_001",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let detail_response = app.router.oneshot(detail_request).await.unwrap();
     assert_eq!(detail_response.status(), StatusCode::OK);
 
-    let detail_body = to_bytes(detail_response.into_body(), usize::MAX).await.unwrap();
+    let detail_body = to_bytes(detail_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let detail_payload: serde_json::Value = serde_json::from_slice(&detail_body).unwrap();
     assert_eq!(detail_payload["entityId"], "biz_db_001");
     assert_eq!(detail_payload["summary"]["uboCount"], 1);
     assert_eq!(detail_payload["summary"]["directorCount"], 1);
 }
 
-
-fn admin_header_map(admin_key: &str) -> HeaderMap {
+fn admin_header_map(admin_jwt: &str) -> HeaderMap {
     let mut headers = HeaderMap::new();
-    headers.insert("X-Admin-Key", admin_key.parse().expect("admin key header"));
+    headers.insert(
+        "X-Admin-Authorization",
+        format!("Bearer {admin_jwt}")
+            .parse()
+            .expect("admin jwt header"),
+    );
     headers
 }
 
@@ -408,8 +447,9 @@ async fn kyb_evidence_packages_list_detail_and_export_from_db() {
         .await
         .expect("migrations should succeed");
 
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app_with_pool("tenant_kyb_evidence", Some(pool.clone())).await;
+    let admin_jwt = make_admin_jwt("viewer");
 
     sqlx::query(
         r#"
@@ -491,7 +531,7 @@ async fn kyb_evidence_packages_list_detail_and_export_from_db() {
     .expect("insert ubo link");
 
     let list_response = list_kyb_evidence_packages(
-        admin_header_map(TEST_ADMIN_KEY),
+        admin_header_map(&admin_jwt),
         axum::extract::State(app.state.clone()),
         Extension(tenant_context("tenant_kyb_evidence")),
         axum::extract::Query(KybEvidencePackageListQuery {
@@ -510,7 +550,7 @@ async fn kyb_evidence_packages_list_detail_and_export_from_db() {
     assert_eq!(list_payload["packages"][0]["packageId"], "pkg_001");
 
     let detail_response = get_kyb_evidence_package(
-        admin_header_map(TEST_ADMIN_KEY),
+        admin_header_map(&admin_jwt),
         axum::extract::State(app.state.clone()),
         Extension(tenant_context("tenant_kyb_evidence")),
         axum::extract::Path("pkg_001".to_string()),
@@ -519,11 +559,14 @@ async fn kyb_evidence_packages_list_detail_and_export_from_db() {
     .expect("get evidence package");
     let detail_payload = serde_json::to_value(detail_response.0).expect("serialize detail");
     assert_eq!(detail_payload["packageId"], "pkg_001");
-    assert_eq!(detail_payload["evidenceSources"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        detail_payload["evidenceSources"].as_array().unwrap().len(),
+        1
+    );
     assert_eq!(detail_payload["uboLinks"].as_array().unwrap().len(), 1);
 
     let export_response = export_kyb_evidence_package(
-        admin_header_map(TEST_ADMIN_KEY),
+        admin_header_map(&admin_jwt),
         axum::extract::State(app.state.clone()),
         Extension(tenant_context("tenant_kyb_evidence")),
         axum::extract::Path("pkg_001".to_string()),
@@ -543,12 +586,16 @@ async fn kyb_evidence_packages_list_detail_and_export_from_db() {
         .unwrap()
         .contains("kyb_evidence_package_pkg_001_"));
 
-    let export_body = to_bytes(export_response.into_body(), usize::MAX).await.unwrap();
+    let export_body = to_bytes(export_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let export_payload: serde_json::Value = serde_json::from_slice(&export_body).unwrap();
     assert_eq!(export_payload["packageId"], "pkg_001");
-    assert_eq!(export_payload["exportArtifactUri"], "s3://evidence/pkg_001.json");
+    assert_eq!(
+        export_payload["exportArtifactUri"],
+        "s3://evidence/pkg_001.json"
+    );
 }
-
 
 #[tokio::test]
 async fn kyb_evidence_package_surfaces_use_persisted_packages_when_pool_is_available() {
@@ -566,8 +613,9 @@ async fn kyb_evidence_package_surfaces_use_persisted_packages_when_pool_is_avail
         .await
         .expect("migrations should succeed");
 
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app_with_pool("tenant_kyb_evidence", Some(pool.clone())).await;
+    let admin_jwt = make_admin_jwt("viewer");
 
     sqlx::query(
         r#"
@@ -674,48 +722,55 @@ async fn kyb_evidence_package_surfaces_use_persisted_packages_when_pool_is_avail
     .await
     .expect("insert ubo evidence link");
 
-    let list_request = build_signed_admin_request(
+    let list_request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/kyb/evidence?reviewStatus=approved",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
     let list_response = app.router.clone().oneshot(list_request).await.unwrap();
     assert_eq!(list_response.status(), StatusCode::OK);
 
-    let list_body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
+    let list_body = to_bytes(list_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let list_payload: serde_json::Value = serde_json::from_slice(&list_body).unwrap();
     assert_eq!(list_payload["actionMode"], "review_only");
     assert_eq!(list_payload["packages"].as_array().unwrap().len(), 1);
     assert_eq!(list_payload["packages"][0]["packageId"], "pkg_001");
     assert_eq!(list_payload["packages"][0]["corridorCode"], "VN_SG_PAYOUT");
 
-    let detail_request = build_signed_admin_request(
+    let detail_request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/kyb/evidence/pkg_001",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
     let detail_response = app.router.clone().oneshot(detail_request).await.unwrap();
     assert_eq!(detail_response.status(), StatusCode::OK);
 
-    let detail_body = to_bytes(detail_response.into_body(), usize::MAX).await.unwrap();
+    let detail_body = to_bytes(detail_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let detail_payload: serde_json::Value = serde_json::from_slice(&detail_body).unwrap();
     assert_eq!(detail_payload["packageId"], "pkg_001");
-    assert_eq!(detail_payload["evidenceSources"][0]["sourceKind"], "registry_extract");
+    assert_eq!(
+        detail_payload["evidenceSources"][0]["sourceKind"],
+        "registry_extract"
+    );
     assert_eq!(detail_payload["uboLinks"][0]["reviewState"], "verified");
 
-    let export_request = build_signed_admin_request(
+    let export_request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/kyb/evidence/pkg_001/export",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
     let export_response = app.router.oneshot(export_request).await.unwrap();
     assert_eq!(export_response.status(), StatusCode::OK);
@@ -731,7 +786,9 @@ async fn kyb_evidence_package_surfaces_use_persisted_packages_when_pool_is_avail
         .unwrap()
         .contains("kyb_evidence_package_pkg_001_"));
 
-    let export_body = to_bytes(export_response.into_body(), usize::MAX).await.unwrap();
+    let export_body = to_bytes(export_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let export_payload: serde_json::Value = serde_json::from_slice(&export_body).unwrap();
     assert_eq!(export_payload["packageId"], "pkg_001");
 }

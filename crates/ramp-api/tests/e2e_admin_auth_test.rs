@@ -4,14 +4,15 @@
 /// - Login → access token + refresh token
 /// - Refresh → new access token
 /// - Logout → revoke refresh token
-/// - Dual auth: JWT Bearer vs legacy X-Admin-Key
+/// - Canonical admin JWT header (`X-Admin-Authorization`) with legacy key compatibility
 /// - Account lockout after failed attempts
 /// - Role enforcement
-
 use axum::{
     body::{to_bytes, Body},
     http::{Request, StatusCode},
 };
+use chrono::Utc;
+use jsonwebtoken::{encode, EncodingKey, Header};
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{
@@ -22,6 +23,7 @@ use ramp_core::service::{
     ledger::LedgerService, payin::PayinService, payout::PayoutService, trade::TradeService,
 };
 use ramp_core::test_utils::*;
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::sync::{Arc, Mutex, OnceLock};
 use tower::ServiceExt;
@@ -36,6 +38,29 @@ async fn setup_app() -> axum::Router {
     let ledger_repo = Arc::new(MockLedgerRepository::new());
     let user_repo = Arc::new(MockUserRepository::new());
     let tenant_repo = Arc::new(MockTenantRepository::new());
+    let api_key = "tenant_api_key_for_admin_tests";
+    let api_secret = "tenant_api_secret_for_admin_tests";
+    let api_key_hash = {
+        let mut hasher = Sha256::new();
+        hasher.update(api_key.as_bytes());
+        hex::encode(hasher.finalize())
+    };
+    tenant_repo.add_tenant(ramp_core::repository::tenant::TenantRow {
+        id: "tenant_e2e_admin".to_string(),
+        name: "Admin E2E Tenant".to_string(),
+        status: "ACTIVE".to_string(),
+        api_key_hash,
+        api_secret_encrypted: Some(api_secret.as_bytes().to_vec()),
+        webhook_secret_hash: "webhook-hash".to_string(),
+        webhook_secret_encrypted: None,
+        webhook_url: None,
+        config: serde_json::json!({}),
+        daily_payin_limit_vnd: None,
+        daily_payout_limit_vnd: None,
+        api_version: None,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    });
     let event_publisher = Arc::new(InMemoryEventPublisher::new());
 
     let payin_service = Arc::new(PayinService::new(
@@ -125,6 +150,33 @@ async fn setup_app() -> axum::Router {
     create_router(app_state)
 }
 
+fn make_admin_jwt(role: &str) -> String {
+    let claims = ramp_api::handlers::admin::admin_auth::AdminClaims {
+        sub: "admin_test_user".to_string(),
+        email: "admin@rampos.local".to_string(),
+        role: role.to_string(),
+        iat: Utc::now().timestamp(),
+        exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+        token_type: "access".to_string(),
+    };
+
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret("admin-auth-test-secret".as_bytes()),
+    )
+    .expect("jwt should encode")
+}
+
+fn hmac_signature(method: &str, path: &str, timestamp: &str, body: &str, secret: &str) -> String {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+
+    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("hmac secret");
+    mac.update(format!("{method}\n{path}\n{timestamp}\n{body}").as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
+
 /// Test: Login endpoint returns proper error for invalid credentials (no DB → 500)
 /// This test validates the endpoint exists and responds to requests.
 /// Full e2e login/refresh/logout requires a real DB with seeded admin_users.
@@ -205,7 +257,7 @@ async fn admin_logout_endpoint_responds() {
     );
 }
 
-/// Test: Legacy X-Admin-Key still works for admin endpoints
+/// Test: Legacy X-Admin-Key remains accepted as compatibility fallback
 #[tokio::test]
 async fn admin_legacy_key_still_accepted() {
     let _guard = env_lock().lock().unwrap();
@@ -237,6 +289,47 @@ async fn admin_legacy_key_still_accepted() {
     std::env::remove_var("RAMPOS_ADMIN_KEY");
 }
 
+/// Test: Canonical X-Admin-Authorization wins even if legacy key is wrong
+#[tokio::test]
+async fn admin_jwt_header_preferred_over_invalid_legacy_key_on_protected_route() {
+    let _guard = env_lock().lock().unwrap();
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", "admin-auth-test-secret");
+    std::env::set_var("RAMPOS_ADMIN_KEY", "legacy-key-that-should-not-be-used");
+
+    let app = setup_app().await;
+    let path = "/v1/admin/extensions";
+    let timestamp = Utc::now().timestamp().to_string();
+    let signature = hmac_signature(
+        "GET",
+        path,
+        &timestamp,
+        "",
+        "tenant_api_secret_for_admin_tests",
+    );
+    let admin_token = make_admin_jwt("admin");
+
+    let request = Request::builder()
+        .uri(path)
+        .method("GET")
+        .header("Authorization", "Bearer tenant_api_key_for_admin_tests")
+        .header("X-Timestamp", &timestamp)
+        .header("X-Signature", signature)
+        .header("X-Admin-Key", "definitely-invalid-legacy-key")
+        .header("X-Admin-Authorization", format!("Bearer {admin_token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Protected admin route should accept canonical admin JWT header even with invalid legacy key"
+    );
+
+    std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
+    std::env::remove_var("RAMPOS_ADMIN_KEY");
+}
+
 /// Test: Missing auth on admin endpoints returns 403
 #[tokio::test]
 async fn admin_no_auth_returns_forbidden() {
@@ -264,13 +357,17 @@ async fn admin_no_auth_returns_forbidden() {
 #[tokio::test]
 async fn admin_invalid_jwt_returns_forbidden() {
     let _guard = env_lock().lock().unwrap();
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", "admin-auth-test-secret");
 
     let app = setup_app().await;
 
     let request = Request::builder()
         .uri("/v1/admin/readiness")
         .method("GET")
-        .header("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.INVALID.PAYLOAD")
+        .header(
+            "Authorization",
+            "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.INVALID.PAYLOAD",
+        )
         .body(Body::empty())
         .unwrap();
 
@@ -281,10 +378,49 @@ async fn admin_invalid_jwt_returns_forbidden() {
         StatusCode::FORBIDDEN,
         "Invalid JWT should result in 403"
     );
+
+    std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
 }
 
 /// DB-backed test: Full login → refresh → logout flow
 /// Only runs when DATABASE_URL is set (CI or local PG available)
+#[tokio::test]
+async fn admin_protected_route_accepts_admin_jwt_header() {
+    let _guard = env_lock().lock().unwrap();
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", "admin-auth-test-secret");
+
+    let app = setup_app().await;
+    let path = "/v1/admin/extensions";
+    let timestamp = Utc::now().timestamp().to_string();
+    let signature = hmac_signature(
+        "GET",
+        path,
+        &timestamp,
+        "",
+        "tenant_api_secret_for_admin_tests",
+    );
+    let admin_token = make_admin_jwt("admin");
+
+    let request = Request::builder()
+        .uri(path)
+        .method("GET")
+        .header("Authorization", "Bearer tenant_api_key_for_admin_tests")
+        .header("X-Timestamp", &timestamp)
+        .header("X-Signature", signature)
+        .header("X-Admin-Authorization", format!("Bearer {admin_token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Protected admin route should accept tenant auth plus admin JWT header"
+    );
+
+    std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
+}
+
 #[tokio::test]
 async fn admin_full_auth_flow_with_db() {
     let database_url = match std::env::var("DATABASE_URL") {
@@ -313,7 +449,7 @@ async fn admin_full_auth_flow_with_db() {
 
     sqlx::query(
         "INSERT INTO admin_users (email, password_hash, display_name, role)
-         VALUES ('test_auth@rampos.local', $1, 'Test Admin', 'admin')"
+         VALUES ('test_auth@rampos.local', $1, 'Test Admin', 'admin')",
     )
     .bind(&password_hash)
     .execute(&pool)
@@ -343,30 +479,43 @@ async fn admin_full_auth_flow_with_db() {
 
         let app_state = AppState {
             payin_service: Arc::new(PayinService::new(
-                intent_repo.clone(), ledger_repo.clone(), user_repo.clone(), event_publisher.clone(),
+                intent_repo.clone(),
+                ledger_repo.clone(),
+                user_repo.clone(),
+                event_publisher.clone(),
             )),
             payout_service: Arc::new(PayoutService::new(
-                intent_repo.clone(), ledger_repo.clone(), user_repo.clone(), event_publisher.clone(),
+                intent_repo.clone(),
+                ledger_repo.clone(),
+                user_repo.clone(),
+                event_publisher.clone(),
             )),
             trade_service: Arc::new(TradeService::new(
-                intent_repo.clone(), ledger_repo.clone(), event_publisher.clone(),
+                intent_repo.clone(),
+                ledger_repo.clone(),
+                event_publisher.clone(),
             )),
             ledger_service: Arc::new(LedgerService::new(ledger_repo)),
             onboarding_service: Arc::new(ramp_core::service::onboarding::OnboardingService::new(
-                tenant_repo.clone(), Arc::new(LedgerService::new(Arc::new(MockLedgerRepository::new()))),
+                tenant_repo.clone(),
+                Arc::new(LedgerService::new(Arc::new(MockLedgerRepository::new()))),
             )),
             user_service: Arc::new(ramp_core::service::user::UserService::new(
-                user_repo, event_publisher.clone(),
+                user_repo,
+                event_publisher.clone(),
             )),
             webhook_service: Arc::new(
                 ramp_core::service::webhook::WebhookService::new(
-                    Arc::new(MockWebhookRepository::new()), tenant_repo.clone(),
-                ).unwrap(),
+                    Arc::new(MockWebhookRepository::new()),
+                    tenant_repo.clone(),
+                )
+                .unwrap(),
             ),
             tenant_repo,
             intent_repo,
             report_generator: Arc::new(ReportGenerator::new(
-                pool.clone(), Arc::new(MockDocumentStorage::new()),
+                pool.clone(),
+                Arc::new(MockDocumentStorage::new()),
             )),
             case_manager: Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new()))),
             rule_manager: None,
@@ -375,7 +524,9 @@ async fn admin_full_auth_flow_with_db() {
             aa_service: None,
             portal_auth_config: Arc::new(PortalAuthConfig {
                 jwt_secret: "admin-auth-db-test".to_string(),
-                issuer: None, audience: None, allow_missing_tenant: false,
+                issuer: None,
+                audience: None,
+                allow_missing_tenant: false,
             }),
             bank_confirmation_repo: None,
             licensing_repo: None,
@@ -402,9 +553,15 @@ async fn admin_full_auth_flow_with_db() {
     };
 
     let login_response = app.clone().oneshot(login_request).await.unwrap();
-    assert_eq!(login_response.status(), StatusCode::OK, "Login should succeed");
+    assert_eq!(
+        login_response.status(),
+        StatusCode::OK,
+        "Login should succeed"
+    );
 
-    let login_body = to_bytes(login_response.into_body(), usize::MAX).await.unwrap();
+    let login_body = to_bytes(login_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let login_json: serde_json::Value = serde_json::from_slice(&login_body).unwrap();
 
     let access_token = login_json["accessToken"].as_str().expect("access token");
@@ -423,12 +580,23 @@ async fn admin_full_auth_flow_with_db() {
         .unwrap();
 
     let refresh_response = app.clone().oneshot(refresh_request).await.unwrap();
-    assert_eq!(refresh_response.status(), StatusCode::OK, "Refresh should succeed");
+    assert_eq!(
+        refresh_response.status(),
+        StatusCode::OK,
+        "Refresh should succeed"
+    );
 
-    let refresh_body = to_bytes(refresh_response.into_body(), usize::MAX).await.unwrap();
+    let refresh_body = to_bytes(refresh_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let refresh_json: serde_json::Value = serde_json::from_slice(&refresh_body).unwrap();
-    let new_access_token = refresh_json["accessToken"].as_str().expect("new access token");
-    assert_ne!(new_access_token, access_token, "New access token should differ");
+    let new_access_token = refresh_json["accessToken"]
+        .as_str()
+        .expect("new access token");
+    assert_ne!(
+        new_access_token, access_token,
+        "New access token should differ"
+    );
 
     // Step 3: Logout
     let logout_body = serde_json::json!({ "refresh_token": refresh_token });
@@ -440,7 +608,11 @@ async fn admin_full_auth_flow_with_db() {
         .unwrap();
 
     let logout_response = app.clone().oneshot(logout_request).await.unwrap();
-    assert_eq!(logout_response.status(), StatusCode::OK, "Logout should succeed");
+    assert_eq!(
+        logout_response.status(),
+        StatusCode::OK,
+        "Logout should succeed"
+    );
 
     // Step 4: Refresh with revoked token should fail
     let revoked_refresh = serde_json::json!({ "refresh_token": refresh_token });

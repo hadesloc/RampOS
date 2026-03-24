@@ -1,990 +1,855 @@
-﻿{
-    "project":  {
-                    "name":  "RampOS March 2026 Full Scope Plan",
-                    "generated_at":  "2026-03-14T12:45:00+07:00"
-                },
-    "tasks":  [
-                  {
-                      "id":  "T-RR-001",
-                      "epic_id":  "E1",
-                      "story_id":  "S01",
-                      "requirement_id":  "FR-001",
-                      "title":  "Define the internal readiness package",
-                      "description":  "Create one canonical internal readiness package covering scan freshness, staging proof, compatibility proof, rollback proof, release evidence, and explicit deferral of external audit for this cycle.",
-                      "priority":  "P0",
-                      "owner":  "qa",
-                      "dependencies":  [
-
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "One internal readiness package covers the required evidence families.",
-                                                  "Evidence freshness rules are explicit.",
-                                                  "External audit is documented as deferred for this cycle."
-                                              ],
-                      "test_cases":  [
-                                         "Run the UW validator and verify all planning artifacts reference the same internal gate.",
-                                         "Review readiness docs and confirm no task depends on external audit completion."
-                                     ],
-                      "expected_output":  "Internal readiness gate definition and evidence contract",
-                      "definition_of_done":  [
-                                                 "Internal gate is explicit across all UW artifacts.",
-                                                 "Freshness expectations are documented.",
-                                                 "Later work can depend on the gate without ambiguity."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  5,
-                                   "risk":  2,
-                                   "ambiguity":  1,
-                                   "scope":  1,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Low-ambiguity planning and gating task with high leverage."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-002",
-                      "epic_id":  "E1",
-                      "story_id":  "S02",
-                      "requirement_id":  "FR-002",
-                      "title":  "Remove tracked artifact noise and define hygiene expectations",
-                      "description":  "Clean tracked __pycache__, .pyc, and temporary artifact noise from the repo state, then define ignore and hygiene expectations so the noise does not return.",
-                      "priority":  "P0",
-                      "owner":  "devops",
-                      "dependencies":  [
-                                           "T-RR-001"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Tracked artifact noise is removed.",
-                                                  "Prevention guidance or ignore rules are updated.",
-                                                  "The cleanup scope is reflected in the internal readiness package."
-                                              ],
-                      "test_cases":  [
-                                         "Check git status and repo state after cleanup.",
-                                         "Verify hygiene rules cover the removed artifact families."
-                                     ],
-                      "expected_output":  "Cleaner repo state with explicit hygiene rules",
-                      "definition_of_done":  [
-                                                 "Tracked noise is removed.",
-                                                 "Hygiene expectations are documented.",
-                                                 "No active task depends on stale artifact files."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  4,
-                                   "risk":  1,
-                                   "ambiguity":  1,
-                                   "scope":  1,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Straightforward cleanup task with immediate credibility payoff."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-003",
-                      "epic_id":  "E1",
-                      "story_id":  "S02",
-                      "requirement_id":  "FR-002",
-                      "title":  "Publish one canonical CI and release workflow map",
-                      "description":  "Inventory overlapping CI and deploy workflows, identify the canonical release path, and categorize duplicates as legacy or deprecation candidates.",
-                      "priority":  "P0",
-                      "owner":  "devops",
-                      "dependencies":  [
-                                           "T-RR-001"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "A canonical CI and release workflow map exists.",
-                                                  "Duplicate or ambiguous workflow files are identified clearly.",
-                                                  "The internal readiness package references the same canonical workflow set."
-                                              ],
-                      "test_cases":  [
-                                         "Cross-check the map against .github/workflows.",
-                                         "Verify readiness docs reference the same canonical workflow set."
-                                     ],
-                      "expected_output":  "Canonical CI and release workflow map",
-                      "definition_of_done":  [
-                                                 "Canonical workflows are documented.",
-                                                 "Ambiguous duplicates are categorized.",
-                                                 "Release readiness references one clear workflow path."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  5,
-                                   "risk":  2,
-                                   "ambiguity":  1,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Moderate repo-wide planning and curation task."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-004",
-                      "epic_id":  "E1",
-                      "story_id":  "S02",
-                      "requirement_id":  "FR-004",
-                      "title":  "Reconcile security docs with the current operational state",
-                      "description":  "Update security-facing docs and checklists so they reflect the actual current state around rate limiting, key rotation, alerts, and the internal-readiness scope.",
-                      "priority":  "P0",
-                      "owner":  "qa",
-                      "dependencies":  [
-                                           "T-RR-001",
-                                           "T-RR-003"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Security checklist statements match the real current state.",
-                                                  "Internal-readiness language does not imply external-audit closure.",
-                                                  "Security-specific alert expectations are explicit."
-                                              ],
-                      "test_cases":  [
-                                         "Review docs/SECURITY.md against implemented controls and known gaps.",
-                                         "Verify the internal readiness package and security docs do not contradict each other."
-                                     ],
-                      "expected_output":  "Security docs aligned to the current cycle scope",
-                      "definition_of_done":  [
-                                                 "Security docs are internally consistent.",
-                                                 "Known gaps are explicit instead of implied resolved.",
-                                                 "The internal gate can cite the docs without contradiction."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  5,
-                                   "risk":  2,
-                                   "ambiguity":  1,
-                                   "scope":  1,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Docs-alignment task with moderate risk if left inconsistent."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-005",
-                      "epic_id":  "E2",
-                      "story_id":  "S03",
-                      "requirement_id":  "FR-003",
-                      "title":  "Define explicit production and fallback semantics for the workflow engine",
-                      "description":  "Audit workflow_engine.rs, define what production mode means, and make fallback behavior explicit when Temporal is unavailable.",
-                      "priority":  "P0",
-                      "owner":  "backend",
-                      "dependencies":  [
-                                           "T-RR-001"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Production and fallback semantics are explicit.",
-                                                  "Transitional Temporal request behavior is identified and scoped.",
-                                                  "Operators can explain runtime behavior during Temporal unavailability."
-                                              ],
-                      "test_cases":  [
-                                         "Review workflow-engine code paths against the documented contract.",
-                                         "Verify product spec and implementation plan use the same runtime terminology."
-                                     ],
-                      "expected_output":  "Documented workflow runtime contract",
-                      "definition_of_done":  [
-                                                 "Operators and engineers can explain the runtime contract.",
-                                                 "The contract is reflected in UW artifacts.",
-                                                 "Follow-on tasks can test the chosen behavior."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  8,
-                                   "risk":  4,
-                                   "ambiguity":  2,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "High-impact runtime hardening task with meaningful correctness risk."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-006",
-                      "epic_id":  "E2",
-                      "story_id":  "S03",
-                      "requirement_id":  "FR-003",
-                      "title":  "Add tests for the chosen workflow runtime contract",
-                      "description":  "Add or tighten targeted tests so the chosen production and fallback semantics for the workflow engine are enforced and regressions are caught early.",
-                      "priority":  "P0",
-                      "owner":  "backend",
-                      "dependencies":  [
-                                           "T-RR-005"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Tests cover the agreed production and fallback behavior.",
-                                                  "The tests fail meaningfully if transitional behavior regresses.",
-                                                  "The internal readiness slice can cite runtime tests as evidence."
-                                              ],
-                      "test_cases":  [
-                                         "Run targeted workflow-engine tests for fallback and production behavior.",
-                                         "Run cargo check or targeted test commands for affected crates."
-                                     ],
-                      "expected_output":  "Test-backed workflow runtime contract",
-                      "definition_of_done":  [
-                                                 "Runtime contract tests exist and pass.",
-                                                 "The test surface is referenced by the readiness gate.",
-                                                 "Future changes can rely on the tests for regressions."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  7,
-                                   "risk":  3,
-                                   "ambiguity":  1,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Focused hardening task with moderate scope and clear payoff."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-007",
-                      "epic_id":  "E2",
-                      "story_id":  "S03",
-                      "requirement_id":  "FR-004",
-                      "title":  "Add security-specific operational alerting",
-                      "description":  "Add security-oriented alerts such as brute-force or unusual auth or key abuse patterns and align their coverage with the security checklist and release-readiness expectations.",
-                      "priority":  "P0",
-                      "owner":  "devops",
-                      "dependencies":  [
-                                           "T-RR-004",
-                                           "T-RR-005"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Security-oriented alerts are defined.",
-                                                  "Reliability and security alert classes are distinguished.",
-                                                  "Security docs reflect the alert coverage accurately."
-                                              ],
-                      "test_cases":  [
-                                         "Review alert rules and monitoring coverage.",
-                                         "Verify docs and internal gate references align with the alert definitions."
-                                     ],
-                      "expected_output":  "Security alerting slice aligned with internal-readiness needs",
-                      "definition_of_done":  [
-                                                 "Security-specific alert coverage exists.",
-                                                 "Docs and monitoring definitions are aligned.",
-                                                 "Operators can distinguish reliability from security alerting."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  6,
-                                   "risk":  3,
-                                   "ambiguity":  2,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Operational hardening task bridging monitoring and docs."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-008",
-                      "epic_id":  "E3",
-                      "story_id":  "S04",
-                      "requirement_id":  "FR-005",
-                      "title":  "Define the treasury live-evidence seam and provenance model",
-                      "description":  "Design or extend the treasury read seam so imported evidence and provenance become first-class inputs to the treasury workbench instead of sample-heavy defaults.",
-                      "priority":  "P0",
-                      "owner":  "backend",
-                      "dependencies":  [
-                                           "T-RR-005"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Treasury evidence and provenance are first-class concepts.",
-                                                  "Sample-only defaults are removed or explicitly labeled.",
-                                                  "The design remains additive to current treasury services and handlers."
-                                              ],
-                      "test_cases":  [
-                                         "Review treasury service code and current sample-heavy behavior.",
-                                         "Verify provenance fields are represented in planning artifacts."
-                                     ],
-                      "expected_output":  "Treasury live-evidence seam and provenance model",
-                      "definition_of_done":  [
-                                                 "Treasury data model references live evidence and provenance.",
-                                                 "The operator default path can move off synthetic state.",
-                                                 "The design does not fork the treasury control plane."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  8,
-                                   "risk":  3,
-                                   "ambiguity":  2,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "High-value operator truth task with moderate modeling ambiguity."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-009",
-                      "epic_id":  "E3",
-                      "story_id":  "S04",
-                      "requirement_id":  "FR-005",
-                      "title":  "Wire treasury workbench defaults to evidence-backed reads",
-                      "description":  "Implement the first treasury workbench slice that reads from live evidence and exposes provenance on the current admin surface and exports.",
-                      "priority":  "P0",
-                      "owner":  "fullstack",
-                      "dependencies":  [
-                                           "T-RR-008"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Treasury workbench defaults to evidence-backed reads.",
-                                                  "Provenance is visible in operator output or export metadata.",
-                                                  "Current admin shell shape is preserved."
-                                              ],
-                      "test_cases":  [
-                                         "Run treasury service and handler tests for evidence-backed behavior.",
-                                         "Verify export paths still function with provenance metadata."
-                                     ],
-                      "expected_output":  "Evidence-backed treasury workbench default path",
-                      "definition_of_done":  [
-                                                 "Treasury default reads are evidence-backed.",
-                                                 "Provenance is surfaced to operators.",
-                                                 "Exports remain compatible."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  8,
-                                   "risk":  3,
-                                   "ambiguity":  2,
-                                   "scope":  3,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Cross-layer task affecting service, admin, and export surfaces."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-010",
-                      "epic_id":  "E3",
-                      "story_id":  "S05",
-                      "requirement_id":  "FR-006",
-                      "title":  "Define reconciliation evidence lineage and live-read model",
-                      "description":  "Add reconciliation evidence, discrepancy lineage, and workflow linkage as first-class concepts so the synthetic default path can be retired.",
-                      "priority":  "P0",
-                      "owner":  "backend",
-                      "dependencies":  [
-                                           "T-RR-008"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Reconciliation evidence and lineage are first-class concepts.",
-                                                  "Default reads do not depend on synthetic-only state.",
-                                                  "The design stays additive to current reconciliation seams."
-                                              ],
-                      "test_cases":  [
-                                         "Review reconciliation services and current synthetic behavior.",
-                                         "Verify lineage fields are represented in planning artifacts."
-                                     ],
-                      "expected_output":  "Reconciliation evidence lineage and live-read model",
-                      "definition_of_done":  [
-                                                 "Reconciliation lineage is part of the data model.",
-                                                 "Synthetic defaults can be retired.",
-                                                 "The design remains additive."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  8,
-                                   "risk":  3,
-                                   "ambiguity":  2,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Critical operator-truth modeling task with multiple downstream consumers."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-011",
-                      "epic_id":  "E3",
-                      "story_id":  "S05",
-                      "requirement_id":  "FR-006",
-                      "title":  "Wire reconciliation workbench defaults to evidence-backed reads",
-                      "description":  "Implement the first reconciliation workbench slice that reads from evidence and lineage while keeping mutate actions operator-assisted and attributable.",
-                      "priority":  "P0",
-                      "owner":  "fullstack",
-                      "dependencies":  [
-                                           "T-RR-010"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Reconciliation views show evidence and lineage.",
-                                                  "Default reads are not synthetic-only.",
-                                                  "Mutate actions remain operator-assisted and attributable."
-                                              ],
-                      "test_cases":  [
-                                         "Run reconciliation service and handler tests against lineage-backed reads.",
-                                         "Verify discrepancy views can reference evidence sources."
-                                     ],
-                      "expected_output":  "Evidence-backed reconciliation workbench default path",
-                      "definition_of_done":  [
-                                                 "Reconciliation default reads are live-backed.",
-                                                 "Lineage is visible to operators.",
-                                                 "The existing admin shell remains intact."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  8,
-                                   "risk":  3,
-                                   "ambiguity":  2,
-                                   "scope":  3,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "High-value operator workbench task with broad surface impact."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-012",
-                      "epic_id":  "E4",
-                      "story_id":  "S06",
-                      "requirement_id":  "FR-007",
-                      "title":  "Audit CLI coverage truth against the ledger",
-                      "description":  "Compare implemented CLI command families against docs/cli/coverage-ledger.md, classify unsupported READY items, and make the coverage contract honest.",
-                      "priority":  "P0",
-                      "owner":  "qa",
-                      "dependencies":  [
-                                           "T-RR-003"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "CLI coverage truth is audited against the ledger.",
-                                                  "READY claims are honest.",
-                                                  "The packaged CLI, docs, and ledger can be reconciled."
-                                              ],
-                      "test_cases":  [
-                                         "Cross-check implemented command families against the coverage ledger.",
-                                         "Verify docs and parser help stay in sync during the audit."
-                                     ],
-                      "expected_output":  "CLI coverage truth audit",
-                      "definition_of_done":  [
-                                                 "Coverage claims are honest.",
-                                                 "The parity gap is explicit.",
-                                                 "Follow-on CLI work has a stable baseline."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  6,
-                                   "risk":  2,
-                                   "ambiguity":  2,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Important distribution audit task with moderate breadth."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-013",
-                      "epic_id":  "E4",
-                      "story_id":  "S06",
-                      "requirement_id":  "FR-007",
-                      "title":  "Close the READY-surface parity gap in the packaged CLI",
-                      "description":  "Implement or reclassify READY ledger items so the packaged CLI, docs, and backend surface agree on what is truly supported.",
-                      "priority":  "P0",
-                      "owner":  "fullstack",
-                      "dependencies":  [
-                                           "T-RR-012"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "READY ledger items are implemented or reclassified honestly.",
-                                                  "Parser behavior, docs, and smoke tests agree.",
-                                                  "JSON remains the default output mode."
-                                              ],
-                      "test_cases":  [
-                                         "Run CLI parser tests and smoke tests.",
-                                         "Cross-check implemented command families against the updated ledger."
-                                     ],
-                      "expected_output":  "Truthful CLI parity for READY surfaces",
-                      "definition_of_done":  [
-                                                 "CLI parity gap is materially smaller.",
-                                                 "Coverage claims are honest.",
-                                                 "Smoke tests reflect the real supported surface."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  7,
-                                   "risk":  2,
-                                   "ambiguity":  2,
-                                   "scope":  3,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Core agent-surface task with moderate breadth and manageable risk."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-014",
-                      "epic_id":  "E4",
-                      "story_id":  "S06",
-                      "requirement_id":  "FR-008",
-                      "title":  "Replace or remove placeholder CLI command behavior",
-                      "description":  "Eliminate placeholder command behavior such as sandbox run by backing it with real backend behavior or removing it from the supported CLI surface.",
-                      "priority":  "P0",
-                      "owner":  "fullstack",
-                      "dependencies":  [
-                                           "T-RR-013"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Placeholder command behavior is gone from the supported surface.",
-                                                  "Any bounded command is clearly labeled as such.",
-                                                  "CLI docs reflect the real supported behavior."
-                                              ],
-                      "test_cases":  [
-                                         "Run CLI smoke tests for the affected commands.",
-                                         "Verify parser help no longer implies unsupported behavior."
-                                     ],
-                      "expected_output":  "Placeholder-free supported CLI surface",
-                      "definition_of_done":  [
-                                                 "Placeholder behavior is removed or replaced.",
-                                                 "Docs match the parser.",
-                                                 "The supported CLI surface is truthful."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  6,
-                                   "risk":  2,
-                                   "ambiguity":  1,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Focused cleanup and parity task with low ambiguity."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-015",
-                      "epic_id":  "E5",
-                      "story_id":  "S07",
-                      "requirement_id":  "FR-009",
-                      "title":  "Add one JSONL watch flow for a real operational stream",
-                      "description":  "Implement one real JSONL watch mode for an operational stream using existing websocket or event seams and document the stable output schema for agent use.",
-                      "priority":  "P1",
-                      "owner":  "fullstack",
-                      "dependencies":  [
-                                           "T-RR-013",
-                                           "T-RR-014"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "At least one real stream emits stable JSONL.",
-                                                  "The stream reuses existing event or websocket seams.",
-                                                  "The output schema is documented and testable."
-                                              ],
-                      "test_cases":  [
-                                         "Run watch-mode tests or smoke checks for JSONL output.",
-                                         "Validate the JSONL schema against documented expectations."
-                                     ],
-                      "expected_output":  "First real JSONL watch flow for agent consumption",
-                      "definition_of_done":  [
-                                                 "A real JSONL stream exists.",
-                                                 "The output schema is stable enough for agent use.",
-                                                 "The watch path is part of the supported CLI surface."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  8,
-                                   "risk":  3,
-                                   "ambiguity":  2,
-                                   "scope":  3,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Strategic agent-native task spanning streaming and CLI behavior."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-016",
-                      "epic_id":  "E5",
-                      "story_id":  "S07",
-                      "requirement_id":  "FR-010",
-                      "title":  "Add approval-aware boundaries for side-effecting CLI commands",
-                      "description":  "Classify high-risk mutate commands separately from read-only flows and define explicit approval or confirmation semantics for dangerous operator actions.",
-                      "priority":  "P1",
-                      "owner":  "fullstack",
-                      "dependencies":  [
-                                           "T-RR-013"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "High-risk mutate commands have explicit approval or confirmation boundaries.",
-                                                  "Read-only and write-side flows are distinguishable in the CLI contract.",
-                                                  "Approval semantics are documented for operators and agents."
-                                              ],
-                      "test_cases":  [
-                                         "Review command families for read versus write classification.",
-                                         "Verify dangerous commands have explicit approval or confirmation behavior."
-                                     ],
-                      "expected_output":  "Approval-aware mutate command contract",
-                      "definition_of_done":  [
-                                                 "Read and write command classes are explicit.",
-                                                 "High-risk mutate flows cannot be mistaken for read-only automation.",
-                                                 "Approval semantics are documented in the CLI surface."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  7,
-                                   "risk":  3,
-                                   "ambiguity":  2,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Moderate-scope contract task with meaningful safety implications."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-017",
-                      "epic_id":  "E5",
-                      "story_id":  "S07",
-                      "requirement_id":  "FR-011",
-                      "title":  "Draft an MCP-ready contract for the first operator-safe tool surfaces",
-                      "description":  "Identify the first operator-safe read-mostly surfaces and define MCP-ready input, output, and approval schema expectations that stay additive to the CLI contract.",
-                      "priority":  "P1",
-                      "owner":  "fullstack",
-                      "dependencies":  [
-                                           "T-RR-015",
-                                           "T-RR-016"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "The first MCP-safe surfaces are identified from current admin and CLI capabilities.",
-                                                  "Each chosen surface has stable input and output schema expectations.",
-                                                  "The MCP draft is additive to the CLI and does not fork the product contract."
-                                              ],
-                      "test_cases":  [
-                                         "Review chosen surfaces against current CLI and admin capabilities.",
-                                         "Verify input and output schema expectations are explicit."
-                                     ],
-                      "expected_output":  "MCP-ready tool contract draft for first operator-safe surfaces",
-                      "definition_of_done":  [
-                                                 "A first MCP-safe tool set is named.",
-                                                 "Input and output schema expectations are documented.",
-                                                 "The draft can guide a later implementation slice."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  7,
-                                   "risk":  3,
-                                   "ambiguity":  2,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Strategic interface-design task with moderate ambiguity and low code risk."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-018",
-                      "epic_id":  "E6",
-                      "story_id":  "S08",
-                      "requirement_id":  "FR-013",
-                      "title":  "Design the governed partner registry schema and service model",
-                      "description":  "Design additive partner, capability, rollout, health, and approval records that can back persistent partner governance on top of current admin and core seams.",
-                      "priority":  "P1",
-                      "owner":  "backend",
-                      "dependencies":  [
-                                           "T-RR-001"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Partners can be modeled for rails, vendors, LPs, custodians, and adjacent connectors.",
-                                                  "Capability, rollout, health, and approval state are first-class records.",
-                                                  "Registry-backed reads can replace static admin state incrementally."
-                                              ],
-                      "test_cases":  [
-                                         "Review current admin and config seams against the proposed registry model.",
-                                         "Verify additive and backfillable assumptions in planning artifacts."
-                                     ],
-                      "expected_output":  "Governed partner registry design",
-                      "definition_of_done":  [
-                                                 "Registry entities are reflected in the plan.",
-                                                 "Current shells and seams remain preserved.",
-                                                 "The design is additive and backfillable."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  7,
-                                   "risk":  3,
-                                   "ambiguity":  2,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Core governance design task with broad downstream impact."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-019",
-                      "epic_id":  "E6",
-                      "story_id":  "S08",
-                      "requirement_id":  "FR-014",
-                      "title":  "Design registry-backed config bundle and extension governance",
-                      "description":  "Design versioned, reviewable, approval-gated config bundles and extension actions with indirect secret references on current admin surfaces.",
-                      "priority":  "P1",
-                      "owner":  "backend",
-                      "dependencies":  [
-                                           "T-RR-018"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Config bundles are versioned, reviewable, and tied to approval records.",
-                                                  "Credential and secret references remain indirect rather than inline.",
-                                                  "Current admin shell and route shapes remain recognizable."
-                                              ],
-                      "test_cases":  [
-                                         "Cross-check the design against current config bundle and extension handlers.",
-                                         "Verify secret and approval assumptions are explicit and additive."
-                                     ],
-                      "expected_output":  "Registry-backed config and extension governance design",
-                      "definition_of_done":  [
-                                                 "Governance records are explicit.",
-                                                 "Secrets remain indirect.",
-                                                 "The design preserves current shells and surfaces."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  7,
-                                   "risk":  3,
-                                   "ambiguity":  2,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Governance design task tightly coupled to current admin seams."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-020",
-                      "epic_id":  "E7",
-                      "story_id":  "S09",
-                      "requirement_id":  "FR-015",
-                      "title":  "Design corridor pack and payment-method capability records",
-                      "description":  "Define additive corridor-pack records and payment-method capability data so source or destination rails, fees, cutoffs, compliance hooks, and optional card-funded lanes are modeled without a new engine.",
-                      "priority":  "P1",
-                      "owner":  "backend",
-                      "dependencies":  [
-                                           "T-RR-018"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Corridor packs define rails, currencies, fees, cutoffs, and compliance hooks.",
-                                                  "Payment-method capabilities are data-driven and tied to corridor and partner eligibility.",
-                                                  "Card-funded support stays optional and policy-bounded."
-                                              ],
-                      "test_cases":  [
-                                         "Review adapter and workflow seams against the proposed corridor model.",
-                                         "Verify capability records stay additive and bounded."
-                                     ],
-                      "expected_output":  "Corridor pack and payment-method capability design",
-                      "definition_of_done":  [
-                                                 "Corridor and capability records are reflected in the plan.",
-                                                 "The model reuses current seams.",
-                                                 "Optional commercial lanes remain bounded."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  7,
-                                   "risk":  3,
-                                   "ambiguity":  2,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Internationalization and commercialization design task with moderate ambiguity."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-021",
-                      "epic_id":  "E7",
-                      "story_id":  "S09",
-                      "requirement_id":  "FR-016",
-                      "title":  "Design provider-routing and institutional compliance productization",
-                      "description":  "Define additive provider-routing policy and institutional compliance records so corridor, entity, risk, trust, ownership, rescreening, and Travel Rule review state remain visible and exportable on current seams.",
-                      "priority":  "P1",
-                      "owner":  "fullstack",
-                      "dependencies":  [
-                                           "T-RR-018",
-                                           "T-RR-020"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Provider selection can vary by corridor, entity type, risk tier, amount, asset, and partner.",
-                                                  "Institutional evidence, trust, and review state remain visible on current admin surfaces.",
-                                                  "The design reuses current compliance and admin seams."
-                                              ],
-                      "test_cases":  [
-                                         "Review current compliance and admin surfaces against the proposed model.",
-                                         "Verify the design covers routing policy plus institutional evidence and trust state."
-                                     ],
-                      "expected_output":  "Provider-routing and institutional compliance design",
-                      "definition_of_done":  [
-                                                 "Routing inputs and institutional records are explicit.",
-                                                 "Current admin shell remains preserved.",
-                                                 "The design is additive and export-aware."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  8,
-                                   "risk":  3,
-                                   "ambiguity":  2,
-                                   "scope":  3,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "High-value compliance control-plane design task spanning backend and admin surfaces."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-022",
-                      "epic_id":  "E8",
-                      "story_id":  "S10",
-                      "requirement_id":  "FR-017",
-                      "title":  "Design best-execution explainability using operator-truth inputs",
-                      "description":  "Define route explainability that can consume LP reliability, treasury context, corridor policy, and compliance eligibility without forking current RFQ and solver seams.",
-                      "priority":  "P1",
-                      "owner":  "fullstack",
-                      "dependencies":  [
-                                           "T-RR-009",
-                                           "T-RR-011",
-                                           "T-RR-020",
-                                           "T-RR-021"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Route scoring can incorporate LP reliability, treasury context, corridor policy, and compliance eligibility.",
-                                                  "Operators can inspect why a route won or lost.",
-                                                  "The explainability surface remains additive to current RFQ and solver seams."
-                                              ],
-                      "test_cases":  [
-                                         "Review current liquidity, treasury, and compliance seams against the explainability design.",
-                                         "Verify the operator-facing rationale is explicit and bounded."
-                                     ],
-                      "expected_output":  "Best-execution explainability design",
-                      "definition_of_done":  [
-                                                 "Explainability inputs are explicit.",
-                                                 "The design stays additive to current execution seams.",
-                                                 "Later implementation can reuse earlier truth layers."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  8,
-                                   "risk":  3,
-                                   "ambiguity":  2,
-                                   "scope":  3,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Strategic moat-building design task that depends on earlier truth layers."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-023",
-                      "epic_id":  "E8",
-                      "story_id":  "S10",
-                      "requirement_id":  "FR-018",
-                      "title":  "Design commercial readiness for stablecoin-account and card-adjacent distribution",
-                      "description":  "Prepare bounded control-plane extensions for stablecoin-account operations, card-adjacent distribution, and related commercialization patterns while keeping them disabled by default and policy-bounded.",
-                      "priority":  "P2",
-                      "owner":  "fullstack",
-                      "dependencies":  [
-                                           "T-RR-018",
-                                           "T-RR-020",
-                                           "T-RR-022"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Stablecoin-account and card-adjacent seams are identified as bounded control-plane extensions.",
-                                                  "Any new commercial surface remains disabled by default until partner, policy, and compliance records allow it.",
-                                                  "The design preserves the current platform core."
-                                              ],
-                      "test_cases":  [
-                                         "Review current partner, corridor, and execution seams against the commercial-readiness design.",
-                                         "Verify disable-by-default and policy-bound assumptions are explicit."
-                                     ],
-                      "expected_output":  "Commercial readiness design for 2026 distribution trends",
-                      "definition_of_done":  [
-                                                 "Commercial extensions are bounded and additive.",
-                                                 "Enablement conditions are explicit.",
-                                                 "The plan preserves the platform core."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  7,
-                                   "risk":  2,
-                                   "ambiguity":  2,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Strategic preparation task that must remain bounded and additive."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-024",
-                      "epic_id":  "E8",
-                      "story_id":  "S10",
-                      "requirement_id":  "FR-018",
-                      "title":  "Define bounded intelligence sequencing for Risk Lab and operational leverage",
-                      "description":  "Sequence Risk Lab evolution, incident intelligence, SLA intelligence, and recommendation systems after runtime truth so intelligence remains bounded, auditable, and operator-supporting.",
-                      "priority":  "P2",
-                      "owner":  "fullstack",
-                      "dependencies":  [
-                                           "T-RR-009",
-                                           "T-RR-011",
-                                           "T-RR-021",
-                                           "T-RR-022"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Intelligence work is explicitly sequenced after runtime truth.",
-                                                  "Intelligence features stay bounded and auditable.",
-                                                  "No intelligence task bypasses operator controls."
-                                              ],
-                      "test_cases":  [
-                                         "Review the plan for sequencing and guardrail consistency.",
-                                         "Verify bounded intelligence assumptions are explicit in the product spec and implementation plan."
-                                     ],
-                      "expected_output":  "Bounded intelligence sequencing plan",
-                      "definition_of_done":  [
-                                                 "Intelligence sequencing is explicit.",
-                                                 "Guardrails are documented.",
-                                                 "Later work can expand safely from this baseline."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  7,
-                                   "risk":  2,
-                                   "ambiguity":  2,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Strategic sequencing task that protects the roadmap from premature AI breadth."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-025",
-                      "epic_id":  "E8",
-                      "story_id":  "S10",
-                      "requirement_id":  "FR-012",
-                      "title":  "Verify additive and backward-compatible boundaries across the full current-scope plan",
-                      "description":  "Review the full plan to ensure no task implies a second workflow engine, second admin shell, or breaking contract for API, SDK, widget, or CLI surfaces.",
-                      "priority":  "P1",
-                      "owner":  "qa",
-                      "dependencies":  [
-                                           "T-RR-006",
-                                           "T-RR-009",
-                                           "T-RR-011",
-                                           "T-RR-017",
-                                           "T-RR-021",
-                                           "T-RR-023",
-                                           "T-RR-024"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "No task in the cycle implies a second core platform or admin shell.",
-                                                  "Backward-compatibility expectations are explicit for API, SDK, widget, and CLI surfaces.",
-                                                  "Data-model changes remain additive in the current cycle."
-                                              ],
-                      "test_cases":  [
-                                         "Cross-check all planning artifacts for additive-extension compliance.",
-                                         "Run the UW validator after compatibility boundaries are finalized."
-                                     ],
-                      "expected_output":  "Additive-boundary and compatibility verification for the full plan",
-                      "definition_of_done":  [
-                                                 "The plan is explicitly additive.",
-                                                 "Backward-compatibility notes exist for external surfaces.",
-                                                 "The plan can be executed in UW without hidden rewrite assumptions."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  6,
-                                   "risk":  2,
-                                   "ambiguity":  1,
-                                   "scope":  2,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Cross-cutting verification task that protects the plan from scope drift."
-                               }
-                  },
-                  {
-                      "id":  "T-RR-026",
-                      "epic_id":  "E1",
-                      "story_id":  "S02",
-                      "requirement_id":  "FR-002",
-                      "title":  "Publish warning-reduction priorities for core crates",
-                      "description":  "Define a ranked warning-reduction target list for ramp-api, ramp-core, and ramp-compliance so credibility cleanup has a deterministic execution order.",
-                      "priority":  "P1",
-                      "owner":  "qa",
-                      "dependencies":  [
-                                           "T-RR-002",
-                                           "T-RR-003"
-                                       ],
-                      "acceptance_criteria":  [
-                                                  "Warning-reduction priorities are explicit for the three main crates.",
-                                                  "The order is deterministic enough for later dispatch.",
-                                                  "The list is referenced by the internal readiness package."
-                                              ],
-                      "test_cases":  [
-                                         "Review warning clusters or known debt notes in repo docs.",
-                                         "Verify the implementation plan references the same priority order."
-                                     ],
-                      "expected_output":  "Warning-reduction priority list",
-                      "definition_of_done":  [
-                                                 "Warning-reduction order is explicit.",
-                                                 "The list can seed later work packages.",
-                                                 "The internal gate references the same ordering."
-                                             ],
-                      "status":  "done",
-                      "tier":  {
-                                   "score":  5,
-                                   "risk":  2,
-                                   "ambiguity":  1,
-                                   "scope":  1,
-                                   "model":  "gpt-5.4",
-                                   "justification":  "Low-ambiguity prioritization task that sharpens repo-credibility cleanup."
-                               }
-                  }
-              ]
+{
+  "project": {
+    "name": "RampOS Truth-First Venue-Agnostic UW Plan",
+    "generated_at": "2026-03-18T16:20:00+07:00",
+    "source_docs": [
+      "docs/plans/2026-03-14-rampos-roadmap-refresh.md",
+      "docs/plans/2026-03-12-global-bank-grade-onofframp-plan.md",
+      "docs/plans/2026-03-18-team-reviewed-phase-plan.md",
+      "docs/plans/2026-03-18-venue-abstraction-and-cashflow-model.md",
+      "docs/plans/2026-03-18-venue-cashin-foundation-implementation-plan.md"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "T-UW-001",
+      "epic_id": "E1",
+      "story_id": "S01",
+      "requirement_id": "FR-001",
+      "title": "Canonicalize the truth-first roadmap stack and readiness package",
+      "description": "Freeze the new planning backbone, align plan sources, and define one canonical readiness package for the current cycle.",
+      "priority": "P0",
+      "owner": "qa",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "One canonical roadmap stack is named.",
+        "Readiness package scope is explicit.",
+        "Later UW artifacts reference the same backbone."
+      ],
+      "status": "done",
+      "tier": {
+        "score": 5,
+        "risk": 2,
+        "ambiguity": 1,
+        "scope": 1,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-002",
+      "epic_id": "E1",
+      "story_id": "S01",
+      "requirement_id": "FR-002",
+      "title": "Refresh repo credibility and signoff truth artifacts",
+      "description": "Refresh signoff evidence, reconcile stale signoff counters, and make the latest release-truth state explicit.",
+      "priority": "P0",
+      "owner": "devops",
+      "dependencies": ["T-UW-001"],
+      "acceptance_criteria": [
+        "Current signoff blockers are named.",
+        "Evidence refresh expectations are explicit.",
+        "Repo credibility blockers are tracked centrally."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 6,
+        "risk": 3,
+        "ambiguity": 1,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-003",
+      "epic_id": "E1",
+      "story_id": "S01",
+      "requirement_id": "FR-002",
+      "title": "Reconcile docs, workflow maps, and tracker truth",
+      "description": "Align docs, tracker notes, and workflow map statements with the repo's actual current posture.",
+      "priority": "P0",
+      "owner": "qa",
+      "dependencies": ["T-UW-001", "T-UW-002"],
+      "acceptance_criteria": [
+        "Docs no longer contradict current auth or readiness truth.",
+        "Trackers point to the current plan backbone.",
+        "Legacy drift is explicitly called out."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 5,
+        "risk": 2,
+        "ambiguity": 1,
+        "scope": 1,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-004",
+      "epic_id": "E2",
+      "story_id": "S02",
+      "requirement_id": "FR-003",
+      "title": "Complete admin auth truth closure",
+      "description": "Finish the admin JWT migration across backend, frontend, proxy, docs, and tests so shared-key auth is no longer the canonical path.",
+      "priority": "P0",
+      "owner": "fullstack",
+      "dependencies": ["T-UW-003"],
+      "acceptance_criteria": [
+        "Admin UI no longer relies on legacy shared-key login as the primary flow.",
+        "Proxy and handler contracts align on canonical auth.",
+        "Docs and tests match the canonical path."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 8,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-005",
+      "epic_id": "E2",
+      "story_id": "S02",
+      "requirement_id": "FR-004",
+      "title": "Complete portal auth truth closure",
+      "description": "Remove fail-closed placeholder auth UX by implementing or truthfully constraining passkey and portal login flows.",
+      "priority": "P0",
+      "owner": "fullstack",
+      "dependencies": ["T-UW-003"],
+      "acceptance_criteria": [
+        "Portal auth does not advertise unavailable completion flows.",
+        "Passkey posture is truthful in API and UI.",
+        "Auth-related docs and tests are aligned."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 8,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-006",
+      "epic_id": "E3",
+      "story_id": "S04",
+      "requirement_id": "FR-005",
+      "title": "Define workflow engine production and fallback contract",
+      "description": "Make the runtime behavior of Temporal and fallback mode explicit, bounded, and operator-explainable.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": ["T-UW-003"],
+      "acceptance_criteria": [
+        "Production semantics are explicit.",
+        "Fallback semantics are explicit.",
+        "Operators can explain runtime behavior during Temporal degradation."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 9,
+        "risk": 5,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-007",
+      "epic_id": "E3",
+      "story_id": "S04",
+      "requirement_id": "FR-006",
+      "title": "Make treasury defaults evidence-backed",
+      "description": "Replace sample-heavy treasury defaults with evidence-backed live-read pathways and provenance declarations.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": ["T-UW-006"],
+      "acceptance_criteria": [
+        "Treasury default read path is evidence-backed.",
+        "Sample paths are no longer the default production-facing route.",
+        "Source-of-truth is visible."
+      ],
+      "status": "completed",
+      "tier": {
+        "score": 8,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-008",
+      "epic_id": "E3",
+      "story_id": "S04",
+      "requirement_id": "FR-007",
+      "title": "Make reconciliation defaults evidence-backed",
+      "description": "Replace fixture-driven reconciliation defaults with lineage-backed runtime truth.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": ["T-UW-006"],
+      "acceptance_criteria": [
+        "Reconciliation default read path is evidence-backed.",
+        "Lineage and provenance are explicit.",
+        "Recommendation-only behavior is bounded and visible."
+      ],
+      "status": "in_progress",
+      "tier": {
+        "score": 8,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-009",
+      "epic_id": "E3",
+      "story_id": "S04",
+      "requirement_id": "FR-008",
+      "title": "Harden webhook and event truth",
+      "description": "Make webhook delivery state, replay provenance, dedupe guarantees, and event truth more authoritative.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": ["T-UW-006"],
+      "acceptance_criteria": [
+        "Webhook replay provenance is explicit.",
+        "Delivery-state truth is operator-explainable.",
+        "Event assumptions for multi-instance use are explicit."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 8,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-010",
+      "epic_id": "E3",
+      "story_id": "S04",
+      "requirement_id": "FR-009",
+      "title": "Harden incident lineage and operator truth",
+      "description": "Remove or replace dead-path incident lookups and tighten incident correlation to real evidence sources.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": ["T-UW-007", "T-UW-008", "T-UW-009"],
+      "acceptance_criteria": [
+        "High-impact incident lookups are evidence-backed.",
+        "Dead-path correlation is removed or explicitly bounded.",
+        "Operator incident truth is clearer."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 1,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-011",
+      "epic_id": "E4",
+      "story_id": "S03",
+      "requirement_id": "FR-010",
+      "title": "Reach truthful CLI parity for READY surfaces",
+      "description": "Make the packaged CLI match its declared READY ledger closely enough to trust as the first agent surface.",
+      "priority": "P0",
+      "owner": "sdk",
+      "dependencies": ["T-UW-004", "T-UW-005"],
+      "acceptance_criteria": [
+        "READY ledger and implementation parity are close.",
+        "CLI docs no longer oversell coverage.",
+        "Operator-safe usage is trustworthy."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 8,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-012",
+      "epic_id": "E4",
+      "story_id": "S03",
+      "requirement_id": "FR-011",
+      "title": "Add watch mode and approval-aware distribution truth",
+      "description": "Add at least one real JSONL watch path and tighten approval boundaries for high-impact CLI actions.",
+      "priority": "P0",
+      "owner": "sdk",
+      "dependencies": ["T-UW-011"],
+      "acceptance_criteria": [
+        "At least one real watch path emits stable JSONL.",
+        "High-impact mutations are approval-aware.",
+        "Placeholder command behavior is removed or explicitly bounded."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 1,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-013",
+      "epic_id": "E4",
+      "story_id": "S03",
+      "requirement_id": "FR-014",
+      "title": "Draft thin MCP contract on truthful CLI surfaces",
+      "description": "Select operator-safe read-heavy surfaces that can later be exposed through a thin MCP layer built on the truthful CLI contract.",
+      "priority": "P1",
+      "owner": "sdk",
+      "dependencies": ["T-UW-011", "T-UW-012"],
+      "acceptance_criteria": [
+        "MCP candidate surfaces are curated.",
+        "The contract is read-heavy and approval-bounded.",
+        "CLI remains the primary truthful surface."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 6,
+        "risk": 2,
+        "ambiguity": 2,
+        "scope": 1,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-014",
+      "epic_id": "E5",
+      "story_id": "S05",
+      "requirement_id": "FR-015",
+      "title": "Persist config bundle governance authoritatively",
+      "description": "Move config bundle governance from fallback-heavy behavior toward authoritative persisted records.",
+      "priority": "P1",
+      "owner": "backend",
+      "dependencies": ["T-UW-003", "T-UW-006"],
+      "acceptance_criteria": [
+        "Config bundle state is authoritative under normal paths.",
+        "Fallback behavior is explicit and bounded.",
+        "Admin views expose provenance."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-015",
+      "epic_id": "E5",
+      "story_id": "S05",
+      "requirement_id": "FR-016",
+      "title": "Persist extension governance authoritatively",
+      "description": "Make extension governance records authoritative and consistent with config bundle and rollout metadata.",
+      "priority": "P1",
+      "owner": "backend",
+      "dependencies": ["T-UW-014"],
+      "acceptance_criteria": [
+        "Extension governance records are authoritative.",
+        "Approval and rollout metadata are explicit.",
+        "Admin surfaces are provenance-aware."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-016",
+      "epic_id": "E5",
+      "story_id": "S05",
+      "requirement_id": "FR-017",
+      "title": "Move provider routing to authoritative runtime use",
+      "description": "Promote provider routing from snapshot/evaluator-only posture toward runtime truth on current seams.",
+      "priority": "P1",
+      "owner": "backend",
+      "dependencies": ["T-UW-006"],
+      "acceptance_criteria": [
+        "Provider routing state is not only evaluative.",
+        "Routing decisions expose matched context and provenance.",
+        "Pilot flows can depend on the records."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-017",
+      "epic_id": "E5",
+      "story_id": "S05",
+      "requirement_id": "FR-018",
+      "title": "Move commercial readiness to authoritative runtime use",
+      "description": "Replace placeholder or purely advisory commercial readiness behavior with governed records and explicit source states.",
+      "priority": "P1",
+      "owner": "backend",
+      "dependencies": ["T-UW-014", "T-UW-015"],
+      "acceptance_criteria": [
+        "Commercial readiness reads governed records by default.",
+        "Fallback source is explicit when used.",
+        "Admin surfaces expose missing prerequisites clearly."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-018",
+      "epic_id": "E5",
+      "story_id": "S05",
+      "requirement_id": "FR-019",
+      "title": "Wire execution explainability to real routing inputs",
+      "description": "Bind execution explainability to real liquidity, treasury, corridor, and compliance inputs instead of leaving it as a detached evaluator.",
+      "priority": "P1",
+      "owner": "backend",
+      "dependencies": ["T-UW-007", "T-UW-016", "T-UW-017"],
+      "acceptance_criteria": [
+        "Explainability reads real route inputs.",
+        "Eligibility and score reasons are operator-explainable.",
+        "The seam supports corridor-brain evolution without engine replacement."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 8,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-019",
+      "epic_id": "E5",
+      "story_id": "S05",
+      "requirement_id": "FR-012",
+      "title": "Verify additive and backward-compatible boundaries",
+      "description": "Audit the evolving implementation plan and planned schema changes for additive-only and backward-compatible boundaries.",
+      "priority": "P1",
+      "owner": "qa",
+      "dependencies": ["T-UW-014", "T-UW-015", "T-UW-016", "T-UW-017", "T-UW-018"],
+      "acceptance_criteria": [
+        "Additive-only assumptions are explicit.",
+        "Backward-compatibility impacts are named.",
+        "No hidden rewrite drift exists in the plan."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 6,
+        "risk": 2,
+        "ambiguity": 1,
+        "scope": 1,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-020",
+      "epic_id": "E6",
+      "story_id": "S06",
+      "requirement_id": "FR-020",
+      "title": "Compose partner registry into pilot commercialization packs",
+      "description": "Use partner registry records to build the first governed commercialization pack on current seams.",
+      "priority": "P1",
+      "owner": "backend",
+      "dependencies": ["T-UW-016", "T-UW-017"],
+      "acceptance_criteria": [
+        "Pilot partner pack exists.",
+        "Partner capability and approval state are explicit.",
+        "The pack can be referenced by pilot corridor logic."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 2,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-021",
+      "epic_id": "E6",
+      "story_id": "S06",
+      "requirement_id": "FR-020",
+      "title": "Compose corridor packs and payment methods into pilot lanes",
+      "description": "Bind corridor packs, payment-method capabilities, and provider-routing decisions into one or two pilot lanes.",
+      "priority": "P1",
+      "owner": "backend",
+      "dependencies": ["T-UW-020", "T-UW-018"],
+      "acceptance_criteria": [
+        "Pilot corridor lanes are represented explicitly.",
+        "Payment method and compliance route are bound to the lane.",
+        "Lane behavior is explainable from current records."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-022",
+      "epic_id": "E7",
+      "story_id": "S07",
+      "requirement_id": "FR-021",
+      "title": "Add venue trust substrate schema",
+      "description": "Add additive schema for wallet attestation, venue linkage, venue transfers, beneficiary profiles, and source-of-funds packages.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": ["T-UW-019"],
+      "acceptance_criteria": [
+        "Core venue trust objects have additive schema.",
+        "Migration ordering is valid after the current repo sequence.",
+        "Cash-in and cash-out can share these trust objects."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 9,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-023",
+      "epic_id": "E7",
+      "story_id": "S07",
+      "requirement_id": "FR-022",
+      "title": "Add venue repositories and services",
+      "description": "Introduce repositories and service seams for wallet attestation, venue connection, venue account, and venue transfer lifecycle.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": ["T-UW-022"],
+      "acceptance_criteria": [
+        "Venue trust objects have repository and service seams.",
+        "Lifecycle transitions are explicit.",
+        "The substrate is connector-agnostic."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 9,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-024",
+      "epic_id": "E7",
+      "story_id": "S07",
+      "requirement_id": "FR-025",
+      "title": "Add product eligibility and source-of-funds support",
+      "description": "Create a bounded service for venue visibility and action permission, and package evidence for review-heavy venue flows.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": ["T-UW-022", "T-UW-023"],
+      "acceptance_criteria": [
+        "Venue visibility and funding permission are explicit decisions.",
+        "Source-of-funds packaging is reusable across venue flows.",
+        "Fast-lane versus review-lane behavior is explainable."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 8,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-025",
+      "epic_id": "E7",
+      "story_id": "S07",
+      "requirement_id": "FR-024",
+      "title": "Add operator review surfaces for venue trust objects",
+      "description": "Expose wallet attestation, venue linkage, venue transfer, and source-of-funds review to admin surfaces.",
+      "priority": "P1",
+      "owner": "fullstack",
+      "dependencies": ["T-UW-023", "T-UW-024"],
+      "acceptance_criteria": [
+        "Admin can review venue trust objects.",
+        "Review state and failure reason are visible.",
+        "Operator surfaces are provenance-aware."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-026",
+      "epic_id": "E8",
+      "story_id": "S08",
+      "requirement_id": "FR-023",
+      "title": "Add portal venue funding APIs",
+      "description": "Expose venue listing, eligibility, connection, funding prepare, funding submit, and status APIs without collapsing them into generic payin APIs.",
+      "priority": "P0",
+      "owner": "backend",
+      "dependencies": ["T-UW-023", "T-UW-024"],
+      "acceptance_criteria": [
+        "Portal can prepare venue funding explicitly.",
+        "Wallet-first funding is preserved.",
+        "Venue funding status is queryable as a first-class flow."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 8,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-027",
+      "epic_id": "E8",
+      "story_id": "S08",
+      "requirement_id": "FR-026",
+      "title": "Add portal and admin venue UI",
+      "description": "Add venue funding pages and workbenches while keeping generic deposit and venue funding as separate but connected flows.",
+      "priority": "P1",
+      "owner": "frontend",
+      "dependencies": ["T-UW-025", "T-UW-026"],
+      "acceptance_criteria": [
+        "Venue funding has explicit portal UI.",
+        "Admin has venue funding workbench visibility.",
+        "Deposit-to-wallet and wallet-to-venue are not conflated in UX."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 7,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-029",
+      "epic_id": "E9",
+      "story_id": "S09",
+      "requirement_id": "FR-027",
+      "title": "Ship Hyperliquid cash-out connector MVP",
+      "description": "Implement read-only linking and wallet-centric venue cash-out using existing off-ramp and RFQ seams.",
+      "priority": "P0",
+      "owner": "venue",
+      "dependencies": ["T-UW-023", "T-UW-024"],
+      "acceptance_criteria": [
+        "Hyperliquid is integrated as connector #1.",
+        "Venue cash-out runs through wallet and off-ramp seams.",
+        "The connector validates the generic venue substrate."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 8,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-028",
+      "epic_id": "E8",
+      "story_id": "S08",
+      "requirement_id": "FR-028",
+      "title": "Ship generic wallet-first venue cash-in flow",
+      "description": "Complete the generic venue-aware cash-in path from fiat to approved wallet to tracked venue deposit.",
+      "priority": "P0",
+      "owner": "fullstack",
+      "dependencies": ["T-UW-026", "T-UW-027", "T-UW-029"],
+      "acceptance_criteria": [
+        "Venue cash-in uses wallet-first flow.",
+        "Cash-in is no longer only generic payin without venue transfer semantics.",
+        "The flow is auditable and reviewable."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 9,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 3,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-030",
+      "epic_id": "E9",
+      "story_id": "S09",
+      "requirement_id": "FR-029",
+      "title": "Ship Hyperliquid funding connector on the generic substrate",
+      "description": "Implement wallet-first Hyperliquid funding on top of venue trust and transfer objects rather than ad hoc payin metadata.",
+      "priority": "P1",
+      "owner": "venue",
+      "dependencies": ["T-UW-028", "T-UW-029"],
+      "acceptance_criteria": [
+        "Hyperliquid funding uses generic venue transfer semantics.",
+        "Wallet-first policy is preserved.",
+        "Venue-specific asset and network guardrails are explicit."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 8,
+        "risk": 4,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-031",
+      "epic_id": "E9",
+      "story_id": "S10",
+      "requirement_id": "FR-030",
+      "title": "Ship Lighter operator/pro connector slice",
+      "description": "Add a read-only and operator-focused connector slice for Lighter aligned with institutional evidence and public-pool style operations.",
+      "priority": "P2",
+      "owner": "venue",
+      "dependencies": ["T-UW-025", "T-UW-030"],
+      "acceptance_criteria": [
+        "Lighter is modeled as operator/pro first.",
+        "Connector uses generic venue substrate.",
+        "Institutional evidence and review paths are reused."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 6,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 2,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-032",
+      "epic_id": "E9",
+      "story_id": "S10",
+      "requirement_id": "FR-031",
+      "title": "Prepare CEX connector family readiness model",
+      "description": "Define the generic readiness model for CEX connectors including API scopes, subaccounts, withdrawal allowlists, and custody boundaries.",
+      "priority": "P2",
+      "owner": "venue",
+      "dependencies": ["T-UW-023", "T-UW-024"],
+      "acceptance_criteria": [
+        "CEX-specific optional fields are modeled as extensions.",
+        "Custody and allowlist assumptions are explicit.",
+        "The core remains venue-agnostic."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 6,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 1,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-033",
+      "epic_id": "E9",
+      "story_id": "S10",
+      "requirement_id": "FR-025",
+      "title": "Unify venue cash-out and cash-in trust reporting",
+      "description": "Use shared trust objects and evidence exports across both venue-linked directions so operators do not review two disconnected systems.",
+      "priority": "P2",
+      "owner": "backend",
+      "dependencies": ["T-UW-028", "T-UW-029", "T-UW-030"],
+      "acceptance_criteria": [
+        "Cash-out and cash-in reuse trust objects.",
+        "Reporting can show both directions coherently.",
+        "Operator review is less fragmented."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 6,
+        "risk": 2,
+        "ambiguity": 2,
+        "scope": 1,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-034",
+      "epic_id": "E10",
+      "story_id": "S11",
+      "requirement_id": "FR-014",
+      "title": "Expose operator-safe surfaces through MCP thin layer",
+      "description": "Publish a thin read-heavy MCP layer on top of truthful CLI or direct safe surfaces only after auth and CLI truth are stable.",
+      "priority": "P2",
+      "owner": "sdk",
+      "dependencies": ["T-UW-013", "T-UW-028"],
+      "acceptance_criteria": [
+        "Initial MCP layer is read-heavy and safe.",
+        "Approval-bounded mutate exposure remains limited.",
+        "The contract follows truthful CLI schemas."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 6,
+        "risk": 3,
+        "ambiguity": 2,
+        "scope": 1,
+        "model": "gpt-5.4"
+      }
+    },
+    {
+      "id": "T-UW-035",
+      "epic_id": "E10",
+      "story_id": "S11",
+      "requirement_id": "FR-032",
+      "title": "Define delegation and execution-envelope prerequisites",
+      "description": "Specify the prerequisites and model for delegation grants and execution envelopes only after auth, CLI, MCP, and venue trust substrate are stable.",
+      "priority": "P2",
+      "owner": "backend",
+      "dependencies": ["T-UW-034", "T-UW-033"],
+      "acceptance_criteria": [
+        "Delegation prerequisites are explicit.",
+        "The model depends on truthful auth and tool contracts.",
+        "It does not bypass approval-aware boundaries."
+      ],
+      "status": "pending",
+      "tier": {
+        "score": 5,
+        "risk": 2,
+        "ambiguity": 2,
+        "scope": 1,
+        "model": "gpt-5.4"
+      }
+    }
+  ]
 }

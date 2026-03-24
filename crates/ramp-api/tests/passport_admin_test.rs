@@ -4,6 +4,7 @@ use axum::{
 };
 use chrono::Utc;
 use hmac::{Hmac, Mac};
+use jsonwebtoken::{encode, EncodingKey, Header};
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{
@@ -24,7 +25,7 @@ type HmacSha256 = Hmac<Sha256>;
 
 const TEST_API_KEY: &str = "passport_test_api_key";
 const TEST_API_SECRET: &str = "passport_test_api_secret";
-const TEST_ADMIN_KEY: &str = "passport_admin_key";
+const TEST_ADMIN_JWT_SECRET: &str = "passport-admin-jwt-secret";
 
 struct TestApp {
     router: axum::Router,
@@ -32,7 +33,13 @@ struct TestApp {
     api_secret: String,
 }
 
-fn generate_signature(method: &str, path: &str, timestamp: &str, body: &str, secret: &str) -> String {
+fn generate_signature(
+    method: &str,
+    path: &str,
+    timestamp: &str,
+    body: &str,
+    secret: &str,
+) -> String {
     let message = format!("{method}\n{path}\n{timestamp}\n{body}");
     let mut mac =
         HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take any size key");
@@ -40,13 +47,31 @@ fn generate_signature(method: &str, path: &str, timestamp: &str, body: &str, sec
     hex::encode(mac.finalize().into_bytes())
 }
 
-fn build_signed_admin_request(
+fn make_admin_jwt(role: &str) -> String {
+    let claims = ramp_api::handlers::admin::admin_auth::AdminClaims {
+        sub: "passport_admin_test_user".to_string(),
+        email: "passport-admin@rampos.local".to_string(),
+        role: role.to_string(),
+        iat: Utc::now().timestamp(),
+        exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+        token_type: "access".to_string(),
+    };
+
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(TEST_ADMIN_JWT_SECRET.as_bytes()),
+    )
+    .expect("jwt should encode")
+}
+
+fn build_signed_admin_jwt_request(
     method: &str,
     uri: &str,
     body: &str,
     api_key: &str,
     api_secret: &str,
-    admin_key: &str,
+    admin_jwt: &str,
 ) -> Request<Body> {
     let timestamp = Utc::now().to_rfc3339();
     let path = uri.split('?').next().unwrap_or(uri);
@@ -58,7 +83,7 @@ fn build_signed_admin_request(
         .header("Authorization", format!("Bearer {api_key}"))
         .header("X-Timestamp", &timestamp)
         .header("X-Signature", signature)
-        .header("X-Admin-Key", admin_key)
+        .header("X-Admin-Authorization", format!("Bearer {admin_jwt}"))
         .body(Body::from(body.to_string()))
         .unwrap()
 }
@@ -169,8 +194,8 @@ async fn setup_app(tenant_id: &str) -> TestApp {
         ws_state: None,
         metrics_registry: Arc::new(ramp_core::service::MetricsRegistry::new()),
         document_storage: None,
-            kyc_service: None,
-            kyt_service: None,
+        kyc_service: None,
+        kyt_service: None,
     };
 
     TestApp {
@@ -182,16 +207,17 @@ async fn setup_app(tenant_id: &str) -> TestApp {
 
 #[tokio::test]
 async fn passport_queue_lists_items() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_passport_queue").await;
+    let admin_jwt = make_admin_jwt("viewer");
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/passport/queue",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -205,16 +231,17 @@ async fn passport_queue_lists_items() {
 
 #[tokio::test]
 async fn passport_package_returns_detail() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_passport_package").await;
+    let admin_jwt = make_admin_jwt("viewer");
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/passport/packages/pkg_passport_active_001",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();

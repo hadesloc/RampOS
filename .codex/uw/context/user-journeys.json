@@ -3,12 +3,9 @@
     "app_url": "http://localhost:3000",
     "start_command": "npm run dev --prefix frontend",
     "wait_for_ready": 90,
-    "scope": "march-2026-full-scope-plan"
+    "scope": "truth-first-venue-agnostic-uw-plan"
   },
-  "viewports": [
-    "desktop",
-    "mobile"
-  ],
+  "viewports": ["desktop", "mobile"],
   "viewport_presets": {
     "desktop": {
       "width": 1440,
@@ -20,262 +17,93 @@
   },
   "journeys": [
     {
-      "id": "J-001",
-      "name": "Review Internal Readiness Surface",
+      "id": "J-UW-001",
+      "name": "Review readiness and release truth",
       "priority": "critical",
-      "preconditions": [
-        "release candidate frozen",
-        "internal readiness package defined"
-      ],
+      "preconditions": ["admin authenticated"],
       "steps": [
-        {
-          "action": "navigate",
-          "url": "/admin/settings/config-bundles",
-          "description": "Open release-governance-adjacent surface"
-        },
-        {
-          "action": "verify_visible",
-          "selector": "body",
-          "description": "Governance page renders"
-        },
-        {
-          "action": "screenshot",
-          "name": "internal-readiness",
-          "description": "Capture internal readiness surface"
-        }
+        {"action": "navigate", "url": "/admin/settings/config-bundles", "description": "Open a governance-adjacent readiness surface"},
+        {"action": "verify_visible", "selector": "body", "description": "Page renders"},
+        {"action": "screenshot", "name": "readiness-truth", "description": "Capture current readiness-adjacent state"}
       ]
     },
     {
-      "id": "J-002",
-      "name": "Govern Partner Connector",
+      "id": "J-UW-002",
+      "name": "Use truthful admin auth path",
       "priority": "critical",
-      "preconditions": [
-        "admin authenticated",
-        "partner registry enabled"
-      ],
+      "preconditions": ["frontend auth migration complete"],
       "steps": [
-        {
-          "action": "navigate",
-          "url": "/admin/settings/extensions",
-          "description": "Open partner and extension governance"
-        },
-        {
-          "action": "verify_visible",
-          "selector": "body",
-          "description": "Registry page renders"
-        },
-        {
-          "action": "screenshot",
-          "name": "partner-governance",
-          "description": "Capture partner governance state"
-        }
+        {"action": "navigate", "url": "/admin-login", "description": "Open admin login"},
+        {"action": "verify_visible", "selector": "body", "description": "Admin login renders"},
+        {"action": "screenshot", "name": "admin-auth-truth", "description": "Capture canonical admin auth surface"}
       ]
     },
     {
-      "id": "J-003",
-      "name": "Activate Pilot Corridor Pack",
+      "id": "J-UW-003",
+      "name": "Review live treasury evidence",
       "priority": "critical",
-      "preconditions": [
-        "admin authenticated",
-        "corridor pack model available"
-      ],
+      "preconditions": ["admin authenticated", "treasury evidence imported"],
       "steps": [
-        {
-          "action": "navigate",
-          "url": "/admin/settings/config-bundles",
-          "description": "Open configuration and rollout surface"
-        },
-        {
-          "action": "verify_visible",
-          "selector": "body",
-          "description": "Config governance page renders"
-        },
-        {
-          "action": "screenshot",
-          "name": "corridor-pack",
-          "description": "Capture corridor-pack state"
-        }
+        {"action": "navigate", "url": "/admin/treasury", "description": "Open treasury workbench"},
+        {"action": "verify_visible", "selector": "body", "description": "Treasury page renders"},
+        {"action": "screenshot", "name": "treasury-truth", "description": "Capture treasury evidence-backed state"}
       ]
     },
     {
-      "id": "J-004",
-      "name": "Review Live Treasury Evidence",
+      "id": "J-UW-004",
+      "name": "Review reconciliation lineage",
       "priority": "critical",
-      "preconditions": [
-        "admin authenticated",
-        "treasury evidence imported"
-      ],
+      "preconditions": ["admin authenticated", "reconciliation evidence imported"],
       "steps": [
-        {
-          "action": "navigate",
-          "url": "/admin/treasury",
-          "description": "Open treasury workbench"
-        },
-        {
-          "action": "verify_visible",
-          "selector": "body",
-          "description": "Treasury page renders"
-        },
-        {
-          "action": "screenshot",
-          "name": "treasury-live-evidence",
-          "description": "Capture treasury live-read state"
-        }
+        {"action": "navigate", "url": "/admin/reconciliation", "description": "Open reconciliation workbench"},
+        {"action": "verify_visible", "selector": "body", "description": "Reconciliation page renders"},
+        {"action": "screenshot", "name": "reconciliation-truth", "description": "Capture reconciliation lineage state"}
       ]
     },
     {
-      "id": "J-005",
-      "name": "Investigate Reconciliation Lineage",
-      "priority": "critical",
-      "preconditions": [
-        "admin authenticated",
-        "reconciliation evidence imported"
-      ],
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/admin/reconciliation",
-          "description": "Open reconciliation workbench"
-        },
-        {
-          "action": "verify_visible",
-          "selector": "body",
-          "description": "Reconciliation page renders"
-        },
-        {
-          "action": "screenshot",
-          "name": "reconciliation-lineage",
-          "description": "Capture reconciliation lineage state"
-        }
-      ]
-    },
-    {
-      "id": "J-006",
-      "name": "Resolve Institutional Compliance Review",
+      "id": "J-UW-005",
+      "name": "Govern partner and corridor pack",
       "priority": "major",
-      "preconditions": [
-        "admin authenticated",
-        "institutional review case exists"
-      ],
+      "preconditions": ["admin authenticated", "partner and corridor records available"],
       "steps": [
-        {
-          "action": "navigate",
-          "url": "/admin/compliance/kyb",
-          "description": "Open institutional compliance surface"
-        },
-        {
-          "action": "verify_visible",
-          "selector": "body",
-          "description": "Institutional review page renders"
-        },
-        {
-          "action": "screenshot",
-          "name": "institutional-review",
-          "description": "Capture institutional compliance state"
-        }
+        {"action": "navigate", "url": "/admin/settings/extensions", "description": "Open governance shell"},
+        {"action": "verify_visible", "selector": "body", "description": "Governance page renders"},
+        {"action": "screenshot", "name": "partner-corridor-pack", "description": "Capture partner/corridor governance state"}
       ]
     },
     {
-      "id": "J-007",
-      "name": "Review Travel Rule Queue",
+      "id": "J-UW-006",
+      "name": "Review venue funding workbench",
       "priority": "major",
-      "preconditions": [
-        "admin authenticated",
-        "travel-rule surface available"
-      ],
+      "preconditions": ["admin authenticated", "venue substrate implemented"],
       "steps": [
-        {
-          "action": "navigate",
-          "url": "/admin/compliance/travel-rule",
-          "description": "Open Travel Rule queue"
-        },
-        {
-          "action": "verify_visible",
-          "selector": "body",
-          "description": "Travel Rule page renders"
-        },
-        {
-          "action": "screenshot",
-          "name": "travel-rule",
-          "description": "Capture Travel Rule state"
-        }
+        {"action": "navigate", "url": "/admin/venue", "description": "Open venue workbench"},
+        {"action": "verify_visible", "selector": "body", "description": "Venue workbench renders"},
+        {"action": "screenshot", "name": "venue-workbench", "description": "Capture venue trust and transfer review state"}
       ]
     },
     {
-      "id": "J-008",
-      "name": "Review Best Execution Explainability",
+      "id": "J-UW-007",
+      "name": "Prepare venue funding from portal",
       "priority": "major",
-      "preconditions": [
-        "admin authenticated",
-        "liquidity data exists"
-      ],
+      "preconditions": ["portal authenticated", "wallet exists", "venue funding UI implemented"],
       "steps": [
-        {
-          "action": "navigate",
-          "url": "/admin/liquidity",
-          "description": "Open liquidity surface"
-        },
-        {
-          "action": "verify_visible",
-          "selector": "body",
-          "description": "Liquidity page renders"
-        },
-        {
-          "action": "screenshot",
-          "name": "best-execution",
-          "description": "Capture explainability state"
-        }
+        {"action": "navigate", "url": "/portal/venues", "description": "Open portal venue funding page"},
+        {"action": "verify_visible", "selector": "body", "description": "Venue page renders"},
+        {"action": "screenshot", "name": "portal-venue-funding", "description": "Capture venue funding preparation flow"}
       ]
     },
     {
-      "id": "J-009",
-      "name": "Investigate Incident Timeline",
+      "id": "J-UW-008",
+      "name": "Review Travel Rule and KYB evidence",
       "priority": "major",
-      "preconditions": [
-        "admin authenticated",
-        "incident timeline available"
-      ],
+      "preconditions": ["admin authenticated"],
       "steps": [
-        {
-          "action": "navigate",
-          "url": "/admin/incidents",
-          "description": "Open incident timeline"
-        },
-        {
-          "action": "verify_visible",
-          "selector": "body",
-          "description": "Incident page renders"
-        },
-        {
-          "action": "screenshot",
-          "name": "incident-timeline",
-          "description": "Capture incident timeline state"
-        }
-      ]
-    },
-    {
-      "id": "J-010",
-      "name": "Review Agent and CLI Docs Surface",
-      "priority": "major",
-      "preconditions": [
-        "docs route available"
-      ],
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/docs",
-          "description": "Open docs surface relevant to CLI and agents"
-        },
-        {
-          "action": "verify_visible",
-          "selector": "body",
-          "description": "Docs page renders"
-        },
-        {
-          "action": "screenshot",
-          "name": "agent-cli-docs",
-          "description": "Capture docs state"
-        }
+        {"action": "navigate", "url": "/admin/compliance/travel-rule", "description": "Open Travel Rule queue"},
+        {"action": "verify_visible", "selector": "body", "description": "Travel Rule page renders"},
+        {"action": "navigate", "url": "/admin/compliance/kyb", "description": "Open KYB review"},
+        {"action": "verify_visible", "selector": "body", "description": "KYB page renders"},
+        {"action": "screenshot", "name": "travel-rule-kyb", "description": "Capture compliance review state"}
       ]
     }
   ]

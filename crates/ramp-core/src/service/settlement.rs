@@ -70,7 +70,10 @@ impl SettlementStatus {
     }
 
     pub fn counts_toward_liquidity_pressure(&self) -> bool {
-        matches!(self, SettlementStatus::Pending | SettlementStatus::Processing)
+        matches!(
+            self,
+            SettlementStatus::Pending | SettlementStatus::Processing
+        )
     }
 }
 
@@ -125,7 +128,9 @@ impl Settlement {
     }
 
     pub fn age_minutes(&self, now: chrono::DateTime<Utc>) -> i64 {
-        now.signed_duration_since(self.created_at).num_minutes().max(0)
+        now.signed_duration_since(self.created_at)
+            .num_minutes()
+            .max(0)
     }
 }
 
@@ -474,7 +479,9 @@ impl SettlementService {
         offramp_id: &str,
     ) -> Result<Vec<IncidentTimelineEntry>> {
         if let Some(repo) = &self.repo {
-            let rows = repo.list_by_offramp_in_tenant(tenant_id, offramp_id).await?;
+            let rows = repo
+                .list_by_offramp_in_tenant(tenant_id, offramp_id)
+                .await?;
             Ok(rows
                 .into_iter()
                 .map(IncidentTimelineEntry::from_settlement_row)
@@ -1073,8 +1080,14 @@ mod tests {
         let repo = Arc::new(InMemorySettlementRepository::new());
         let svc = SettlementService::with_repository(repo);
 
-        let first = svc.trigger_settlement_async("ofr_lookup_first").await.unwrap();
-        let second = svc.trigger_settlement_async("ofr_lookup_second").await.unwrap();
+        let first = svc
+            .trigger_settlement_async("ofr_lookup_first")
+            .await
+            .unwrap();
+        let second = svc
+            .trigger_settlement_async("ofr_lookup_second")
+            .await
+            .unwrap();
 
         let settlements = svc
             .list_settlements_by_ids_async(&[
@@ -1097,7 +1110,10 @@ mod tests {
         let repo = Arc::new(InMemorySettlementRepository::new());
         let svc = SettlementService::with_repository(repo);
 
-        let created = svc.trigger_settlement_async("ofr_lookup_bank").await.unwrap();
+        let created = svc
+            .trigger_settlement_async("ofr_lookup_bank")
+            .await
+            .unwrap();
         let bank_reference = created
             .bank_reference
             .clone()

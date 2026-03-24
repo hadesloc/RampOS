@@ -39,10 +39,9 @@ pub async fn upsert_partner_registry(
 ) -> Result<Json<ramp_core::service::PartnerRegistrySnapshot>, ApiError> {
     let _auth = super::tier::check_admin_key_operator(&headers)?;
 
-    let pool = state
-        .db_pool
-        .clone()
-        .ok_or_else(|| ApiError::Internal("Partner registry write path requires a configured database".to_string()))?;
+    let pool = state.db_pool.clone().ok_or_else(|| {
+        ApiError::Internal("Partner registry write path requires a configured database".to_string())
+    })?;
 
     let service = PartnerRegistryService::with_pool(pool);
     let snapshot = service

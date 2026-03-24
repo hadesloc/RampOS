@@ -186,7 +186,10 @@ mod tests {
 
         let config = Config::from_env().expect("partial env config should deserialize");
 
-        assert_eq!(config.database.url, "postgres://rampos:test@db.internal:5432/rampos");
+        assert_eq!(
+            config.database.url,
+            "postgres://rampos:test@db.internal:5432/rampos"
+        );
         assert_eq!(config.database.max_connections, 100);
         assert_eq!(config.redis.url, "redis://:pass@redis.internal:6379");
         assert_eq!(config.redis.pool_size, 20);

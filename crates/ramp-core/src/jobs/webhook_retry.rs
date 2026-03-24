@@ -6,7 +6,7 @@
 use ramp_common::Result;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::service::webhook_delivery::WebhookDeliveryService;
 
@@ -41,12 +41,32 @@ impl WebhookRetryWorker {
         self
     }
 
+    /// This worker is intentionally bounded to a single-process / single-worker
+    /// runtime model. It does not claim durable multi-instance queue ownership.
+    pub fn single_worker_bound(&self) -> bool {
+        true
+    }
+
+    /// The current retry worker is not an authoritative multi-instance delivery plane.
+    pub fn multi_instance_authoritative(&self) -> bool {
+        false
+    }
+
+    /// Operator-facing runtime truth for the current retry worker model.
+    pub fn runtime_truth_note(&self) -> &'static str {
+        "Webhook retry worker is single-worker bound and not authoritative for multi-instance delivery semantics"
+    }
+
     /// Run the worker continuously (blocking)
     pub async fn run(&self) {
         info!(
             poll_interval_secs = self.poll_interval.as_secs(),
             batch_size = self.batch_size,
             "Starting webhook retry worker"
+        );
+        warn!(
+            runtime_truth = self.runtime_truth_note(),
+            "Webhook retry worker is running with bounded single-worker semantics"
         );
 
         let mut interval = tokio::time::interval(self.poll_interval);
@@ -89,6 +109,8 @@ impl WebhookRetryWorker {
                 event_id = %delivery.event_id,
                 endpoint_url = %delivery.endpoint_url,
                 attempt = delivery.attempts + 1,
+                single_worker_bound = self.single_worker_bound(),
+                multi_instance_authoritative = self.multi_instance_authoritative(),
                 "Processing webhook delivery retry"
             );
 

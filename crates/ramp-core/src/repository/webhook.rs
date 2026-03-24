@@ -176,10 +176,13 @@ impl WebhookRepository for PgWebhookRepository {
         sqlx::query(
             r#"
             UPDATE webhook_events
-            SET last_error = $1,
-            next_attempt_at = $2,
-            last_attempt_at = NOW(),
-            attempts = attempts + 1
+            SET status = 'PENDING',
+                last_error = $1,
+                next_attempt_at = $2,
+                last_attempt_at = NOW(),
+                attempts = attempts + 1,
+                delivered_at = NULL,
+                response_status = NULL
             WHERE id = $3
             "#,
         )
@@ -200,7 +203,10 @@ impl WebhookRepository for PgWebhookRepository {
             SET status = 'FAILED',
                 last_error = $1,
                 last_attempt_at = NOW(),
-                attempts = attempts + 1
+                attempts = attempts + 1,
+                next_attempt_at = NULL,
+                delivered_at = NULL,
+                response_status = NULL
             WHERE id = $2
             "#,
         )
@@ -316,7 +322,9 @@ impl WebhookRepository for PgWebhookRepository {
             UPDATE webhook_events
             SET status = 'PENDING',
                 next_attempt_at = NOW(),
-                last_error = NULL
+                last_error = NULL,
+                delivered_at = NULL,
+                response_status = NULL
             WHERE tenant_id = $1 AND id = $2
             "#,
         )

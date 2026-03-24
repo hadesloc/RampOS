@@ -170,7 +170,10 @@ pub struct UpsertApprovalReferenceRequest {
 
 #[async_trait]
 pub trait PartnerRegistryRepository: Send + Sync {
-    async fn upsert_approval_reference(&self, request: &UpsertApprovalReferenceRequest) -> Result<()>;
+    async fn upsert_approval_reference(
+        &self,
+        request: &UpsertApprovalReferenceRequest,
+    ) -> Result<()>;
     async fn upsert_partner(&self, request: &UpsertPartnerRequest) -> Result<()>;
     async fn upsert_capability(&self, request: &UpsertPartnerCapabilityRequest) -> Result<()>;
     async fn upsert_rollout_scope(&self, request: &UpsertPartnerRolloutScopeRequest) -> Result<()>;
@@ -179,7 +182,10 @@ pub trait PartnerRegistryRepository: Send + Sync {
         &self,
         request: &UpsertCredentialReferenceRequest,
     ) -> Result<()>;
-    async fn list_registry_records(&self, tenant_id: Option<&str>) -> Result<Vec<PartnerRegistryRecord>>;
+    async fn list_registry_records(
+        &self,
+        tenant_id: Option<&str>,
+    ) -> Result<Vec<PartnerRegistryRecord>>;
 }
 
 pub struct PgPartnerRegistryRepository {
@@ -275,7 +281,10 @@ struct ApprovalReferenceRow {
 
 #[async_trait]
 impl PartnerRegistryRepository for PgPartnerRegistryRepository {
-    async fn upsert_approval_reference(&self, request: &UpsertApprovalReferenceRequest) -> Result<()> {
+    async fn upsert_approval_reference(
+        &self,
+        request: &UpsertApprovalReferenceRequest,
+    ) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO partner_approval_references (
@@ -512,7 +521,10 @@ impl PartnerRegistryRepository for PgPartnerRegistryRepository {
         Ok(())
     }
 
-    async fn list_registry_records(&self, tenant_id: Option<&str>) -> Result<Vec<PartnerRegistryRecord>> {
+    async fn list_registry_records(
+        &self,
+        tenant_id: Option<&str>,
+    ) -> Result<Vec<PartnerRegistryRecord>> {
         let partners = if let Some(tenant_id) = tenant_id {
             sqlx::query_as::<_, PartnerRow>(
                 r#"

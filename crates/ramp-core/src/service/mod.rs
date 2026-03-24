@@ -2,8 +2,9 @@
 
 pub mod bridge;
 pub mod canonical_payment;
-pub mod compliance_audit;
 pub mod commercial_readiness;
+pub mod commercialization_pack;
+pub mod compliance_audit;
 pub mod config_bundle;
 pub mod corridor_pack;
 pub mod crypto;
@@ -22,31 +23,38 @@ pub mod liquidity_reliability;
 pub mod metrics;
 pub mod net_settlement;
 pub mod offramp;
+pub mod offramp_address_allocator;
 pub mod offramp_fees;
+pub mod offramp_observation;
 #[cfg(test)]
 mod offramp_tests;
 pub mod onboarding;
-pub mod passkey;
 pub mod partner_registry;
+pub mod passkey;
 pub mod payin;
-pub mod provider_routing;
-pub mod payout;
 pub mod payment_method_capability;
+pub mod payout;
 #[cfg(test)]
 mod payout_compliance_tests;
+pub mod product_eligibility;
+pub mod provider_routing;
 pub mod reconciliation;
 pub mod reconciliation_export;
-pub mod rescreening_actions;
 pub mod replay;
+pub mod rescreening_actions;
 pub mod rfq;
 pub mod sandbox;
 pub mod settlement;
 pub mod sla_guardian;
 pub mod timeout;
+pub mod trade;
 pub mod treasury;
 pub mod treasury_evidence;
-pub mod trade;
 pub mod user;
+pub mod venue_cashout;
+pub mod venue_funding;
+pub mod venue_trust_reporting;
+pub mod venue_trust;
 pub mod webhook;
 pub mod webhook_delivery;
 #[cfg(test)]
@@ -64,11 +72,21 @@ pub use canonical_payment::{
     CanonicalPaymentInput, CanonicalPaymentParty, CanonicalPaymentRecord,
     CanonicalPaymentStatusFamily,
 };
+pub use commercial_readiness::{
+    CommercialExtensionRecord, CommercialReadinessService, CommercialReadinessSnapshot,
+    EnablementCheckResult,
+};
+pub use commercialization_pack::{
+    CommercializationPack, CommercializationPackCapability, CommercializationPackCorridor,
+    CommercializationPackPartner, CommercializationPackReadiness,
+    CommercializationPackRuntimeReference, CommercializationPackService,
+    CommercializationPackSnapshot, UpsertCommercializationPackRequest,
+};
 pub use compliance_audit::{AuditContext, AuditLogExport, ComplianceAuditService, ExportFormat};
 pub use config_bundle::{
-    ConfigBundleArtifact, ConfigBundleCredentialReference, ConfigBundleService,
-    ConfigBundleVersionEntry, ConfigBundleVersionHistory, CreateConfigBundleRequest,
-    WhitelistedExtensionAction,
+    extract_offramp_bundle_config, ConfigBundleArtifact, ConfigBundleCredentialReference,
+    ConfigBundleService, ConfigBundleVersionEntry, ConfigBundleVersionHistory,
+    CreateConfigBundleRequest, OfframpBundleConfig, WhitelistedExtensionAction,
 };
 pub use corridor_pack::{CorridorPackService, CorridorPackSnapshot, UpsertCorridorPackBundle};
 pub use crypto::CryptoService;
@@ -77,11 +95,20 @@ pub use event_catalog::{
     EventCatalog, EventCatalogEntry, EventDeprecationMarker, EventPayloadFieldDescriptor,
     EventStability,
 };
+pub use execution_explainability::{
+    ExecutionExplainabilityService, ExplainabilityWeights, RateNormalizationConfig,
+    RouteComparisonSnapshot, RouteExplainabilityFactor, RouteExplainabilityInput,
+    RouteExplainabilityResult,
+};
 pub use fees::FeeCalculator;
 pub use incident_timeline::{
     IncidentActionMode, IncidentActionRecommendation, IncidentConfidenceMarker,
     IncidentRecommendationPriority, IncidentTimeline, IncidentTimelineAssembler,
     IncidentTimelineEntry, IncidentTimelineSourceKind,
+};
+pub use intelligence_sequencing::{
+    DependencyCheckResult, IntelligenceGuardrail, IntelligenceSequencingService,
+    IntelligenceSequencingSnapshot, IntelligenceWorkPackage,
 };
 pub use ledger::LedgerService;
 pub use license::LicenseService;
@@ -95,36 +122,52 @@ pub use liquidity_reliability::{
 };
 pub use metrics::{IncidentSignalSnapshot, MetricsRegistry};
 pub use net_settlement::{
-    NetSettlementAlert, NetSettlementProposal, NetSettlementProposalStatus,
-    NetSettlementService, NetSettlementWorkbenchSnapshot,
+    NetSettlementAlert, NetSettlementProposal, NetSettlementProposalStatus, NetSettlementService,
+    NetSettlementWorkbenchSnapshot,
+};
+pub use offramp_address_allocator::{
+    EvmPlaceholderDepositAddressProvider, OfframpDepositAddressAllocator,
+    OfframpDepositAddressProvider, OfframpDepositAddressRequest,
+    UnsupportedSolanaDepositAddressProvider,
+};
+pub use offramp_observation::{
+    ConfirmOfframpObservationRequest, OfframpObservationService, RecordOfframpObservationRequest,
 };
 pub use onboarding::OnboardingService;
-pub use passkey::PasskeyService;
 pub use partner_registry::{
-    PartnerHealthSummary, PartnerRegistryService, PartnerRegistrySnapshot,
-    PartnerSearchCriteria, UpsertPartnerCapabilityBundle,
-    UpsertPartnerRegistryRecordRequest,
+    PartnerHealthSummary, PartnerRegistryService, PartnerRegistrySnapshot, PartnerSearchCriteria,
+    UpsertPartnerCapabilityBundle, UpsertPartnerRegistryRecordRequest,
 };
+pub use passkey::PasskeyService;
 pub use payin::PayinService;
-pub use payout::PayoutService;
 pub use payment_method_capability::{
     PaymentMethodCapabilityService, PaymentMethodCapabilitySnapshot,
+};
+pub use payout::PayoutService;
+pub use product_eligibility::{
+    ProductEligibilityDecision, ProductEligibilityDecisionState, ProductEligibilityReason,
+    ProductEligibilityRequest, ProductEligibilityService, ProductEligibilitySourceOfFundsDecision,
+    SourceOfFundsPackageAction,
+};
+pub use provider_routing::{
+    InstitutionalComplianceRecord, ProviderRoutingContext, ProviderRoutingDecision,
+    ProviderRoutingRule, ProviderRoutingService, ProviderRoutingSnapshot,
 };
 pub use reconciliation::{
     Discrepancy, DiscrepancyKind, OnChainTransaction, ReconciliationAgeBucket,
     ReconciliationEvidencePack, ReconciliationMatchConfidence, ReconciliationOwnerLane,
-    ReconciliationQueueItem, ReconciliationReport, ReconciliationRootCause,
-    ReconciliationService, ReconciliationStatus, SettlementRecord, Severity,
+    ReconciliationQueueItem, ReconciliationReport, ReconciliationRootCause, ReconciliationService,
+    ReconciliationStatus, SettlementRecord, Severity,
 };
 pub use reconciliation_export::{
     ReconciliationExportArtifact, ReconciliationExportFormat, ReconciliationExportService,
     ReconciliationProvenance, ReconciliationWorkbench, ReconciliationWorkbenchSnapshot,
 };
-pub use rescreening_actions::{RescreeningAccountAction, RescreeningActionService};
 pub use replay::{
     redact_replay_bundle, ReplayBundle, ReplayBundleAssembler, ReplayTimelineEntry,
     ReplayTimelineSource,
 };
+pub use rescreening_actions::{RescreeningAccountAction, RescreeningActionService};
 pub use sandbox::{
     default_sandbox_presets, SandboxPreset, SandboxResetResult, SandboxResetStrategy,
     SandboxScenarioRun, SandboxScenarioRunRequest, SandboxScenarioRunner, SandboxScenarioStatus,
@@ -136,6 +179,7 @@ pub use sla_guardian::{
     SlaGuardianSnapshot,
 };
 pub use timeout::TimeoutService;
+pub use trade::TradeService;
 pub use treasury::{
     TreasuryActionMode, TreasuryControlTowerSnapshot, TreasuryDataSource, TreasuryExposureSummary,
     TreasuryFloatSlice, TreasuryLiquidityForecast, TreasuryProvenance, TreasuryRecommendation,
@@ -145,25 +189,24 @@ pub use treasury_evidence::{
     normalize_treasury_balances, TreasuryEvidenceImportQuery, TreasuryEvidenceImportRecord,
     TreasuryEvidenceImportStore, UpsertTreasuryEvidenceImportRequest,
 };
-pub use trade::TradeService;
 pub use user::UserService;
+pub use venue_cashout::{
+    ConfirmVenueCashoutReceiptRequest, ConfirmedVenueCashout, PrepareHyperliquidCashoutRequest,
+    PreparedVenueCashout, VenueCashoutService,
+};
+pub use venue_funding::{
+    PersistedVenueFundingTransfer, PrepareVenueFundingTransferRequest,
+    PreparedVenueFundingTransfer, SubmitVenueFundingTransferRequest,
+    SubmittedVenueFundingTransfer, VenueFundingService,
+};
+pub use venue_trust_reporting::{
+    VenueTrustDirectionSummary, VenueTrustEvidenceExportArtifact,
+    VenueTrustEvidenceReference, VenueTrustReport, VenueTrustReportingService,
+};
+pub use venue_trust::{
+    CexConnectorReadiness, LighterConnectorReadiness, VenueConnectorReadinessRequirement,
+    VenueSubjectSnapshot, VenueTransferDetail, VenueTrustService,
+};
 pub use webhook::WebhookService;
 pub use withdraw::WithdrawService;
 pub use withdraw_policy_provider::IntentBasedWithdrawPolicyDataProvider;
-pub use commercial_readiness::{
-    CommercialExtensionRecord, CommercialReadinessService, CommercialReadinessSnapshot,
-    EnablementCheckResult,
-};
-pub use execution_explainability::{
-    ExecutionExplainabilityService, ExplainabilityWeights, RateNormalizationConfig,
-    RouteComparisonSnapshot, RouteExplainabilityFactor, RouteExplainabilityInput,
-    RouteExplainabilityResult,
-};
-pub use intelligence_sequencing::{
-    DependencyCheckResult, IntelligenceGuardrail, IntelligenceSequencingService,
-    IntelligenceSequencingSnapshot, IntelligenceWorkPackage,
-};
-pub use provider_routing::{
-    InstitutionalComplianceRecord, ProviderRoutingContext, ProviderRoutingDecision,
-    ProviderRoutingRule, ProviderRoutingService, ProviderRoutingSnapshot,
-};

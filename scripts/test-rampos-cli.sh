@@ -32,6 +32,7 @@ grep -q -- "--body" "$tmp_dir/intents-create-payin-help.txt"
 
 "${PYTHON[@]}" scripts/rampos-cli.py rfq list-open --help > "$tmp_dir/rfq-list-open-help.txt"
 grep -q -- "--admin-key" "$tmp_dir/rfq-list-open-help.txt"
+grep -q -- "--admin-jwt" "$tmp_dir/rfq-list-open-help.txt"
 
 "${PYTHON[@]}" scripts/rampos-cli.py lp rfq bid --help > "$tmp_dir/lp-rfq-bid-help.txt"
 grep -q -- "--rfq-id" "$tmp_dir/lp-rfq-bid-help.txt"
@@ -48,5 +49,8 @@ grep -q -- "--scenario" "$tmp_dir/reconciliation-workbench-help.txt"
 
 "${PYTHON[@]}" scripts/rampos-cli.py treasury workbench --help > "$tmp_dir/treasury-workbench-help.txt"
 grep -q -- "--format" "$tmp_dir/treasury-workbench-help.txt"
+
+"${PYTHON[@]}" scripts/rampos-cli.py sandbox run --help > "$tmp_dir/sandbox-run-help.txt"
+grep -q "placeholder" "$tmp_dir/sandbox-run-help.txt"
 
 echo "rampos-cli smoke passed"

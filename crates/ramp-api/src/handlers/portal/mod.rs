@@ -14,6 +14,8 @@ pub mod offramp;
 pub mod rfq;
 pub mod settings;
 pub mod transactions;
+pub mod venue_cashout;
+pub mod venue_funding;
 pub mod wallet;
 
 use axum::Router;
@@ -27,5 +29,7 @@ pub fn router() -> Router<AppState> {
         .nest("/wallet", wallet::router())
         .nest("/transactions", transactions::router())
         .nest("/intents", intents::router())
+        .nest("/venue-cashout", venue_cashout::router())
+        .nest("/venue-funding", venue_funding::router())
         .nest("/settings", settings::router())
 }

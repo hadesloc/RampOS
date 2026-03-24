@@ -19,19 +19,21 @@ export default async function AdminLayout({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  const adminKey = process.env.RAMPOS_ADMIN_KEY;
-  if (!adminKey) {
-    return <div className="p-6">Admin key not configured.</div>;
+  const sessionSecret = process.env.RAMPOS_ADMIN_JWT_SECRET;
+  if (!sessionSecret) {
+    return <div className="p-6">Admin auth not configured.</div>;
   }
 
+  // In development, allow bypassing auth to preview UI
+  const isDev = process.env.NODE_ENV === 'development';
   const cookieStore = await cookies();
   const token = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
-  if (!isAdminSessionTokenValid(token, adminKey)) {
+  if (!isDev && !isAdminSessionTokenValid(token, sessionSecret)) {
     redirect("/admin-login");
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden bg-[#050505] text-slate-300">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         <PageContainer className="py-6 md:py-8" maxWidth="2xl">

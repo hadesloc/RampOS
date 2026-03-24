@@ -199,7 +199,8 @@ impl IntentSolver {
                     .iter()
                     .find(|value| value.candidate_id == candidate_id);
 
-                let treasury_penalty_bps = signal.map(|value| value.treasury_penalty_bps).unwrap_or(0);
+                let treasury_penalty_bps =
+                    signal.map(|value| value.treasury_penalty_bps).unwrap_or(0);
                 let partner_quality_penalty_bps = signal
                     .map(|value| value.partner_quality_penalty_bps)
                     .unwrap_or(0);
@@ -244,7 +245,10 @@ impl IntentSolver {
             .max_by(|(_, left), (_, right)| {
                 left.adjusted_output
                     .cmp(&right.adjusted_output)
-                    .then_with(|| compliance_rank(&left.compliance_status).cmp(&compliance_rank(&right.compliance_status)))
+                    .then_with(|| {
+                        compliance_rank(&left.compliance_status)
+                            .cmp(&compliance_rank(&right.compliance_status))
+                    })
             })
             .map(|(index, _)| index)?;
 

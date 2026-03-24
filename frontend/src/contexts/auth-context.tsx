@@ -31,6 +31,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const PASSKEY_UNAVAILABLE_MESSAGE =
+  "Passkey sign-in is not available until the backend WebAuthn completion flow is verified.";
+const MAGIC_LINK_UNAVAILABLE_MESSAGE =
+  "Magic link sign-in is not available until token verification and session issuance are enabled.";
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [wallet, setWallet] = useState<SmartAccount | null>(null);
@@ -77,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     setError(null);
     try {
-      throw new Error("Passkey login requires a verified backend WebAuthn flow.");
+      throw new Error(PASSKEY_UNAVAILABLE_MESSAGE);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Passkey login failed";
       setIsAuthenticated(false);
@@ -94,7 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     setError(null);
     try {
-      throw new Error("Passkey registration requires a verified backend WebAuthn flow.");
+      throw new Error(PASSKEY_UNAVAILABLE_MESSAGE);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Passkey registration failed";
       setIsAuthenticated(false);
@@ -108,13 +113,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loginWithMagicLink = useCallback(async (email: string) => {
+    void email;
     setIsLoading(true);
     setError(null);
     try {
-      await authApi.requestMagicLink(email);
+      throw new Error(MAGIC_LINK_UNAVAILABLE_MESSAGE);
     } catch (err) {
-      const message =
-        err instanceof PortalApiError ? err.message : "Magic link request failed";
+      const message = err instanceof Error ? err.message : "Magic link request failed";
       setError(message);
       throw err;
     } finally {
@@ -123,16 +128,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const verifyMagicLink = useCallback(async (token: string) => {
+    void token;
     setIsLoading(true);
     setError(null);
     try {
-      const response = await authApi.verifyMagicLink(token);
-      setUser(response.user);
-      setIsAuthenticated(true);
-      router.push("/portal");
+      throw new Error(MAGIC_LINK_UNAVAILABLE_MESSAGE);
     } catch (err) {
-      const message =
-        err instanceof PortalApiError ? err.message : "Magic link verification failed";
+      const message = err instanceof Error ? err.message : "Magic link verification failed";
       setIsAuthenticated(false);
       setUser(null);
       setWallet(null);
@@ -141,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [router]);
+  }, []);
 
   const logout = useCallback(async () => {
     setError(null);

@@ -131,16 +131,17 @@ pub async fn get_kyb_evidence_package(
 ) -> Result<Json<KybEvidencePackageRecord>, ApiError> {
     super::tier::check_admin_key(&headers)?;
 
-    let pool = state
-        .db_pool
-        .clone()
-        .ok_or_else(|| ApiError::NotFound(format!("KYB evidence package {} not found", package_id)))?;
+    let pool = state.db_pool.clone().ok_or_else(|| {
+        ApiError::NotFound(format!("KYB evidence package {} not found", package_id))
+    })?;
 
     let package = KybEvidencePackageStore::new(pool)
         .get_package(&tenant_ctx.tenant_id.0, &package_id)
         .await
         .map_err(|error| ApiError::Internal(error.to_string()))?
-        .ok_or_else(|| ApiError::NotFound(format!("KYB evidence package {} not found", package_id)))?;
+        .ok_or_else(|| {
+            ApiError::NotFound(format!("KYB evidence package {} not found", package_id))
+        })?;
 
     Ok(Json(package))
 }
@@ -153,16 +154,17 @@ pub async fn export_kyb_evidence_package(
 ) -> Result<Response, ApiError> {
     super::tier::check_admin_key(&headers)?;
 
-    let pool = state
-        .db_pool
-        .clone()
-        .ok_or_else(|| ApiError::NotFound(format!("KYB evidence package {} not found", package_id)))?;
+    let pool = state.db_pool.clone().ok_or_else(|| {
+        ApiError::NotFound(format!("KYB evidence package {} not found", package_id))
+    })?;
 
     let package = KybEvidencePackageStore::new(pool)
         .get_package(&tenant_ctx.tenant_id.0, &package_id)
         .await
         .map_err(|error| ApiError::Internal(error.to_string()))?
-        .ok_or_else(|| ApiError::NotFound(format!("KYB evidence package {} not found", package_id)))?;
+        .ok_or_else(|| {
+            ApiError::NotFound(format!("KYB evidence package {} not found", package_id))
+        })?;
 
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
     Ok((
@@ -170,7 +172,9 @@ pub async fn export_kyb_evidence_package(
             (axum::http::header::CONTENT_TYPE, "application/json"),
             (
                 axum::http::header::CONTENT_DISPOSITION,
-                &format!("attachment; filename=\"kyb_evidence_package_{package_id}_{timestamp}.json\""),
+                &format!(
+                    "attachment; filename=\"kyb_evidence_package_{package_id}_{timestamp}.json\""
+                ),
             ),
         ],
         serde_json::to_string_pretty(&package)

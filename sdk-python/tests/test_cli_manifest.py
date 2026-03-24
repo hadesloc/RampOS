@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rampos.cli.manifest import CURATED_OPERATIONS, load_manifest, parse_openapi_operation_ids
+from rampos.cli.manifest import (
+    CURATED_OPERATIONS,
+    load_manifest,
+    load_mcp_v1_manifest,
+    parse_openapi_operation_ids,
+)
 
 
 def test_parse_openapi_operation_ids_extracts_known_core_operations() -> None:
@@ -40,6 +45,8 @@ def test_manifest_includes_required_curated_surface_details() -> None:
     assert operations["lp.rfq.bid"]["path"] == "/v1/lp/rfq/:rfq_id/bid"
     assert operations["admin.bridge.transfer"]["method"] == "POST"
     assert operations["admin.licensing.upload"]["contract_source"] == "CURATED"
+    assert operations["admin.bridge.transfer"]["safety_class"] == "approval_bounded_write"
+    assert operations["admin.bridge.transfer"]["mcp_default"] is False
 
 
 def test_manifest_extracts_route_metadata_for_core_openapi_operations() -> None:
@@ -50,3 +57,29 @@ def test_manifest_extracts_route_metadata_for_core_openapi_operations() -> None:
     assert operations["create_payin"]["path"] == "/v1/intents/payin"
     assert operations["get_intent"]["method"] == "GET"
     assert operations["get_intent"]["path"] == "/v1/intents/{id}"
+
+
+def test_mcp_v1_manifest_is_explicit_read_heavy_catalog() -> None:
+    mcp_manifest = load_mcp_v1_manifest()
+    operation_ids = set(mcp_manifest["operation_ids"])
+    operations = {operation["operation_id"]: operation for operation in mcp_manifest["operations"]}
+
+    required_ids = {
+        "portal.watch.stream",
+        "admin.reconciliation.workbench",
+        "admin.reconciliation.evidence",
+        "admin.treasury.workbench",
+        "admin.webhooks.catalog",
+        "admin.webhooks.history",
+        "admin.certification.artifact",
+        "admin.venue_trust.lighter_readiness",
+        "admin.venue_trust.cex_readiness",
+        "admin.venue_trust.report_snapshot",
+        "admin.venue_trust.report_export",
+    }
+    assert required_ids.issubset(operation_ids)
+    assert "admin.bridge.transfer" not in operation_ids
+    assert "admin.rfq.finalize" not in operation_ids
+    assert operations["portal.watch.stream"]["mcp_exposure"] == "v1_default"
+    assert operations["admin.certification.artifact"]["safety_class"] == "read"
+    assert operations["admin.venue_trust.report_export"]["path"] == "/v1/admin/venue-trust/reports/{subject_type}/{subject_id}/export"

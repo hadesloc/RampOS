@@ -15,6 +15,24 @@ use crate::handlers::health::*;
 use crate::handlers::intent::*;
 use crate::handlers::payin::*;
 use crate::handlers::payout::*;
+#[allow(unused_imports)]
+use crate::handlers::portal::venue_cashout::{
+    confirm_hyperliquid_wallet_receipt, prepare_hyperliquid_cashout,
+    HyperliquidCashoutPrepareRequest, HyperliquidCashoutPrepareResponse,
+    HyperliquidCashoutReceiptRequest, HyperliquidCashoutReceiptResponse,
+};
+#[allow(unused_imports)]
+use crate::handlers::portal::venue_funding::{
+    connect_venue_funding, get_venue_funding_eligibility, get_venue_funding_status,
+    list_venue_funding_venues, prepare_venue_funding, submit_venue_funding,
+    VenueFundingAccountSummaryResponse, VenueFundingChecklistItemResponse,
+    VenueFundingConnectionRequest, VenueFundingConnectionResponse,
+    VenueFundingConnectionSummaryResponse, VenueFundingEligibilityResponse,
+    VenueFundingEligibilityReasonResponse, VenueFundingPrepareRequest,
+    VenueFundingPrepareResponse, VenueFundingSourceOfFundsResponse, VenueFundingStatusResponse,
+    VenueFundingSubmitRequest, VenueFundingSubmitResponse, VenueListResponse,
+    VenueSummaryResponse,
+};
 use crate::handlers::stablecoin::*;
 use crate::handlers::trade::*;
 // Import admin and bank_webhook handlers + utoipa __path_xxx generated types via re-export
@@ -24,6 +42,16 @@ use crate::handlers::{
     __path_handle_bank_webhook, __path_list_cases, __path_list_users, __path_update_case, get_case,
     get_case_stats, get_dashboard, get_user, handle_bank_webhook, list_cases, list_users,
     update_case,
+};
+#[allow(unused_imports)]
+use crate::handlers::portal::venue_cashout::{
+    __path_confirm_hyperliquid_wallet_receipt, __path_prepare_hyperliquid_cashout,
+};
+#[allow(unused_imports)]
+use crate::handlers::portal::venue_funding::{
+    __path_connect_venue_funding, __path_get_venue_funding_eligibility,
+    __path_get_venue_funding_status, __path_list_venue_funding_venues,
+    __path_prepare_venue_funding, __path_submit_venue_funding,
 };
 // Admin types with aliases to avoid name conflicts
 use crate::handlers::admin::{
@@ -64,6 +92,7 @@ use crate::handlers::admin::{
         (name = "chains", description = "Multi-chain operations and cross-chain bridging"),
         (name = "stablecoin", description = "VNST stablecoin mint, burn, reserves, and peg status"),
         (name = "domains", description = "Custom domain management for tenants"),
+        (name = "portal", description = "Portal end-user flows including explicit venue listing, connection, eligibility, prepare, submit, and status"),
         (name = "webhooks", description = "Incoming bank webhook processing and outgoing tenant webhook contracts aligned to the `v1` event catalog")
     ),
     paths(
@@ -107,6 +136,15 @@ use crate::handlers::admin::{
         delete_domain,
         verify_dns,
         provision_ssl,
+        // Portal
+        prepare_hyperliquid_cashout,
+        confirm_hyperliquid_wallet_receipt,
+        list_venue_funding_venues,
+        connect_venue_funding,
+        get_venue_funding_eligibility,
+        prepare_venue_funding,
+        submit_venue_funding,
+        get_venue_funding_status,
         // Webhooks
         handle_bank_webhook,
         // Admin
@@ -190,6 +228,25 @@ use crate::handlers::admin::{
             DnsVerificationResponse,
             SslProvisioningResponse,
             DeleteDomainResponse,
+            HyperliquidCashoutPrepareRequest,
+            HyperliquidCashoutPrepareResponse,
+            HyperliquidCashoutReceiptRequest,
+            HyperliquidCashoutReceiptResponse,
+            VenueListResponse,
+            VenueSummaryResponse,
+            VenueFundingConnectionRequest,
+            VenueFundingConnectionResponse,
+            VenueFundingConnectionSummaryResponse,
+            VenueFundingAccountSummaryResponse,
+            VenueFundingPrepareRequest,
+            VenueFundingPrepareResponse,
+            VenueFundingStatusResponse,
+            VenueFundingChecklistItemResponse,
+            VenueFundingEligibilityResponse,
+            VenueFundingEligibilityReasonResponse,
+            VenueFundingSourceOfFundsResponse,
+            VenueFundingSubmitRequest,
+            VenueFundingSubmitResponse,
             // Error responses
             ErrorResponse,
             ErrorBody,
@@ -280,8 +337,859 @@ impl utoipa::Modify for SecurityAddon {
         attach_manual_passport_paths(openapi);
         attach_manual_kyb_paths(openapi);
         attach_manual_config_bundle_paths(openapi);
+        attach_manual_commercial_readiness_paths(openapi);
+        attach_manual_commercialization_pack_paths(openapi);
+        attach_manual_provider_routing_paths(openapi);
         attach_manual_partner_registry_paths(openapi);
+        attach_manual_execution_explainability_paths(openapi);
+        attach_manual_venue_trust_paths(openapi);
     }
+}
+
+fn attach_manual_venue_trust_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    insert_manual_path(
+        openapi,
+        "/v1/admin/venue-trust/reports/{subject_type}/{subject_id}",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "getVenueTrustReportSnapshot",
+                "summary": "Get venue trust report snapshot",
+                "description": "Returns a read-only trust report snapshot for the supplied subject, covering cash-in and cash-out transfer summaries plus evidence references.",
+                "parameters": [
+                    {
+                        "name": "subject_type",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "subject_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Venue trust report snapshot",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "source",
+                                        "subjectType",
+                                        "subjectId",
+                                        "connectionIds",
+                                        "accountIds",
+                                        "walletAttestationIds",
+                                        "beneficiaryProfileIds",
+                                        "sourceOfFundsPackageIds",
+                                        "cashIn",
+                                        "cashOut",
+                                        "evidenceReferences"
+                                    ],
+                                    "properties": {
+                                        "source": { "type": "string" },
+                                        "subjectType": { "type": "string" },
+                                        "subjectId": { "type": "string" },
+                                        "connectionIds": { "type": "array", "items": { "type": "string" } },
+                                        "accountIds": { "type": "array", "items": { "type": "string" } },
+                                        "walletAttestationIds": { "type": "array", "items": { "type": "string" } },
+                                        "beneficiaryProfileIds": { "type": "array", "items": { "type": "string" } },
+                                        "sourceOfFundsPackageIds": { "type": "array", "items": { "type": "string" } },
+                                        "cashIn": { "type": "object" },
+                                        "cashOut": { "type": "object" },
+                                        "evidenceReferences": { "type": "array", "items": { "type": "object" } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/venue-trust/reports/{subject_type}/{subject_id}/export",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "exportVenueTrustReport",
+                "summary": "Export venue trust evidence report",
+                "description": "Exports the venue trust evidence report as JSON for the supplied subject.",
+                "parameters": [
+                    {
+                        "name": "subject_type",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "subject_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Venue trust evidence export",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["subjectType", "subjectId", "cashIn", "cashOut", "evidenceReferences"],
+                                    "properties": {
+                                        "subjectType": { "type": "string" },
+                                        "subjectId": { "type": "string" },
+                                        "cashIn": { "type": "object" },
+                                        "cashOut": { "type": "object" },
+                                        "evidenceReferences": { "type": "array", "items": { "type": "object" } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/venue-trust/connectors/cex/{connector_key}/readiness/{subject_type}/{subject_id}",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "getCexConnectorReadinessSnapshot",
+                "summary": "Get generic CEX connector readiness snapshot",
+                "description": "Returns a read-only operator-first readiness snapshot for a generic CEX connector, including API key mode, subaccount mode, withdrawal allowlist status, custody boundary mode, and requirement satisfaction.",
+                "parameters": [
+                    {
+                        "name": "connector_key",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "subject_type",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "subject_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Generic CEX connector readiness snapshot",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "connectorKey",
+                                        "status",
+                                        "connectionId",
+                                        "accountId",
+                                        "apiKeyMode",
+                                        "subaccountMode",
+                                        "withdrawalAllowlistStatus",
+                                        "custodyBoundaryMode",
+                                        "requirements"
+                                    ],
+                                    "properties": {
+                                        "connectorKey": { "type": "string" },
+                                        "status": { "type": "string" },
+                                        "connectionId": { "type": "string", "nullable": true },
+                                        "accountId": { "type": "string", "nullable": true },
+                                        "apiKeyMode": { "type": "string", "nullable": true },
+                                        "subaccountMode": { "type": "string", "nullable": true },
+                                        "withdrawalAllowlistStatus": { "type": "string", "nullable": true },
+                                        "custodyBoundaryMode": { "type": "string", "nullable": true },
+                                        "requirements": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "required": ["code", "satisfied", "source", "message"],
+                                                "properties": {
+                                                    "code": { "type": "string" },
+                                                    "satisfied": { "type": "boolean" },
+                                                    "source": { "type": "string" },
+                                                    "message": { "type": "string" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/venue-trust/connectors/lighter/readiness/{subject_type}/{subject_id}",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "getLighterConnectorReadinessSnapshot",
+                "summary": "Get Lighter connector readiness snapshot",
+                "description": "Returns a read-only operator-first readiness snapshot for the Lighter connector, including public pool mode, proof anchor mode, operator linkage, institutional evidence status, and requirement satisfaction.",
+                "parameters": [
+                    {
+                        "name": "subject_type",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "subject_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Lighter connector readiness snapshot",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "connectorKey",
+                                        "status",
+                                        "connectionId",
+                                        "accountId",
+                                        "publicPoolMode",
+                                        "proofAnchorMode",
+                                        "operatorLinkageStatus",
+                                        "institutionalEvidenceStatus",
+                                        "requirements"
+                                    ],
+                                    "properties": {
+                                        "connectorKey": { "type": "string" },
+                                        "status": { "type": "string" },
+                                        "connectionId": { "type": "string", "nullable": true },
+                                        "accountId": { "type": "string", "nullable": true },
+                                        "publicPoolMode": { "type": "string", "nullable": true },
+                                        "proofAnchorMode": { "type": "string", "nullable": true },
+                                        "operatorLinkageStatus": { "type": "string", "nullable": true },
+                                        "institutionalEvidenceStatus": { "type": "string", "nullable": true },
+                                        "requirements": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "required": ["code", "satisfied", "source", "message"],
+                                                "properties": {
+                                                    "code": { "type": "string" },
+                                                    "satisfied": { "type": "boolean" },
+                                                    "source": { "type": "string" },
+                                                    "message": { "type": "string" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/venue-trust/delegation-prerequisites/{subject_type}/{subject_id}/delegates/{delegate}",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "getDelegationPrerequisitesSnapshot",
+                "summary": "Get delegation prerequisites snapshot",
+                "description": "Returns a read-only admin snapshot of effective delegation prerequisites and execution-envelope evaluation for a subject/delegate pair.",
+                "parameters": [
+                    {
+                        "name": "subject_type",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "subject_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "delegate",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "tool_surface",
+                        "in": "query",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "approval_boundary",
+                        "in": "query",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Delegation prerequisites snapshot",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "subjectType",
+                                        "subjectId",
+                                        "tenantId",
+                                        "delegate",
+                                        "prerequisites",
+                                        "evaluation"
+                                    ],
+                                    "properties": {
+                                        "subjectType": { "type": "string" },
+                                        "subjectId": { "type": "string" },
+                                        "tenantId": { "type": "string" },
+                                        "delegate": { "type": "string" },
+                                        "prerequisites": {
+                                            "type": "object",
+                                            "required": ["allowedToolSurfaces", "approvalBoundary"],
+                                            "properties": {
+                                                "allowedToolSurfaces": {
+                                                    "type": "array",
+                                                    "items": { "type": "string" }
+                                                },
+                                                "approvalBoundary": { "type": "string" }
+                                            }
+                                        },
+                                        "evaluation": {
+                                            "type": "object",
+                                            "required": [
+                                                "allowed",
+                                                "requestedToolSurface",
+                                                "requestedApprovalBoundary",
+                                                "denialReasons"
+                                            ],
+                                            "properties": {
+                                                "allowed": { "type": "boolean" },
+                                                "requestedToolSurface": { "type": "string" },
+                                                "requestedApprovalBoundary": { "type": "string" },
+                                                "denialReasons": {
+                                                    "type": "array",
+                                                    "items": { "type": "string" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/venue-trust/subjects/{subject_type}/{subject_id}",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "getVenueTrustSubjectSnapshot",
+                "summary": "Get venue trust subject snapshot",
+                "description": "Returns the venue trust subject snapshot for the provided subject type and subject id, including connections, attestations, transfers, and source-of-funds packages.",
+                "parameters": [
+                    {
+                        "name": "subject_type",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "subject_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Venue trust subject snapshot",
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/venue-trust/connections/{id}/review",
+        json!({
+            "post": {
+                "tags": ["admin"],
+                "operationId": "reviewVenueTrustConnection",
+                "summary": "Review venue trust connection",
+                "description": "Transitions a venue connection into an operator-reviewed status and records review metadata such as review reason, optional failure reason, and provenance.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["status", "reviewReason"],
+                                "properties": {
+                                    "status": { "type": "string" },
+                                    "reviewReason": { "type": "string" },
+                                    "failureReason": { "type": "string" },
+                                    "provenance": { "type": "object" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Reviewed venue connection",
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/venue-trust/transfers/{id}",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "getVenueTrustTransferDetail",
+                "summary": "Get venue trust transfer detail",
+                "description": "Returns a venue transfer detail view with the transfer, connection, wallet attestation, and source-of-funds packages for the supplied transfer id.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Venue trust transfer detail",
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/venue-trust/transfers/{id}/review",
+        json!({
+            "post": {
+                "tags": ["admin"],
+                "operationId": "reviewVenueTrustTransfer",
+                "summary": "Review venue trust transfer",
+                "description": "Transitions a venue transfer into an operator-reviewed status and records review metadata such as review reason, optional failure reason, and provenance.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["status", "reviewReason"],
+                                "properties": {
+                                    "status": { "type": "string" },
+                                    "reviewReason": { "type": "string" },
+                                    "failureReason": { "type": "string" },
+                                    "provenance": { "type": "object" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Reviewed venue transfer",
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/venue-trust/source-of-funds-packages/{id}/review",
+        json!({
+            "post": {
+                "tags": ["admin"],
+                "operationId": "reviewVenueTrustSourceOfFundsPackage",
+                "summary": "Review venue trust source-of-funds package",
+                "description": "Transitions a source-of-funds package into an operator-reviewed status and records review metadata such as review reason, optional failure reason, and provenance.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["status", "reviewReason"],
+                                "properties": {
+                                    "status": { "type": "string" },
+                                    "reviewReason": { "type": "string" },
+                                    "failureReason": { "type": "string" },
+                                    "provenance": { "type": "object" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Reviewed source-of-funds package",
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/venue-trust/wallet-attestations/{id}/review",
+        json!({
+            "post": {
+                "tags": ["admin"],
+                "operationId": "reviewVenueTrustWalletAttestation",
+                "summary": "Review venue trust wallet attestation",
+                "description": "Transitions a wallet attestation into an operator-reviewed status and records review metadata such as review reason and optional failure reason.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string", "format": "uuid" }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["status", "reviewReason"],
+                                "properties": {
+                                    "status": { "type": "string" },
+                                    "reviewReason": { "type": "string" },
+                                    "failureReason": { "type": "string" },
+                                    "provenance": { "type": "object" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Reviewed wallet attestation",
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+}
+
+fn attach_manual_execution_explainability_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    insert_manual_path(
+        openapi,
+        "/v1/admin/execution-explainability/explain",
+        json!({
+            "post": {
+                "tags": ["admin"],
+                "operationId": "explainExecutionRoute",
+                "summary": "Explain a single execution route",
+                "description": "Scores a route candidate using runtime LP, treasury, corridor, and compliance signals. Returns eligibility, factors, and provenance.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "routeId",
+                                    "lpId",
+                                    "direction",
+                                    "asset",
+                                    "treasuryStressActive",
+                                    "corridorPolicyEligible",
+                                    "complianceEligible",
+                                    "quotedRate",
+                                    "quotedVndAmount"
+                                ],
+                                "properties": {
+                                    "routeId": { "type": "string" },
+                                    "corridorCode": { "type": "string" },
+                                    "lpId": { "type": "string" },
+                                    "direction": { "type": "string" },
+                                    "asset": { "type": "string" },
+                                    "providerFamily": { "type": "string" },
+                                    "lpReliabilityScore": { "type": "string" },
+                                    "lpFillRate": { "type": "string" },
+                                    "lpDisputeRate": { "type": "string" },
+                                    "treasuryFloatAvailable": { "type": "string" },
+                                    "treasuryStressActive": { "type": "boolean" },
+                                    "corridorPolicyEligible": { "type": "boolean" },
+                                    "complianceEligible": { "type": "boolean" },
+                                    "quotedRate": { "type": "string" },
+                                    "quotedVndAmount": { "type": "string" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Explainability result",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["routeId", "eligible", "factors", "provenance"],
+                                    "properties": {
+                                        "routeId": { "type": "string" },
+                                        "eligible": { "type": "boolean" },
+                                        "factors": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "required": [
+                                                    "factorName",
+                                                    "weight",
+                                                    "rawValue",
+                                                    "contribution",
+                                                    "explanation"
+                                                ],
+                                                "properties": {
+                                                    "factorName": { "type": "string" },
+                                                    "weight": { "type": "string" },
+                                                    "rawValue": { "type": "string" },
+                                                    "contribution": { "type": "string" },
+                                                    "explanation": { "type": "string" }
+                                                }
+                                            }
+                                        },
+                                        "provenance": { "type": "object" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/execution-explainability/compare",
+        json!({
+            "post": {
+                "tags": ["admin"],
+                "operationId": "compareExecutionRoutes",
+                "summary": "Compare execution routes",
+                "description": "Ranks multiple routes using runtime signals and exposes a provenance-rich snapshot.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["direction", "inputs"],
+                                "properties": {
+                                    "corridorCode": { "type": "string" },
+                                    "direction": { "type": "string" },
+                                    "inputs": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "required": [
+                                                "routeId",
+                                                "lpId",
+                                                "direction",
+                                                "asset",
+                                                "treasuryStressActive",
+                                                "corridorPolicyEligible",
+                                                "complianceEligible",
+                                                "quotedRate",
+                                                "quotedVndAmount"
+                                            ],
+                                            "properties": {
+                                                "routeId": { "type": "string" },
+                                                "corridorCode": { "type": "string" },
+                                                "lpId": { "type": "string" },
+                                                "direction": { "type": "string" },
+                                                "asset": { "type": "string" },
+                                                "providerFamily": { "type": "string" },
+                                                "lpReliabilityScore": { "type": "string" },
+                                                "lpFillRate": { "type": "string" },
+                                                "lpDisputeRate": { "type": "string" },
+                                                "treasuryFloatAvailable": { "type": "string" },
+                                                "treasuryStressActive": { "type": "boolean" },
+                                                "corridorPolicyEligible": { "type": "boolean" },
+                                                "complianceEligible": { "type": "boolean" },
+                                                "quotedRate": { "type": "string" },
+                                                "quotedVndAmount": { "type": "string" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Comparison snapshot",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["candidates", "winningRouteId", "provenance"],
+                                    "properties": {
+                                        "candidates": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "required": [
+                                                    "routeId",
+                                                    "lpId",
+                                                    "direction",
+                                                    "compositeScore",
+                                                    "factors",
+                                                    "eligible",
+                                                    "ineligibilityReasons",
+                                                    "summary",
+                                                    "provenance"
+                                                ],
+                                                "properties": {
+                                                    "routeId": { "type": "string" },
+                                                    "lpId": { "type": "string" },
+                                                    "direction": { "type": "string" },
+                                                    "compositeScore": { "type": "string" },
+                                                    "factors": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "required": [
+                                                                "factorName",
+                                                                "weight",
+                                                                "rawValue",
+                                                                "contribution",
+                                                                "explanation"
+                                                            ],
+                                                            "properties": {
+                                                                "factorName": { "type": "string" },
+                                                                "weight": { "type": "string" },
+                                                                "rawValue": { "type": "string" },
+                                                                "contribution": { "type": "string" },
+                                                                "explanation": { "type": "string" }
+                                                            }
+                                                        }
+                                                    },
+                                                    "eligible": { "type": "boolean" },
+                                                    "ineligibilityReasons": {
+                                                        "type": "array",
+                                                        "items": { "type": "string" }
+                                                    },
+                                                    "summary": { "type": "string" },
+                                                    "provenance": { "type": "object" }
+                                                }
+                                            }
+                                        },
+                                        "winningRouteId": { "type": "string", "nullable": true },
+                                        "provenance": { "type": "object" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
 }
 
 fn attach_manual_reconciliation_paths(openapi: &mut utoipa::openapi::OpenApi) {
@@ -293,7 +1201,7 @@ fn attach_manual_reconciliation_paths(openapi: &mut utoipa::openapi::OpenApi) {
                 "tags": ["admin"],
                 "operationId": "getReconciliationWorkbench",
                 "summary": "Load reconciliation workbench",
-                "description": "Returns the bounded reconciliation workbench snapshot used by the thin CLI and admin UI, plus operator-assisted gated actions that remain approval-linked and audit-linked on the current admin seam.",
+                "description": "Returns the bounded reconciliation workbench snapshot used by the thin CLI and admin UI. Runtime inputs are surfaced as evidence-backed provenance, while sample fallback remains explicitly bounded fallback with warning context; gated actions remain approval-linked and audit-linked on the current admin seam.",
                 "parameters": [
                     {
                         "name": "scenario",
@@ -308,7 +1216,36 @@ fn attach_manual_reconciliation_paths(openapi: &mut utoipa::openapi::OpenApi) {
                         "description": "Reconciliation workbench snapshot",
                         "content": {
                             "application/json": {
-                                "schema": { "type": "object" }
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["snapshot", "actionMode", "exportFormats", "incidentLinkHint", "gatedActions"],
+                                    "properties": {
+                                        "snapshot": {
+                                            "type": "object",
+                                            "required": ["generatedAt", "report", "queue", "provenance"],
+                                            "properties": {
+                                                "generatedAt": { "type": "string", "format": "date-time" },
+                                                "report": { "type": "object" },
+                                                "queue": { "type": "array", "items": { "type": "object" } },
+                                                "provenance": {
+                                                    "type": "object",
+                                                    "required": ["sourceKind", "sourceClass", "settlementCount", "onChainTxCount"],
+                                                    "properties": {
+                                                        "sourceKind": { "type": "string" },
+                                                        "sourceClass": { "type": "string" },
+                                                        "settlementCount": { "type": "integer", "minimum": 0 },
+                                                        "onChainTxCount": { "type": "integer", "minimum": 0 },
+                                                        "freshnessWarning": { "type": "string", "nullable": true }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "actionMode": { "type": "string" },
+                                        "exportFormats": { "type": "array", "items": { "type": "string" } },
+                                        "incidentLinkHint": { "type": "string" },
+                                        "gatedActions": { "type": "array", "items": { "type": "object" } }
+                                    }
+                                }
                             }
                         }
                     }
@@ -325,7 +1262,7 @@ fn attach_manual_reconciliation_paths(openapi: &mut utoipa::openapi::OpenApi) {
                 "tags": ["admin"],
                 "operationId": "exportReconciliationWorkbench",
                 "summary": "Export reconciliation workbench",
-                "description": "Exports the bounded reconciliation queue snapshot as JSON or CSV.",
+                "description": "Exports the bounded reconciliation queue snapshot as JSON or CSV, preserving provenance classification so evidence-backed runtime inputs remain distinct from bounded fallback exports.",
                 "parameters": [
                     {
                         "name": "scenario",
@@ -367,7 +1304,7 @@ fn attach_manual_reconciliation_paths(openapi: &mut utoipa::openapi::OpenApi) {
                 "tags": ["admin"],
                 "operationId": "getReconciliationEvidence",
                 "summary": "Load reconciliation evidence pack",
-                "description": "Returns the linked evidence pack for one reconciliation discrepancy, including additive evidence-source and lineage context on the current admin seam.",
+                "description": "Returns the linked evidence pack for one reconciliation discrepancy, including additive evidence-source and lineage context on the current admin seam. When the surrounding workbench originated from bounded fallback instead of evidence-backed runtime inputs, operators should treat this evidence context as bounded fallback rather than production truth.",
                 "parameters": [
                     {
                         "name": "id",
@@ -406,7 +1343,7 @@ fn attach_manual_reconciliation_paths(openapi: &mut utoipa::openapi::OpenApi) {
                 "tags": ["admin"],
                 "operationId": "exportReconciliationEvidence",
                 "summary": "Export reconciliation evidence pack",
-                "description": "Exports one reconciliation evidence pack as JSON, including additive evidence-source and lineage context.",
+                "description": "Exports one reconciliation evidence pack as JSON, including additive evidence-source and lineage context, while preserving the distinction between evidence-backed runtime context and bounded fallback operator review context.",
                 "parameters": [
                     {
                         "name": "id",
@@ -885,9 +1822,7 @@ fn attach_manual_kyb_paths(openapi: &mut utoipa::openapi::OpenApi) {
             }
         }),
     );
-
 }
-
 
 fn attach_manual_partner_registry_paths(openapi: &mut utoipa::openapi::OpenApi) {
     insert_manual_path(
@@ -948,14 +1883,50 @@ fn attach_manual_config_bundle_paths(openapi: &mut utoipa::openapi::OpenApi) {
                     "200": {
                         "description": "Config bundle export artifact",
                         "content": {
-                            "application/json": { "schema": { "type": "object" } }
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["bundle"],
+                                    "properties": {
+                                        "bundle": {
+                                            "type": "object",
+                                            "required": [
+                                                "bundleId",
+                                                "tenantName",
+                                                "exportedAt",
+                                                "actionMode",
+                                                "sections",
+                                                "payload",
+                                                "approvalStatus",
+                                                "rolloutScope",
+                                                "provenance",
+                                                "source"
+                                            ],
+                                            "properties": {
+                                                "bundleId": { "type": "string" },
+                                                "tenantName": { "type": "string" },
+                                                "exportedAt": { "type": "string" },
+                                                "actionMode": { "type": "string" },
+                                                "sections": {
+                                                    "type": "array",
+                                                    "items": { "type": "string" }
+                                                },
+                                                "payload": { "type": "object" },
+                                                "approvalStatus": { "type": "string" },
+                                                "rolloutScope": { "type": "object" },
+                                                "provenance": { "type": "object" },
+                                                "source": { "type": "string" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }),
     );
-
     insert_manual_path(
         openapi,
         "/v1/admin/extensions",
@@ -969,7 +1940,384 @@ fn attach_manual_config_bundle_paths(openapi: &mut utoipa::openapi::OpenApi) {
                     "200": {
                         "description": "Whitelisted extension action registry",
                         "content": {
-                            "application/json": { "schema": { "type": "object" } }
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["actionMode", "actions", "provenance"],
+                                    "properties": {
+                                        "actionMode": { "type": "string" },
+                                        "actions": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "required": [
+                                                    "actionId",
+                                                    "label",
+                                                    "description",
+                                                    "enabled",
+                                                    "approvalRequired",
+                                                    "approvalStatus",
+                                                    "rolloutScope",
+                                                    "provenance",
+                                                    "source"
+                                                ],
+                                                "properties": {
+                                                    "actionId": { "type": "string" },
+                                                    "label": { "type": "string" },
+                                                    "description": { "type": "string" },
+                                                    "enabled": { "type": "boolean" },
+                                                    "approvalRequired": { "type": "boolean" },
+                                                    "approvalStatus": { "type": "string" },
+                                                    "rolloutScope": { "type": "object" },
+                                                    "provenance": { "type": "object" },
+                                                    "source": { "type": "string" }
+                                                }
+                                            }
+                                        },
+                                        "provenance": {
+                                            "type": "object",
+                                            "required": ["mode", "sourceClass", "actionCount", "sources"],
+                                            "properties": {
+                                                "mode": { "type": "string" },
+                                                "sourceClass": { "type": "string" },
+                                                "reason": { "type": "string" },
+                                                "actionCount": { "type": "integer" },
+                                                "sources": {
+                                                    "type": "array",
+                                                    "items": { "type": "string" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+}
+
+fn attach_manual_provider_routing_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    insert_manual_path(
+        openapi,
+        "/v1/admin/provider-routing/snapshot",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "getProviderRoutingSnapshot",
+                "summary": "Get provider routing snapshot",
+                "description": "Returns the current provider-routing runtime snapshot. When a database-backed policy store is available, the snapshot is sourced from persisted provider routing policies and exposes top-level provenance.",
+                "responses": {
+                    "200": {
+                        "description": "Provider routing snapshot",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["actionMode", "source", "rules", "institutionalRecords", "provenance"],
+                                    "properties": {
+                                        "actionMode": { "type": "string" },
+                                        "source": { "type": "string" },
+                                        "rules": {
+                                            "type": "array",
+                                            "items": { "type": "object" }
+                                        },
+                                        "institutionalRecords": {
+                                            "type": "array",
+                                            "items": { "type": "object" }
+                                        },
+                                        "provenance": { "type": "object" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/provider-routing/evaluate",
+        json!({
+            "post": {
+                "tags": ["admin"],
+                "operationId": "evaluateProviderRouting",
+                "summary": "Evaluate provider routing",
+                "description": "Evaluates provider routing for a supplied context. When `providerFamily` and a DB-backed policy store are present, the decision uses authoritative persisted policy selection and exposes matched-policy provenance.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "providerFamily": { "type": "string" },
+                                    "corridorCode": { "type": "string" },
+                                    "entityType": { "type": "string" },
+                                    "riskTier": { "type": "string" },
+                                    "amount": { "type": "string" },
+                                    "asset": { "type": "string" },
+                                    "partnerId": { "type": "string" },
+                                    "tenantId": { "type": "string" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Provider routing decision",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "selectedProviderKey",
+                                        "selectedProviderClass",
+                                        "matchedRuleId",
+                                        "matchPriority",
+                                        "evaluationContext",
+                                        "fallbackUsed",
+                                        "explanation",
+                                        "provenance"
+                                    ],
+                                    "properties": {
+                                        "selectedProviderKey": { "type": "string" },
+                                        "selectedProviderClass": { "type": "string" },
+                                        "matchedRuleId": { "type": "string" },
+                                        "matchPriority": { "type": "integer" },
+                                        "evaluationContext": { "type": "object" },
+                                        "fallbackUsed": { "type": "boolean" },
+                                        "explanation": { "type": "string" },
+                                        "provenance": { "type": "object" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+}
+
+fn attach_manual_commercial_readiness_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    insert_manual_path(
+        openapi,
+        "/v1/admin/commercial-readiness/snapshot",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "getCommercialReadinessSnapshot",
+                "summary": "Get commercial readiness snapshot",
+                "description": "Returns the commercial readiness control-plane snapshot. Governed partner registry, corridor pack, compliance, and approval records are used by default when available; otherwise a bounded fallback catalog is returned with explicit provenance.",
+                "responses": {
+                    "200": {
+                        "description": "Commercial readiness snapshot",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["actionMode", "source", "extensions", "enabledCount", "disabledCount", "provenance"],
+                                    "properties": {
+                                        "actionMode": { "type": "string" },
+                                        "source": { "type": "string" },
+                                        "extensions": {
+                                            "type": "array",
+                                            "items": { "type": "object" }
+                                        },
+                                        "enabledCount": { "type": "integer" },
+                                        "disabledCount": { "type": "integer" },
+                                        "provenance": { "type": "object" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/commercial-readiness/check",
+        json!({
+            "post": {
+                "tags": ["admin"],
+                "operationId": "checkCommercialReadinessEnablement",
+                "summary": "Check commercial readiness enablement",
+                "description": "Evaluates whether a bounded commercial readiness extension can be enabled and returns missing prerequisites clearly, together with provenance for the readiness record used.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "extensionId",
+                                    "availablePartnerCapabilities",
+                                    "availableCorridorPacks",
+                                    "complianceChecksPassed"
+                                ],
+                                "properties": {
+                                    "extensionId": { "type": "string" },
+                                    "availablePartnerCapabilities": {
+                                        "type": "array",
+                                        "items": { "type": "string" }
+                                    },
+                                    "availableCorridorPacks": {
+                                        "type": "array",
+                                        "items": { "type": "string" }
+                                    },
+                                    "complianceChecksPassed": {
+                                        "type": "array",
+                                        "items": { "type": "string" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Commercial readiness enablement result",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "extensionId",
+                                        "canEnable",
+                                        "hasApproval",
+                                        "missingCapabilities",
+                                        "missingCorridors",
+                                        "missingCompliance",
+                                        "provenance"
+                                    ],
+                                    "properties": {
+                                        "extensionId": { "type": "string" },
+                                        "canEnable": { "type": "boolean" },
+                                        "hasApproval": { "type": "boolean" },
+                                        "missingCapabilities": {
+                                            "type": "array",
+                                            "items": { "type": "string" }
+                                        },
+                                        "missingCorridors": {
+                                            "type": "array",
+                                            "items": { "type": "string" }
+                                        },
+                                        "missingCompliance": {
+                                            "type": "array",
+                                            "items": { "type": "string" }
+                                        },
+                                        "provenance": { "type": "object" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+}
+
+fn attach_manual_commercialization_pack_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    insert_manual_path(
+        openapi,
+        "/v1/admin/commercialization-packs",
+        json!({
+            "get": {
+                "tags": ["admin"],
+                "operationId": "listCommercializationPacks",
+                "summary": "List commercialization packs",
+                "description": "Returns commercialization packs composed from governed partner, commercial readiness, and corridor state, including a narrow runtime reference suitable for pilot corridor consumption.",
+                "responses": {
+                    "200": {
+                        "description": "Commercialization pack snapshot",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["actionMode", "source", "packs", "provenance"],
+                                    "properties": {
+                                        "actionMode": { "type": "string" },
+                                        "source": { "type": "string" },
+                                        "packs": {
+                                            "type": "array",
+                                            "items": { "type": "object" }
+                                        },
+                                        "provenance": { "type": "object" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": ["admin"],
+                "operationId": "upsertCommercializationPack",
+                "summary": "Upsert commercialization pack",
+                "description": "Creates or updates a commercialization pack reference and returns the composed snapshot on the current governed seams.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "commercializationPackId",
+                                    "packCode",
+                                    "partnerId",
+                                    "partnerCapabilityId",
+                                    "commercialExtensionId",
+                                    "corridorCode",
+                                    "lifecycleState",
+                                    "rolloutState",
+                                    "metadata"
+                                ],
+                                "properties": {
+                                    "commercializationPackId": { "type": "string" },
+                                    "tenantId": { "type": "string" },
+                                    "packCode": { "type": "string" },
+                                    "partnerId": { "type": "string" },
+                                    "partnerCapabilityId": { "type": "string" },
+                                    "commercialExtensionId": { "type": "string" },
+                                    "corridorCode": { "type": "string" },
+                                    "approvalReference": { "type": "string" },
+                                    "lifecycleState": { "type": "string" },
+                                    "rolloutState": { "type": "string" },
+                                    "metadata": { "type": "object" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Commercialization pack snapshot",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["actionMode", "source", "packs", "provenance"],
+                                    "properties": {
+                                        "actionMode": { "type": "string" },
+                                        "source": { "type": "string" },
+                                        "packs": {
+                                            "type": "array",
+                                            "items": { "type": "object" }
+                                        },
+                                        "provenance": { "type": "object" }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

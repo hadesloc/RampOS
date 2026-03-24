@@ -18,8 +18,10 @@ use crate::repository::ledger::LedgerRepository;
 use crate::repository::tenant::TenantRepository;
 use crate::repository::webhook::WebhookRepository;
 use crate::repository::BankConfirmationRepository;
-use crate::service::{CorridorPackService, PaymentMethodCapabilityService};
 use crate::service::webhook::{WebhookEventType, WebhookService};
+use crate::service::{
+    CommercializationPackService, CorridorPackService, PaymentMethodCapabilityService,
+};
 use chrono::Utc;
 use ramp_adapter::{
     CreatePayinInstructionRequest, InitiatePayoutRequest as AdapterPayoutRequest, PayoutStatus,
@@ -66,6 +68,8 @@ pub struct ActivityContext {
     pub corridor_pack_service: Option<Arc<CorridorPackService>>,
     /// Optional payment-method capability service for bounded pilot corridor resolution.
     pub payment_method_capability_service: Option<Arc<PaymentMethodCapabilityService>>,
+    /// Optional commercialization-pack service for pack-reference runtime resolution.
+    pub commercialization_pack_service: Option<Arc<CommercializationPackService>>,
 }
 
 impl ActivityContext {
@@ -85,6 +89,7 @@ impl ActivityContext {
             bank_confirmation_repo: None,
             corridor_pack_service: None,
             payment_method_capability_service: None,
+            commercialization_pack_service: None,
         }
     }
 
@@ -106,6 +111,7 @@ impl ActivityContext {
             bank_confirmation_repo: None,
             corridor_pack_service: None,
             payment_method_capability_service: None,
+            commercialization_pack_service: None,
         }
     }
 
@@ -126,6 +132,14 @@ impl ActivityContext {
     ) -> Self {
         self.corridor_pack_service = Some(corridor_pack_service);
         self.payment_method_capability_service = Some(payment_method_capability_service);
+        self
+    }
+
+    pub fn with_commercialization_pack_service(
+        mut self,
+        commercialization_pack_service: Arc<CommercializationPackService>,
+    ) -> Self {
+        self.commercialization_pack_service = Some(commercialization_pack_service);
         self
     }
 
@@ -282,29 +296,51 @@ async fn resolve_pilot_corridor_provider(
     settlement_direction: &str,
     method_family: &str,
 ) -> String {
-    let Some(corridor_code) = parse_pilot_corridor_code(requested_provider) else {
-        return requested_provider.to_string();
+    let requested_provider = match ctx.commercialization_pack_service.as_ref() {
+        Some(service) => match service
+            .resolve_runtime_target(
+                Some(tenant_id),
+                requested_provider,
+                settlement_direction,
+                method_family,
+            )
+            .await
+        {
+            Ok(provider) => provider,
+            Err(_) => match service
+                .resolve_requested_provider(Some(tenant_id), requested_provider)
+                .await
+            {
+                Ok(provider) => provider,
+                Err(_) => requested_provider.to_string(),
+            },
+        },
+        None => requested_provider.to_string(),
+    };
+
+    let Some(corridor_code) = parse_pilot_corridor_code(&requested_provider) else {
+        return requested_provider;
     };
 
     let (Some(corridor_pack_service), Some(payment_method_capability_service)) = (
         ctx.corridor_pack_service.as_ref(),
         ctx.payment_method_capability_service.as_ref(),
     ) else {
-        return requested_provider.to_string();
+        return requested_provider;
     };
 
     let Ok(Some(corridor)) = corridor_pack_service
         .get_corridor_pack(Some(tenant_id), corridor_code)
         .await
     else {
-        return requested_provider.to_string();
+        return requested_provider;
     };
 
     let Ok(capabilities) = payment_method_capability_service
         .list_capabilities(Some(&corridor.corridor_pack_id), None)
         .await
     else {
-        return requested_provider.to_string();
+        return requested_provider;
     };
 
     let supports_method = capabilities.capabilities.iter().any(|capability| {
@@ -322,18 +358,17 @@ async fn resolve_pilot_corridor_provider(
         .endpoints
         .iter()
         .find(|endpoint| {
-            endpoint
-                .endpoint_role
-                .eq_ignore_ascii_case(if settlement_direction.eq_ignore_ascii_case("payout") {
+            endpoint.endpoint_role.eq_ignore_ascii_case(
+                if settlement_direction.eq_ignore_ascii_case("payout") {
                     "destination"
                 } else {
                     "source"
-                })
-                && endpoint
-                    .method_family
-                    .as_deref()
-                    .map(|value| value.eq_ignore_ascii_case(method_family))
-                    .unwrap_or(true)
+                },
+            ) && endpoint
+                .method_family
+                .as_deref()
+                .map(|value| value.eq_ignore_ascii_case(method_family))
+                .unwrap_or(true)
         })
         .and_then(|endpoint| {
             endpoint
@@ -343,7 +378,7 @@ async fn resolve_pilot_corridor_provider(
                 .or_else(|| endpoint.partner_id.clone())
         })
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| requested_provider.to_string())
+        .unwrap_or(requested_provider)
 }
 
 /// Payin workflow activities
@@ -1341,10 +1376,10 @@ pub mod payout_activities {
 mod tests {
     use super::*;
     use crate::repository::{
+        CommercializationPackReferenceRecord, CommercializationPackRepository,
         CorridorComplianceHookRecord, CorridorCutoffPolicyRecord, CorridorEligibilityRuleRecord,
-        CorridorEndpointRecord, CorridorFeeProfileRecord, CorridorPackRecord,
-        CorridorPackRepository, CorridorRolloutScopeRecord, PaymentMethodCapabilityRecord,
-        PaymentMethodCapabilityRepository,
+        CorridorEndpointRecord, CorridorFeeProfileRecord, CorridorPackRecord, CorridorPackRepository,
+        CorridorRolloutScopeRecord, PaymentMethodCapabilityRecord, PaymentMethodCapabilityRepository,
     };
     use crate::test_utils::{MockLedgerRepository, MockTenantRepository, MockWebhookRepository};
     use async_trait::async_trait;
@@ -1358,38 +1393,70 @@ mod tests {
 
     #[async_trait]
     impl CorridorPackRepository for MockPilotCorridorRepository {
-        async fn upsert_corridor_pack(&self, _request: &crate::repository::UpsertCorridorPackRequest) -> ramp_common::Result<()> {
+        async fn upsert_corridor_pack(
+            &self,
+            _request: &crate::repository::UpsertCorridorPackRequest,
+        ) -> ramp_common::Result<()> {
             Ok(())
         }
-        async fn upsert_endpoint(&self, _request: &crate::repository::UpsertCorridorEndpointRequest) -> ramp_common::Result<()> {
+        async fn upsert_endpoint(
+            &self,
+            _request: &crate::repository::UpsertCorridorEndpointRequest,
+        ) -> ramp_common::Result<()> {
             Ok(())
         }
-        async fn upsert_fee_profile(&self, _request: &crate::repository::UpsertCorridorFeeProfileRequest) -> ramp_common::Result<()> {
+        async fn upsert_fee_profile(
+            &self,
+            _request: &crate::repository::UpsertCorridorFeeProfileRequest,
+        ) -> ramp_common::Result<()> {
             Ok(())
         }
-        async fn upsert_cutoff_policy(&self, _request: &crate::repository::UpsertCorridorCutoffPolicyRequest) -> ramp_common::Result<()> {
+        async fn upsert_cutoff_policy(
+            &self,
+            _request: &crate::repository::UpsertCorridorCutoffPolicyRequest,
+        ) -> ramp_common::Result<()> {
             Ok(())
         }
-        async fn upsert_compliance_hook(&self, _request: &crate::repository::UpsertCorridorComplianceHookRequest) -> ramp_common::Result<()> {
+        async fn upsert_compliance_hook(
+            &self,
+            _request: &crate::repository::UpsertCorridorComplianceHookRequest,
+        ) -> ramp_common::Result<()> {
             Ok(())
         }
-        async fn upsert_rollout_scope(&self, _request: &crate::repository::UpsertCorridorRolloutScopeRequest) -> ramp_common::Result<()> {
+        async fn upsert_rollout_scope(
+            &self,
+            _request: &crate::repository::UpsertCorridorRolloutScopeRequest,
+        ) -> ramp_common::Result<()> {
             Ok(())
         }
-        async fn upsert_eligibility_rule(&self, _request: &crate::repository::UpsertCorridorEligibilityRuleRequest) -> ramp_common::Result<()> {
+        async fn upsert_eligibility_rule(
+            &self,
+            _request: &crate::repository::UpsertCorridorEligibilityRuleRequest,
+        ) -> ramp_common::Result<()> {
             Ok(())
         }
-        async fn list_corridor_packs(&self, tenant_id: Option<&str>) -> ramp_common::Result<Vec<CorridorPackRecord>> {
+        async fn list_corridor_packs(
+            &self,
+            tenant_id: Option<&str>,
+        ) -> ramp_common::Result<Vec<CorridorPackRecord>> {
             Ok(self
                 .corridor
                 .lock()
                 .expect("corridor lock")
                 .clone()
                 .into_iter()
-                .filter(|record| tenant_id.map(|v| record.tenant_id.as_deref() == Some(v)).unwrap_or(true))
+                .filter(|record| {
+                    tenant_id
+                        .map(|v| record.tenant_id.as_deref() == Some(v))
+                        .unwrap_or(true)
+                })
                 .collect())
         }
-        async fn get_corridor_pack(&self, tenant_id: Option<&str>, corridor_code: &str) -> ramp_common::Result<Option<CorridorPackRecord>> {
+        async fn get_corridor_pack(
+            &self,
+            tenant_id: Option<&str>,
+            corridor_code: &str,
+        ) -> ramp_common::Result<Option<CorridorPackRecord>> {
             Ok(self
                 .corridor
                 .lock()
@@ -1397,7 +1464,9 @@ mod tests {
                 .clone()
                 .filter(|record| {
                     record.corridor_code == corridor_code
-                        && tenant_id.map(|v| record.tenant_id.as_deref() == Some(v)).unwrap_or(true)
+                        && tenant_id
+                            .map(|v| record.tenant_id.as_deref() == Some(v))
+                            .unwrap_or(true)
                 }))
         }
     }
@@ -1426,9 +1495,80 @@ mod tests {
                 .lock()
                 .expect("capabilities lock")
                 .iter()
-                .filter(|record| corridor_pack_id.map(|v| record.corridor_pack_id == v).unwrap_or(true))
+                .filter(|record| {
+                    corridor_pack_id
+                        .map(|v| record.corridor_pack_id == v)
+                        .unwrap_or(true)
+                })
                 .cloned()
                 .collect())
+        }
+    }
+
+    #[derive(Default)]
+    struct MockCommercializationPackRepository {
+        records: Mutex<Vec<CommercializationPackReferenceRecord>>,
+    }
+
+    #[async_trait]
+    impl CommercializationPackRepository for MockCommercializationPackRepository {
+        async fn upsert_commercialization_pack(
+            &self,
+            request: &crate::repository::UpsertCommercializationPackRequest,
+        ) -> ramp_common::Result<()> {
+            let mut records = self.records.lock().expect("records lock");
+            records.retain(|record| record.commercialization_pack_id != request.commercialization_pack_id);
+            records.push(CommercializationPackReferenceRecord {
+                commercialization_pack_id: request.commercialization_pack_id.clone(),
+                tenant_id: request.tenant_id.clone(),
+                pack_code: request.pack_code.clone(),
+                partner_id: request.partner_id.clone(),
+                partner_capability_id: request.partner_capability_id.clone(),
+                commercial_extension_id: request.commercial_extension_id.clone(),
+                corridor_code: request.corridor_code.clone(),
+                approval_reference: request.approval_reference.clone(),
+                lifecycle_state: request.lifecycle_state.clone(),
+                rollout_state: request.rollout_state.clone(),
+                metadata: request.metadata.clone(),
+            });
+            Ok(())
+        }
+
+        async fn list_commercialization_packs(
+            &self,
+            tenant_id: Option<&str>,
+        ) -> ramp_common::Result<Vec<CommercializationPackReferenceRecord>> {
+            Ok(self
+                .records
+                .lock()
+                .expect("records lock")
+                .iter()
+                .filter(|record| {
+                    tenant_id
+                        .map(|value| record.tenant_id.as_deref() == Some(value))
+                        .unwrap_or(true)
+                })
+                .cloned()
+                .collect())
+        }
+
+        async fn get_commercialization_pack(
+            &self,
+            tenant_id: Option<&str>,
+            pack_code: &str,
+        ) -> ramp_common::Result<Option<CommercializationPackReferenceRecord>> {
+            Ok(self
+                .records
+                .lock()
+                .expect("records lock")
+                .iter()
+                .find(|record| {
+                    record.pack_code == pack_code
+                        && tenant_id
+                            .map(|value| record.tenant_id.as_deref() == Some(value))
+                            .unwrap_or(true)
+                })
+                .cloned())
         }
     }
 
@@ -1525,6 +1665,21 @@ mod tests {
                     metadata: serde_json::json!({}),
                 }]),
             });
+            let commercialization_pack_repo = Arc::new(MockCommercializationPackRepository {
+                records: Mutex::new(vec![CommercializationPackReferenceRecord {
+                    commercialization_pack_id: "pack_vn_hk".to_string(),
+                    tenant_id: Some("tenant_pilot".to_string()),
+                    pack_code: "pilot_vn_hk".to_string(),
+                    partner_id: "partner_card_hk".to_string(),
+                    partner_capability_id: "capability_card_hk".to_string(),
+                    commercial_extension_id: "card_payout".to_string(),
+                    corridor_code: "VN_HK_PAYOUT".to_string(),
+                    approval_reference: None,
+                    lifecycle_state: "active".to_string(),
+                    rollout_state: "approved".to_string(),
+                    metadata: serde_json::json!({}),
+                }]),
+            });
 
             let ctx = ActivityContext::new(
                 Arc::new(MockLedgerRepository::new()),
@@ -1534,8 +1689,13 @@ mod tests {
             )
             .with_pilot_corridor_services(
                 Arc::new(CorridorPackService::with_repository(corridor_repo)),
-                Arc::new(PaymentMethodCapabilityService::with_repository(payment_repo)),
-            );
+                Arc::new(PaymentMethodCapabilityService::with_repository(
+                    payment_repo,
+                )),
+            )
+            .with_commercialization_pack_service(Arc::new(
+                CommercializationPackService::with_pack_repository(commercialization_pack_repo),
+            ));
 
             let adapters = ramp_adapter::create_test_adapters();
             let ctx = ActivityContext {
@@ -1678,5 +1838,28 @@ mod tests {
             .await
             .expect("unknown pilot corridor should keep fallback behavior");
         assert!(result.provider_tx_id.starts_with("SIM_"));
+    }
+
+    #[tokio::test]
+    async fn test_commercialization_pack_reference_uses_configured_adapter() {
+        ensure_pilot_test_activity_context();
+
+        let request = payout_activities::PayoutRequest {
+            tenant_id: "tenant_pilot".to_string(),
+            user_id: "user_pilot".to_string(),
+            intent_id: "intent_pack_pilot".to_string(),
+            reference_code: "REF_PACK_001".to_string(),
+            amount_vnd: 500_000,
+            rails_provider: "pack:pilot_vn_hk".to_string(),
+            recipient_bank_code: "004".to_string(),
+            recipient_account_number: "123456789".to_string(),
+            recipient_account_name: "Pilot User".to_string(),
+            description: "commercialization pack payout".to_string(),
+        };
+
+        let result = payout_activities::initiate_bank_transfer(&request)
+            .await
+            .expect("commercialization pack should resolve to configured adapter");
+        assert!(result.provider_tx_id.starts_with("MOCK_"));
     }
 }

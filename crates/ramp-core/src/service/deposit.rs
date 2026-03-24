@@ -18,6 +18,9 @@ use crate::event::EventPublisher;
 use crate::repository::{
     intent::{IntentRepository, IntentRow},
     ledger::LedgerRepository,
+    onchain_observation::{
+        OnchainObservationRepository, OnchainObservationStatus, UpsertOnchainObservationRequest,
+    },
     user::UserRepository,
 };
 
@@ -71,6 +74,7 @@ pub struct DepositService {
     ledger_repo: Arc<dyn LedgerRepository>,
     user_repo: Arc<dyn UserRepository>,
     event_publisher: Arc<dyn EventPublisher>,
+    onchain_observation_repo: Option<Arc<dyn OnchainObservationRepository>>,
     /// Required confirmations per chain (simplified)
     required_confirmations: u32,
     /// KYT score threshold for flagging (0.0 - 1.0, higher = riskier)
@@ -89,6 +93,7 @@ impl DepositService {
             ledger_repo,
             user_repo,
             event_publisher,
+            onchain_observation_repo: None,
             required_confirmations: 12, // Default for EVM chains
             kyt_threshold: 0.7,         // 70% risk score triggers review
         }
@@ -106,6 +111,14 @@ impl DepositService {
         self
     }
 
+    pub fn with_onchain_observation_repo(
+        mut self,
+        repo: Arc<dyn OnchainObservationRepository>,
+    ) -> Self {
+        self.onchain_observation_repo = Some(repo);
+        self
+    }
+
     /// Get required confirmations for a chain
     fn get_required_confirmations(&self, chain_id: &ChainId) -> u32 {
         match chain_id {
@@ -115,6 +128,7 @@ impl DepositService {
             ChainId::Arbitrum => 1, // L2 finality is faster
             ChainId::Optimism => 1,
             ChainId::Base => 1,
+            ChainId::Avalanche => 3,
             ChainId::Solana => 32,
         }
     }
@@ -186,7 +200,7 @@ impl DepositService {
                 "required_confirmations": required_confirmations,
                 "original_metadata": req.metadata
             }),
-            idempotency_key: req.idempotency_key.map(|k| k.0),
+            idempotency_key: req.idempotency_key.clone().map(|k| k.0),
             created_at: now,
             updated_at: now,
             expires_at: None, // Deposits don't expire
@@ -195,6 +209,8 @@ impl DepositService {
 
         // Save to database
         self.intent_repo.create(&intent_row).await?;
+        self.upsert_detected_observation(&req, &intent_id, required_confirmations, now)
+            .await?;
 
         // Publish event
         self.event_publisher
@@ -243,6 +259,8 @@ impl DepositService {
             .and_then(|v| v.as_u64())
             .map(|v| v as u32)
             .unwrap_or(self.required_confirmations);
+        self.upsert_confirmed_observation(&intent, &req, required_confirmations)
+            .await?;
 
         // Update to confirming state if not already
         if current_state == DepositState::Detected {
@@ -292,6 +310,98 @@ impl DepositService {
         }
 
         Ok(DepositState::Confirming)
+    }
+
+    async fn upsert_detected_observation(
+        &self,
+        req: &CreateDepositRequest,
+        intent_id: &IntentId,
+        required_confirmations: u32,
+        observed_at: chrono::DateTime<Utc>,
+    ) -> Result<()> {
+        let Some(repo) = &self.onchain_observation_repo else {
+            return Ok(());
+        };
+
+        repo.upsert_observation(&UpsertOnchainObservationRequest {
+            tenant_id: req.tenant_id.0.clone(),
+            intent_id: Some(intent_id.0.clone()),
+            offramp_intent_id: None,
+            tx_hash: req.tx_hash.0.clone(),
+            chain_id: chain_id_to_observation_id(&req.chain_id),
+            asset_code: req.symbol.to_string(),
+            amount: req.amount,
+            from_address: req.from_address.0.clone(),
+            to_address: req.to_address.0.clone(),
+            status: OnchainObservationStatus::Observed,
+            confirmations: 0,
+            required_confirmations: required_confirmations as i32,
+            block_number: None,
+            observation_source: "deposit_detect".to_string(),
+            raw_payload: None,
+            metadata: serde_json::json!({
+                "tokenAddress": req.token_address.as_ref().map(|value| value.0.clone()),
+                "originalMetadata": req.metadata,
+            }),
+            observed_at,
+            confirmed_at: None,
+        })
+        .await?;
+
+        Ok(())
+    }
+
+    async fn upsert_confirmed_observation(
+        &self,
+        intent: &IntentRow,
+        req: &ConfirmDepositRequest,
+        required_confirmations: u32,
+    ) -> Result<()> {
+        let Some(repo) = &self.onchain_observation_repo else {
+            return Ok(());
+        };
+        let (Some(tx_hash), Some(from_address), Some(to_address), Some(chain_id)) = (
+            intent.tx_hash.clone(),
+            intent.from_address.clone(),
+            intent.to_address.clone(),
+            intent
+                .chain_id
+                .as_ref()
+                .and_then(|value| value.parse::<i64>().ok()),
+        ) else {
+            return Ok(());
+        };
+        let now = Utc::now();
+
+        repo.upsert_observation(&UpsertOnchainObservationRequest {
+            tenant_id: req.tenant_id.0.clone(),
+            intent_id: Some(req.intent_id.0.clone()),
+            offramp_intent_id: None,
+            tx_hash,
+            chain_id,
+            asset_code: intent.currency.clone(),
+            amount: intent.amount,
+            from_address,
+            to_address,
+            status: if req.confirmations >= required_confirmations {
+                OnchainObservationStatus::Confirmed
+            } else {
+                OnchainObservationStatus::Pending
+            },
+            confirmations: req.confirmations as i32,
+            required_confirmations: required_confirmations as i32,
+            block_number: Some(req.block_number as i64),
+            observation_source: "deposit_confirm".to_string(),
+            raw_payload: None,
+            metadata: serde_json::json!({
+                "intentId": req.intent_id.0,
+            }),
+            observed_at: now,
+            confirmed_at: (req.confirmations >= required_confirmations).then_some(now),
+        })
+        .await?;
+
+        Ok(())
     }
 
     /// Process KYT (Know Your Transaction) check result
@@ -490,13 +600,94 @@ fn parse_deposit_state(state: &str) -> DepositState {
     DepositState::from(state)
 }
 
+fn chain_id_to_observation_id(chain_id: &ChainId) -> i64 {
+    match chain_id {
+        ChainId::Ethereum => 1,
+        ChainId::Polygon => 137,
+        ChainId::BnbChain => 56,
+        ChainId::Arbitrum => 42161,
+        ChainId::Optimism => 10,
+        ChainId::Base => 8453,
+        ChainId::Avalanche => 43114,
+        ChainId::Solana => 101,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::event::InMemoryEventPublisher;
+    use crate::repository::onchain_observation::{
+        OnchainObservationRepository, OnchainObservationRow, UpsertOnchainObservationRequest,
+    };
     use crate::repository::user::UserRow;
     use crate::test_utils::{MockIntentRepository, MockLedgerRepository, MockUserRepository};
+    use async_trait::async_trait;
     use rust_decimal_macros::dec;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone, Default)]
+    struct SpyOnchainObservationRepository {
+        writes: Arc<Mutex<Vec<UpsertOnchainObservationRequest>>>,
+    }
+
+    #[async_trait]
+    impl OnchainObservationRepository for SpyOnchainObservationRepository {
+        async fn upsert_observation(
+            &self,
+            request: &UpsertOnchainObservationRequest,
+        ) -> Result<OnchainObservationRow> {
+            self.writes.lock().unwrap().push(request.clone());
+            Ok(OnchainObservationRow {
+                id: "OCO_TEST".to_string(),
+                tenant_id: request.tenant_id.clone(),
+                intent_id: request.intent_id.clone(),
+                offramp_intent_id: request.offramp_intent_id.clone(),
+                tx_hash: request.tx_hash.clone(),
+                chain_id: request.chain_id,
+                asset_code: request.asset_code.clone(),
+                amount: request.amount,
+                from_address: request.from_address.clone(),
+                to_address: request.to_address.clone(),
+                status: request.status.as_str().to_string(),
+                confirmations: request.confirmations,
+                required_confirmations: request.required_confirmations,
+                block_number: request.block_number,
+                observation_source: request.observation_source.clone(),
+                raw_payload: request.raw_payload.clone(),
+                metadata: request.metadata.clone(),
+                observed_at: request.observed_at,
+                confirmed_at: request.confirmed_at,
+                created_at: request.observed_at,
+                updated_at: request.observed_at,
+            })
+        }
+
+        async fn get_by_tx_hash(
+            &self,
+            _tenant_id: &TenantId,
+            _chain_id: i64,
+            _tx_hash: &str,
+        ) -> Result<Option<OnchainObservationRow>> {
+            Ok(None)
+        }
+
+        async fn list_by_offramp_intent(
+            &self,
+            _tenant_id: &TenantId,
+            _offramp_intent_id: &str,
+        ) -> Result<Vec<OnchainObservationRow>> {
+            Ok(Vec::new())
+        }
+
+        async fn list_by_intent(
+            &self,
+            _tenant_id: &TenantId,
+            _intent_id: &str,
+        ) -> Result<Vec<OnchainObservationRow>> {
+            Ok(Vec::new())
+        }
+    }
 
     fn create_test_user() -> UserRow {
         UserRow {
@@ -612,6 +803,54 @@ mod tests {
 
         let state = service.update_confirmations(confirm_req).await.unwrap();
         assert_eq!(state, DepositState::Confirmed);
+    }
+
+    #[tokio::test]
+    async fn test_deposit_writes_onchain_observation_lifecycle() {
+        let intent_repo = Arc::new(MockIntentRepository::new());
+        let ledger_repo = Arc::new(MockLedgerRepository::new());
+        let user_repo = Arc::new(MockUserRepository::new());
+        let event_publisher = Arc::new(InMemoryEventPublisher::new());
+        let observation_repo = Arc::new(SpyOnchainObservationRepository::default());
+
+        user_repo.add_user(create_test_user());
+
+        let service =
+            DepositService::new(intent_repo.clone(), ledger_repo, user_repo, event_publisher)
+                .with_onchain_observation_repo(observation_repo.clone());
+
+        let create_req = CreateDepositRequest {
+            tenant_id: TenantId::new("tenant1"),
+            user_id: UserId::new("user1"),
+            chain_id: ChainId::Ethereum,
+            token_address: None,
+            amount: dec!(100.0),
+            symbol: CryptoSymbol::USDT,
+            from_address: WalletAddress::new("0x1111111111111111111111111111111111111111"),
+            to_address: WalletAddress::new("0x2222222222222222222222222222222222222222"),
+            tx_hash: TxHash::new("0xdeadbeef"),
+            idempotency_key: None,
+            metadata: serde_json::json!({"source":"test"}),
+        };
+
+        let create_res = service.create_deposit(create_req).await.unwrap();
+        service
+            .update_confirmations(ConfirmDepositRequest {
+                tenant_id: TenantId::new("tenant1"),
+                intent_id: create_res.intent_id,
+                confirmations: 12,
+                block_number: 123,
+            })
+            .await
+            .unwrap();
+
+        let writes = observation_repo.writes.lock().unwrap();
+        assert_eq!(writes.len(), 2);
+        assert_eq!(writes[0].observation_source, "deposit_detect");
+        assert_eq!(writes[0].status, OnchainObservationStatus::Observed);
+        assert_eq!(writes[1].observation_source, "deposit_confirm");
+        assert_eq!(writes[1].status, OnchainObservationStatus::Confirmed);
+        assert_eq!(writes[1].block_number, Some(123));
     }
 
     #[tokio::test]

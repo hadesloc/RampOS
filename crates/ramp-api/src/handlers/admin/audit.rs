@@ -379,7 +379,9 @@ pub async fn export_break_glass_audit_log(
         .await
         .map_err(ApiError::from)?;
 
-    Ok(Json(build_break_glass_export_response(actor_id, query, export)))
+    Ok(Json(build_break_glass_export_response(
+        actor_id, query, export,
+    )))
 }
 
 fn build_break_glass_export_response(
@@ -447,6 +449,7 @@ impl From<AuditLogExport> for ExportResponse {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use jsonwebtoken::{encode, EncodingKey, Header};
     use ramp_common::types::TenantId;
     use ramp_core::repository::{
         ActorType, AuditQueryFilter, ChainVerificationResult, ComplianceAuditEntry,
@@ -457,6 +460,26 @@ mod tests {
 
     struct MockBreakGlassAuditRepository {
         entries: Vec<ComplianceAuditEntry>,
+    }
+
+    const TEST_ADMIN_JWT_SECRET: &str = "audit-tests-admin-jwt-secret";
+
+    fn make_admin_jwt(role: &str) -> String {
+        let claims = crate::handlers::admin::admin_auth::AdminClaims {
+            sub: "audit_test_admin".to_string(),
+            email: "audit-admin@rampos.local".to_string(),
+            role: role.to_string(),
+            iat: Utc::now().timestamp(),
+            exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+            token_type: "access".to_string(),
+        };
+
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(TEST_ADMIN_JWT_SECRET.as_bytes()),
+        )
+        .expect("jwt should encode")
     }
 
     #[async_trait]
@@ -517,7 +540,7 @@ mod tests {
 
     #[tokio::test]
     async fn break_glass_actions_are_filtered_and_export_linked() {
-        std::env::set_var("RAMPOS_ADMIN_KEY", "audit_test_key");
+        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
         let now = Utc::now();
         let audit_state = AuditState {
             audit_service: Arc::new(ComplianceAuditService::new(Arc::new(
@@ -572,7 +595,12 @@ mod tests {
         };
 
         let mut headers = HeaderMap::new();
-        headers.insert("X-Admin-Key", "audit_test_key".parse().unwrap());
+        headers.insert(
+            "X-Admin-Authorization",
+            format!("Bearer {}", make_admin_jwt("viewer"))
+                .parse()
+                .unwrap(),
+        );
         let tenant_ctx = TenantContext {
             tenant_id: TenantId("tenant_audit".to_string()),
             name: "Tenant Audit".to_string(),
@@ -604,6 +632,8 @@ mod tests {
             "/v1/admin/audit/export?format=json"
         );
         assert_eq!(payload["chainVerified"], true);
+
+        std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
     }
 
     #[test]

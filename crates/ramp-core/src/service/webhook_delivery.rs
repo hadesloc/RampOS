@@ -522,12 +522,12 @@ impl WebhookDeliveryService {
         let mut original_by_endpoint = std::collections::BTreeMap::new();
 
         for delivery in deliveries {
-            let should_replace = original_by_endpoint
-                .get(&delivery.endpoint_url)
-                .is_none_or(|current: &WebhookDelivery| {
+            let should_replace = original_by_endpoint.get(&delivery.endpoint_url).is_none_or(
+                |current: &WebhookDelivery| {
                     delivery.created_at < current.created_at
                         || (delivery.created_at == current.created_at && delivery.id < current.id)
-                });
+                },
+            );
             if should_replace {
                 original_by_endpoint.insert(delivery.endpoint_url.clone(), delivery);
             }

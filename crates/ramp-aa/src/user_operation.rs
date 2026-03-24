@@ -81,8 +81,9 @@ impl UserOperation {
         let call_offset = init_offset + init_tail.len() as u64;
         let paymaster_offset = call_offset + call_tail.len() as u64;
 
-        let mut encoded =
-            Vec::with_capacity(init_offset as usize + init_tail.len() + call_tail.len() + paymaster_tail.len());
+        let mut encoded = Vec::with_capacity(
+            init_offset as usize + init_tail.len() + call_tail.len() + paymaster_tail.len(),
+        );
         encoded.extend_from_slice(&Self::abi_encode_address(self.sender));
         encoded.extend_from_slice(&Self::abi_encode_uint(self.nonce));
         encoded.extend_from_slice(&Self::abi_encode_uint(U256::from(init_offset)));
@@ -99,7 +100,11 @@ impl UserOperation {
         encoded
     }
 
-    fn encode_final_hash_tuple(user_op_hash: &[u8; 32], entry_point: Address, chain_id: u64) -> Vec<u8> {
+    fn encode_final_hash_tuple(
+        user_op_hash: &[u8; 32],
+        entry_point: Address,
+        chain_id: u64,
+    ) -> Vec<u8> {
         let mut encoded = Vec::with_capacity(96);
         encoded.extend_from_slice(&Self::abi_encode_fixed_bytes(user_op_hash));
         encoded.extend_from_slice(&Self::abi_encode_address(entry_point));

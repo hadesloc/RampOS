@@ -37,11 +37,11 @@ describe("AdminLayout", () => {
     redirectMock.mockImplementation(() => {
       throw new Error("NEXT_REDIRECT");
     });
-    delete process.env.RAMPOS_ADMIN_KEY;
+    delete process.env.RAMPOS_ADMIN_JWT_SECRET;
   });
 
   it("redirects unauthenticated requests to the locale-aware admin login route", async () => {
-    process.env.RAMPOS_ADMIN_KEY = "test-admin-key";
+    process.env.RAMPOS_ADMIN_JWT_SECRET = "test-admin-secret";
     cookiesMock.mockResolvedValue({
       get: vi.fn(() => undefined),
     });
@@ -55,13 +55,19 @@ describe("AdminLayout", () => {
       }),
     ).rejects.toThrow("NEXT_REDIRECT");
 
-    expect(redirectMock).toHaveBeenCalledWith("/en/admin-login");
+    expect(redirectMock).toHaveBeenCalledWith("/admin-login");
   });
 
   it("renders admin pages when the request has a valid admin session", async () => {
-    const adminKey = "test-admin-key";
-    process.env.RAMPOS_ADMIN_KEY = adminKey;
-    const token = createAdminSessionToken(adminKey, 60);
+    const adminSecret = "test-admin-secret";
+    process.env.RAMPOS_ADMIN_JWT_SECRET = adminSecret;
+    const token = createAdminSessionToken(adminSecret, {
+      accessToken: "access-token-123",
+      refreshToken: "refresh-token-456",
+      accessTokenExpiresAt: Math.floor(Date.now() / 1000) + 60,
+      refreshTokenExpiresAt: Math.floor(Date.now() / 1000) + 3600,
+      admin: { email: "admin@example.com", role: "admin" },
+    });
 
     cookiesMock.mockResolvedValue({
       get: vi.fn(() => ({ value: token })),

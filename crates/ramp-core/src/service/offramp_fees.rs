@@ -152,6 +152,7 @@ impl OffRampFeeCalculator {
             CryptoSymbol::USDT => Decimal::new(75_000, 0), // ~$3 USD (TRC20/ERC20)
             CryptoSymbol::USDC => Decimal::new(75_000, 0), // ~$3 USD
             CryptoSymbol::BNB => Decimal::new(25_000, 0),  // ~$1 USD (BSC is cheap)
+            CryptoSymbol::MATIC => Decimal::new(12_500, 0), // ~$0.5 USD (Polygon is cheap)
             CryptoSymbol::SOL => Decimal::new(2_500, 0),   // ~$0.1 USD (Solana is very cheap)
             CryptoSymbol::Other => Decimal::new(125_000, 0), // Default
         }

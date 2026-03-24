@@ -381,6 +381,51 @@ pub fn create_router(state: AppState) -> Router {
             "/travel-rule/exceptions/:id/resolve",
             post(handlers::admin::resolve_exception),
         )
+        // Venue trust review
+        .route(
+            "/venue-trust/connections/:id/review",
+            post(handlers::admin::review_connection),
+        )
+        .route(
+            "/venue-trust/subjects/:subject_type/:subject_id",
+            get(handlers::admin::get_venue_subject_snapshot),
+        )
+        .route(
+            "/venue-trust/reports/:subject_type/:subject_id",
+            get(handlers::admin::get_venue_trust_report_snapshot),
+        )
+        .route(
+            "/venue-trust/reports/:subject_type/:subject_id/export",
+            get(handlers::admin::export_venue_trust_report),
+        )
+        .route(
+            "/venue-trust/connectors/lighter/readiness/:subject_type/:subject_id",
+            get(handlers::admin::get_lighter_connector_readiness_snapshot),
+        )
+        .route(
+            "/venue-trust/connectors/cex/:connector_key/readiness/:subject_type/:subject_id",
+            get(handlers::admin::get_cex_connector_readiness_snapshot),
+        )
+        .route(
+            "/venue-trust/delegation-prerequisites/:subject_type/:subject_id/delegates/:delegate",
+            get(handlers::admin::get_delegation_prerequisites_snapshot),
+        )
+        .route(
+            "/venue-trust/transfers/:id",
+            get(handlers::admin::get_venue_transfer_detail),
+        )
+        .route(
+            "/venue-trust/transfers/:id/review",
+            post(handlers::admin::review_transfer),
+        )
+        .route(
+            "/venue-trust/source-of-funds-packages/:id/review",
+            post(handlers::admin::review_source_of_funds_package),
+        )
+        .route(
+            "/venue-trust/wallet-attestations/:id/review",
+            post(handlers::admin::review_wallet_attestation),
+        )
         // Rescreening
         .route(
             "/rescreening/runs",
@@ -399,19 +444,32 @@ pub fn create_router(state: AppState) -> Router {
         // KYB graph + evidence packages
         .route("/kyb/reviews", get(handlers::admin::list_kyb_reviews))
         .route("/kyb/graph/:id", get(handlers::admin::get_kyb_graph))
-        .route("/kyb/evidence", get(handlers::admin::list_kyb_evidence_packages))
-        .route("/kyb/evidence/:id", get(handlers::admin::get_kyb_evidence_package))
-        .route("/kyb/evidence/:id/export", get(handlers::admin::export_kyb_evidence_package))
+        .route(
+            "/kyb/evidence",
+            get(handlers::admin::list_kyb_evidence_packages),
+        )
+        .route(
+            "/kyb/evidence/:id",
+            get(handlers::admin::get_kyb_evidence_package),
+        )
+        .route(
+            "/kyb/evidence/:id/export",
+            get(handlers::admin::export_kyb_evidence_package),
+        )
         // Partner registry, config bundles, and extensions
         .route(
             "/partners",
-            get(handlers::admin::list_partner_registry).post(handlers::admin::upsert_partner_registry),
+            get(handlers::admin::list_partner_registry)
+                .post(handlers::admin::upsert_partner_registry),
         )
         .route(
             "/config-bundles/export",
             get(handlers::admin::export_config_bundle),
         )
-        .route("/extensions", get(handlers::admin::list_whitelisted_extension_actions))
+        .route(
+            "/extensions",
+            get(handlers::admin::list_whitelisted_extension_actions),
+        )
         // Provider routing
         .route(
             "/provider-routing/snapshot",
@@ -438,6 +496,12 @@ pub fn create_router(state: AppState) -> Router {
         .route(
             "/commercial-readiness/check",
             post(handlers::admin::check_extension_enablement),
+        )
+        // Commercialization packs
+        .route(
+            "/commercialization-packs",
+            get(handlers::admin::list_commercialization_packs)
+                .post(handlers::admin::upsert_commercialization_pack),
         )
         // Intelligence sequencing
         .route(
@@ -549,7 +613,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/bridge/chains", get(handlers::admin::bridge::list_chains))
         .route("/bridge/routes", get(handlers::admin::bridge::list_routes))
         .route("/bridge/quote", get(handlers::admin::bridge::get_quote))
-        .route("/bridge/transfer", post(handlers::admin::bridge::initiate_transfer))
+        .route(
+            "/bridge/transfer",
+            post(handlers::admin::bridge::initiate_transfer),
+        )
         .route(
             "/bridge/transfer/:bridge_name/:tx_hash",
             get(handlers::admin::bridge::get_transfer_status),
@@ -668,7 +735,6 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/sandbox", sandbox_routes)
         .nest("/domains", domain_routes);
 
-
     // Yield Strategy routes
     let yield_routes = Router::new()
         .route("/strategies", get(handlers::admin::list_strategies))
@@ -731,6 +797,8 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/transactions", handlers::portal::transactions::router())
         .nest("/intents", handlers::portal::intents::router())
         .nest("/offramp", handlers::portal::offramp::router())
+        .nest("/venue-cashout", handlers::portal::venue_cashout::router())
+        .nest("/venue-funding", handlers::portal::venue_funding::router())
         .merge(handlers::portal::rfq::router())
         .layer(middleware::from_fn_with_state(
             state.portal_auth_config.clone(),
@@ -866,7 +934,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/docs", get(docs_handler))
         .nest("/graphql", gql_router)
         .nest("/v1", api_v1)
-        // Portal auth routes (no JWT required - these issue tokens)
+        // Portal auth routes (no JWT required - challenge/request surfaces are public;
+        // completion and session issuance are still constrained by handler truth)
         .nest("/v1/portal/auth", portal_auth_routes.clone())
         // Portal protected routes (JWT required)
         .nest("/v1/portal", portal_protected_routes)

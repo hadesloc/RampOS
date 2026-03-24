@@ -198,6 +198,181 @@ impl Default for SessionPermissions {
     }
 }
 
+/// Approval gate required before a delegated tool surface may be used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DelegationApprovalBoundary {
+    /// A human or approval service must explicitly approve the execution.
+    ExplicitApprovalRequired,
+    /// A delegated operator review must explicitly precede the execution.
+    OperatorReviewRequired,
+}
+
+/// Fail-closed prerequisites for enabling a delegation execution envelope.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DelegationPrerequisites {
+    /// The contract delegate the EOA is authorizing.
+    pub delegate: Address,
+    /// Explicitly allowlisted tool surfaces for the delegation.
+    pub allowed_tool_surfaces: Vec<String>,
+    /// Explicit approval boundary expected for any valid envelope.
+    pub approval_boundary: Option<DelegationApprovalBoundary>,
+}
+
+impl DelegationPrerequisites {
+    pub fn new(delegate: Address) -> Self {
+        Self {
+            delegate,
+            allowed_tool_surfaces: Vec::new(),
+            approval_boundary: None,
+        }
+    }
+
+    pub fn allow_tool_surface(mut self, tool_surface: String) -> Self {
+        self.allowed_tool_surfaces.push(tool_surface);
+        self
+    }
+
+    pub fn with_approval_boundary(mut self, approval_boundary: DelegationApprovalBoundary) -> Self {
+        self.approval_boundary = Some(approval_boundary);
+        self
+    }
+
+    pub fn validate_envelope(
+        &self,
+        envelope: &DelegationExecutionEnvelope,
+    ) -> std::result::Result<(), DelegationValidationError> {
+        if self.allowed_tool_surfaces.is_empty() {
+            return Err(DelegationValidationError::MissingAllowedToolSurface);
+        }
+
+        let expected_boundary = self
+            .approval_boundary
+            .ok_or(DelegationValidationError::MissingApprovalBoundary)?;
+        let tool_surface = envelope.validate_required_fields()?;
+
+        if envelope.delegate != self.delegate {
+            return Err(DelegationValidationError::DelegateMismatch {
+                expected: self.delegate,
+                actual: envelope.delegate,
+            });
+        }
+
+        if !self.allowed_tool_surfaces.iter().any(|allowed| allowed == tool_surface)
+        {
+            return Err(DelegationValidationError::ToolSurfaceNotAllowed(
+                tool_surface.to_string(),
+            ));
+        }
+
+        if envelope.approval_boundary != Some(expected_boundary) {
+            return Err(DelegationValidationError::ApprovalBoundaryMismatch);
+        }
+
+        Ok(())
+    }
+}
+
+/// Contract describing one bounded delegated execution attempt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DelegationExecutionEnvelope {
+    /// The delegate contract that may execute on behalf of the EOA.
+    pub delegate: Address,
+    /// Explicit tool/API/catalog surface the delegation may touch.
+    pub tool_surface: Option<String>,
+    /// Explicit approval boundary that must be satisfied before execution.
+    pub approval_boundary: Option<DelegationApprovalBoundary>,
+    /// The absolute expiry timestamp after which execution is invalid.
+    pub expires_at: Option<DateTime<Utc>>,
+    /// Scope string that bounds the delegated action.
+    pub scope: Option<String>,
+    /// Provenance reference tying the envelope back to truthful auth/session state.
+    pub provenance: Option<String>,
+}
+
+impl DelegationExecutionEnvelope {
+    pub fn new(
+        delegate: Address,
+        tool_surface: String,
+        approval_boundary: DelegationApprovalBoundary,
+        expires_at: DateTime<Utc>,
+        scope: String,
+        provenance: String,
+    ) -> Self {
+        Self {
+            delegate,
+            tool_surface: Some(tool_surface),
+            approval_boundary: Some(approval_boundary),
+            expires_at: Some(expires_at),
+            scope: Some(scope),
+            provenance: Some(provenance),
+        }
+    }
+
+    fn validate_required_fields(&self) -> std::result::Result<&str, DelegationValidationError> {
+        let tool_surface = self
+            .tool_surface
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or(DelegationValidationError::MissingAllowedToolSurface)?;
+
+        if self.approval_boundary.is_none() {
+            return Err(DelegationValidationError::MissingApprovalBoundary);
+        }
+
+        let expires_at = self
+            .expires_at
+            .ok_or(DelegationValidationError::MissingExpiry)?;
+        if expires_at <= Utc::now() {
+            return Err(DelegationValidationError::ExpiredExpiry);
+        }
+
+        if self
+            .scope
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            return Err(DelegationValidationError::MissingScope);
+        }
+
+        if self
+            .provenance
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            return Err(DelegationValidationError::MissingProvenance);
+        }
+
+        Ok(tool_surface)
+    }
+}
+
+impl Default for DelegationExecutionEnvelope {
+    fn default() -> Self {
+        Self {
+            delegate: Address::ZERO,
+            tool_surface: None,
+            approval_boundary: None,
+            expires_at: None,
+            scope: None,
+            provenance: None,
+        }
+    }
+}
+
+/// Validation failures for delegation prerequisites / execution envelopes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DelegationValidationError {
+    MissingAllowedToolSurface,
+    MissingApprovalBoundary,
+    MissingExpiry,
+    ExpiredExpiry,
+    MissingScope,
+    MissingProvenance,
+    ApprovalBoundaryMismatch,
+    ToolSurfaceNotAllowed(String),
+    DelegateMismatch { expected: Address, actual: Address },
+}
+
 /// In-memory delegation registry
 pub struct DelegationRegistry {
     /// Map of delegator address to their delegations

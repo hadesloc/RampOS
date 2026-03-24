@@ -42,7 +42,7 @@ redis = { version = "0.26.1", default-features = false, features = ["tokio-comp"
 sha2 = "0.10"
 hmac = "0.12"
 hex = "0.4"
-jsonwebtoken = "10.3"
+jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
 argon2 = "0.5"
 rand = "0.8"
 base64 = "0.22"

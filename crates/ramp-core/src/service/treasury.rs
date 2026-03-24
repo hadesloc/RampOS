@@ -1,14 +1,15 @@
 use chrono::{Duration, Utc};
+use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::r#yield::{recommended_treasury_buffer_percent, StrategyConfig, YieldAllocationConfig};
 use crate::repository::rfq::LpReliabilitySnapshotRow;
 use crate::service::rfq::{lp_counterparty_pressure_label, lp_counterparty_pressure_score};
 use crate::service::settlement::{Settlement, SettlementStatus};
-use crate::service::treasury_evidence::TreasuryEvidenceImportRecord;
-use crate::r#yield::{
-    recommended_treasury_buffer_percent, StrategyConfig, YieldAllocationConfig,
+use crate::service::treasury_evidence::{
+    normalize_treasury_balances, TreasuryEvidenceImportRecord,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,6 +162,9 @@ pub struct TreasuryProvenance {
     pub latest_evidence_at: Option<String>,
     /// Explicit label: "sample" data should not be used for production decisions
     pub freshness_warning: Option<String>,
+    /// Explicit coverage note when data source is mixed (for example, evidence-backed float slices
+    /// with synthetic recommendation fixtures for non-float sections).
+    pub coverage_note: Option<String>,
 }
 
 impl TreasuryProvenance {
@@ -174,11 +178,15 @@ impl TreasuryProvenance {
                 "This snapshot uses sample data and should NOT be used for production treasury decisions."
                     .to_string(),
             ),
+            coverage_note: None,
         }
     }
 
     pub fn from_evidence(records: &[TreasuryEvidenceImportRecord]) -> Self {
-        let ids: Vec<String> = records.iter().map(|r| r.evidence_import_id.clone()).collect();
+        let ids: Vec<String> = records
+            .iter()
+            .map(|r| r.evidence_import_id.clone())
+            .collect();
         let earliest = records.iter().map(|r| r.snapshot_at).min();
         let latest = records.iter().map(|r| r.snapshot_at).max();
         Self {
@@ -187,6 +195,10 @@ impl TreasuryProvenance {
             earliest_evidence_at: earliest.map(|t| t.to_rfc3339()),
             latest_evidence_at: latest.map(|t| t.to_rfc3339()),
             freshness_warning: None,
+            coverage_note: Some(
+                "Float slices are evidence-backed; non-float sections currently use synthetic recommendation fixtures."
+                    .to_string(),
+            ),
         }
     }
 }
@@ -210,13 +222,8 @@ impl TreasuryService {
         Self
     }
 
-    pub fn build_control_tower(
-        &self,
-        scenario: Option<&str>,
-    ) -> TreasuryControlTowerSnapshot {
-        self.build_control_tower_from(TreasuryDataSource::Sample(
-            scenario.map(|s| s.to_string()),
-        ))
+    pub fn build_control_tower(&self, scenario: Option<&str>) -> TreasuryControlTowerSnapshot {
+        self.build_control_tower_from(TreasuryDataSource::Sample(scenario.map(|s| s.to_string())))
     }
 
     /// Build a control tower snapshot from an explicit data source.
@@ -272,9 +279,9 @@ impl TreasuryService {
                     counterparty_id: snapshot.lp_id.clone(),
                     direction: snapshot.direction.clone(),
                     pressure_score: decimal_to_string(lp_counterparty_pressure_score(&snapshot)),
-                    concentration: lp_counterparty_pressure_label(
-                        &lp_counterparty_pressure_score(&snapshot),
-                    )
+                    concentration: lp_counterparty_pressure_label(&lp_counterparty_pressure_score(
+                        &snapshot,
+                    ))
                     .to_string(),
                     reliability_score: snapshot.reliability_score.map(decimal_to_string),
                     p95_settlement_latency_seconds: snapshot.p95_settlement_latency_seconds,
@@ -286,6 +293,60 @@ impl TreasuryService {
             reserve_positions,
             yield_allocations,
         }
+    }
+
+    /// Build treasury float slices from evidence imports.
+    ///
+    /// The input is expected to be sorted newest-first. If multiple imports exist for the same
+    /// `(account_scope, asset_code)`, only the first (latest) row is used.
+    pub fn float_slices_from_evidence(
+        records: &[TreasuryEvidenceImportRecord],
+    ) -> Vec<TreasuryFloatSlice> {
+        let mut latest_by_scope =
+            std::collections::BTreeMap::<(String, String), &TreasuryEvidenceImportRecord>::new();
+
+        for record in records {
+            let key = (
+                record.account_scope.clone(),
+                record.asset_code.to_ascii_uppercase(),
+            );
+            latest_by_scope.entry(key).or_insert(record);
+        }
+
+        latest_by_scope
+            .into_iter()
+            .map(|((segment, asset), record)| {
+                let (available, reserved) =
+                    normalize_treasury_balances(record.available_balance, record.reserved_balance);
+                let total = available + reserved;
+                let utilization_pct = if total > Decimal::ZERO {
+                    ((reserved * Decimal::from(100)) / total)
+                        .round_dp(0)
+                        .to_i64()
+                        .unwrap_or(0)
+                        .clamp(0, 100)
+                } else {
+                    0
+                };
+
+                let shortage_risk = if utilization_pct >= 85 {
+                    "high"
+                } else if utilization_pct >= 60 {
+                    "medium"
+                } else {
+                    "low"
+                };
+
+                TreasuryFloatSlice {
+                    segment,
+                    asset,
+                    available: decimal_to_string(available),
+                    reserved: decimal_to_string(reserved),
+                    utilization_pct,
+                    shortage_risk: shortage_risk.to_string(),
+                }
+            })
+            .collect()
     }
 }
 
@@ -385,9 +446,8 @@ fn build_recommendations(
         .filter(|slice| slice.segment.starts_with("chain:"))
         .map(|slice| parse_decimal(&slice.available))
         .fold(Decimal::ZERO, |acc, value| acc + value);
-    let max_allocatable = deployable_cash
-        * Decimal::from(config.max_allocation_percent)
-        / Decimal::from(100);
+    let max_allocatable =
+        deployable_cash * Decimal::from(config.max_allocation_percent) / Decimal::from(100);
 
     recommendations.push(TreasuryRecommendation {
         id: "treasury_yield_parking_hint".to_string(),
@@ -478,8 +538,7 @@ fn build_alerts(
             id: "alert_no_action".to_string(),
             severity: "low".to_string(),
             title: "Treasury posture is healthy".to_string(),
-            summary: "No recommendation crossed the current treasury action threshold."
-                .to_string(),
+            summary: "No recommendation crossed the current treasury action threshold.".to_string(),
             recommendation_ids: Vec::new(),
         });
     }
@@ -655,9 +714,7 @@ fn sample_exposures(scenario: Option<&str>) -> Vec<LpReliabilitySnapshotRow> {
     ]
 }
 
-fn sample_safeguarding_overlays(
-    scenario: Option<&str>,
-) -> Vec<TreasurySafeguardingOverlay> {
+fn sample_safeguarding_overlays(scenario: Option<&str>) -> Vec<TreasurySafeguardingOverlay> {
     let now = Utc::now().to_rfc3339();
 
     if matches!(scenario, Some("stable")) {
@@ -721,9 +778,7 @@ fn sample_safeguarding_overlays(
     ]
 }
 
-fn sample_reserve_positions(
-    scenario: Option<&str>,
-) -> Vec<TreasuryReservePosition> {
+fn sample_reserve_positions(scenario: Option<&str>) -> Vec<TreasuryReservePosition> {
     let now = Utc::now().to_rfc3339();
 
     if matches!(scenario, Some("stable")) {

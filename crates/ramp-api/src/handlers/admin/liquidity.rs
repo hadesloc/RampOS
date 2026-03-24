@@ -485,7 +485,6 @@ pub async fn activate_liquidity_policy(
     }))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -495,8 +494,8 @@ mod tests {
         let response = map_route_selection_explanation(&RouteSelectionExplanation {
             policy_version: Some("liquidity-policy-default-v1".to_string()),
             selected_candidate_id: "1".to_string(),
-            winning_reason: "Selected route balanced treasury, partner, and compliance constraints."
-                .to_string(),
+            winning_reason:
+                "Selected route balanced treasury, partner, and compliance constraints.".to_string(),
             candidate_breakdowns: vec![
                 RouteCandidateBreakdown {
                     candidate_id: "0".to_string(),
@@ -528,14 +527,20 @@ mod tests {
         });
 
         assert_eq!(response.selected_candidate_id, "1");
-        assert_eq!(response.policy_version.as_deref(), Some("liquidity-policy-default-v1"));
+        assert_eq!(
+            response.policy_version.as_deref(),
+            Some("liquidity-policy-default-v1")
+        );
         assert_eq!(response.candidates.len(), 2);
         assert_eq!(response.candidates[0].compliance_status, "review_required");
         assert!(response.candidates[0]
             .rejection_reasons
             .iter()
             .any(|reason| reason == "manual_compliance_review"));
-        assert_eq!(response.candidates[1].partner_id.as_deref(), Some("lp_beta"));
+        assert_eq!(
+            response.candidates[1].partner_id.as_deref(),
+            Some("lp_beta")
+        );
         assert!(response.candidates[1].selected);
     }
 }

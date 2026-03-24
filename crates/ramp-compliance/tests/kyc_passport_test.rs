@@ -26,5 +26,7 @@ fn passport_service_lists_review_queue() {
     let queue = PassportService::new().list_queue(None);
 
     assert!(!queue.is_empty());
-    assert!(queue.iter().any(|item| item.review_status == "pending_review"));
+    assert!(queue
+        .iter()
+        .any(|item| item.review_status == "pending_review"));
 }

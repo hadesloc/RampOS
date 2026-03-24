@@ -1,6 +1,7 @@
 //! Cookie Authentication Integration Tests
 //!
-//! Tests for cookie-based authentication flow including login, logout, and session management.
+//! Tests for the current portal cookie/auth posture, including fail-closed
+//! completion endpoints, logout cookie clearing, and placeholder session checks.
 
 use axum::{
     body::Body,
@@ -171,8 +172,8 @@ async fn setup_cookie_app() -> TestCookieApp {
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
         document_storage: None,
-            kyc_service: None,
-            kyt_service: None,
+        kyc_service: None,
+        kyt_service: None,
     };
 
     let router = create_router(app_state);
@@ -278,7 +279,7 @@ async fn test_webauthn_register_challenge_invalid_email() {
 }
 
 #[tokio::test]
-async fn test_webauthn_register_complete_sets_cookies() {
+async fn test_webauthn_register_complete_is_unavailable() {
     let app = setup_cookie_app().await;
 
     let payload = serde_json::json!({
@@ -338,7 +339,7 @@ async fn test_webauthn_login_challenge() {
 }
 
 #[tokio::test]
-async fn test_webauthn_login_complete_sets_cookies() {
+async fn test_webauthn_login_complete_is_unavailable() {
     let app = setup_cookie_app().await;
 
     let payload = serde_json::json!({
@@ -399,7 +400,7 @@ async fn test_request_magic_link() {
 }
 
 #[tokio::test]
-async fn test_verify_magic_link_sets_cookies() {
+async fn test_verify_magic_link_is_unavailable() {
     let app = setup_cookie_app().await;
 
     let payload = serde_json::json!({

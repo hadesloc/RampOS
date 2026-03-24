@@ -4,6 +4,7 @@ use axum::{
 };
 use chrono::{Duration, Utc};
 use hmac::{Hmac, Mac};
+use jsonwebtoken::{encode, EncodingKey, Header};
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{
@@ -25,7 +26,7 @@ type HmacSha256 = Hmac<Sha256>;
 
 const TEST_API_KEY: &str = "rescreening_test_api_key";
 const TEST_API_SECRET: &str = "rescreening_test_api_secret";
-const TEST_ADMIN_KEY: &str = "rescreening_admin_key";
+const TEST_ADMIN_JWT_SECRET: &str = "rescreening-admin-jwt-secret";
 
 struct TestApp {
     router: axum::Router,
@@ -47,13 +48,31 @@ fn generate_signature(
     hex::encode(mac.finalize().into_bytes())
 }
 
-fn build_signed_admin_request(
+fn make_admin_jwt(role: &str) -> String {
+    let claims = ramp_api::handlers::admin::admin_auth::AdminClaims {
+        sub: "rescreening_admin_test_user".to_string(),
+        email: "rescreening-admin@rampos.local".to_string(),
+        role: role.to_string(),
+        iat: Utc::now().timestamp(),
+        exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+        token_type: "access".to_string(),
+    };
+
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(TEST_ADMIN_JWT_SECRET.as_bytes()),
+    )
+    .expect("jwt should encode")
+}
+
+fn build_signed_admin_jwt_request(
     method: &str,
     uri: &str,
     body: &str,
     api_key: &str,
     api_secret: &str,
-    admin_key: &str,
+    admin_jwt: &str,
 ) -> Request<Body> {
     let timestamp = Utc::now().to_rfc3339();
     let path = uri.split('?').next().unwrap_or(uri);
@@ -65,7 +84,7 @@ fn build_signed_admin_request(
         .header("Authorization", format!("Bearer {api_key}"))
         .header("X-Timestamp", &timestamp)
         .header("X-Signature", signature)
-        .header("X-Admin-Key", admin_key);
+        .header("X-Admin-Authorization", format!("Bearer {admin_jwt}"));
 
     if !body.is_empty() {
         builder = builder.header("Content-Type", "application/json");
@@ -201,8 +220,8 @@ async fn setup_app(tenant_id: &str) -> TestApp {
         ws_state: None,
         metrics_registry: Arc::new(ramp_core::service::MetricsRegistry::new()),
         document_storage: None,
-            kyc_service: None,
-            kyt_service: None,
+        kyc_service: None,
+        kyt_service: None,
     };
 
     TestApp {
@@ -214,16 +233,17 @@ async fn setup_app(tenant_id: &str) -> TestApp {
 
 #[tokio::test]
 async fn rescreening_runs_lists_due_users() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_rescreening_list").await;
+    let admin_jwt = make_admin_jwt("viewer");
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/rescreening/runs",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -240,22 +260,22 @@ async fn rescreening_runs_lists_due_users() {
 
 #[tokio::test]
 async fn rescreening_restriction_action_updates_user_flags() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
-    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_rescreening_restrict").await;
+    let operator_jwt = make_admin_jwt("operator");
     let body = serde_json::json!({
         "restrictionStatus": "RESTRICTED",
         "reason": "watchlist escalation"
     })
     .to_string();
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/rescreening/users/user_rescreen_due/restrict",
         &body,
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &operator_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -267,5 +287,4 @@ async fn rescreening_restriction_action_updates_user_flags() {
     assert_eq!(payload["userId"], "user_rescreen_due");
     assert_eq!(payload["restrictionStatus"], "RESTRICTED");
     assert_eq!(payload["reason"], "watchlist escalation");
-    std::env::remove_var("RAMPOS_ADMIN_ROLE");
 }

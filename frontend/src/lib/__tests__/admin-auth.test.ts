@@ -3,6 +3,7 @@ import {
   constantTimeEqual,
   createAdminSessionToken,
   isAdminSessionTokenValid,
+  readAdminSessionToken,
 } from '../admin-auth'
 
 afterEach(() => {
@@ -50,5 +51,24 @@ describe('admin session tokens', () => {
     vi.setSystemTime(new Date(baseTime.getTime() + 2000))
 
     expect(isAdminSessionTokenValid(token, 'secret')).toBe(false)
+  })
+
+  it('round-trips a signed admin session payload', () => {
+    const token = createAdminSessionToken('secret', {
+      accessToken: 'access-token-123',
+      refreshToken: 'refresh-token-456',
+      accessTokenExpiresAt: Math.floor(Date.now() / 1000) + 1800,
+      refreshTokenExpiresAt: Math.floor(Date.now() / 1000) + 86400,
+      admin: {
+        email: 'admin@example.com',
+        role: 'admin',
+      },
+    })
+
+    const session = readAdminSessionToken(token, 'secret')
+    expect(session).not.toBeNull()
+    expect(session?.accessToken).toBe('access-token-123')
+    expect(session?.refreshToken).toBe('refresh-token-456')
+    expect(session?.admin?.role).toBe('admin')
   })
 })

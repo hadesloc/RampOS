@@ -61,6 +61,8 @@ The canonical staging workflow is:
 | --- | --- | --- | --- |
 | **Deploy Staging** | `deploy-staging.yaml` | push to staging branch, manual dispatch | Build, push, and deploy to staging environment |
 
+This workflow map identifies the canonical deployment path only. It does not mean staging evidence for the current RC is attached or attributable. Use `docs/current-status.md` and `docs/operations/bank-grade-signoff-ledger.md` for the actual signoff truth of RC `268670d74`.
+
 ## Deprecation Process
 
 1. Add `# DEPRECATED — see docs/operations/canonical-ci-workflow-map.md` header to each legacy file.
@@ -77,5 +79,5 @@ The canonical staging workflow is:
 
 ---
 
-Last updated: 2026-03-16
+Last updated: 2026-03-18
 Version: 1.0.0

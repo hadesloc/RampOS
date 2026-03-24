@@ -2,6 +2,10 @@
 
 Complete flow examples demonstrating real-world integration scenarios with the RampOS API.
 
+Admin auth note:
+- Canonical admin auth header is `X-Admin-Authorization: Bearer <admin-jwt>`.
+- `X-Admin-Key` appears in some legacy snippets as deprecated compatibility fallback.
+
 ## Table of Contents
 
 1. [User Registration and KYC Flow](#1-user-registration-and-kyc-flow)
@@ -55,7 +59,7 @@ After registration, check the user's tier with RampOS.
 curl -X GET "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/tier" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 **Response:**
@@ -75,7 +79,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/tier" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/limits" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 **Response:**
@@ -101,7 +105,7 @@ User submits KYC documents through your platform. After verification:
 curl -X POST "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/tier/upgrade" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "targetTier": "TIER1",
@@ -117,7 +121,7 @@ After ID verification and address proof:
 curl -X POST "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/tier/upgrade" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "targetTier": "TIER2",
@@ -157,7 +161,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/tier/upgrade" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/limits" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 **Response:**
@@ -180,6 +184,8 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/limits" \
 async function completeUserOnboarding(userId, kycData) {
   const rampos = new RampOSClient({
     apiKey: process.env.RAMPOS_API_KEY,
+    // Legacy compatibility-only fallback for this SDK snippet.
+    // Canonical admin auth contract is X-Admin-Authorization: Bearer <admin-jwt>.
     adminKey: process.env.RAMPOS_ADMIN_KEY
   });
 
@@ -604,7 +610,7 @@ This flow demonstrates how to set up and manage multiple tenants (exchanges/plat
 curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "VietCrypto Exchange",
@@ -634,7 +640,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants" \
 curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants/tenant_vietcrypto/api-keys" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}"
 ```
 
 **Response:**
@@ -653,7 +659,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants/tenant_vietcrypto/api-keys" \
 curl -X PATCH "${RAMPOS_API_URL}/v1/admin/tenants/tenant_vietcrypto" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "dailyPayinLimitVnd": "50000000000",
@@ -668,7 +674,7 @@ curl -X PATCH "${RAMPOS_API_URL}/v1/admin/tenants/tenant_vietcrypto" \
 curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants/tenant_vietcrypto/activate" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}"
 ```
 
 ### Step 5: Tenant Makes API Calls
@@ -700,7 +706,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/intents/payin" \
 curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants/tenant_vietcrypto/suspend" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "reason": "Pending compliance review - unusual transaction patterns detected"
@@ -714,7 +720,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants/tenant_vietcrypto/suspend" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/dashboard" \
   -H "Authorization: Bearer ${TENANT_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${TENANT_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${TENANT_ADMIN_JWT}"
 ```
 
 ### Multi-Tenant Management Script
@@ -730,16 +736,16 @@ from datetime import datetime
 import json
 
 class RampOSAdmin:
-    def __init__(self, base_url, api_key, admin_key):
+    def __init__(self, base_url, api_key, admin_jwt):
         self.base_url = base_url
         self.api_key = api_key
-        self.admin_key = admin_key
+        self.admin_jwt = admin_jwt
 
     def _headers(self):
         return {
             "Authorization": f"Bearer {self.api_key}",
             "X-Timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "X-Admin-Key": self.admin_key,
+            "X-Admin-Authorization": f"Bearer {self.admin_jwt}",
             "Content-Type": "application/json"
         }
 
@@ -806,7 +812,7 @@ if __name__ == "__main__":
     admin = RampOSAdmin(
         base_url="https://api.rampos.io",
         api_key="your_master_api_key",
-        admin_key="your_admin_key"
+        admin_jwt="your_admin_jwt"
     )
 
     # Onboard a new exchange
@@ -855,7 +861,7 @@ This flow demonstrates handling AML (Anti-Money Laundering) cases from detection
 curl -X GET "${RAMPOS_API_URL}/v1/admin/cases?status=OPEN&limit=10" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 **Response:**
@@ -893,7 +899,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/cases?status=OPEN&limit=10" \
 curl -X PATCH "${RAMPOS_API_URL}/v1/admin/cases/case_aml_001" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}:operator" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "assignedTo": "analyst_nguyen",
@@ -908,7 +914,7 @@ curl -X PATCH "${RAMPOS_API_URL}/v1/admin/cases/case_aml_001" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/cases/case_aml_001" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 ### Step 4: Add Investigation Notes
@@ -917,7 +923,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/cases/case_aml_001" \
 curl -X PATCH "${RAMPOS_API_URL}/v1/admin/cases/case_aml_001" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}:operator" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "note": "Reviewed user KYC documents. User is a verified business owner with documented income sources. Transaction is for legitimate business equipment purchase."
@@ -936,7 +942,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/intents?user_id=user_abc123&limit=50" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/users/user_abc123" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 ### Step 6A: Close Case (False Positive)
@@ -945,7 +951,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/users/user_abc123" \
 curl -X PATCH "${RAMPOS_API_URL}/v1/admin/cases/case_aml_001" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}:operator" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "status": "CLOSED",
@@ -961,7 +967,7 @@ If the case is genuine, generate a SAR:
 curl -X POST "${RAMPOS_API_URL}/v1/admin/cases/case_aml_001/sar" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}"
 ```
 
 **Response:**
@@ -997,7 +1003,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/admin/cases/case_aml_001/sar" \
 curl -X POST "${RAMPOS_API_URL}/v1/admin/users/user_abc123/tier/downgrade" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "targetTier": "TIER0",
@@ -1008,7 +1014,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/admin/users/user_abc123/tier/downgrade" \
 curl -X PATCH "${RAMPOS_API_URL}/v1/admin/users/user_abc123" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}:operator" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "status": "SUSPENDED"
@@ -1021,7 +1027,7 @@ curl -X PATCH "${RAMPOS_API_URL}/v1/admin/users/user_abc123" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/cases/stats" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 **Response:**
@@ -1069,7 +1075,7 @@ This flow demonstrates daily reconciliation between RampOS records and bank stat
 curl -X POST "${RAMPOS_API_URL}/v1/admin/recon/batches" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "railsProvider": "vcb",
@@ -1102,7 +1108,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/admin/recon/batches" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/recon/batches?limit=10" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 ### Step 3: Generate Reconciliation Report
@@ -1114,7 +1120,7 @@ After the batch is processed:
 curl -X GET "${RAMPOS_API_URL}/v1/admin/reports/aml?start_date=2026-01-22T00:00:00Z&end_date=2026-01-22T23:59:59Z" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 ### Step 4: Export Report for Audit
@@ -1124,14 +1130,14 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/reports/aml?start_date=2026-01-22T00:00:
 curl -X GET "${RAMPOS_API_URL}/v1/admin/reports/aml/export?start_date=2026-01-22T00:00:00Z&end_date=2026-01-22T23:59:59Z&format=csv" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}" \
   -o "recon_report_20260122.csv"
 
 # Export as PDF
 curl -X GET "${RAMPOS_API_URL}/v1/admin/reports/aml/export?start_date=2026-01-22T00:00:00Z&end_date=2026-01-22T23:59:59Z&format=pdf" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}" \
   -o "recon_report_20260122.pdf"
 ```
 
@@ -1160,7 +1166,7 @@ for PROVIDER in "${RAILS_PROVIDERS[@]}"; do
     BATCH=$(curl -s -X POST "${RAMPOS_API_URL}/v1/admin/recon/batches" \
         -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
         -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+        -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
         -H "Content-Type: application/json" \
         -d "{
             \"railsProvider\": \"${PROVIDER}\",
@@ -1175,7 +1181,7 @@ for PROVIDER in "${RAILS_PROVIDERS[@]}"; do
     curl -s -X GET "${RAMPOS_API_URL}/v1/admin/reports/aml/export?start_date=${YESTERDAY}&end_date=${YESTERDAY_END}&format=csv" \
         -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
         -H "X-Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+        -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}" \
         -o "/var/reports/recon_${PROVIDER}_${TODAY}.csv"
 
     echo "Report saved to /var/reports/recon_${PROVIDER}_${TODAY}.csv"

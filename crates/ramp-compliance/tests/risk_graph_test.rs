@@ -4,9 +4,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use ramp_common::types::{IntentId, TenantId, UserId};
-use ramp_compliance::{
-    RiskGraphAssembler, RiskLabReplayRecord, RiskLabRuleVersion,
-};
+use ramp_compliance::{RiskGraphAssembler, RiskLabReplayRecord, RiskLabRuleVersion};
 
 fn sample_replay() -> RiskLabReplayRecord {
     RiskLabReplayRecord {
@@ -71,10 +69,7 @@ fn risk_graph_assembler_builds_nodes_edges_and_summary_from_replay() {
     assert!(graph.summary.edge_count >= 4);
     assert_eq!(graph.summary.factor_count, 1);
     assert_eq!(graph.summary.feature_count, 3);
-    assert!(graph
-        .nodes
-        .iter()
-        .any(|node| node.kind == "RULE_VERSION"));
+    assert!(graph.nodes.iter().any(|node| node.kind == "RULE_VERSION"));
     assert!(graph
         .edges
         .iter()

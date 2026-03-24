@@ -1,92 +1,141 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import Image from 'next/image'
 import { FileSignature, Route, Cog, Wallet } from 'lucide-react'
 
 const steps = [
   {
     id: 1,
-    title: 'Express Intent',
-    description: 'Users declare what they want: Swap, Bridge, Send, or Stake — across any chain.',
+    title: 'Declare Intent',
+    description: 'Users express what they want: Swap, Bridge, Send, Ramp, or Stake — across any chain. No manual routing needed.',
     icon: FileSignature,
+    accent: '#00FF87',
   },
   {
     id: 2,
-    title: 'Smart Routing',
-    description: 'IntentSolver evaluates all routes, scoring by gas, speed, and step count to find the optimum.',
+    title: 'Route & Price',
+    description: 'IntentSolver evaluates every path, scoring by gas, speed, liquidity depth, and step count to find the optimum.',
     icon: Route,
+    accent: '#7B61FF',
   },
   {
     id: 3,
-    title: 'Durable Execution',
-    description: 'WorkflowEngine executes each step with built-in compensation and automatic rollback on failure.',
+    title: 'Execute & Settle',
+    description: 'WorkflowEngine executes each step with durable state, built-in compensation, and automatic rollback on failure.',
     icon: Cog,
+    accent: '#00D4FF',
   },
   {
     id: 4,
-    title: 'Settlement',
-    description: 'Double-entry ledger records every movement. Escrow releases. Webhooks fire. Done.',
+    title: 'Comply & Report',
+    description: 'Built-in KYC/AML screening, Travel Rule compliance, sanctions checks, and regulatory reporting — all automatic.',
     icon: Wallet,
+    accent: '#00FF87',
   },
 ]
 
 export default function HowItWorks() {
   return (
-    <section className="w-full py-32 bg-black relative overflow-hidden">
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-cyan-900/10 blur-[150px] rounded-full pointer-events-none" />
+    <section className="w-full py-32 relative overflow-hidden">
+      {/* Background glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-[#7B61FF]/5 blur-[180px] rounded-full pointer-events-none" />
 
-      <div className="container mx-auto px-4 relative z-10 max-w-7xl">
+      <div className="container mx-auto px-4 relative z-10 max-w-6xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6 }}
-          className="text-center mb-24"
+          className="text-center mb-20"
         >
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 mb-6 backdrop-blur-md text-sm font-medium text-cyan-400 tracking-wider uppercase">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-sm font-medium text-[#7B61FF] tracking-wider uppercase mb-6">
             Intent Lifecycle
           </div>
-          <h2 className="text-4xl md:text-6xl font-extrabold bg-clip-text text-transparent bg-gradient-to-b from-white to-gray-500 mb-6 tracking-tight">
-            From Intent to Settlement
+          <h2 className="text-4xl md:text-6xl font-display font-extrabold tracking-tight mb-6">
+            From Intent to{' '}
+            <span className="text-shimmer">Settlement</span>
           </h2>
           <p className="text-gray-400 text-xl max-w-2xl mx-auto font-light leading-relaxed">
-            Every operation in RampOS follows a declarative intent pipeline — users express <em>what</em>, the engine decides <em>how</em>.
+            Every operation follows a declarative pipeline — users express <em>what</em>, the engine decides <em>how</em>.
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 relative mt-16">
-          {/* Connection Line */}
-          <div className="hidden lg:block absolute top-[48px] left-[10%] w-[80%] h-0.5 bg-gradient-to-r from-transparent via-white/10 to-transparent -z-10" />
+        {/* Vertical Timeline + Illustration */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-12 items-start">
+        <div className="lg:col-span-3 relative">
+          {/* Glowing line */}
+          <div className="absolute left-8 md:left-12 top-0 bottom-0 w-[2px]">
+            <div className="h-full w-full bg-gradient-to-b from-[#00FF87]/40 via-[#7B61FF]/40 to-[#00D4FF]/40 rounded-full" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#00FF87] via-[#7B61FF] to-[#00D4FF] rounded-full animate-neon-pulse" style={{ filter: 'blur(4px)' }} />
+          </div>
 
-          {steps.map((step, index) => (
-            <motion.div
-              key={step.id}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6, delay: index * 0.15 }}
-              className="relative flex flex-col items-center text-center group"
-            >
-              <div className="w-24 h-24 rounded-3xl bg-black border border-white/10 flex items-center justify-center mb-8 group-hover:border-cyan-500/50 group-hover:shadow-[0_0_40px_-10px_rgba(34,211,238,0.4)] transition-all duration-500 relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <step.icon className="w-10 h-10 text-gray-500 group-hover:text-cyan-400 transition-colors duration-500 relative z-10" />
-                <div className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-black border border-white/20 flex items-center justify-center text-sm font-mono text-gray-400 group-hover:bg-cyan-900/50 group-hover:border-cyan-500/50 group-hover:text-cyan-300 transition-all duration-300 z-20 shadow-xl">
-                  {step.id}
+          <div className="space-y-16">
+            {steps.map((step, index) => (
+              <motion.div
+                key={step.id}
+                initial={{ opacity: 0, x: -30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true, margin: '-50px' }}
+                transition={{ duration: 0.6, delay: index * 0.1 }}
+                className="relative flex gap-8 md:gap-12 group"
+              >
+                {/* Number Circle */}
+                <div className="relative z-10 shrink-0">
+                  <div
+                    className="w-16 h-16 md:w-24 md:h-24 rounded-full border-2 flex items-center justify-center bg-[#050505] font-display text-2xl md:text-3xl font-bold transition-all duration-500 group-hover:scale-110"
+                    style={{
+                      borderColor: `${step.accent}40`,
+                      color: step.accent,
+                      boxShadow: `0 0 0 0 ${step.accent}00`,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.boxShadow = `0 0 30px ${step.accent}30, 0 0 60px ${step.accent}10`
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.boxShadow = `0 0 0 0 ${step.accent}00`
+                    }}
+                  >
+                    {step.id}
+                  </div>
                 </div>
-              </div>
 
-              <h3 className="text-2xl font-bold text-white mb-4 group-hover:text-cyan-400 transition-colors duration-300">
-                {step.title}
-              </h3>
-              <p className="text-gray-400 text-lg leading-relaxed font-light px-4">
-                {step.description}
-              </p>
+                {/* Content */}
+                <div className="pt-2 md:pt-5 flex-1">
+                  <div className="flex items-center gap-3 mb-3">
+                    <step.icon className="w-5 h-5" style={{ color: step.accent }} />
+                    <h3 className="text-xl md:text-2xl font-display font-bold text-white group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-gray-400 transition-all duration-300">
+                      {step.title}
+                    </h3>
+                  </div>
+                  <p className="text-gray-400 text-lg leading-relaxed font-light">
+                    {step.description}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
 
-              {index !== steps.length - 1 && (
-                <div className="lg:hidden absolute bottom-[-40px] left-1/2 w-0.5 h-10 bg-gradient-to-b from-white/10 to-transparent" />
-              )}
-            </motion.div>
-          ))}
+        {/* Data Pipeline Illustration */}
+        <motion.div
+          initial={{ opacity: 0, x: 30 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8, delay: 0.3 }}
+          className="hidden lg:flex lg:col-span-2 items-center justify-center sticky top-32"
+        >
+          <div className="relative">
+            <div className="absolute inset-0 bg-[#7B61FF]/5 blur-[60px] rounded-full scale-110" />
+            <Image
+              src="/images/data-pipeline.png"
+              alt="Intent Processing Pipeline"
+              width={500}
+              height={500}
+              className="relative z-10 drop-shadow-[0_0_40px_rgba(123,97,255,0.1)]"
+            />
+          </div>
+        </motion.div>
         </div>
       </div>
     </section>

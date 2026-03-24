@@ -9,13 +9,15 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use super::{
-    Balance, Chain, ChainError, ChainId, ChainType, FeeEstimate, FeeOption, Result, TokenBalance,
-    Transaction, TxHash, TxState, TxStatus, UnifiedAddress,
+    Balance, Chain, ChainError, ChainId, ChainType, FeeEstimate, FeeOption,
+    NativeInboundTransferQuery, ObservedInboundTransfer, Result, TokenBalance, Transaction, TxHash,
+    TxState, TxStatus, UnifiedAddress,
 };
 
 const DEFAULT_RPC_URL: &str = "https://api.mainnet-beta.solana.com";
 const RPC_TIMEOUT_SECS: u64 = 10;
 const LAMPORTS_PER_SOL: f64 = 1_000_000_000.0;
+const DEFAULT_SIGNATURE_SCAN_LIMIT: usize = 100;
 
 /// Solana chain configuration
 #[derive(Debug, Clone)]
@@ -85,6 +87,43 @@ struct TransactionResult {
     slot: Option<u64>,
     block_time: Option<i64>,
     meta: Option<TransactionMeta>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SignatureInfo {
+    signature: String,
+    slot: u64,
+    err: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ParsedNativeTransactionResult {
+    slot: u64,
+    transaction: ParsedNativeTransactionEnvelope,
+    meta: Option<ParsedNativeTransactionMeta>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ParsedNativeTransactionEnvelope {
+    signatures: Vec<String>,
+    message: ParsedNativeTransactionMessage,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ParsedNativeTransactionMessage {
+    account_keys: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ParsedNativeTransactionMeta {
+    err: Option<serde_json::Value>,
+    pre_balances: Vec<u64>,
+    post_balances: Vec<u64>,
 }
 
 #[derive(Deserialize)]
@@ -251,6 +290,71 @@ impl SolanaChain {
         rpc_response
             .result
             .ok_or_else(|| ChainError::RpcError("RPC response missing result".to_string()))
+    }
+
+    async fn get_signatures_for_address(
+        &self,
+        address: &str,
+        limit: usize,
+    ) -> Result<Vec<SignatureInfo>> {
+        self.rpc_call(
+            "getSignaturesForAddress",
+            serde_json::json!([address, {"limit": limit}]),
+        )
+        .await
+    }
+
+    async fn get_parsed_transaction(
+        &self,
+        signature: &str,
+    ) -> Result<Option<ParsedNativeTransactionResult>> {
+        self.rpc_call(
+            "getTransaction",
+            serde_json::json!([signature, {"encoding": "json", "maxSupportedTransactionVersion": 0}]),
+        )
+        .await
+    }
+
+    fn parse_native_inbound_transfer(
+        recipient_address: &str,
+        tx: &ParsedNativeTransactionResult,
+    ) -> Option<ObservedInboundTransfer> {
+        let meta = tx.meta.as_ref()?;
+        if meta.err.is_some() {
+            return None;
+        }
+
+        let index = tx
+            .transaction
+            .message
+            .account_keys
+            .iter()
+            .position(|key| key == recipient_address)?;
+        let pre_balance = *meta.pre_balances.get(index)?;
+        let post_balance = *meta.post_balances.get(index)?;
+        if post_balance <= pre_balance {
+            return None;
+        }
+
+        Some(ObservedInboundTransfer {
+            tx_hash: TxHash(
+                tx.transaction
+                    .signatures
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "unknown".to_string()),
+            ),
+            from_address: tx
+                .transaction
+                .message
+                .account_keys
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string()),
+            to_address: recipient_address.to_string(),
+            amount: (post_balance - pre_balance).to_string(),
+            block_number: tx.slot,
+        })
     }
 }
 
@@ -593,6 +697,37 @@ impl Chain for SolanaChain {
             }
         }
     }
+
+    async fn find_native_inbound_transfers(
+        &self,
+        query: &NativeInboundTransferQuery,
+    ) -> Result<Vec<ObservedInboundTransfer>> {
+        Self::validate_solana_address(&query.to_address)?;
+
+        let signatures = self
+            .get_signatures_for_address(&query.to_address, DEFAULT_SIGNATURE_SCAN_LIMIT)
+            .await?;
+        let mut transfers = Vec::new();
+
+        for signature in signatures {
+            if signature.err.is_some()
+                || signature.slot < query.from_block
+                || signature.slot > query.to_block
+            {
+                continue;
+            }
+
+            let Some(tx) = self.get_parsed_transaction(&signature.signature).await? else {
+                continue;
+            };
+
+            if let Some(transfer) = Self::parse_native_inbound_transfer(&query.to_address, &tx) {
+                transfers.push(transfer);
+            }
+        }
+
+        Ok(transfers)
+    }
 }
 
 #[cfg(test)]
@@ -651,6 +786,37 @@ mod tests {
         let result = bs58_decode("7cVfgArCheMR6Cs4t6vz5rfnqd56vZq4ndaBrY5xkxXy");
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 32);
+    }
+
+    #[test]
+    fn test_parse_native_inbound_transfer() {
+        let recipient = "11111111111111111111111111111111";
+        let tx = ParsedNativeTransactionResult {
+            slot: 123,
+            transaction: ParsedNativeTransactionEnvelope {
+                signatures: vec![
+                    "5NnYvN2rKxwz1U2s3T4u5V6w7X8y9ZaBcDeFgHiJkLmNoPqRsTuVwXyZ".to_string()
+                ],
+                message: ParsedNativeTransactionMessage {
+                    account_keys: vec![
+                        "7cVfgArCheMR6Cs4t6vz5rfnqd56vZq4ndaBrY5xkxXy".to_string(),
+                        recipient.to_string(),
+                    ],
+                },
+            },
+            meta: Some(ParsedNativeTransactionMeta {
+                err: None,
+                pre_balances: vec![5_000_000_000, 100_000_000],
+                post_balances: vec![3_999_995_000, 600_000_000],
+            }),
+        };
+
+        let parsed = SolanaChain::parse_native_inbound_transfer(recipient, &tx).unwrap();
+        assert_eq!(parsed.tx_hash.0, tx.transaction.signatures[0]);
+        assert_eq!(parsed.from_address, tx.transaction.message.account_keys[0]);
+        assert_eq!(parsed.to_address, recipient);
+        assert_eq!(parsed.amount, "500000000");
+        assert_eq!(parsed.block_number, 123);
     }
 
     #[test]

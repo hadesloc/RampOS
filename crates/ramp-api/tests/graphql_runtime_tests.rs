@@ -178,8 +178,8 @@ async fn setup_app() -> axum::Router {
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
         document_storage: None,
-            kyc_service: None,
-            kyt_service: None,
+        kyc_service: None,
+        kyt_service: None,
     };
 
     create_router(app_state)
@@ -414,7 +414,9 @@ async fn test_graphql_rejects_cross_tenant_query_even_with_valid_auth() {
     let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert!(
-        json["errors"].as_array().is_some_and(|errors| !errors.is_empty()),
+        json["errors"]
+            .as_array()
+            .is_some_and(|errors| !errors.is_empty()),
         "expected cross-tenant GraphQL query to return errors, got {json:?}"
     );
 }
@@ -636,8 +638,8 @@ fn setup_app_state_with_data() -> (
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
         document_storage: None,
-            kyc_service: None,
-            kyt_service: None,
+        kyc_service: None,
+        kyt_service: None,
     };
 
     (app_state, intent_repo, user_repo)

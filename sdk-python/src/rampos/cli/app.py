@@ -10,9 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from rampos.cli.config import DEFAULT_BASE_URL, DEFAULT_PROFILE, build_cli_context, load_config, save_config
-from rampos.cli.manifest import ManifestOperation, load_manifest
+from rampos.cli.manifest import ManifestOperation, load_manifest, load_mcp_v1_manifest
 from rampos.cli.output import print_output
 from rampos.cli.request import append_query, load_body, request_json
+from rampos.cli.errors import CliAuthError, CliHttpError, CliTransportError
 
 REQUIRED_COMPATIBILITY_SURFACES = ("openapi", "sdk-python", "cli")
 
@@ -23,6 +24,7 @@ def _add_common_runtime_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--auth-mode", choices=["api", "admin", "portal", "lp"])
     parser.add_argument("--api-key")
     parser.add_argument("--api-secret")
+    parser.add_argument("--admin-jwt")
     parser.add_argument("--admin-key")
     parser.add_argument("--admin-role")
     parser.add_argument("--admin-user-id")
@@ -49,6 +51,7 @@ def cmd_login(args: argparse.Namespace) -> int:
         "auth_mode": args.auth_mode,
         "api_key": args.api_key,
         "api_secret": args.api_secret,
+        "admin_jwt": args.admin_jwt,
         "admin_key": args.admin_key,
         "admin_role": args.admin_role,
         "admin_user_id": args.admin_user_id,
@@ -93,18 +96,24 @@ def cmd_sandbox_run(args: argparse.Namespace) -> int:
         result = request_json(ctx, "POST", "/v1/admin/sandbox/run", payload=payload, require_operator=True)
         print_output(result, output=ctx.output, compact=ctx.compact)
         return 0
-    except Exception as exc:
+    except (CliHttpError, CliTransportError) as exc:
+        if isinstance(exc, CliHttpError) and exc.status_code not in {404, 501, 503}:
+            raise
         print_output(
             {
                 "status": "backend_unavailable",
+                "contractStatus": "placeholder",
                 "error": str(exc),
                 "message": "Sandbox scenario execution endpoint is not available. Use 'sandbox seed' and 'sandbox replay' as the supported alternative.",
+                "supportedAlternatives": ["sandbox seed", "sandbox replay"],
                 "request": payload,
             },
             output=ctx.output,
             compact=ctx.compact,
         )
         return 1
+    except CliAuthError:
+        raise
 
 
 def cmd_sandbox_replay(args: argparse.Namespace) -> int:
@@ -386,6 +395,22 @@ def cmd_manifest_operation(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_manifest_mcp_v1(args: argparse.Namespace) -> int:
+    catalog = load_mcp_v1_manifest()
+    print_output(
+        {
+            "catalog": "thin_mcp_v1",
+            "contractStatus": "read_heavy_default",
+            "operations": catalog["operations"],
+            "operationIds": catalog["operation_ids"],
+            "mutatingSurfacesPolicy": "approval_bounded_or_non_v1",
+        },
+        output=args.output,
+        compact=args.compact,
+    )
+    return 0
+
+
 def _register_manifest_commands(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -402,7 +427,13 @@ def _register_manifest_commands(
             contract_source=operation_dict["contract_source"],
             method=operation_dict["method"],
             path=operation_dict["path"],
+            safety_class=operation_dict.get("safety_class", "unknown"),
+            mcp_exposure=operation_dict.get("mcp_exposure", "non_v1"),
+            mcp_default=operation_dict.get("mcp_default", False),
+            cli_runtime_exposed=operation_dict.get("cli_runtime_exposed", True),
         )
+        if not operation.cli_runtime_exposed:
+            continue
         prefix: tuple[str, ...] = ()
         for index, part in enumerate(operation.command):
             is_leaf = index == len(operation.command) - 1
@@ -453,7 +484,15 @@ def build_parser() -> argparse.ArgumentParser:
     seed.add_argument("--config-overrides", default={})
     seed.set_defaults(func=cmd_sandbox_seed)
 
-    run = sandbox_subparsers.add_parser("run", help="Show the placeholder for scenario execution.")
+    run = sandbox_subparsers.add_parser(
+        "run",
+        help="Attempt sandbox scenario execution; returns a truthful placeholder contract when the backend endpoint is unavailable.",
+        description=(
+            "Attempt sandbox scenario execution. This command remains bounded: if the backend "
+            "execution endpoint is unavailable, the CLI returns an explicit placeholder contract "
+            "instead of pretending the flow is fully live."
+        ),
+    )
     run.add_argument("--tenant-id", required=True)
     run.add_argument("--preset-code", required=True)
     run.add_argument("--scenario-code", required=True)
@@ -546,6 +585,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not attempt to reconnect on connection loss.",
     )
     watch.set_defaults(func=cmd_watch)
+
+    manifest_parser = subparsers.add_parser(
+        "manifest",
+        help="Inspect machine-readable manifest catalogs for operator and MCP tooling.",
+    )
+    manifest_parser.set_defaults(func=lambda parsed: manifest_parser.print_help() or 0)
+    manifest_subparsers = manifest_parser.add_subparsers(dest="manifest_command")
+
+    mcp_v1 = manifest_subparsers.add_parser(
+        "mcp-v1",
+        help="Print thin MCP v1 read-heavy catalog as JSON.",
+    )
+    mcp_v1.add_argument("--output", choices=["json", "jsonl", "table"], default="json")
+    mcp_v1.add_argument("--compact", action="store_true")
+    mcp_v1.set_defaults(func=cmd_manifest_mcp_v1)
 
     _register_manifest_commands(subparsers)
 

@@ -21,6 +21,8 @@ export function PasskeyManagement({ userName }: PasskeyManagementProps) {
   const [renameValue, setRenameValue] = React.useState("");
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [actionLoading, setActionLoading] = React.useState(false);
+  const experimentalNote =
+    "Quản lý passkey này vẫn là surface thử nghiệm cho tới khi backend portal passkey routes được bật đầy đủ.";
 
   const loadPasskeys = React.useCallback(async () => {
     setState("loading");
@@ -134,6 +136,7 @@ export function PasskeyManagement({ userName }: PasskeyManagementProps) {
       {state === "error" && errorMessage && (
         <p className="text-sm text-destructive">{errorMessage}</p>
       )}
+      <p className="text-xs text-muted-foreground">{experimentalNote}</p>
 
       {state === "loading" && (
         <p className="text-sm text-muted-foreground">Dang tai...</p>

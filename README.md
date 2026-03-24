@@ -74,6 +74,13 @@ The **on/off ramp** is the critical bridge between traditional finance and crypt
   <img src="docs/screenshots/landing-features.png" alt="Landing Page Features" width="800">
 </p>
 
+### Admin Dashboard
+> Real-time operations center with beautiful SVG data visualizations for transaction volume and revenue breakdown.
+
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="Admin Dashboard" width="800">
+</p>
+
 ### User Portal
 > Self-service portal for end users with deposit, withdraw, asset management, and transaction history.
 

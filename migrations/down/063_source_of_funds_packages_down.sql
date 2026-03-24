@@ -1,0 +1,2 @@
+DROP TRIGGER IF EXISTS trigger_source_of_funds_packages_updated_at ON source_of_funds_packages;
+DROP TABLE IF EXISTS source_of_funds_packages;

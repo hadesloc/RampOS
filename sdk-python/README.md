@@ -57,7 +57,13 @@ The SDK organizes API methods into service namespaces that mirror the TypeScript
 
 ## Contract-Driven Note
 
-RampOS keeps the public SDKs aligned to the OpenAPI contract and uses the thin `rampos-cli` preview for bounded admin/operator flows that are not yet first-class SDK namespaces.
+RampOS keeps the public SDKs aligned to the OpenAPI contract and uses the packaged Python CLI in `sdk-python/src/rampos/cli/` for bounded admin/operator flows that are not yet first-class SDK namespaces.
+
+Current CLI truth:
+- `watch` is a real JSONL WebSocket surface, not a planned gap.
+- Dangerous writes already have bounded approval-aware behavior through `--dry-run`, `--yes`, and interactive confirmation in `rampos.cli.request`.
+- Admin auth at the API layer is JWT-first (`X-Admin-Authorization: Bearer <admin-jwt>`). Legacy shared-key behavior should be treated as compatibility fallback, not as the primary operator contract.
+- Those mutate safeguards are intentionally bounded. They reduce unsafe operator UX, but they do not by themselves mean every high-impact mutate flow should be treated as production-safe autonomous execution.
 
 The reconciliation workbench and evidence export surface currently live behind:
 
@@ -67,6 +73,11 @@ python scripts/rampos-cli.py reconciliation evidence --discrepancy-id <id>
 ```
 
 Use `scripts/validate-openapi.sh` and `scripts/test-rampos-cli.sh` together when validating SDK/CLI drift locally.
+
+The sandbox family is still only partially parity-complete:
+- `seed` and `replay` are live.
+- `run` remains bounded placeholder/backend-unavailable behavior and should not be treated as fully `READY`.
+- When `run` falls back to the placeholder contract, that is explicit truth about backend availability, not a hidden simulation success.
 
 ## Examples
 

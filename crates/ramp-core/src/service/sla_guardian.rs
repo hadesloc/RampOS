@@ -111,10 +111,7 @@ fn derive_risk_level(
             .any(|alert| alert.owner_lane == SlaGuardianOwnerLane::RiskOps)
     {
         SlaGuardianRiskLevel::Critical
-    } else if has_immediate
-        || signals.failed_settlements > 0
-        || signals.failed_webhooks > 0
-    {
+    } else if has_immediate || signals.failed_settlements > 0 || signals.failed_webhooks > 0 {
         SlaGuardianRiskLevel::High
     } else if !alerts.is_empty() || signals.processing_settlements > 0 {
         SlaGuardianRiskLevel::Elevated

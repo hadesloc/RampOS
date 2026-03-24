@@ -129,10 +129,13 @@ impl WebhookRepository for InMemoryWebhookRepo {
     ) -> Result<()> {
         let mut events = self.events.lock().unwrap();
         if let Some(event) = events.get_mut(&id.0) {
+            event.status = "PENDING".to_string();
             event.last_error = Some(error.to_string());
             event.next_attempt_at = Some(next_attempt_at);
             event.last_attempt_at = Some(Utc::now());
             event.attempts += 1;
+            event.delivered_at = None;
+            event.response_status = None;
         }
         Ok(())
     }
@@ -144,6 +147,9 @@ impl WebhookRepository for InMemoryWebhookRepo {
             event.last_error = Some(error.to_string());
             event.last_attempt_at = Some(Utc::now());
             event.attempts += 1;
+            event.next_attempt_at = None;
+            event.delivered_at = None;
+            event.response_status = None;
         }
         Ok(())
     }
@@ -203,6 +209,8 @@ impl WebhookRepository for InMemoryWebhookRepo {
                 event.status = "PENDING".to_string();
                 event.next_attempt_at = Some(Utc::now());
                 event.last_error = None;
+                event.delivered_at = None;
+                event.response_status = None;
                 return Ok(());
             }
         }
@@ -999,6 +1007,14 @@ async fn test_webhook_full_lifecycle_e2e() {
         reset.last_error.is_none(),
         "Error should be cleared after reset"
     );
+    assert!(
+        reset.delivered_at.is_none(),
+        "Retry reset should clear stale delivered_at"
+    );
+    assert!(
+        reset.response_status.is_none(),
+        "Retry reset should clear stale response_status"
+    );
     assert_eq!(repo.count_by_status("PENDING"), 1);
     assert_eq!(repo.count_by_status("FAILED"), 0);
 
@@ -1006,6 +1022,67 @@ async fn test_webhook_full_lifecycle_e2e() {
     let listed = service.list_events(&tenant_id, 10, 0).await.unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].id, event_id.0);
+}
+
+#[tokio::test]
+async fn test_retryable_failure_clears_stale_delivery_metadata() {
+    let repo = Arc::new(InMemoryWebhookRepo::new());
+    let tenant_repo: Arc<dyn TenantRepository> = Arc::new(DummyTenantRepo);
+    let service = WebhookService::new(repo.clone(), tenant_repo).unwrap();
+    let tenant_id = TenantId::new("tenant_retryable_clear");
+
+    let event_id = service
+        .queue_event(
+            &tenant_id,
+            WebhookEventType::IntentStatusChanged,
+            Some(&IntentId::new("intent_retryable_clear")),
+            json!({"state":"CREATED"}),
+        )
+        .await
+        .unwrap();
+
+    repo.mark_delivered(&event_id, 200).await.unwrap();
+    let retry_time = Utc::now() + chrono::Duration::seconds(30);
+    repo.mark_failed(&event_id, "transient failure", retry_time)
+        .await
+        .unwrap();
+
+    let event = repo.get_event_by_id(&event_id.0).unwrap();
+    assert_eq!(event.status, "PENDING");
+    assert_eq!(event.last_error.as_deref(), Some("transient failure"));
+    assert_eq!(event.next_attempt_at, Some(retry_time));
+    assert!(event.delivered_at.is_none());
+    assert!(event.response_status.is_none());
+}
+
+#[tokio::test]
+async fn test_permanent_failure_clears_stale_delivery_metadata() {
+    let repo = Arc::new(InMemoryWebhookRepo::new());
+    let tenant_repo: Arc<dyn TenantRepository> = Arc::new(DummyTenantRepo);
+    let service = WebhookService::new(repo.clone(), tenant_repo).unwrap();
+    let tenant_id = TenantId::new("tenant_permanent_clear");
+
+    let event_id = service
+        .queue_event(
+            &tenant_id,
+            WebhookEventType::IntentStatusChanged,
+            Some(&IntentId::new("intent_permanent_clear")),
+            json!({"state":"CREATED"}),
+        )
+        .await
+        .unwrap();
+
+    repo.mark_delivered(&event_id, 202).await.unwrap();
+    repo.mark_permanently_failed(&event_id, "final failure")
+        .await
+        .unwrap();
+
+    let event = repo.get_event_by_id(&event_id.0).unwrap();
+    assert_eq!(event.status, "FAILED");
+    assert_eq!(event.last_error.as_deref(), Some("final failure"));
+    assert!(event.next_attempt_at.is_none());
+    assert!(event.delivered_at.is_none());
+    assert!(event.response_status.is_none());
 }
 
 // ============================================================================

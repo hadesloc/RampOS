@@ -8,13 +8,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Shield, User, Bell, Key, Loader2, LogOut } from "lucide-react";
+import { Shield, User, Bell, Key, Loader2, LogOut, AlertCircle } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContainer } from "@/components/layout/page-container";
 import { useRouter } from "@/navigation";
@@ -57,6 +58,8 @@ export default function SettingsPage() {
     logout,
   } = useAuth();
   const router = useRouter();
+  const passkeyUnavailableMessage =
+    "Passkey management is unavailable because portal passkey completion and management APIs are not enabled in this environment.";
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -290,14 +293,18 @@ export default function SettingsPage() {
 
                   <div className="border-t pt-6">
                     <h4 className="font-medium mb-4">{t('passkeys')}</h4>
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{passkeyUnavailableMessage}</AlertDescription>
+                    </Alert>
                     {security?.webauthnCredentials &&
-                    security.webauthnCredentials.length > 0 ? (
-                      security.webauthnCredentials.map((cred) => (
-                        <div
-                          key={cred.id}
-                          className="flex items-center justify-between p-4 border rounded-lg bg-muted/50 mb-2"
-                        >
-                          <div className="flex items-center gap-3">
+                    security.webauthnCredentials.length > 0 && (
+                      <div className="mt-4 space-y-2">
+                        {security.webauthnCredentials.map((cred) => (
+                          <div
+                            key={cred.id}
+                            className="flex items-center gap-3 rounded-lg border bg-muted/50 p-4"
+                          >
                             <Key className="h-5 w-5 text-primary" />
                             <div>
                               <p className="font-medium">{cred.name}</p>
@@ -311,23 +318,9 @@ export default function SettingsPage() {
                               </p>
                             </div>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive"
-                          >
-                            {tCommon('delete')}
-                          </Button>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-muted-foreground mb-2">
-                        No passkeys registered yet.
-                      </p>
+                        ))}
+                      </div>
                     )}
-                    <Button variant="outline" className="mt-4 gap-2">
-                      Add a passkey
-                    </Button>
                   </div>
 
                   {security?.lastPasswordChange && (

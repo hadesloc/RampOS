@@ -104,7 +104,10 @@ packages/widget/dist/
 audit_results/
 security-reports/
 bundle/
-docs/plans/
+docs/plans/*
+!docs/plans/2026-03-18-team-reviewed-phase-plan.md
+!docs/plans/2026-03-18-venue-abstraction-and-cashflow-model.md
+!docs/plans/2026-03-18-venue-cashin-foundation-implementation-plan.md
 docs/security/*
 !docs/security/independent-security-review-plan.md
 !docs/security/reports/

@@ -166,7 +166,11 @@ impl EscrowAddressService {
             .map_err(|_| Error::Internal("Failed to acquire address_index lock".to_string()))?;
 
         let coin_type = match chain {
-            ChainId::Ethereum | ChainId::Arbitrum | ChainId::Optimism | ChainId::Base => 60,
+            ChainId::Ethereum
+            | ChainId::Arbitrum
+            | ChainId::Optimism
+            | ChainId::Base
+            | ChainId::Avalanche => 60,
             ChainId::Polygon => 966,
             ChainId::BnbChain => 714,
             ChainId::Solana => 501,

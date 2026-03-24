@@ -1,6 +1,16 @@
 # RampOS Project Completion Status
 
-_Last updated: 2026-03-17_
+_Last updated: 2026-03-18_
+
+---
+
+## Release-Truth Note
+
+Implementation progress and signoff status are not the same thing.
+
+- The latest implementation milestone is still the hardening wave completed on `2026-03-17`.
+- The repo is still in `review / signoff closure` for release-truth purposes.
+- Use `docs/current-status.md` and `docs/operations/bank-grade-signoff-ledger.md` before treating completed implementation work as promotion-ready.
 
 ---
 
@@ -25,7 +35,7 @@ Shipped JWT admin authentication, secrets abstraction, passkey PostgreSQL migrat
 
 | File | Change |
 |------|--------|
-| `handlers/admin/tier.rs` | Dual JWT + legacy X-Admin-Key auth |
+| `handlers/admin/tier.rs` | Canonical admin JWT header (`X-Admin-Authorization`) with deprecated legacy `X-Admin-Key` fallback |
 | `handlers/admin/mod.rs` | Registered `admin_auth`, `readiness_gate` modules |
 | `router.rs` | Wired readiness + auth routes |
 | `ramp-common/error.rs` | Added `Error::Config` variant |
@@ -72,12 +82,15 @@ Bidirectional LP auction market (USDT↔VND) with competitive price discovery.
 
 | Priority | Task | Est. |
 |----------|------|------|
-| High | Phase 2: Multi-tenant isolation, Vault secrets, rate limiting | 90 days |
-| Medium | Frontend: RFQ auction UI | 1-2 days |
-| Medium | Phase 3: Horizontal scaling, blue-green, DR | 90 days |
-| Low | Phase 4: SOC 2, pen testing, bug bounty | 90 days |
+| High | Refresh staging validation evidence for the current RC | Blocker |
+| High | Refresh Trivy and security signoff evidence after dependency remediation | Blocker |
+| High | Resolve or risk-accept the residual `rsa` advisory | Blocker |
+| High | Assign named approvers in the signoff ledger | Blocker |
+| Medium | After signoff closure, resume the next approved mainline roadmap unit | TBD |
 
 ## Estimated Completion
+
+_Historical roadmap framing below. Do not treat these labels as the active UW execution tracker._
 
 | Phase | Status |
 |-------|--------|

@@ -1,10 +1,18 @@
+import { createHmac } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { ADMIN_SESSION_COOKIE, constantTimeEqual, isAdminSessionTokenValid } from '@/lib/admin-auth';
+import {
+  ADMIN_AUTHORIZATION_HEADER,
+  ADMIN_SESSION_COOKIE,
+  constantTimeEqual,
+  createAdminSessionToken,
+  readAdminSessionToken,
+} from '@/lib/admin-auth';
 
 const API_URL = process.env.API_URL || 'http://localhost:8080';
 const API_KEY = process.env.API_KEY || '';
-const ADMIN_KEY = process.env.RAMPOS_ADMIN_KEY || '';
+const API_SECRET = process.env.API_SECRET || '';
+const ADMIN_SESSION_SECRET = process.env.RAMPOS_ADMIN_JWT_SECRET || '';
 
 async function handleRequest(req: NextRequest, props: { params: Promise<{ path: string[] }> }) {
   const cookieStore = await cookies();
@@ -15,10 +23,11 @@ async function handleRequest(req: NextRequest, props: { params: Promise<{ path: 
   }
 
   const token = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
-  if (!isAdminSessionTokenValid(token, ADMIN_KEY)) {
+  const session = readAdminSessionToken(token, ADMIN_SESSION_SECRET);
+  if (!session) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
-  if (!API_KEY || !ADMIN_KEY) {
+  if (!API_KEY || !API_SECRET || !ADMIN_SESSION_SECRET) {
     return NextResponse.json({ message: 'Server configuration error' }, { status: 500 });
   }
 
@@ -28,10 +37,19 @@ async function handleRequest(req: NextRequest, props: { params: Promise<{ path: 
   // Ensure we don't double slash if API_URL has trailing slash
   const cleanApiUrl = API_URL.replace(/\/$/, '');
   const url = `${cleanApiUrl}/${path}${searchParams ? `?${searchParams}` : ''}`;
+  const backendPath = `/${path}`;
+  const bodyText =
+    req.method === 'GET' || req.method === 'HEAD' ? '' : await req.text();
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const signature = createHmac('sha256', API_SECRET)
+    .update(`${req.method}\n${backendPath}\n${timestamp}\n${bodyText}`)
+    .digest('hex');
 
   const headers = new Headers();
   headers.set('Authorization', `Bearer ${API_KEY}`);
-  headers.set('X-Admin-Key', ADMIN_KEY);
+  headers.set(ADMIN_AUTHORIZATION_HEADER, `Bearer ${session.accessToken}`);
+  headers.set('X-Timestamp', timestamp);
+  headers.set('X-Signature', signature);
   // Only forward content-type, not all request headers
   const contentType = req.headers.get('content-type');
   if (contentType) {
@@ -43,16 +61,51 @@ async function handleRequest(req: NextRequest, props: { params: Promise<{ path: 
   }
 
   try {
-    const body = req.body;
     const options: RequestInit = {
       method: req.method,
       headers,
-      body: (req.method === 'GET' || req.method === 'HEAD') ? undefined : body,
+      body: req.method === 'GET' || req.method === 'HEAD' ? undefined : bodyText,
       // @ts-expect-error - duplex is needed for streaming body in fetch
       duplex: 'half'
     };
 
-    const response = await fetch(url, options);
+    let response = await fetch(url, options);
+
+    if (response.status === 401 && session.refreshToken) {
+      const refreshResponse = await fetch(`${cleanApiUrl}/v1/admin/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ refresh_token: session.refreshToken }),
+      });
+
+      if (refreshResponse.ok) {
+        const refreshPayload = await refreshResponse.json().catch(() => ({}));
+        const refreshedSession = {
+          ...session,
+          accessToken: String(refreshPayload.accessToken || ''),
+          accessTokenExpiresAt:
+            Math.floor(Date.now() / 1000) + Number(refreshPayload.expiresIn || 0),
+        };
+
+        if (refreshedSession.accessToken) {
+          cookieStore.set({
+            name: ADMIN_SESSION_COOKIE,
+            value: createAdminSessionToken(ADMIN_SESSION_SECRET, refreshedSession),
+            httpOnly: true,
+            sameSite: 'strict',
+            secure: process.env.NODE_ENV === 'production',
+            path: '/',
+            maxAge: 60 * 60 * 24 * 7,
+          });
+
+          headers.set(ADMIN_AUTHORIZATION_HEADER, `Bearer ${refreshedSession.accessToken}`);
+          response = await fetch(url, options);
+        }
+      }
+    }
 
     return new NextResponse(response.body, {
       status: response.status,

@@ -161,13 +161,13 @@ describe('Admin auth guard', () => {
     expect(isAdminSessionTokenValid(token, 'wrong-key')).toBe(false);
   });
 
-  it('shows "Admin key not configured" when RAMPOS_ADMIN_KEY is missing', () => {
-    // When adminKey is falsy, the layout returns a div with this message
-    const adminKey = '';
-    const shouldShowError = !adminKey;
+  it('shows "Admin auth not configured" when RAMPOS_ADMIN_JWT_SECRET is missing', () => {
+    // When the admin session secret is missing, the layout returns a config error.
+    const adminSecret = '';
+    const shouldShowError = !adminSecret;
     expect(shouldShowError).toBe(true);
-    const errorMessage = 'Admin key not configured.';
-    expect(errorMessage).toBe('Admin key not configured.');
+    const errorMessage = 'Admin auth not configured.';
+    expect(errorMessage).toBe('Admin auth not configured.');
   });
 
   it('rejects malformed token (wrong number of parts)', () => {

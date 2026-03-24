@@ -158,14 +158,28 @@ pub async fn login(
 
     // 2. Check account status
     if !admin.is_active {
-        log_auth_event(&pool, Some(admin.id), "login_failed_inactive", ip.as_deref(), user_agent.as_deref()).await;
+        log_auth_event(
+            &pool,
+            Some(admin.id),
+            "login_failed_inactive",
+            ip.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
         return Err(ApiError::Forbidden("Account is disabled".to_string()));
     }
 
     // 3. Check lockout
     if let Some(locked_until) = admin.locked_until {
         if Utc::now() < locked_until {
-            log_auth_event(&pool, Some(admin.id), "login_failed_locked", ip.as_deref(), user_agent.as_deref()).await;
+            log_auth_event(
+                &pool,
+                Some(admin.id),
+                "login_failed_locked",
+                ip.as_deref(),
+                user_agent.as_deref(),
+            )
+            .await;
             return Err(ApiError::Forbidden(format!(
                 "Account is locked. Try again after {}",
                 locked_until.format("%H:%M UTC")
@@ -185,7 +199,7 @@ pub async fn login(
         };
 
         sqlx::query(
-            "UPDATE admin_users SET failed_login_count = $1, locked_until = $2 WHERE id = $3"
+            "UPDATE admin_users SET failed_login_count = $1, locked_until = $2 WHERE id = $3",
         )
         .bind(new_count)
         .bind(lockout)
@@ -194,7 +208,14 @@ pub async fn login(
         .await
         .ok();
 
-        log_auth_event(&pool, Some(admin.id), "login_failed", ip.as_deref(), user_agent.as_deref()).await;
+        log_auth_event(
+            &pool,
+            Some(admin.id),
+            "login_failed",
+            ip.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
         warn!(email = %request.email, attempts = new_count, "Admin login failed");
         return Err(ApiError::Forbidden("Invalid email or password".to_string()));
     }
@@ -244,7 +265,14 @@ pub async fn login(
     .await
     .map_err(|e| ApiError::Internal(format!("Failed to store refresh token: {}", e)))?;
 
-    log_auth_event(&pool, Some(admin.id), "login", ip.as_deref(), user_agent.as_deref()).await;
+    log_auth_event(
+        &pool,
+        Some(admin.id),
+        "login",
+        ip.as_deref(),
+        user_agent.as_deref(),
+    )
+    .await;
     info!(admin_id = %admin.id, email = %admin.email, role = %admin.role, "Admin logged in");
 
     Ok(Json(LoginResponse {
@@ -280,16 +308,15 @@ pub async fn refresh(
     // 1. Find valid (non-revoked, non-expired) refresh token
     let row: Option<(uuid::Uuid,)> = sqlx::query_as(
         "SELECT admin_id FROM admin_refresh_tokens
-         WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > NOW()"
+         WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > NOW()",
     )
     .bind(&token_hash)
     .fetch_optional(pool)
     .await
     .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
 
-    let (admin_id,) = row.ok_or_else(|| {
-        ApiError::Forbidden("Invalid or expired refresh token".to_string())
-    })?;
+    let (admin_id,) =
+        row.ok_or_else(|| ApiError::Forbidden("Invalid or expired refresh token".to_string()))?;
 
     // 2. Fetch admin user
     let admin: AdminUserRow = sqlx::query_as(
@@ -320,7 +347,14 @@ pub async fn refresh(
     )
     .map_err(|e| ApiError::Internal(format!("Failed to create token: {}", e)))?;
 
-    log_auth_event(&pool, Some(admin_id), "token_refresh", ip.as_deref(), user_agent.as_deref()).await;
+    log_auth_event(
+        &pool,
+        Some(admin_id),
+        "token_refresh",
+        ip.as_deref(),
+        user_agent.as_deref(),
+    )
+    .await;
 
     Ok(Json(RefreshResponse {
         access_token,
@@ -356,17 +390,23 @@ pub async fn logout(
 
     if result.rows_affected() > 0 {
         // Find admin_id for audit log
-        let row: Option<(uuid::Uuid,)> = sqlx::query_as(
-            "SELECT admin_id FROM admin_refresh_tokens WHERE token_hash = $1"
-        )
-        .bind(&token_hash)
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten();
+        let row: Option<(uuid::Uuid,)> =
+            sqlx::query_as("SELECT admin_id FROM admin_refresh_tokens WHERE token_hash = $1")
+                .bind(&token_hash)
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten();
 
         if let Some((admin_id,)) = row {
-            log_auth_event(&pool, Some(admin_id), "logout", ip.as_deref(), user_agent.as_deref()).await;
+            log_auth_event(
+                &pool,
+                Some(admin_id),
+                "logout",
+                ip.as_deref(),
+                user_agent.as_deref(),
+            )
+            .await;
         }
     }
 

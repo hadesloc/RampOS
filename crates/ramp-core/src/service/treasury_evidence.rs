@@ -117,7 +117,7 @@ impl TreasuryEvidenceImportStore {
               AND ($3::text IS NULL OR asset_code = $3)
               AND ($4::text IS NULL OR account_scope = $4)
             ORDER BY snapshot_at DESC, imported_at DESC, id ASC
-            "#
+            "#,
         )
         .bind(&query.tenant_id)
         .bind(&query.source_family)
@@ -126,7 +126,10 @@ impl TreasuryEvidenceImportStore {
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows.into_iter().map(TreasuryEvidenceImportRow::into_record).collect())
+        Ok(rows
+            .into_iter()
+            .map(TreasuryEvidenceImportRow::into_record)
+            .collect())
     }
 }
 
@@ -182,10 +185,8 @@ mod tests {
 
     #[test]
     fn normalize_treasury_balances_clamps_negative_values() {
-        let (available, reserved) = normalize_treasury_balances(
-            Decimal::new(-500, 0),
-            Decimal::new(-250, 0),
-        );
+        let (available, reserved) =
+            normalize_treasury_balances(Decimal::new(-500, 0), Decimal::new(-250, 0));
 
         assert_eq!(available, Decimal::ZERO);
         assert_eq!(reserved, Decimal::ZERO);
@@ -238,7 +239,10 @@ mod tests {
         };
 
         let first = store.import_evidence(&request).await.expect("first import");
-        let second = store.import_evidence(&request).await.expect("replayed import");
+        let second = store
+            .import_evidence(&request)
+            .await
+            .expect("replayed import");
         let rows = store
             .list_imports(&TreasuryEvidenceImportQuery {
                 tenant_id: tenant_id.to_string(),

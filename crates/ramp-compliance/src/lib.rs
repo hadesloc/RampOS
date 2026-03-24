@@ -7,9 +7,9 @@ pub mod config;
 pub mod documents;
 pub mod fraud;
 pub mod history;
+pub mod kyb;
 pub mod kyc;
 pub mod kyt;
-pub mod kyb;
 pub mod limits;
 pub mod passport;
 pub mod provider_routing;
@@ -43,9 +43,9 @@ pub use documents::{
     TransactionSummary,
 };
 pub use history::{ScoreHistory, ScoreHistoryManager, ScoreTrend};
+pub use kyb::*;
 pub use kyc::KycService;
 pub use kyc::{KycWorkflowState, MockKycConfig, MockKycProvider, OnfidoKycProvider};
-pub use kyb::*;
 pub use kyt::ChainalysisKytProvider;
 pub use kyt::KytService;
 pub use limits::{

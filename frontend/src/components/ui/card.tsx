@@ -4,28 +4,29 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const cardVariants = cva(
-  "rounded-xl border bg-card text-card-foreground transition-all duration-200",
+  "rounded-xl border border-white/[0.06] bg-card text-card-foreground transition-all duration-300",
   {
     variants: {
       elevation: {
         none: "shadow-none",
-        sm: "shadow-sm",
-        md: "shadow",
-        lg: "shadow-lg",
-        xl: "shadow-xl",
-        "2xl": "shadow-2xl",
+        sm: "shadow-none",
+        md: "shadow-none",
+        lg: "shadow-none",
+        xl: "shadow-none",
+        "2xl": "shadow-none",
       },
       variant: {
         default: "",
         gradient: "border-primary/20 bg-gradient-to-br from-card to-accent/5",
+        glow: "hover:shadow-[0_0_30px_rgba(0,255,135,0.05)] hover:border-white/[0.1]",
       },
       isHoverable: {
-        true: "hover:shadow-md hover:-translate-y-0.5 cursor-pointer",
+        true: "hover:border-white/[0.12] hover:-translate-y-0.5 cursor-pointer",
         false: "",
       }
     },
     defaultVariants: {
-      elevation: "md",
+      elevation: "none",
       variant: "default",
       isHoverable: false,
     },

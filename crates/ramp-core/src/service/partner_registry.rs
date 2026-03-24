@@ -136,19 +136,23 @@ impl PartnerRegistryService {
                         .market
                         .as_ref()
                         .map_or(true, |m| partner.market.as_deref() == Some(m.as_str()))
-                    && criteria.approval_status.as_ref().map_or(true, |s| {
-                        partner.approval_status.eq_ignore_ascii_case(s)
-                    })
-                    && criteria.lifecycle_state.as_ref().map_or(true, |s| {
-                        partner.lifecycle_state.eq_ignore_ascii_case(s)
-                    })
-                    && criteria.service_domain.as_ref().map_or(true, |d| {
-                        partner.service_domain.eq_ignore_ascii_case(d)
-                    })
+                    && criteria
+                        .approval_status
+                        .as_ref()
+                        .map_or(true, |s| partner.approval_status.eq_ignore_ascii_case(s))
+                    && criteria
+                        .lifecycle_state
+                        .as_ref()
+                        .map_or(true, |s| partner.lifecycle_state.eq_ignore_ascii_case(s))
+                    && criteria
+                        .service_domain
+                        .as_ref()
+                        .map_or(true, |d| partner.service_domain.eq_ignore_ascii_case(d))
                     && criteria.capability_family.as_ref().map_or(true, |fam| {
-                        partner.capabilities.iter().any(|cap| {
-                            cap.capability_family.eq_ignore_ascii_case(fam)
-                        })
+                        partner
+                            .capabilities
+                            .iter()
+                            .any(|cap| cap.capability_family.eq_ignore_ascii_case(fam))
                     })
             })
             .collect();
@@ -206,9 +210,8 @@ impl PartnerRegistryService {
                     }
                     for signal in &cap.health_signals {
                         if let Some(score) = signal.score {
-                            lowest_score = Some(
-                                lowest_score.map_or(score, |current| current.min(score)),
-                            );
+                            lowest_score =
+                                Some(lowest_score.map_or(score, |current| current.min(score)));
                         }
                         // Always take the latest non-None incident summary
                         if signal.incident_summary.is_some() {
@@ -246,13 +249,16 @@ impl PartnerRegistryService {
         &self,
         request: &UpsertPartnerRegistryRecordRequest,
     ) -> Result<PartnerRegistrySnapshot> {
-        let repository = self
-            .repository
-            .as_ref()
-            .ok_or_else(|| ramp_common::Error::Internal("Partner registry repository is not configured".to_string()))?;
+        let repository = self.repository.as_ref().ok_or_else(|| {
+            ramp_common::Error::Internal(
+                "Partner registry repository is not configured".to_string(),
+            )
+        })?;
 
         for approval_reference in &request.approval_references {
-            repository.upsert_approval_reference(approval_reference).await?;
+            repository
+                .upsert_approval_reference(approval_reference)
+                .await?;
         }
 
         repository.upsert_partner(&request.partner).await?;
@@ -277,7 +283,8 @@ impl PartnerRegistryService {
                 .await?;
         }
 
-        self.list_partners(request.partner.tenant_id.as_deref()).await
+        self.list_partners(request.partner.tenant_id.as_deref())
+            .await
     }
 }
 
@@ -290,9 +297,7 @@ impl Default for PartnerRegistryService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::repository::{
-        PartnerCapabilityRecord, PartnerHealthSignalRecord,
-    };
+    use crate::repository::{PartnerCapabilityRecord, PartnerHealthSignalRecord};
     use async_trait::async_trait;
 
     // ── Mock repository with in-memory partner data ──
@@ -309,12 +314,36 @@ mod tests {
         ) -> Result<Vec<PartnerRegistryRecord>> {
             Ok(self.partners.clone())
         }
-        async fn upsert_partner(&self, _req: &UpsertPartnerRequest) -> Result<()> { Ok(()) }
-        async fn upsert_capability(&self, _req: &UpsertPartnerCapabilityRequest) -> Result<()> { Ok(()) }
-        async fn upsert_rollout_scope(&self, _req: &UpsertPartnerRolloutScopeRequest) -> Result<()> { Ok(()) }
-        async fn upsert_health_signal(&self, _req: &UpsertPartnerHealthSignalRequest) -> Result<()> { Ok(()) }
-        async fn upsert_approval_reference(&self, _req: &UpsertApprovalReferenceRequest) -> Result<()> { Ok(()) }
-        async fn upsert_credential_reference(&self, _req: &UpsertCredentialReferenceRequest) -> Result<()> { Ok(()) }
+        async fn upsert_partner(&self, _req: &UpsertPartnerRequest) -> Result<()> {
+            Ok(())
+        }
+        async fn upsert_capability(&self, _req: &UpsertPartnerCapabilityRequest) -> Result<()> {
+            Ok(())
+        }
+        async fn upsert_rollout_scope(
+            &self,
+            _req: &UpsertPartnerRolloutScopeRequest,
+        ) -> Result<()> {
+            Ok(())
+        }
+        async fn upsert_health_signal(
+            &self,
+            _req: &UpsertPartnerHealthSignalRequest,
+        ) -> Result<()> {
+            Ok(())
+        }
+        async fn upsert_approval_reference(
+            &self,
+            _req: &UpsertApprovalReferenceRequest,
+        ) -> Result<()> {
+            Ok(())
+        }
+        async fn upsert_credential_reference(
+            &self,
+            _req: &UpsertCredentialReferenceRequest,
+        ) -> Result<()> {
+            Ok(())
+        }
     }
 
     fn make_partner(
@@ -373,12 +402,30 @@ mod tests {
 
     fn sample_partners() -> Vec<PartnerRegistryRecord> {
         vec![
-            make_partner("p1", "payment_rail", Some("VN"), "approved", "active",
-                vec![make_cap("settlement", "healthy", Some(95))]),
-            make_partner("p2", "liquidity_provider", Some("VN"), "approved", "active",
-                vec![make_cap("quoting", "degraded", Some(60))]),
-            make_partner("p3", "custodian", Some("SG"), "pending", "onboarding",
-                vec![make_cap("custody", "healthy", Some(80))]),
+            make_partner(
+                "p1",
+                "payment_rail",
+                Some("VN"),
+                "approved",
+                "active",
+                vec![make_cap("settlement", "healthy", Some(95))],
+            ),
+            make_partner(
+                "p2",
+                "liquidity_provider",
+                Some("VN"),
+                "approved",
+                "active",
+                vec![make_cap("quoting", "degraded", Some(60))],
+            ),
+            make_partner(
+                "p3",
+                "custodian",
+                Some("SG"),
+                "pending",
+                "onboarding",
+                vec![make_cap("custody", "healthy", Some(80))],
+            ),
         ]
     }
 
@@ -401,7 +448,11 @@ mod tests {
     #[tokio::test]
     async fn get_partner_returns_none_without_repository() {
         let service = PartnerRegistryService::new();
-        assert!(service.get_partner(Some("t"), "x").await.expect("ok").is_none());
+        assert!(service
+            .get_partner(Some("t"), "x")
+            .await
+            .expect("ok")
+            .is_none());
     }
 
     // ── Mock-backed search/filter tests ──
@@ -409,24 +460,35 @@ mod tests {
     #[tokio::test]
     async fn get_partner_finds_by_id() {
         let service = service_with_data();
-        let p = service.get_partner(None, "p2").await.expect("ok").expect("found");
+        let p = service
+            .get_partner(None, "p2")
+            .await
+            .expect("ok")
+            .expect("found");
         assert_eq!(p.partner_class, "liquidity_provider");
     }
 
     #[tokio::test]
     async fn get_partner_returns_none_for_unknown_id() {
         let service = service_with_data();
-        assert!(service.get_partner(None, "p999").await.expect("ok").is_none());
+        assert!(service
+            .get_partner(None, "p999")
+            .await
+            .expect("ok")
+            .is_none());
     }
 
     #[tokio::test]
     async fn search_by_partner_class() {
         let service = service_with_data();
         let snap = service
-            .search_partners(None, &PartnerSearchCriteria {
-                partner_class: Some("payment_rail".to_string()),
-                ..Default::default()
-            })
+            .search_partners(
+                None,
+                &PartnerSearchCriteria {
+                    partner_class: Some("payment_rail".to_string()),
+                    ..Default::default()
+                },
+            )
             .await
             .expect("ok");
         assert_eq!(snap.partners.len(), 1);
@@ -437,10 +499,13 @@ mod tests {
     async fn search_by_market() {
         let service = service_with_data();
         let snap = service
-            .search_partners(None, &PartnerSearchCriteria {
-                market: Some("SG".to_string()),
-                ..Default::default()
-            })
+            .search_partners(
+                None,
+                &PartnerSearchCriteria {
+                    market: Some("SG".to_string()),
+                    ..Default::default()
+                },
+            )
             .await
             .expect("ok");
         assert_eq!(snap.partners.len(), 1);
@@ -451,10 +516,13 @@ mod tests {
     async fn search_by_capability_family() {
         let service = service_with_data();
         let snap = service
-            .search_partners(None, &PartnerSearchCriteria {
-                capability_family: Some("quoting".to_string()),
-                ..Default::default()
-            })
+            .search_partners(
+                None,
+                &PartnerSearchCriteria {
+                    capability_family: Some("quoting".to_string()),
+                    ..Default::default()
+                },
+            )
             .await
             .expect("ok");
         assert_eq!(snap.partners.len(), 1);
@@ -465,11 +533,14 @@ mod tests {
     async fn search_combined_criteria() {
         let service = service_with_data();
         let snap = service
-            .search_partners(None, &PartnerSearchCriteria {
-                market: Some("VN".to_string()),
-                approval_status: Some("approved".to_string()),
-                ..Default::default()
-            })
+            .search_partners(
+                None,
+                &PartnerSearchCriteria {
+                    market: Some("VN".to_string()),
+                    approval_status: Some("approved".to_string()),
+                    ..Default::default()
+                },
+            )
             .await
             .expect("ok");
         assert_eq!(snap.partners.len(), 2); // p1 and p2
@@ -480,7 +551,10 @@ mod tests {
         let service = service_with_data();
         let snap = service.list_approved_partners(None).await.expect("ok");
         assert_eq!(snap.partners.len(), 2); // p1 and p2 are approved+active
-        assert!(snap.partners.iter().all(|p| p.approval_status == "approved"));
+        assert!(snap
+            .partners
+            .iter()
+            .all(|p| p.approval_status == "approved"));
     }
 
     #[tokio::test]

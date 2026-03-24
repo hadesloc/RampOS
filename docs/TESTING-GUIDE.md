@@ -126,11 +126,13 @@ Truy cập: http://localhost:3000
 
 ## Bước 5: Test Flow
 
-### 5.1. Đăng ký tài khoản
+### 5.1. Portal auth truth
 
-1. Vào http://localhost:3000/portal/register
-2. Nhập email
-3. Đăng ký bằng Passkey hoặc Magic Link
+Portal self-serve sign-up/sign-in is currently not available end to end.
+
+- Passkey challenge endpoints exist, but registration/login completion is still disabled.
+- Magic-link request exists, but token verification/session issuance is still disabled.
+- Portal protected routes currently require a pre-issued Bearer JWT if you need to test them directly.
 
 ### 5.2. Tạo Smart Account
 

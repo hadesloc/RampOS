@@ -11,7 +11,6 @@
 /// so we use ramp-core's RfqService tests here as E2E validation.
 ///
 /// For full HTTP-level E2E with real DB, see the DATABASE_URL-gated test.
-
 use ramp_common::types::TenantId;
 use ramp_core::event::InMemoryEventPublisher;
 use ramp_core::repository::PgRfqRepository;

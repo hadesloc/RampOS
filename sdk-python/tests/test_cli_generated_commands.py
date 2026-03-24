@@ -16,3 +16,11 @@ def test_command_registry_contains_curated_aliases() -> None:
 def test_command_path_renders_human_readable_command() -> None:
     operation = next(item for item in CURATED_OPERATIONS if item.operation_id == "admin.bridge.routes")
     assert command_path(operation) == "bridge routes"
+
+
+def test_runtime_manifest_excludes_catalog_only_operations() -> None:
+    runtime_manifest = load_manifest(runtime_only=True)
+    runtime_ids = set(runtime_manifest["operation_ids"])
+
+    assert "portal.watch.stream" not in runtime_ids
+    assert "admin.certification.artifact" not in runtime_ids

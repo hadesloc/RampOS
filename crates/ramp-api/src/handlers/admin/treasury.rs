@@ -1,5 +1,5 @@
 use axum::{
-    extract::Query,
+    extract::{Extension, Query, State},
     http::HeaderMap,
     response::{IntoResponse, Response},
     Json,
@@ -8,9 +8,14 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use ramp_core::service::{TreasuryControlTowerSnapshot, TreasuryService};
+use ramp_core::service::{
+    TreasuryControlTowerSnapshot, TreasuryDataSource, TreasuryEvidenceImportQuery,
+    TreasuryEvidenceImportStore, TreasuryProvenance, TreasuryService,
+};
 
 use crate::error::ApiError;
+use crate::middleware::tenant::TenantContext;
+use crate::AppState;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,14 +41,20 @@ pub struct TreasuryWorkbenchResponse {
 
 pub async fn get_treasury_workbench(
     headers: HeaderMap,
+    Extension(tenant_ctx): Extension<TenantContext>,
+    State(app_state): State<AppState>,
     Query(query): Query<TreasuryWorkbenchQuery>,
 ) -> Result<Json<TreasuryWorkbenchResponse>, ApiError> {
     super::tier::check_admin_key(&headers)?;
 
-    let service = TreasuryService::new();
-    let snapshot = service.build_control_tower(query.scenario.as_deref());
+    let snapshot =
+        resolve_treasury_snapshot(&app_state, &tenant_ctx, query.scenario.as_deref()).await?;
 
-    info!("Admin: loading treasury workbench");
+    info!(
+        tenant = %tenant_ctx.tenant_id.0,
+        data_source = %snapshot.data_source,
+        "Admin: loading treasury workbench"
+    );
 
     Ok(Json(TreasuryWorkbenchResponse {
         action_mode: snapshot.action_mode.clone(),
@@ -55,50 +66,99 @@ pub async fn get_treasury_workbench(
 
 pub async fn export_treasury_workbench(
     headers: HeaderMap,
+    Extension(tenant_ctx): Extension<TenantContext>,
+    State(app_state): State<AppState>,
     Query(query): Query<TreasuryExportQuery>,
 ) -> Result<Response, ApiError> {
     super::tier::check_admin_key(&headers)?;
 
-    let snapshot = TreasuryService::new().build_control_tower(query.scenario.as_deref());
+    let snapshot =
+        resolve_treasury_snapshot(&app_state, &tenant_ctx, query.scenario.as_deref()).await?;
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
 
-    Ok(match query
-        .format
-        .as_deref()
-        .unwrap_or("json")
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "csv" => (
-            [
-                (axum::http::header::CONTENT_TYPE, "text/csv; charset=utf-8"),
-                (
-                    axum::http::header::CONTENT_DISPOSITION,
-                    &format!("attachment; filename=\"treasury_workbench_{timestamp}.csv\""),
-                ),
-            ],
-            export_csv(&snapshot),
-        )
-            .into_response(),
-        "json" => (
-            [
-                (axum::http::header::CONTENT_TYPE, "application/json"),
-                (
-                    axum::http::header::CONTENT_DISPOSITION,
-                    &format!("attachment; filename=\"treasury_workbench_{timestamp}.json\""),
-                ),
-            ],
-            serde_json::to_string_pretty(&snapshot)
-                .map_err(|error| ApiError::Internal(error.to_string()))?,
-        )
-            .into_response(),
-        other => {
-            return Err(ApiError::Validation(format!(
-                "Unsupported treasury export format '{}'",
-                other
-            )))
+    Ok(
+        match query
+            .format
+            .as_deref()
+            .unwrap_or("json")
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "csv" => (
+                [
+                    (axum::http::header::CONTENT_TYPE, "text/csv; charset=utf-8"),
+                    (
+                        axum::http::header::CONTENT_DISPOSITION,
+                        &format!("attachment; filename=\"treasury_workbench_{timestamp}.csv\""),
+                    ),
+                ],
+                export_csv(&snapshot),
+            )
+                .into_response(),
+            "json" => (
+                [
+                    (axum::http::header::CONTENT_TYPE, "application/json"),
+                    (
+                        axum::http::header::CONTENT_DISPOSITION,
+                        &format!("attachment; filename=\"treasury_workbench_{timestamp}.json\""),
+                    ),
+                ],
+                serde_json::to_string_pretty(&snapshot)
+                    .map_err(|error| ApiError::Internal(error.to_string()))?,
+            )
+                .into_response(),
+            other => {
+                return Err(ApiError::Validation(format!(
+                    "Unsupported treasury export format '{}'",
+                    other
+                )))
+            }
+        },
+    )
+}
+
+async fn resolve_treasury_snapshot(
+    app_state: &AppState,
+    tenant_ctx: &TenantContext,
+    scenario: Option<&str>,
+) -> Result<TreasuryControlTowerSnapshot, ApiError> {
+    let service = TreasuryService::new();
+
+    // Scenario mode stays sample-backed for deterministic fixture exploration.
+    if scenario.is_some() {
+        return Ok(service.build_control_tower(scenario));
+    }
+
+    if let Some(pool) = app_state.db_pool.as_ref() {
+        let store = TreasuryEvidenceImportStore::new(pool.clone());
+        let imports = store
+            .list_imports(&TreasuryEvidenceImportQuery {
+                tenant_id: tenant_ctx.tenant_id.0.clone(),
+                source_family: None,
+                asset_code: None,
+                account_scope: None,
+            })
+            .await
+            .map_err(|error| {
+                ApiError::Internal(format!(
+                    "Treasury evidence lookup failed for tenant '{}': {}",
+                    tenant_ctx.tenant_id.0, error
+                ))
+            })?;
+
+        if !imports.is_empty() {
+            let float_slices = TreasuryService::float_slices_from_evidence(&imports);
+            let provenance = TreasuryProvenance::from_evidence(&imports);
+            return Ok(
+                service.build_control_tower_from(TreasuryDataSource::Evidence {
+                    float_slices,
+                    provenance,
+                }),
+            );
         }
-    })
+    }
+
+    Ok(service.build_control_tower(None))
 }
 
 fn export_csv(snapshot: &TreasuryControlTowerSnapshot) -> String {

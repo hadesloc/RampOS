@@ -208,12 +208,25 @@ pub trait CorridorPackRepository: Send + Sync {
     async fn upsert_corridor_pack(&self, request: &UpsertCorridorPackRequest) -> Result<()>;
     async fn upsert_endpoint(&self, request: &UpsertCorridorEndpointRequest) -> Result<()>;
     async fn upsert_fee_profile(&self, request: &UpsertCorridorFeeProfileRequest) -> Result<()>;
-    async fn upsert_cutoff_policy(&self, request: &UpsertCorridorCutoffPolicyRequest) -> Result<()>;
-    async fn upsert_compliance_hook(&self, request: &UpsertCorridorComplianceHookRequest) -> Result<()>;
-    async fn upsert_rollout_scope(&self, request: &UpsertCorridorRolloutScopeRequest) -> Result<()>;
-    async fn upsert_eligibility_rule(&self, request: &UpsertCorridorEligibilityRuleRequest) -> Result<()>;
-    async fn list_corridor_packs(&self, tenant_id: Option<&str>) -> Result<Vec<CorridorPackRecord>>;
-    async fn get_corridor_pack(&self, tenant_id: Option<&str>, corridor_code: &str) -> Result<Option<CorridorPackRecord>>;
+    async fn upsert_cutoff_policy(&self, request: &UpsertCorridorCutoffPolicyRequest)
+        -> Result<()>;
+    async fn upsert_compliance_hook(
+        &self,
+        request: &UpsertCorridorComplianceHookRequest,
+    ) -> Result<()>;
+    async fn upsert_rollout_scope(&self, request: &UpsertCorridorRolloutScopeRequest)
+        -> Result<()>;
+    async fn upsert_eligibility_rule(
+        &self,
+        request: &UpsertCorridorEligibilityRuleRequest,
+    ) -> Result<()>;
+    async fn list_corridor_packs(&self, tenant_id: Option<&str>)
+        -> Result<Vec<CorridorPackRecord>>;
+    async fn get_corridor_pack(
+        &self,
+        tenant_id: Option<&str>,
+        corridor_code: &str,
+    ) -> Result<Option<CorridorPackRecord>>;
 }
 
 pub struct PgCorridorPackRepository {
@@ -409,7 +422,11 @@ impl CorridorPackRepository for PgCorridorPackRepository {
     }
 
     async fn upsert_fee_profile(&self, request: &UpsertCorridorFeeProfileRequest) -> Result<()> {
-        let base_fee = request.base_fee.as_deref().map(str::parse::<rust_decimal::Decimal>).transpose()
+        let base_fee = request
+            .base_fee
+            .as_deref()
+            .map(str::parse::<rust_decimal::Decimal>)
+            .transpose()
             .map_err(|e| ramp_common::Error::Validation(format!("Invalid base_fee: {e}")))?;
         sqlx::query(
             r#"
@@ -440,7 +457,10 @@ impl CorridorPackRepository for PgCorridorPackRepository {
         Ok(())
     }
 
-    async fn upsert_cutoff_policy(&self, request: &UpsertCorridorCutoffPolicyRequest) -> Result<()> {
+    async fn upsert_cutoff_policy(
+        &self,
+        request: &UpsertCorridorCutoffPolicyRequest,
+    ) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO corridor_cutoff_policies (
@@ -470,7 +490,10 @@ impl CorridorPackRepository for PgCorridorPackRepository {
         Ok(())
     }
 
-    async fn upsert_compliance_hook(&self, request: &UpsertCorridorComplianceHookRequest) -> Result<()> {
+    async fn upsert_compliance_hook(
+        &self,
+        request: &UpsertCorridorComplianceHookRequest,
+    ) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO corridor_compliance_hooks (
@@ -498,7 +521,10 @@ impl CorridorPackRepository for PgCorridorPackRepository {
         Ok(())
     }
 
-    async fn upsert_rollout_scope(&self, request: &UpsertCorridorRolloutScopeRequest) -> Result<()> {
+    async fn upsert_rollout_scope(
+        &self,
+        request: &UpsertCorridorRolloutScopeRequest,
+    ) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO corridor_rollout_scopes (
@@ -530,7 +556,10 @@ impl CorridorPackRepository for PgCorridorPackRepository {
         Ok(())
     }
 
-    async fn upsert_eligibility_rule(&self, request: &UpsertCorridorEligibilityRuleRequest) -> Result<()> {
+    async fn upsert_eligibility_rule(
+        &self,
+        request: &UpsertCorridorEligibilityRuleRequest,
+    ) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO corridor_eligibility_rules (
@@ -560,7 +589,10 @@ impl CorridorPackRepository for PgCorridorPackRepository {
         Ok(())
     }
 
-    async fn list_corridor_packs(&self, tenant_id: Option<&str>) -> Result<Vec<CorridorPackRecord>> {
+    async fn list_corridor_packs(
+        &self,
+        tenant_id: Option<&str>,
+    ) -> Result<Vec<CorridorPackRecord>> {
         let rows = if let Some(tenant_id) = tenant_id {
             sqlx::query_as::<_, CorridorPackRow>(
                 r#"
@@ -598,7 +630,11 @@ impl CorridorPackRepository for PgCorridorPackRepository {
         Ok(records)
     }
 
-    async fn get_corridor_pack(&self, tenant_id: Option<&str>, corridor_code: &str) -> Result<Option<CorridorPackRecord>> {
+    async fn get_corridor_pack(
+        &self,
+        tenant_id: Option<&str>,
+        corridor_code: &str,
+    ) -> Result<Option<CorridorPackRecord>> {
         let row = if let Some(tenant_id) = tenant_id {
             sqlx::query_as::<_, CorridorPackRow>(
                 r#"
@@ -734,63 +770,81 @@ async fn load_corridor_pack(pool: &PgPool, row: CorridorPackRow) -> Result<Corri
         rollout_state: row.rollout_state,
         eligibility_state: row.eligibility_state,
         metadata: row.metadata,
-        endpoints: endpoints.into_iter().map(|item| CorridorEndpointRecord {
-            endpoint_id: item.id,
-            endpoint_role: item.endpoint_role,
-            partner_id: item.partner_id,
-            provider_key: item.provider_key,
-            adapter_key: item.adapter_key,
-            entity_type: item.entity_type,
-            rail: item.rail,
-            method_family: item.method_family,
-            settlement_mode: item.settlement_mode,
-            instrument_family: item.instrument_family,
-            metadata: item.metadata,
-        }).collect(),
-        fee_profiles: fee_profiles.into_iter().map(|item| CorridorFeeProfileRecord {
-            fee_profile_id: item.id,
-            fee_currency: item.fee_currency,
-            base_fee: item.base_fee.map(|v| v.to_string()),
-            fx_spread_bps: item.fx_spread_bps,
-            liquidity_cost_bps: item.liquidity_cost_bps,
-            surcharge_bps: item.surcharge_bps,
-            metadata: item.metadata,
-        }).collect(),
-        cutoff_policies: cutoff_policies.into_iter().map(|item| CorridorCutoffPolicyRecord {
-            cutoff_policy_id: item.id,
-            timezone: item.timezone,
-            cutoff_windows: item.cutoff_windows,
-            holiday_calendar: item.holiday_calendar,
-            retry_rule: item.retry_rule,
-            exception_policy: item.exception_policy,
-            metadata: item.metadata,
-        }).collect(),
-        compliance_hooks: compliance_hooks.into_iter().map(|item| CorridorComplianceHookRecord {
-            compliance_hook_id: item.id,
-            hook_kind: item.hook_kind,
-            provider_key: item.provider_key,
-            required: item.required,
-            config: item.config,
-            metadata: item.metadata,
-        }).collect(),
-        rollout_scopes: rollout_scopes.into_iter().map(|item| CorridorRolloutScopeRecord {
-            rollout_scope_id: item.id,
-            tenant_id: item.tenant_id,
-            environment: item.environment,
-            geography: item.geography,
-            method_family: item.method_family,
-            rollout_state: item.rollout_state,
-            approval_reference: item.approval_reference,
-            metadata: item.metadata,
-        }).collect(),
-        eligibility_rules: eligibility_rules.into_iter().map(|item| CorridorEligibilityRuleRecord {
-            eligibility_rule_id: item.id,
-            partner_id: item.partner_id,
-            entity_type: item.entity_type,
-            method_family: item.method_family,
-            amount_bounds: item.amount_bounds,
-            compliance_requirements: item.compliance_requirements,
-            metadata: item.metadata,
-        }).collect(),
+        endpoints: endpoints
+            .into_iter()
+            .map(|item| CorridorEndpointRecord {
+                endpoint_id: item.id,
+                endpoint_role: item.endpoint_role,
+                partner_id: item.partner_id,
+                provider_key: item.provider_key,
+                adapter_key: item.adapter_key,
+                entity_type: item.entity_type,
+                rail: item.rail,
+                method_family: item.method_family,
+                settlement_mode: item.settlement_mode,
+                instrument_family: item.instrument_family,
+                metadata: item.metadata,
+            })
+            .collect(),
+        fee_profiles: fee_profiles
+            .into_iter()
+            .map(|item| CorridorFeeProfileRecord {
+                fee_profile_id: item.id,
+                fee_currency: item.fee_currency,
+                base_fee: item.base_fee.map(|v| v.to_string()),
+                fx_spread_bps: item.fx_spread_bps,
+                liquidity_cost_bps: item.liquidity_cost_bps,
+                surcharge_bps: item.surcharge_bps,
+                metadata: item.metadata,
+            })
+            .collect(),
+        cutoff_policies: cutoff_policies
+            .into_iter()
+            .map(|item| CorridorCutoffPolicyRecord {
+                cutoff_policy_id: item.id,
+                timezone: item.timezone,
+                cutoff_windows: item.cutoff_windows,
+                holiday_calendar: item.holiday_calendar,
+                retry_rule: item.retry_rule,
+                exception_policy: item.exception_policy,
+                metadata: item.metadata,
+            })
+            .collect(),
+        compliance_hooks: compliance_hooks
+            .into_iter()
+            .map(|item| CorridorComplianceHookRecord {
+                compliance_hook_id: item.id,
+                hook_kind: item.hook_kind,
+                provider_key: item.provider_key,
+                required: item.required,
+                config: item.config,
+                metadata: item.metadata,
+            })
+            .collect(),
+        rollout_scopes: rollout_scopes
+            .into_iter()
+            .map(|item| CorridorRolloutScopeRecord {
+                rollout_scope_id: item.id,
+                tenant_id: item.tenant_id,
+                environment: item.environment,
+                geography: item.geography,
+                method_family: item.method_family,
+                rollout_state: item.rollout_state,
+                approval_reference: item.approval_reference,
+                metadata: item.metadata,
+            })
+            .collect(),
+        eligibility_rules: eligibility_rules
+            .into_iter()
+            .map(|item| CorridorEligibilityRuleRecord {
+                eligibility_rule_id: item.id,
+                partner_id: item.partner_id,
+                entity_type: item.entity_type,
+                method_family: item.method_family,
+                amount_bounds: item.amount_bounds,
+                compliance_requirements: item.compliance_requirements,
+                metadata: item.metadata,
+            })
+            .collect(),
     })
 }

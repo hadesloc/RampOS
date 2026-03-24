@@ -469,7 +469,10 @@ mod tests {
             .await
             .expect("package detail load")
             .expect("package should exist");
-        assert_eq!(detail.provider_policy_id.as_deref(), Some("policy_kyb_default"));
+        assert_eq!(
+            detail.provider_policy_id.as_deref(),
+            Some("policy_kyb_default")
+        );
         assert_eq!(detail.ubo_links[0].review_state, "verified");
     }
 }

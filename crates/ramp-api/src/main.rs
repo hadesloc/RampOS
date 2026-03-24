@@ -16,12 +16,14 @@ use ramp_api::{
 };
 use ramp_common::telemetry::{init_telemetry, shutdown_telemetry, TelemetryConfig};
 use ramp_core::{
+    chain::{ChainAbstractionLayer, ChainId as RuntimeChainId},
     config::Config,
-    jobs::intent_timeout::IntentTimeoutJob,
+    jobs::{intent_timeout::IntentTimeoutJob, OfframpConfirmationJob, OfframpDetectionJob},
     repository::{
         compliance_audit::PgComplianceAuditRepository, intent::PgIntentRepository,
         ledger::PgLedgerRepository, tenant::PgTenantRepository, user::PgUserRepository,
-        webhook::PgWebhookRepository, PgSmartAccountRepository,
+        webhook::PgWebhookRepository, PgOfframpIntentRepository, PgOnchainObservationRepository,
+        PgSmartAccountRepository,
     },
     service::{
         ledger::LedgerService, onboarding::OnboardingService, payin::PayinService,
@@ -69,6 +71,8 @@ async fn main() -> anyhow::Result<()> {
     let tenant_repo = Arc::new(PgTenantRepository::new(pool.clone()));
     let user_repo = Arc::new(PgUserRepository::new(pool.clone()));
     let webhook_repo = Arc::new(PgWebhookRepository::new(pool.clone()));
+    let offramp_repo = Arc::new(PgOfframpIntentRepository::new(pool.clone()));
+    let onchain_observation_repo = Arc::new(PgOnchainObservationRepository::new(pool.clone()));
 
     // Create event publisher via config-driven factory.
     // Respects EVENT_PUBLISHER env var (accepted: "nats", "memory").
@@ -308,6 +312,95 @@ async fn main() -> anyhow::Result<()> {
             }
             if let Err(e) = timeout_job.process_expired().await {
                 tracing::error!(error = %e, "Failed to process expired intents");
+            }
+            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+        }
+    });
+
+    // Start off-ramp confirmation job — promotes observed off-ramp chain facts into
+    // confirmed observations using the shared off-ramp observer seam.
+    let mut chain_rpc_map = std::collections::HashMap::new();
+    chain_rpc_map.insert(
+        RuntimeChainId::ETHEREUM,
+        std::env::var("MAINNET_RPC_URL").unwrap_or_else(|_| "https://eth.llamarpc.com".to_string()),
+    );
+    chain_rpc_map.insert(
+        RuntimeChainId::POLYGON,
+        std::env::var("POLYGON_RPC_URL").unwrap_or_else(|_| "https://polygon-rpc.com".to_string()),
+    );
+    chain_rpc_map.insert(
+        RuntimeChainId::BSC,
+        std::env::var("BSC_RPC_URL")
+            .unwrap_or_else(|_| "https://bsc-dataseed.binance.org".to_string()),
+    );
+    chain_rpc_map.insert(
+        RuntimeChainId::AVALANCHE,
+        std::env::var("AVALANCHE_RPC_URL")
+            .unwrap_or_else(|_| "https://api.avax.network/ext/bc/C/rpc".to_string()),
+    );
+    chain_rpc_map.insert(
+        RuntimeChainId::ARBITRUM,
+        std::env::var("ARBITRUM_RPC_URL")
+            .unwrap_or_else(|_| "https://arb1.arbitrum.io/rpc".to_string()),
+    );
+    chain_rpc_map.insert(
+        RuntimeChainId::BASE,
+        std::env::var("BASE_RPC_URL").unwrap_or_else(|_| "https://mainnet.base.org".to_string()),
+    );
+    chain_rpc_map.insert(
+        RuntimeChainId::OPTIMISM,
+        std::env::var("OPTIMISM_RPC_URL")
+            .unwrap_or_else(|_| "https://mainnet.optimism.io".to_string()),
+    );
+    chain_rpc_map.insert(
+        RuntimeChainId::SOLANA_MAINNET,
+        std::env::var("SOLANA_RPC_URL")
+            .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string()),
+    );
+    chain_rpc_map.insert(
+        RuntimeChainId::TON_MAINNET,
+        std::env::var("TON_API_URL").unwrap_or_else(|_| "https://toncenter.com/api/v2".to_string()),
+    );
+
+    let chain_layer = Arc::new(
+        ChainAbstractionLayer::with_defaults(chain_rpc_map)
+            .map_err(|e| anyhow::anyhow!("Failed to build chain abstraction layer: {}", e))?,
+    );
+    let offramp_detection_job = OfframpDetectionJob::new(
+        tenant_repo.clone(),
+        offramp_repo.clone(),
+        onchain_observation_repo.clone(),
+        chain_layer.clone(),
+    );
+    let shutdown_flag_offramp_detect = shutdown_flag.clone();
+    tokio::spawn(async move {
+        loop {
+            if shutdown_flag_offramp_detect.load(Ordering::Relaxed) {
+                info!("Off-ramp detection job shutting down");
+                break;
+            }
+            if let Err(e) = offramp_detection_job.process_pending().await {
+                tracing::error!(error = %e, "Failed to process off-ramp detections");
+            }
+            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+        }
+    });
+
+    let offramp_confirmation_job = OfframpConfirmationJob::new(
+        tenant_repo.clone(),
+        offramp_repo,
+        onchain_observation_repo,
+        chain_layer,
+    );
+    let shutdown_flag_offramp = shutdown_flag.clone();
+    tokio::spawn(async move {
+        loop {
+            if shutdown_flag_offramp.load(Ordering::Relaxed) {
+                info!("Off-ramp confirmation job shutting down");
+                break;
+            }
+            if let Err(e) = offramp_confirmation_job.process_pending().await {
+                tracing::error!(error = %e, "Failed to process off-ramp confirmations");
             }
             tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
         }

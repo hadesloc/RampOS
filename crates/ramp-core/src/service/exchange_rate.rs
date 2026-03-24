@@ -289,6 +289,7 @@ impl ExchangeRateService {
             CryptoSymbol::USDT => Decimal::new(25_400, 0),       // 25,400 VND
             CryptoSymbol::USDC => Decimal::new(25_380, 0),       // 25,380 VND
             CryptoSymbol::BNB => Decimal::new(15_000_000, 0),    // 15 million VND
+            CryptoSymbol::MATIC => Decimal::new(16_500, 0),      // 16,500 VND
             CryptoSymbol::SOL => Decimal::new(5_500_000, 0),     // 5.5 million VND
             CryptoSymbol::Other => {
                 return Err(Error::Validation("Unsupported asset: OTHER".to_string()));

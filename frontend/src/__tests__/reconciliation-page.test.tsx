@@ -12,6 +12,13 @@ const workbenchResponse = {
   incidentLinkHint: "/v1/admin/incidents/timeline",
   snapshot: {
     generatedAt: "2026-03-09T10:00:00Z",
+    provenance: {
+      sourceKind: "sample_fallback",
+      settlementCount: 2,
+      onChainTxCount: 2,
+      freshnessWarning:
+        "This reconciliation snapshot uses sample fixture data and should NOT be treated as evidence-backed production truth.",
+    },
     report: {
       id: "recon_demo_001",
       totalDiscrepancies: 2,
@@ -58,6 +65,27 @@ const evidenceResponse = {
     rootCause: "status_drift",
   },
   settlementIds: ["stl_recon_status_001"],
+  evidenceSources: [
+    {
+      evidenceSourceId: "recon_src_001",
+      sourceFamily: "settlement_record",
+      sourceRef: "stl_recon_status_001",
+      snapshotAt: "2026-03-09T09:52:00Z",
+      entityScope: "tenant_demo",
+      corridorCode: "VN_SG",
+    },
+  ],
+  lineageRecords: [
+    {
+      lineageId: "recon_lineage_001",
+      lineageKind: "settlement_to_discrepancy",
+      referenceId: "stl_recon_status_001",
+      parentReferenceId: null,
+      entityScope: "tenant_demo",
+      corridorCode: "VN_SG",
+      operatorReviewState: "pending_review",
+    },
+  ],
   replayEntries: [
     {
       referenceId: "disc_status_001",
@@ -102,6 +130,9 @@ describe("ReconciliationPage", () => {
     render(<ReconciliationPage />);
 
     expect(await screen.findByText(/reconciliation ops workbench/i)).toBeInTheDocument();
+    expect(screen.getByText(/source of truth/i)).toBeInTheDocument();
+    expect(screen.getByText(/^sample_fallback$/i)).toBeInTheDocument();
+    expect(screen.getByText(/provenance warning/i)).toBeInTheDocument();
     expect(screen.getByText(/sla guardian/i)).toBeInTheDocument();
     expect(screen.getByText(/1 needs attention within 15 min/i)).toBeInTheDocument();
     expect(screen.getByText(/offchain recording gap/i)).toBeInTheDocument();
@@ -112,6 +143,9 @@ describe("ReconciliationPage", () => {
       expect(screen.getByText(/stl_recon_status_001/i)).toBeInTheDocument();
     });
 
+    expect(screen.getByText(/lineage summary/i)).toBeInTheDocument();
+    expect(screen.getByText(/review: pending review/i)).toBeInTheDocument();
+    expect(screen.getByText(/recon_src_001/i)).toBeInTheDocument();
     expect(screen.getByText(/recommended response target/i)).toBeInTheDocument();
     expect(screen.getByText(/page banking partner and incident commander/i)).toBeInTheDocument();
 

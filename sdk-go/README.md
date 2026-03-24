@@ -61,7 +61,13 @@ func main() {
 
 ## Contract-Driven Note
 
-RampOS keeps the public SDKs aligned to the OpenAPI contract and uses the thin `rampos-cli` preview for bounded admin/operator flows that are not yet first-class SDK namespaces.
+RampOS keeps the public SDKs aligned to the OpenAPI contract and uses the packaged Python CLI in `sdk-python/src/rampos/cli/` for bounded admin/operator flows that are not yet first-class SDK namespaces.
+
+Current CLI truth:
+- `watch` is already implemented as a real JSONL streaming surface.
+- Dangerous writes already have bounded approval-aware behavior through `--dry-run`, `--yes`, and interactive confirmation in the packaged CLI request layer.
+- Canonical admin auth is JWT-first (`X-Admin-Authorization: Bearer <admin-jwt>`); legacy `X-Admin-Key` remains compatibility fallback, not the primary operator contract.
+- Those mutate safeguards are intentionally bounded operator controls, not proof that high-impact admin writes are safe to run autonomously without human review.
 
 For example, the reconciliation workbench and evidence export surface currently live behind:
 
@@ -71,6 +77,11 @@ python scripts/rampos-cli.py reconciliation evidence --discrepancy-id <id>
 ```
 
 Use `scripts/validate-openapi.sh` and `scripts/test-rampos-cli.sh` together when validating SDK/CLI drift locally.
+
+Sandbox parity remains partial rather than fully `READY`:
+- `seed` and `replay` are live.
+- `run` still returns bounded placeholder/backend-unavailable behavior.
+- A placeholder result from `run` should be read as explicit backend absence, not as a successful simulated execution.
 
 ## Authentication
 

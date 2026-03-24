@@ -181,6 +181,7 @@ pub enum CryptoSymbol {
     USDT,
     USDC,
     BNB,
+    MATIC,
     SOL,
     Other,
 }
@@ -193,6 +194,7 @@ impl std::fmt::Display for CryptoSymbol {
             CryptoSymbol::USDT => write!(f, "USDT"),
             CryptoSymbol::USDC => write!(f, "USDC"),
             CryptoSymbol::BNB => write!(f, "BNB"),
+            CryptoSymbol::MATIC => write!(f, "MATIC"),
             CryptoSymbol::SOL => write!(f, "SOL"),
             CryptoSymbol::Other => write!(f, "OTHER"),
         }
@@ -327,6 +329,7 @@ pub enum ChainId {
     Arbitrum,
     Optimism,
     Base,
+    Avalanche,
     Solana,
 }
 
@@ -340,6 +343,7 @@ impl ChainId {
             ChainId::Arbitrum => Some(42161),
             ChainId::Optimism => Some(10),
             ChainId::Base => Some(8453),
+            ChainId::Avalanche => Some(43114),
             ChainId::Solana => None,
         }
     }
@@ -470,6 +474,7 @@ mod tests {
         assert_eq!(format!("{}", CryptoSymbol::USDT), "USDT");
         assert_eq!(format!("{}", CryptoSymbol::USDC), "USDC");
         assert_eq!(format!("{}", CryptoSymbol::BNB), "BNB");
+        assert_eq!(format!("{}", CryptoSymbol::MATIC), "MATIC");
         assert_eq!(format!("{}", CryptoSymbol::SOL), "SOL");
         assert_eq!(format!("{}", CryptoSymbol::Other), "OTHER");
     }
@@ -542,6 +547,7 @@ mod tests {
         assert_eq!(ChainId::Arbitrum.evm_chain_id(), Some(42161));
         assert_eq!(ChainId::Optimism.evm_chain_id(), Some(10));
         assert_eq!(ChainId::Base.evm_chain_id(), Some(8453));
+        assert_eq!(ChainId::Avalanche.evm_chain_id(), Some(43114));
         assert_eq!(ChainId::Solana.evm_chain_id(), None);
     }
 

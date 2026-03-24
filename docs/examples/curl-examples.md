@@ -30,7 +30,8 @@ All API requests (except health checks) require:
 # Set your credentials
 export RAMPOS_API_URL="https://api.rampos.io"
 export RAMPOS_API_KEY="your_api_key_here"
-export RAMPOS_ADMIN_KEY="your_admin_key_here"
+export RAMPOS_ADMIN_JWT="your_admin_jwt_here"
+export RAMPOS_ADMIN_OPERATOR_JWT="your_admin_operator_jwt_here"
 export TENANT_ID="your_tenant_id"
 export USER_ID="user_123"
 
@@ -351,7 +352,10 @@ curl -X GET "${RAMPOS_API_URL}/v1/balance/${USER_ID}" \
 
 ## Admin Endpoints
 
-Admin endpoints require the `X-Admin-Key` header instead of Bearer token.
+Admin endpoints use the canonical admin JWT header:
+
+- `X-Admin-Authorization: Bearer <admin-jwt>` (preferred)
+- `X-Admin-Key` is deprecated and kept only as compatibility fallback.
 
 ### Dashboard
 
@@ -361,7 +365,7 @@ Admin endpoints require the `X-Admin-Key` header instead of Bearer token.
 curl -X GET "${RAMPOS_API_URL}/v1/admin/dashboard" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 **Response:**
@@ -413,19 +417,19 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/dashboard" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/users?limit=20&offset=0" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 
 # Filter by KYC tier
 curl -X GET "${RAMPOS_API_URL}/v1/admin/users?kyc_tier=2" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 
 # Search users
 curl -X GET "${RAMPOS_API_URL}/v1/admin/users?search=nguyen" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 #### Get User Details
@@ -434,7 +438,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/users?search=nguyen" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 #### Update User (Requires Operator Role)
@@ -443,7 +447,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}" \
 curl -X PATCH "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}:operator" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "status": "ACTIVE",
@@ -459,7 +463,7 @@ curl -X PATCH "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/tier" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 #### Upgrade User Tier
@@ -468,7 +472,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/tier" \
 curl -X POST "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/tier/upgrade" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "targetTier": "TIER2",
@@ -482,7 +486,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/tier/upgrade" \
 curl -X POST "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/tier/downgrade" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "targetTier": "TIER1",
@@ -496,7 +500,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/tier/downgrade" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/limits" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 **Response:**
@@ -522,25 +526,25 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/users/${USER_ID}/limits" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/cases?limit=20&offset=0" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 
 # Filter by status
 curl -X GET "${RAMPOS_API_URL}/v1/admin/cases?status=OPEN" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 
 # Filter by severity
 curl -X GET "${RAMPOS_API_URL}/v1/admin/cases?severity=HIGH" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 
 # Filter by assigned analyst
 curl -X GET "${RAMPOS_API_URL}/v1/admin/cases?assigned_to=analyst1" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 #### Get Case Details
@@ -551,7 +555,7 @@ CASE_ID="case_123"
 curl -X GET "${RAMPOS_API_URL}/v1/admin/cases/${CASE_ID}" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 #### Update Case (Requires Operator Role)
@@ -560,7 +564,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/cases/${CASE_ID}" \
 curl -X PATCH "${RAMPOS_API_URL}/v1/admin/cases/${CASE_ID}" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}:operator" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "status": "REVIEW",
@@ -575,7 +579,7 @@ curl -X PATCH "${RAMPOS_API_URL}/v1/admin/cases/${CASE_ID}" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/cases/stats" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 #### Generate SAR (Suspicious Activity Report)
@@ -584,7 +588,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/cases/stats" \
 curl -X POST "${RAMPOS_API_URL}/v1/admin/cases/${CASE_ID}/sar" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}"
 ```
 
 ### Tier Configuration
@@ -595,7 +599,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/admin/cases/${CASE_ID}/sar" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/tiers" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 **Response:**
@@ -644,7 +648,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/tiers" \
 curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "New Exchange",
@@ -661,7 +665,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants" \
 curl -X PATCH "${RAMPOS_API_URL}/v1/admin/tenants/${TENANT_ID}" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "dailyPayinLimitVnd": "10000000000",
@@ -676,7 +680,7 @@ curl -X PATCH "${RAMPOS_API_URL}/v1/admin/tenants/${TENANT_ID}" \
 curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants/${TENANT_ID}/api-keys" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}"
 ```
 
 **Warning:** This will invalidate existing API keys!
@@ -695,7 +699,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants/${TENANT_ID}/api-keys" \
 curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants/${TENANT_ID}/activate" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}"
 ```
 
 #### Suspend Tenant
@@ -704,7 +708,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants/${TENANT_ID}/activate" \
 curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants/${TENANT_ID}/suspend" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "reason": "Compliance review required"
@@ -719,7 +723,7 @@ curl -X POST "${RAMPOS_API_URL}/v1/admin/tenants/${TENANT_ID}/suspend" \
 curl -X GET "${RAMPOS_API_URL}/v1/admin/reports/aml?start_date=2026-01-01T00:00:00Z&end_date=2026-01-31T23:59:59Z" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 #### Export AML Report as CSV
@@ -728,7 +732,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/reports/aml?start_date=2026-01-01T00:00:
 curl -X GET "${RAMPOS_API_URL}/v1/admin/reports/aml/export?start_date=2026-01-01T00:00:00Z&end_date=2026-01-31T23:59:59Z&format=csv" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}" \
   -o aml_report.csv
 ```
 
@@ -738,7 +742,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/reports/aml/export?start_date=2026-01-01
 curl -X GET "${RAMPOS_API_URL}/v1/admin/reports/aml/export?start_date=2026-01-01T00:00:00Z&end_date=2026-01-31T23:59:59Z&format=pdf" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}" \
   -o aml_report.pdf
 ```
 
@@ -748,7 +752,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/reports/aml/export?start_date=2026-01-01
 curl -X GET "${RAMPOS_API_URL}/v1/admin/reports/kyc?start_date=2026-01-01T00:00:00Z&end_date=2026-01-31T23:59:59Z" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 ### Reconciliation
@@ -759,7 +763,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/reports/kyc?start_date=2026-01-01T00:00:
 curl -X GET "${RAMPOS_API_URL}/v1/admin/recon/batches?limit=20&offset=0" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}"
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_JWT}"
 ```
 
 #### Create Reconciliation Batch
@@ -768,7 +772,7 @@ curl -X GET "${RAMPOS_API_URL}/v1/admin/recon/batches?limit=20&offset=0" \
 curl -X POST "${RAMPOS_API_URL}/v1/admin/recon/batches" \
   -H "Authorization: Bearer ${RAMPOS_API_KEY}" \
   -H "X-Timestamp: $(get_timestamp)" \
-  -H "X-Admin-Key: ${RAMPOS_ADMIN_KEY}" \
+  -H "X-Admin-Authorization: Bearer ${RAMPOS_ADMIN_OPERATOR_JWT}" \
   -H "Content-Type: application/json" \
   -d '{
     "railsProvider": "vcb",

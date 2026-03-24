@@ -6,7 +6,8 @@ Use this ledger for one release candidate at a time. Do not mark a candidate as 
 
 - This ledger records the release-gate state for RC `268670d74` as of the `2026-03-13` internal pre-signoff pass.
 - Later implementation hardening landed on `2026-03-17`, but that work is an implementation response, not automatic signoff closure.
-- Do not treat newer implementation docs as refreshed signoff evidence until this ledger or a successor RC ledger is explicitly updated.
+- This ledger was refreshed on `2026-03-18` to centralize the current blocker register for the post-hardening workspace state.
+- Do not treat newer implementation docs as refreshed signoff evidence until this ledger or a successor RC ledger is explicitly updated with attributable evidence.
 
 ## Candidate Header
 
@@ -21,6 +22,25 @@ Use this ledger for one release candidate at a time. Do not mark a candidate as 
 | Migration set in scope | `043-048` plus any new migrations |
 | Evidence root | `docs/operations/evidence/` |
 | Security review plan | `docs/security/independent-security-review-plan.md` |
+
+## Current Blocker Register
+
+These blockers are the current centralized release-truth view for the post-hardening workspace state. They describe why the repo is still in signoff closure even though hardening landed on `2026-03-17`.
+
+| Blocker | Current state | Required refresh or closure |
+| --- | --- | --- |
+| Staging validation | `blocked before preflight`; no attributable rollout, smoke, or rollback evidence exists for RC `268670d74` | Run the staging validation sequence from CI or an operator host with working DNS and kubeconfig, then attach the resulting evidence package |
+| Trivy freshness | `trivy-current.json` exists but predates the latest dependency-remediation batch | Re-run Trivy against the current post-remediation RC state and attach the refreshed output |
+| Residual Rust advisory | `rsa` remains as the last recorded Rust advisory and still needs final disposition | Close it technically or record explicit risk acceptance with named approver and expiry |
+| Independent security review | No external reviewer output is attached for this RC | Attach the independent review summary, finding ledger, closure evidence, and exception register |
+| Approver chain | Required release, engineering, security, and operations approvers are still unnamed | Assign named approvers and record approval timestamps |
+
+## Evidence Refresh Expectations
+
+- Any dependency-remediation batch after the evidence window invalidates scan freshness until the affected scans are rerun.
+- Any post-hardening workspace state after `2026-03-17` must not be described as signoff-ready using the `2026-03-13` evidence window alone.
+- Staging validation is not satisfied by workflow mapping or local compose evidence; it requires attributable staging-host or CI evidence tied to the candidate SHA.
+- Approver rows stay `pending` until named people and timestamps are attached in this ledger.
 
 ## Approver Chain
 

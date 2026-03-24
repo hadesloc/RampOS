@@ -128,9 +128,8 @@ impl SmartAccountService {
         let values_offset = targets_offset + targets_tail.len() as u64;
         let datas_offset = values_offset + values_tail.len() as u64;
 
-        let mut encoded = Vec::with_capacity(
-            96 + targets_tail.len() + values_tail.len() + datas_tail.len(),
-        );
+        let mut encoded =
+            Vec::with_capacity(96 + targets_tail.len() + values_tail.len() + datas_tail.len());
         encoded.extend_from_slice(&Self::abi_encode_uint(U256::from(targets_offset)));
         encoded.extend_from_slice(&Self::abi_encode_uint(U256::from(values_offset)));
         encoded.extend_from_slice(&Self::abi_encode_uint(U256::from(datas_offset)));

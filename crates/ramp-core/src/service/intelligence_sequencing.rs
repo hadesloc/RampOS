@@ -135,9 +135,7 @@ impl IntelligenceSequencingService {
             .guardrails
             .iter()
             .filter(|g| {
-                g.enforced
-                    && !g.satisfied
-                    && g.applies_to.contains(&package_id.to_string())
+                g.enforced && !g.satisfied && g.applies_to.contains(&package_id.to_string())
             })
             .map(|g| format!("{}: {}", g.guardrail_id, g.rule))
             .collect();
@@ -259,13 +257,9 @@ mod tests {
 
     #[test]
     fn check_dependencies_with_all_met() {
-        let service =
-            IntelligenceSequencingService::with_packages(sample_packages(), Vec::new());
+        let service = IntelligenceSequencingService::with_packages(sample_packages(), Vec::new());
         let result = service
-            .check_dependencies(
-                "risk_lab_v2",
-                &["runtime_truth_baseline".to_string()],
-            )
+            .check_dependencies("risk_lab_v2", &["runtime_truth_baseline".to_string()])
             .expect("check should succeed");
 
         assert!(result.can_start);
@@ -274,10 +268,12 @@ mod tests {
 
     #[test]
     fn check_dependencies_with_missing() {
-        let service =
-            IntelligenceSequencingService::with_packages(sample_packages(), Vec::new());
+        let service = IntelligenceSequencingService::with_packages(sample_packages(), Vec::new());
         let result = service
-            .check_dependencies("incident_intelligence", &["runtime_truth_baseline".to_string()])
+            .check_dependencies(
+                "incident_intelligence",
+                &["runtime_truth_baseline".to_string()],
+            )
             .expect("check should succeed");
 
         assert!(!result.can_start);
@@ -289,10 +285,7 @@ mod tests {
         let service =
             IntelligenceSequencingService::with_packages(sample_packages(), sample_guardrails());
         let result = service
-            .check_dependencies(
-                "risk_lab_v2",
-                &["runtime_truth_baseline".to_string()],
-            )
+            .check_dependencies("risk_lab_v2", &["runtime_truth_baseline".to_string()])
             .expect("check should succeed");
 
         // Guardrail applies and is enforced
@@ -302,8 +295,7 @@ mod tests {
 
     #[test]
     fn list_by_domain_filters() {
-        let service =
-            IntelligenceSequencingService::with_packages(sample_packages(), Vec::new());
+        let service = IntelligenceSequencingService::with_packages(sample_packages(), Vec::new());
         assert_eq!(service.list_by_domain("risk_lab").len(), 1);
         assert_eq!(service.list_by_domain("incident").len(), 1);
         assert_eq!(service.list_by_domain("sla").len(), 1);
@@ -312,8 +304,7 @@ mod tests {
 
     #[test]
     fn verify_operator_control_all_controlled() {
-        let service =
-            IntelligenceSequencingService::with_packages(sample_packages(), Vec::new());
+        let service = IntelligenceSequencingService::with_packages(sample_packages(), Vec::new());
         let violations = service.verify_operator_control_enforcement();
         assert!(violations.is_empty());
     }

@@ -18,6 +18,8 @@ The RampOS CLI is designed for both human operators and AI agents. This document
 
 ### 1. Monitor intents and react
 
+Legacy note: the `--admin-key` usage below is compatibility-only. Canonical admin auth remains `X-Admin-Authorization: Bearer <admin-jwt>`.
+
 ```bash
 rampos watch --event-type intent.updated --portal-token $TOKEN | while IFS= read -r line; do
   status=$(echo "$line" | jq -r '.data.status')
@@ -58,7 +60,25 @@ if [ "$source" = "sample" ]; then
 fi
 ```
 
+### 5. Reconciliation provenance check before automation
+
+```bash
+result=$(rampos reconciliation workbench --output json)
+source=$(echo "$result" | jq -r '.snapshot.provenance.sourceKind // "unknown"')
+warning=$(echo "$result" | jq -r '.snapshot.provenance.freshnessWarning // empty')
+if [ "$source" = "sample_fallback" ]; then
+  echo "WARNING: Reconciliation workbench is fixture-backed ($source) - $warning"
+elif [ -n "$warning" ]; then
+  echo "WARNING: Reconciliation workbench has bounded runtime inputs ($source) - $warning"
+fi
+```
+
+In the current wave, `runtime_inputs` is the preferred source when tenant-scoped persisted settlement rows exist. `sample_fallback` still appears when those runtime inputs are absent.
+
 ## Authentication for Agents
+
+Canonical admin API auth is `X-Admin-Authorization: Bearer <admin-jwt>`.
+The CLI login example below uses the current legacy compatibility flag (`--admin-key`) and is not the preferred path.
 
 ```bash
 # Save a profile for automation

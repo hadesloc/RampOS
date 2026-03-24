@@ -228,10 +228,7 @@ pub fn next_run_at(subject: &RescreeningSubject, cadence_days: i64) -> DateTime<
         .and_then(|value| value.get("nextRunAt"))
         .and_then(parse_timestamp)
         .unwrap_or_else(|| {
-            subject
-                .kyc_verified_at
-                .unwrap_or_else(Utc::now)
-                + Duration::days(cadence_days)
+            subject.kyc_verified_at.unwrap_or_else(Utc::now) + Duration::days(cadence_days)
         })
 }
 

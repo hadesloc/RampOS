@@ -532,11 +532,8 @@ impl ReconciliationService {
             .map(str::to_string);
         let evidence_sources =
             self.build_evidence_sources(discrepancy, &linked_settlements, corridor_code.clone());
-        let lineage_records = self.build_lineage_records(
-            &queue_item,
-            &evidence_sources,
-            corridor_code,
-        );
+        let lineage_records =
+            self.build_lineage_records(&queue_item, &evidence_sources, corridor_code);
 
         Ok(ReconciliationEvidencePack {
             queue_item,
@@ -609,15 +606,19 @@ impl ReconciliationService {
             operator_review_state: "review_required".to_string(),
         }];
 
-        records.extend(evidence_sources.iter().map(|source| ReconciliationLineageRecord {
-            lineage_id: format!("lineage_source_{}", source.evidence_source_id),
-            lineage_kind: "evidence_source".to_string(),
-            reference_id: source.evidence_source_id.clone(),
-            parent_reference_id: Some(queue_item.discrepancy_id.clone()),
-            entity_scope: source.entity_scope.clone(),
-            corridor_code: source.corridor_code.clone(),
-            operator_review_state: "review_required".to_string(),
-        }));
+        records.extend(
+            evidence_sources
+                .iter()
+                .map(|source| ReconciliationLineageRecord {
+                    lineage_id: format!("lineage_source_{}", source.evidence_source_id),
+                    lineage_kind: "evidence_source".to_string(),
+                    reference_id: source.evidence_source_id.clone(),
+                    parent_reference_id: Some(queue_item.discrepancy_id.clone()),
+                    entity_scope: source.entity_scope.clone(),
+                    corridor_code: source.corridor_code.clone(),
+                    operator_review_state: "review_required".to_string(),
+                }),
+        );
 
         records
     }
@@ -836,7 +837,8 @@ impl ReconciliationService {
                     return None;
                 }
 
-                let confidence = if amount_delta <= discrepancy.expected_amount.abs().max(1.0) * 0.001
+                let confidence = if amount_delta
+                    <= discrepancy.expected_amount.abs().max(1.0) * 0.001
                     || amount_delta <= 0.01
                 {
                     ReconciliationMatchConfidence::High
@@ -1219,14 +1221,20 @@ mod tests {
         let queue = svc.build_break_queue(&report, &settlements);
 
         assert_eq!(queue.len(), 1);
-        assert_eq!(queue[0].owner_lane, ReconciliationOwnerLane::SettlementOperations);
+        assert_eq!(
+            queue[0].owner_lane,
+            ReconciliationOwnerLane::SettlementOperations
+        );
         assert_eq!(
             queue[0].root_cause,
             ReconciliationRootCause::OffchainRecordingGap
         );
         assert_eq!(queue[0].age_bucket, ReconciliationAgeBucket::Aging);
         assert_eq!(queue[0].suggested_matches.len(), 1);
-        assert_eq!(queue[0].suggested_matches[0].settlement_id, "stl_candidate_001");
+        assert_eq!(
+            queue[0].suggested_matches[0].settlement_id,
+            "stl_candidate_001"
+        );
         assert_eq!(
             queue[0].suggested_matches[0].confidence,
             ReconciliationMatchConfidence::High
@@ -1278,7 +1286,10 @@ mod tests {
             .expect("evidence pack should be generated");
 
         assert_eq!(evidence.queue_item.discrepancy_id, "disc_evidence_001");
-        assert_eq!(evidence.settlement_ids, vec!["stl_evidence_001".to_string()]);
+        assert_eq!(
+            evidence.settlement_ids,
+            vec!["stl_evidence_001".to_string()]
+        );
         assert!(evidence
             .replay_entries
             .iter()
@@ -1333,17 +1344,26 @@ mod tests {
         };
 
         let evidence = svc
-            .build_evidence_pack(&report, std::slice::from_ref(&candidate), "disc_missing_evidence_001")
+            .build_evidence_pack(
+                &report,
+                std::slice::from_ref(&candidate),
+                "disc_missing_evidence_001",
+            )
             .expect("evidence pack should be generated");
 
-        assert_eq!(evidence.queue_item.discrepancy_id, "disc_missing_evidence_001");
+        assert_eq!(
+            evidence.queue_item.discrepancy_id,
+            "disc_missing_evidence_001"
+        );
         assert_eq!(evidence.queue_item.suggested_matches.len(), 1);
         assert_eq!(
             evidence.queue_item.suggested_matches[0].settlement_id,
             "stl_candidate_live_001"
         );
         assert_eq!(
-            evidence.queue_item.suggested_matches[0].bank_reference.as_deref(),
+            evidence.queue_item.suggested_matches[0]
+                .bank_reference
+                .as_deref(),
             Some("RAMP-LIVE-CANDIDATE")
         );
         assert_eq!(

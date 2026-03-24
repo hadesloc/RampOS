@@ -3,7 +3,7 @@
 //! Comprehensive integration tests for portal features including:
 //! - Portal route authentication (JWT-based)
 //! - HMAC signature verification
-//! - Cookie-based authentication
+//! - Fail-closed portal auth placeholders
 //! - Protected route access control
 
 use axum::{
@@ -212,8 +212,8 @@ async fn setup_portal_test_app() -> PortalTestApp {
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
         document_storage: None,
-            kyc_service: None,
-            kyt_service: None,
+        kyc_service: None,
+        kyt_service: None,
     };
 
     let router = create_router(app_state);
@@ -645,10 +645,10 @@ async fn test_hmac_expired_timestamp_rejected() {
 // ============================================================================
 
 #[tokio::test]
-async fn test_login_sets_auth_cookie() {
+async fn test_webauthn_register_complete_does_not_issue_auth_cookie() {
     let app = setup_portal_test_app().await;
 
-    // Call login endpoint (WebAuthn register complete)
+    // Register-complete endpoint is still fail-closed and should not issue auth cookies.
     let payload = serde_json::json!({
         "email": "test@example.com",
         "credential": {
@@ -675,7 +675,7 @@ async fn test_login_sets_auth_cookie() {
 }
 
 #[tokio::test]
-async fn test_magic_link_login_sets_cookie() {
+async fn test_magic_link_verify_does_not_issue_auth_cookie() {
     let app = setup_portal_test_app().await;
 
     let payload = serde_json::json!({
@@ -1144,7 +1144,7 @@ async fn test_get_me_endpoint_without_auth() {
 }
 
 #[tokio::test]
-async fn test_get_me_endpoint_with_valid_cookie() {
+async fn test_get_me_endpoint_with_cookie_still_returns_unauthorized() {
     let app = setup_portal_test_app().await;
 
     let request = Request::builder()

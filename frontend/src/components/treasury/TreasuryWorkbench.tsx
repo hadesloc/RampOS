@@ -64,12 +64,22 @@ type TreasuryYieldAllocation = {
   strategyPosture: string;
 };
 
+type TreasuryProvenance = {
+  sourceKind: string;
+  evidenceImportIds: string[];
+  earliestEvidenceAt?: string | null;
+  latestEvidenceAt?: string | null;
+  freshnessWarning?: string | null;
+};
+
 type TreasurySnapshot = {
   generatedAt: string;
   forecastWindowHours: number;
   actionMode: string;
   bufferTargetPercent: number;
   policyHint: string;
+  dataSource: string;
+  provenance: TreasuryProvenance;
   floatSlices: TreasuryFloatSlice[];
   forecasts: TreasuryForecast[];
   exposures: TreasuryExposure[];
@@ -192,7 +202,7 @@ export default function TreasuryWorkbench() {
             void loadWorkbench("active");
           }}
         >
-          Active Pressure
+          Active Scenario
         </Button>
         <Button
           variant={scenario === "stable" ? "default" : "outline"}
@@ -201,9 +211,13 @@ export default function TreasuryWorkbench() {
             void loadWorkbench("stable");
           }}
         >
-          Stable Control
+          Stable Scenario
         </Button>
       </div>
+      <p className="text-sm text-muted-foreground">
+        Scenario toggles modeled pressure profiles. Source-of-truth is shown separately and may be
+        sample-backed.
+      </p>
 
       {error ? (
         <Card>
@@ -229,7 +243,16 @@ export default function TreasuryWorkbench() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-4">
+      {snapshot?.provenance.freshnessWarning ? (
+        <Card className="border-amber-300 bg-amber-50/60">
+          <CardHeader>
+            <CardTitle className="text-base">Sample fallback in use</CardTitle>
+            <CardDescription>{snapshot.provenance.freshnessWarning}</CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Action Mode</CardDescription>
@@ -266,6 +289,15 @@ export default function TreasuryWorkbench() {
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
             Forecast window: {snapshot?.forecastWindowHours ?? 24}h
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Source Of Truth</CardDescription>
+            <CardTitle className="text-lg">{snapshot?.dataSource ?? "loading"}</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Evidence imports: {snapshot?.provenance.evidenceImportIds.length ?? 0}
           </CardContent>
         </Card>
       </div>

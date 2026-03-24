@@ -1,0 +1,2 @@
+DROP TRIGGER IF EXISTS trigger_commercialization_packs_updated_at ON commercialization_packs;
+DROP TABLE IF EXISTS commercialization_packs;

@@ -62,43 +62,45 @@ pub async fn export_settlement_workbench(
     let snapshot = NetSettlementService::new().build_workbench(query.scenario.as_deref());
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
 
-    Ok(match query
-        .format
-        .as_deref()
-        .unwrap_or("json")
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "csv" => (
-            [
-                (axum::http::header::CONTENT_TYPE, "text/csv; charset=utf-8"),
-                (
-                    axum::http::header::CONTENT_DISPOSITION,
-                    &format!("attachment; filename=\"settlement_workbench_{timestamp}.csv\""),
-                ),
-            ],
-            export_csv(&snapshot),
-        )
-            .into_response(),
-        "json" => (
-            [
-                (axum::http::header::CONTENT_TYPE, "application/json"),
-                (
-                    axum::http::header::CONTENT_DISPOSITION,
-                    &format!("attachment; filename=\"settlement_workbench_{timestamp}.json\""),
-                ),
-            ],
-            serde_json::to_string_pretty(&snapshot)
-                .map_err(|error| ApiError::Internal(error.to_string()))?,
-        )
-            .into_response(),
-        other => {
-            return Err(ApiError::Validation(format!(
-                "Unsupported settlement export format '{}'",
-                other
-            )))
-        }
-    })
+    Ok(
+        match query
+            .format
+            .as_deref()
+            .unwrap_or("json")
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "csv" => (
+                [
+                    (axum::http::header::CONTENT_TYPE, "text/csv; charset=utf-8"),
+                    (
+                        axum::http::header::CONTENT_DISPOSITION,
+                        &format!("attachment; filename=\"settlement_workbench_{timestamp}.csv\""),
+                    ),
+                ],
+                export_csv(&snapshot),
+            )
+                .into_response(),
+            "json" => (
+                [
+                    (axum::http::header::CONTENT_TYPE, "application/json"),
+                    (
+                        axum::http::header::CONTENT_DISPOSITION,
+                        &format!("attachment; filename=\"settlement_workbench_{timestamp}.json\""),
+                    ),
+                ],
+                serde_json::to_string_pretty(&snapshot)
+                    .map_err(|error| ApiError::Internal(error.to_string()))?,
+            )
+                .into_response(),
+            other => {
+                return Err(ApiError::Validation(format!(
+                    "Unsupported settlement export format '{}'",
+                    other
+                )))
+            }
+        },
+    )
 }
 
 fn export_csv(snapshot: &NetSettlementWorkbenchSnapshot) -> String {

@@ -8,7 +8,10 @@ use serde_json::json;
 
 #[test]
 fn sla_guardian_routes_recommendations_to_owner_lanes_and_risk_level() {
-    let base_time = Utc.with_ymd_and_hms(2026, 3, 10, 10, 0, 0).single().unwrap();
+    let base_time = Utc
+        .with_ymd_and_hms(2026, 3, 10, 10, 0, 0)
+        .single()
+        .unwrap();
     let timeline = IncidentTimelineAssembler::assemble_with_signals(
         "incident_guardian_001",
         vec![
@@ -51,7 +54,10 @@ fn sla_guardian_routes_recommendations_to_owner_lanes_and_risk_level() {
     );
 
     assert_eq!(snapshot.action_mode, timeline.action_mode);
-    assert_eq!(snapshot.predicted_breach_risk, SlaGuardianRiskLevel::Critical);
+    assert_eq!(
+        snapshot.predicted_breach_risk,
+        SlaGuardianRiskLevel::Critical
+    );
     assert!(snapshot.alerts.iter().any(|alert| {
         alert.code == "review_webhook_delivery"
             && alert.owner_lane == SlaGuardianOwnerLane::Webhooks

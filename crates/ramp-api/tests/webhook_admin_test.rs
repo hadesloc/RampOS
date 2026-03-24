@@ -4,6 +4,7 @@ use axum::{
 };
 use chrono::Utc;
 use hmac::{Hmac, Mac};
+use jsonwebtoken::{encode, EncodingKey, Header};
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{
@@ -25,7 +26,7 @@ type HmacSha256 = Hmac<Sha256>;
 
 const TEST_API_KEY: &str = "webhook_test_api_key";
 const TEST_API_SECRET: &str = "webhook_test_api_secret";
-const TEST_ADMIN_KEY: &str = "webhook_admin_key";
+const TEST_ADMIN_JWT_SECRET: &str = "webhook-admin-jwt-secret";
 
 fn env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -53,13 +54,31 @@ fn generate_signature(
     hex::encode(mac.finalize().into_bytes())
 }
 
-fn build_signed_admin_request(
+fn make_admin_jwt(role: &str) -> String {
+    let claims = ramp_api::handlers::admin::admin_auth::AdminClaims {
+        sub: "webhook_admin_test_user".to_string(),
+        email: "webhook-admin@rampos.local".to_string(),
+        role: role.to_string(),
+        iat: Utc::now().timestamp(),
+        exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+        token_type: "access".to_string(),
+    };
+
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(TEST_ADMIN_JWT_SECRET.as_bytes()),
+    )
+    .expect("jwt should encode")
+}
+
+fn build_signed_admin_jwt_request(
     method: &str,
     uri: &str,
     body: &str,
     api_key: &str,
     api_secret: &str,
-    admin_key: &str,
+    admin_jwt: &str,
 ) -> Request<Body> {
     let timestamp = Utc::now().to_rfc3339();
     let path = uri.split('?').next().unwrap_or(uri);
@@ -71,7 +90,7 @@ fn build_signed_admin_request(
         .header("Authorization", format!("Bearer {api_key}"))
         .header("X-Timestamp", &timestamp)
         .header("X-Signature", signature)
-        .header("X-Admin-Key", admin_key);
+        .header("X-Admin-Authorization", format!("Bearer {admin_jwt}"));
 
     if !body.is_empty() {
         builder = builder.header("Content-Type", "application/json");
@@ -81,6 +100,10 @@ fn build_signed_admin_request(
 }
 
 async fn setup_app() -> TestApp {
+    setup_app_with_pool(None).await
+}
+
+async fn setup_app_with_pool(db_pool: Option<PgPool>) -> TestApp {
     let intent_repo = Arc::new(MockIntentRepository::new());
     let ledger_repo = Arc::new(MockLedgerRepository::new());
     let user_repo = Arc::new(MockUserRepository::new());
@@ -143,6 +166,26 @@ async fn setup_app() -> TestApp {
     ));
     let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
 
+    let webhook_service = if let Some(pool) = db_pool.clone() {
+        Arc::new(
+            ramp_core::service::webhook::WebhookService::new(
+                Arc::new(ramp_core::repository::webhook::PgWebhookRepository::new(
+                    pool,
+                )),
+                tenant_repo.clone(),
+            )
+            .expect("webhook service with pg repository"),
+        )
+    } else {
+        Arc::new(
+            ramp_core::service::webhook::WebhookService::new(
+                webhook_repo.clone(),
+                tenant_repo.clone(),
+            )
+            .expect("webhook service with mock repository"),
+        )
+    };
+
     let app_state = AppState {
         payin_service,
         payout_service,
@@ -150,13 +193,7 @@ async fn setup_app() -> TestApp {
         ledger_service,
         onboarding_service,
         user_service,
-        webhook_service: Arc::new(
-            ramp_core::service::webhook::WebhookService::new(
-                webhook_repo.clone(),
-                tenant_repo.clone(),
-            )
-            .unwrap(),
-        ),
+        webhook_service,
         tenant_repo: tenant_repo.clone(),
         intent_repo,
         report_generator,
@@ -184,13 +221,13 @@ async fn setup_app() -> TestApp {
             Arc::new(ramp_core::stablecoin::MockVnstProtocolDataProvider::new()),
         )),
         event_publisher: event_publisher.clone(),
-        db_pool: None,
+        db_pool,
         ctr_service: None,
         ws_state: None,
         metrics_registry: Arc::new(ramp_core::service::MetricsRegistry::new()),
         document_storage: None,
-            kyc_service: None,
-            kyt_service: None,
+        kyc_service: None,
+        kyt_service: None,
     };
 
     TestApp {
@@ -226,16 +263,17 @@ fn sample_event_row(event_id: &str, event_type: &str) -> WebhookEventRow {
 #[tokio::test]
 async fn webhook_admin_catalog_returns_current_event_contract() {
     let _guard = env_lock().lock().unwrap();
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app().await;
+    let admin_jwt = make_admin_jwt("viewer");
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/webhooks/catalog",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -256,16 +294,17 @@ async fn webhook_admin_catalog_returns_current_event_contract() {
 #[tokio::test]
 async fn webhook_admin_history_accepts_filters_and_stays_tenant_scoped() {
     let _guard = env_lock().lock().unwrap();
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app().await;
+    let admin_jwt = make_admin_jwt("viewer");
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/webhooks/history?eventId=evt_history_001&eventType=intent.status.changed&endpointUrl=https%3A%2F%2Fprimary.example.com%2Fwh",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -279,9 +318,9 @@ async fn webhook_admin_history_accepts_filters_and_stays_tenant_scoped() {
 #[tokio::test]
 async fn webhook_admin_replay_by_event_requeues_existing_event() {
     let _guard = env_lock().lock().unwrap();
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
-    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app().await;
+    let operator_jwt = make_admin_jwt("operator");
 
     app.webhook_repo
         .queue_event(&sample_event_row(
@@ -291,13 +330,13 @@ async fn webhook_admin_replay_by_event_requeues_existing_event() {
         .await
         .unwrap();
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/webhooks/evt_replay_admin_001/replay",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &operator_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -309,15 +348,319 @@ async fn webhook_admin_replay_by_event_requeues_existing_event() {
     assert_eq!(payload["eventId"], "evt_replay_admin_001");
     assert_eq!(payload["status"], "REPLAY_SCHEDULED");
     assert_eq!(payload["eventType"], "intent.status.changed");
-    std::env::remove_var("RAMPOS_ADMIN_ROLE");
+    assert_eq!(payload["eventStatus"], "PENDING");
+    assert!(payload["deliveredAt"].is_null());
+    assert!(payload["responseStatus"].is_null());
+    assert!(payload["lastError"].is_null());
+    assert!(payload["nextAttemptAt"].is_string());
+}
+
+#[tokio::test]
+async fn webhook_admin_retry_clears_stale_delivery_metadata() {
+    let _guard = env_lock().lock().unwrap();
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
+    let app = setup_app().await;
+    let operator_jwt = make_admin_jwt("operator");
+
+    let mut event = sample_event_row("evt_retry_clears_delivery_state", "intent.status.changed");
+    event.status = "DELIVERED".to_string();
+    event.attempts = 3;
+    event.last_attempt_at = Some(Utc::now());
+    event.next_attempt_at = None;
+    event.last_error = Some("stale delivery error".to_string());
+    event.delivered_at = Some(Utc::now());
+    event.response_status = Some(200);
+    app.webhook_repo.queue_event(&event).await.unwrap();
+
+    let request = build_signed_admin_jwt_request(
+        "POST",
+        "/v1/admin/webhooks/evt_retry_clears_delivery_state/retry",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        &operator_jwt,
+    );
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(payload["id"], "evt_retry_clears_delivery_state");
+    assert_eq!(payload["status"], "PENDING");
+    assert!(payload["next_attempt_at"].is_string());
+    assert!(payload["delivered_at"].is_null());
+    assert!(payload["response_status"].is_null());
+    assert!(payload["last_error"].is_null());
+}
+
+#[tokio::test]
+async fn webhook_admin_history_reflects_retry_reset_truthfully_and_stays_tenant_scoped() {
+    let database_url = match std::env::var("DATABASE_URL") {
+        Ok(url) => url,
+        Err(_) => return,
+    };
+    let pool = PgPool::connect(&database_url)
+        .await
+        .expect("database connection should succeed");
+    sqlx::migrate!("../../migrations")
+        .run(&pool)
+        .await
+        .expect("migrations should succeed");
+
+    let _guard = env_lock().lock().unwrap();
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
+    let app = setup_app_with_pool(Some(pool.clone())).await;
+    let operator_jwt = make_admin_jwt("operator");
+
+    sqlx::query(
+        r#"
+        INSERT INTO tenants (
+            id, name, status, api_key_hash, webhook_secret_hash, config, created_at, updated_at
+        ) VALUES
+            ('tenant_webhook_test', 'Webhook Admin Runtime Tenant', 'ACTIVE', 'hash', 'secret', '{}'::jsonb, NOW(), NOW()),
+            ('tenant_webhook_other', 'Webhook Admin Other Tenant', 'ACTIVE', 'hash', 'secret', '{}'::jsonb, NOW(), NOW())
+        ON CONFLICT (id) DO NOTHING
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed runtime tenants");
+
+    sqlx::query(
+        r#"
+        INSERT INTO webhook_events (
+            id, tenant_id, event_type, intent_id, payload, status, attempts, max_attempts,
+            last_attempt_at, next_attempt_at, last_error, delivered_at, response_status, created_at
+        ) VALUES
+            (
+                'evt_history_runtime_a',
+                'tenant_webhook_test',
+                'intent.status.changed',
+                'intent_runtime_a',
+                '{"state":"COMPLETED"}'::jsonb,
+                'DELIVERED',
+                2,
+                10,
+                NOW(),
+                NULL,
+                'stale error'::text,
+                NOW(),
+                200,
+                NOW()
+            ),
+            (
+                'evt_history_runtime_b',
+                'tenant_webhook_other',
+                'intent.status.changed',
+                'intent_runtime_b',
+                '{"state":"COMPLETED"}'::jsonb,
+                'DELIVERED',
+                1,
+                10,
+                NOW(),
+                NULL,
+                NULL,
+                NOW(),
+                200,
+                NOW()
+            )
+        ON CONFLICT (id) DO NOTHING
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed runtime webhook events");
+
+    let retry_request = build_signed_admin_jwt_request(
+        "POST",
+        "/v1/admin/webhooks/evt_history_runtime_a/retry",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        &operator_jwt,
+    );
+    let retry_response = app.router.clone().oneshot(retry_request).await.unwrap();
+    assert_eq!(retry_response.status(), StatusCode::OK);
+
+    let retry_body = to_bytes(retry_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let retry_payload: serde_json::Value = serde_json::from_slice(&retry_body).unwrap();
+    assert_eq!(retry_payload["id"], "evt_history_runtime_a");
+    assert_eq!(retry_payload["status"], "PENDING");
+    assert!(retry_payload["delivered_at"].is_null());
+    assert!(retry_payload["response_status"].is_null());
+    assert!(retry_payload["last_error"].is_null());
+
+    let history_request = build_signed_admin_jwt_request(
+        "GET",
+        "/v1/admin/webhooks/history?eventType=intent.status.changed",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        &operator_jwt,
+    );
+    let history_response = app.router.oneshot(history_request).await.unwrap();
+    assert_eq!(history_response.status(), StatusCode::OK);
+
+    let history_body = to_bytes(history_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let history_payload: serde_json::Value = serde_json::from_slice(&history_body).unwrap();
+    let history_items = history_payload
+        .as_array()
+        .expect("history should be an array");
+
+    assert!(history_items
+        .iter()
+        .any(|item| item["id"] == "evt_history_runtime_a"
+            && item["status"] == "PENDING"
+            && item["deliveredAt"].is_null()
+            && item["responseStatus"].is_null()));
+    assert!(!history_items
+        .iter()
+        .any(|item| item["id"] == "evt_history_runtime_b"));
+}
+
+#[tokio::test]
+async fn webhook_admin_history_reflects_replay_reset_truthfully_and_stays_tenant_scoped() {
+    let database_url = match std::env::var("DATABASE_URL") {
+        Ok(url) => url,
+        Err(_) => return,
+    };
+    let pool = PgPool::connect(&database_url)
+        .await
+        .expect("database connection should succeed");
+    sqlx::migrate!("../../migrations")
+        .run(&pool)
+        .await
+        .expect("migrations should succeed");
+
+    let _guard = env_lock().lock().unwrap();
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
+    let app = setup_app_with_pool(Some(pool.clone())).await;
+    let operator_jwt = make_admin_jwt("operator");
+
+    sqlx::query(
+        r#"
+        INSERT INTO tenants (
+            id, name, status, api_key_hash, webhook_secret_hash, config, created_at, updated_at
+        ) VALUES
+            ('tenant_webhook_test', 'Webhook Admin Runtime Tenant', 'ACTIVE', 'hash', 'secret', '{}'::jsonb, NOW(), NOW()),
+            ('tenant_webhook_other', 'Webhook Admin Other Tenant', 'ACTIVE', 'hash', 'secret', '{}'::jsonb, NOW(), NOW())
+        ON CONFLICT (id) DO NOTHING
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed runtime tenants");
+
+    sqlx::query(
+        r#"
+        INSERT INTO webhook_events (
+            id, tenant_id, event_type, intent_id, payload, status, attempts, max_attempts,
+            last_attempt_at, next_attempt_at, last_error, delivered_at, response_status, created_at
+        ) VALUES
+            (
+                'evt_history_runtime_replay_a',
+                'tenant_webhook_test',
+                'intent.status.changed',
+                'intent_runtime_replay_a',
+                '{"state":"COMPLETED"}'::jsonb,
+                'DELIVERED',
+                2,
+                10,
+                NOW(),
+                NULL,
+                'stale error'::text,
+                NOW(),
+                200,
+                NOW()
+            ),
+            (
+                'evt_history_runtime_replay_b',
+                'tenant_webhook_other',
+                'intent.status.changed',
+                'intent_runtime_replay_b',
+                '{"state":"COMPLETED"}'::jsonb,
+                'DELIVERED',
+                1,
+                10,
+                NOW(),
+                NULL,
+                NULL,
+                NOW(),
+                200,
+                NOW()
+            )
+        ON CONFLICT (id) DO NOTHING
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed runtime webhook events");
+
+    let replay_request = build_signed_admin_jwt_request(
+        "POST",
+        "/v1/admin/webhooks/evt_history_runtime_replay_a/replay",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        &operator_jwt,
+    );
+    let replay_response = app.router.clone().oneshot(replay_request).await.unwrap();
+    assert_eq!(replay_response.status(), StatusCode::OK);
+
+    let replay_body = to_bytes(replay_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let replay_payload: serde_json::Value = serde_json::from_slice(&replay_body).unwrap();
+    assert_eq!(replay_payload["eventId"], "evt_history_runtime_replay_a");
+    assert_eq!(replay_payload["status"], "REPLAY_SCHEDULED");
+    assert_eq!(replay_payload["eventStatus"], "PENDING");
+    assert!(replay_payload["deliveredAt"].is_null());
+    assert!(replay_payload["responseStatus"].is_null());
+    assert!(replay_payload["lastError"].is_null());
+    assert!(replay_payload["nextAttemptAt"].is_string());
+
+    let history_request = build_signed_admin_jwt_request(
+        "GET",
+        "/v1/admin/webhooks/history?eventType=intent.status.changed",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        &operator_jwt,
+    );
+    let history_response = app.router.oneshot(history_request).await.unwrap();
+    assert_eq!(history_response.status(), StatusCode::OK);
+
+    let history_body = to_bytes(history_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let history_payload: serde_json::Value = serde_json::from_slice(&history_body).unwrap();
+    let history_items = history_payload
+        .as_array()
+        .expect("history should be an array");
+
+    assert!(history_items
+        .iter()
+        .any(|item| item["id"] == "evt_history_runtime_replay_a"
+            && item["status"] == "PENDING"
+            && item["deliveredAt"].is_null()
+            && item["responseStatus"].is_null()));
+    assert!(!history_items
+        .iter()
+        .any(|item| item["id"] == "evt_history_runtime_replay_b"));
 }
 
 #[tokio::test]
 async fn webhook_admin_retry_rejects_viewer_role() {
     let _guard = env_lock().lock().unwrap();
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
-    std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app().await;
+    let viewer_jwt = make_admin_jwt("viewer");
 
     app.webhook_repo
         .queue_event(&sample_event_row(
@@ -327,26 +670,25 @@ async fn webhook_admin_retry_rejects_viewer_role() {
         .await
         .unwrap();
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/webhooks/evt_retry_viewer_001/retry",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &viewer_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    std::env::remove_var("RAMPOS_ADMIN_ROLE");
 }
 
 #[tokio::test]
 async fn webhook_admin_replay_rejects_viewer_role() {
     let _guard = env_lock().lock().unwrap();
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
-    std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app().await;
+    let viewer_jwt = make_admin_jwt("viewer");
 
     app.webhook_repo
         .queue_event(&sample_event_row(
@@ -356,26 +698,25 @@ async fn webhook_admin_replay_rejects_viewer_role() {
         .await
         .unwrap();
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/webhooks/evt_replay_viewer_001/replay",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &viewer_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    std::env::remove_var("RAMPOS_ADMIN_ROLE");
 }
 
 #[tokio::test]
 async fn webhook_admin_retry_requires_operator_role() {
     let _guard = env_lock().lock().unwrap();
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
-    std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app().await;
+    let viewer_jwt = make_admin_jwt("viewer");
 
     app.webhook_repo
         .queue_event(&sample_event_row(
@@ -385,26 +726,25 @@ async fn webhook_admin_retry_requires_operator_role() {
         .await
         .unwrap();
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/webhooks/evt_retry_admin_forbidden/retry",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &viewer_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    std::env::remove_var("RAMPOS_ADMIN_ROLE");
 }
 
 #[tokio::test]
 async fn webhook_admin_replay_requires_operator_role() {
     let _guard = env_lock().lock().unwrap();
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
-    std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app().await;
+    let viewer_jwt = make_admin_jwt("viewer");
 
     app.webhook_repo
         .queue_event(&sample_event_row(
@@ -414,16 +754,15 @@ async fn webhook_admin_replay_requires_operator_role() {
         .await
         .unwrap();
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/webhooks/evt_replay_admin_forbidden/replay",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &viewer_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    std::env::remove_var("RAMPOS_ADMIN_ROLE");
 }

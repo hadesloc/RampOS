@@ -5,8 +5,9 @@
 //! - PayoutWorkflow: Handles VND pay-out flow
 //! - TradeWorkflow: Handles trade execution flow
 //!
-//! The worker connects to a Temporal server and polls for workflow tasks,
-//! executing the appropriate activities based on the workflow type.
+//! Current truth: this is still a simplified in-process worker that simulates
+//! Temporal-oriented behavior. It is not the same as a fully authoritative
+//! Temporal worker polling durable tasks from Temporal Server.
 
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -127,11 +128,12 @@ pub enum WorkflowSignal {
     Cancel { intent_id: String, reason: String },
 }
 
-/// Temporal worker service
+/// Transitional workflow worker service.
 ///
-/// This is a simplified implementation that simulates Temporal behavior
-/// using in-process task queues. For production, integrate with actual
-/// Temporal SDK (temporal-sdk-core).
+/// This implementation simulates Temporal-oriented behavior using in-process
+/// task queues. It is suitable for development, fallback execution, and current
+/// transitional runtime seams, but should not be described as a fully durable
+/// Temporal worker.
 pub struct TemporalWorker {
     config: TemporalWorkerConfig,
     intent_repo: Arc<dyn IntentRepository>,

@@ -1,4 +1,4 @@
-{
+﻿{
   "info": {
     "_postman_id": "rampos-api-collection",
     "name": "RampOS API Collection",
@@ -426,17 +426,17 @@
     },
     {
       "name": "Admin",
-      "description": "Admin dashboard endpoints (requires X-Admin-Key header)",
+      "description": "Admin dashboard endpoints (canonical: X-Admin-Authorization: Bearer <admin-jwt>; X-Admin-Key is deprecated fallback)",
       "auth": {
         "type": "apikey",
         "apikey": [
           {
             "key": "key",
-            "value": "X-Admin-Key"
+            "value": "X-Admin-Authorization"
           },
           {
             "key": "value",
-            "value": "{{ADMIN_KEY}}"
+            "value": "Bearer {{ADMIN_JWT}}"
           },
           {
             "key": "in",
@@ -454,8 +454,8 @@
                 "method": "GET",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -485,8 +485,8 @@
                 "method": "GET",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -529,8 +529,8 @@
                 "method": "GET",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -548,8 +548,8 @@
                 "method": "PATCH",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}:operator"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_OPERATOR_JWT}}"
                   },
                   {
                     "key": "Content-Type",
@@ -575,8 +575,8 @@
                 "method": "GET",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -594,8 +594,8 @@
                 "method": "POST",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   },
                   {
                     "key": "Content-Type",
@@ -621,8 +621,8 @@
                 "method": "POST",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   },
                   {
                     "key": "Content-Type",
@@ -648,8 +648,8 @@
                 "method": "GET",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -672,8 +672,8 @@
                 "method": "GET",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -721,8 +721,8 @@
                 "method": "GET",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -740,8 +740,8 @@
                 "method": "PATCH",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}:operator"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_OPERATOR_JWT}}"
                   },
                   {
                     "key": "Content-Type",
@@ -767,8 +767,8 @@
                 "method": "GET",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -786,8 +786,8 @@
                 "method": "POST",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -810,8 +810,8 @@
                 "method": "GET",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -834,8 +834,8 @@
                 "method": "POST",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   },
                   {
                     "key": "Content-Type",
@@ -861,8 +861,8 @@
                 "method": "PATCH",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   },
                   {
                     "key": "Content-Type",
@@ -888,8 +888,8 @@
                 "method": "POST",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -907,8 +907,8 @@
                 "method": "POST",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -926,8 +926,8 @@
                 "method": "POST",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   },
                   {
                     "key": "Content-Type",
@@ -958,8 +958,8 @@
                 "method": "GET",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -987,8 +987,8 @@
                 "method": "GET",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -1021,8 +1021,8 @@
                 "method": "GET",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -1050,8 +1050,8 @@
                 "method": "GET",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -1089,8 +1089,8 @@
                 "method": "GET",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   }
                 ],
                 "url": {
@@ -1118,8 +1118,8 @@
                 "method": "POST",
                 "header": [
                   {
-                    "key": "X-Admin-Key",
-                    "value": "{{ADMIN_KEY}}"
+                    "key": "X-Admin-Authorization",
+                    "value": "Bearer {{ADMIN_JWT}}"
                   },
                   {
                     "key": "Content-Type",

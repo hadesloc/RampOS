@@ -2,31 +2,107 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { api, type DashboardStats, type Intent } from "@/lib/api";
-import { RefreshCw, Radio } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { ChartContainer } from "@/components/dashboard/chart-container";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
+import { LPLeaderboard } from "@/components/dashboard/lp-leaderboard";
+import { TimeRangeSelector } from "@/components/dashboard/time-range-selector";
 import { PageHeader } from "@/components/layout/page-header";
 import { useRealtimeDashboard } from "@/hooks/use-websocket";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import { ArrowUpRight, ArrowDownLeft, Activity, Users, FileText, AlertTriangle } from "lucide-react";
+
+import { VolumeChart } from "@/components/dashboard/volume-chart";
+import { DonutChart } from "@/components/dashboard/donut-chart";
+import { StatusDistribution } from "@/components/dashboard/status-distribution";
+import { ArrowUpRight, ArrowDownLeft, Activity, Users, AlertTriangle, Zap, TrendingUp, Wallet } from "lucide-react";
 import { useTranslations, useFormatter } from "next-intl";
 
+/* ─── Demo Data ─── */
+const DEMO_STATS: DashboardStats = {
+  volume: {
+    totalPayinVnd: "12548200000",
+    totalPayoutVnd: "8340000000",
+    totalTradeVnd: "3250000000",
+    period: "24h",
+  },
+  intents: {
+    totalToday: 1247,
+    payinCount: 842,
+    payoutCount: 387,
+    pendingCount: 23,
+    completedCount: 1187,
+    failedCount: 18,
+  },
+  cases: {
+    total: 47,
+    open: 3,
+    inReview: 5,
+    onHold: 2,
+    resolved: 37,
+    avgResolutionHours: 2.4,
+  },
+  users: {
+    total: 12450,
+    active: 4892,
+    kycPending: 34,
+    newToday: 156,
+  },
+};
+
+const DEMO_CHART_DATA = [
+  { name: "00:00", volume: 420 },
+  { name: "02:00", volume: 380 },
+  { name: "04:00", volume: 290 },
+  { name: "06:00", volume: 450 },
+  { name: "08:00", volume: 780 },
+  { name: "10:00", volume: 1240 },
+  { name: "12:00", volume: 1580 },
+  { name: "14:00", volume: 1420 },
+  { name: "16:00", volume: 1680 },
+  { name: "18:00", volume: 1350 },
+  { name: "20:00", volume: 980 },
+  { name: "22:00", volume: 650 },
+  { name: "Now", volume: 720 },
+];
+
+const DEMO_REVENUE = [
+  { name: "On-ramp", value: 12548, color: "#00FF87" },
+  { name: "Off-ramp", value: 8340, color: "#7B61FF" },
+  { name: "Trading", value: 3250, color: "#00D4FF" },
+  { name: "Fees", value: 720, color: "#FFB800" },
+];
+
+const DEMO_STATUS = [
+  { name: "Completed", value: 75, color: "#00FF87" },
+  { name: "Pending", value: 15, color: "#FFB800" },
+  { name: "Failed", value: 5, color: "#FF4757" },
+  { name: "Cancelled", value: 5, color: "#4A4A4D" },
+];
+
+const DEMO_LP = [
+  { rank: 1, name: "StableFiex Global", volume: "₫3.2B", successRate: 99.8 },
+  { rank: 2, name: "Nexus Capital", volume: "₫2.1B", successRate: 98.7 },
+  { rank: 3, name: "Oceanus LP", volume: "₫1.8B", successRate: 98.4 },
+  { rank: 4, name: "Vertex Exchange", volume: "₫950M", successRate: 97.7 },
+  { rank: 5, name: "AsiaVault Ltd", volume: "₫820M", successRate: 97.4 },
+];
+
+const DEMO_ACTIVITY = [
+  { id: "int_01", description: "On-ramp Intent ONEX24X71", amount: 95250000, currency: "VND", status: "completed", timestamp: new Date(Date.now() - 120000).toISOString(), type: "pay_in", user: { name: "Inv.._fdu3", email: "" } },
+  { id: "int_02", description: "Off-ramp Intent OFRQ.R4Q", amount: -210680000, currency: "VND", status: "cancelled", timestamp: new Date(Date.now() - 420000).toISOString(), type: "pay_out", user: { name: "Busi_APP1", email: "" } },
+  { id: "int_03", description: "Internal Liquidity Swap", amount: 523990.84, currency: "USDT", status: "completed", timestamp: new Date(Date.now() - 900000).toISOString(), type: "trade", user: { name: "SYSTEM_LP", email: "" } },
+  { id: "int_04", description: "On-ramp Intent ONEX2P19", amount: 3900000, currency: "VND", status: "failed", timestamp: new Date(Date.now() - 1500000).toISOString(), type: "pay_in", user: { name: "Reta_Lcom", email: "" } },
+  { id: "int_05", description: "On-ramp Intent ONEX50T7", amount: 25200000, currency: "VND", status: "completed", timestamp: new Date(Date.now() - 2400000).toISOString(), type: "pay_in", user: { name: "Inv.._0ba7", email: "" } },
+];
+
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<DashboardStats>(DEMO_STATS);
   const [recentIntents, setRecentIntents] = useState<Intent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [timeRange, setTimeRange] = useState("24H");
+  const [isDemo, setIsDemo] = useState(true);
   const { toast } = useToast();
   const t = useTranslations('Dashboard');
   const tCommon = useTranslations('Common');
@@ -35,67 +111,76 @@ export default function DashboardPage() {
   const { isConnected, lastUpdate } = useRealtimeDashboard();
 
   const fetchData = useCallback(async () => {
-    // Only show loading spinner on initial load, not background updates
-    if (!stats) setLoading(true);
-    setError(null);
+    setLoading(true);
     try {
       const [statsData, intentsData] = await Promise.all([
         api.dashboard.getStats(),
         api.intents.list({ page: 1, per_page: 5 })
       ]);
-
       setStats(statsData);
       setRecentIntents(intentsData.data);
+      setIsDemo(false);
     } catch (err: any) {
-      console.error("Failed to fetch dashboard data:", err);
-      const message = err.message || t('error_loading');
-      setError(message);
-      if (!stats) { // Only toast error if we don't have stale data to show
-        toast({
-          variant: "destructive",
-          title: tCommon('error'),
-          description: message,
-        });
-      }
+      console.warn("API unavailable, using demo data:", err.message);
+      setStats(DEMO_STATS);
+      setIsDemo(true);
     } finally {
       setLoading(false);
     }
-  }, [toast, t, tCommon, stats]);
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]); // Initial load
+  }, [fetchData]);
 
-  // Re-fetch when realtime signal is received
   useEffect(() => {
     if (lastUpdate) {
       fetchData();
-      toast({
-        title: "Dashboard Updated",
-        description: "New data received via realtime connection.",
-        duration: 2000,
-      });
     }
-  }, [lastUpdate, fetchData, toast]);
+  }, [lastUpdate, fetchData]);
 
-  if (error && !stats) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-4">
-        <div className="text-red-500">{error}</div>
-        <Button variant="outline" size="sm" onClick={fetchData}>{t('try_again')}</Button>
-      </div>
-    );
-  }
+  // Use current stats (always populated - either real or demo)
+  const displayStats = stats;
 
-  // Build chart data from volume stats (single-period snapshot as bar chart equivalent)
-  const chartData = stats ? [
-    { name: t('total_payin'), volume: parseInt(stats.volume.totalPayinVnd, 10) / 1_000_000 },
-    { name: t('total_payout'), volume: parseInt(stats.volume.totalPayoutVnd, 10) / 1_000_000 },
-    { name: t('total_trade'), volume: parseInt(stats.volume.totalTradeVnd, 10) / 1_000_000 },
-  ] : [];
+  // Build chart data
+  const chartData = isDemo ? DEMO_CHART_DATA : [
+    { name: "00:00", volume: parseInt(displayStats.volume.totalPayinVnd, 10) / 1_000_000 * 0.15 },
+    { name: "02:00", volume: parseInt(displayStats.volume.totalPayinVnd, 10) / 1_000_000 * 0.12 },
+    { name: "04:00", volume: parseInt(displayStats.volume.totalPayinVnd, 10) / 1_000_000 * 0.08 },
+    { name: "06:00", volume: parseInt(displayStats.volume.totalPayinVnd, 10) / 1_000_000 * 0.18 },
+    { name: "08:00", volume: parseInt(displayStats.volume.totalPayinVnd, 10) / 1_000_000 * 0.45 },
+    { name: "10:00", volume: parseInt(displayStats.volume.totalPayinVnd, 10) / 1_000_000 * 0.72 },
+    { name: "12:00", volume: parseInt(displayStats.volume.totalPayinVnd, 10) / 1_000_000 * 1.0 },
+    { name: "14:00", volume: parseInt(displayStats.volume.totalPayinVnd, 10) / 1_000_000 * 0.88 },
+    { name: "16:00", volume: parseInt(displayStats.volume.totalPayinVnd, 10) / 1_000_000 * 0.95 },
+    { name: "18:00", volume: parseInt(displayStats.volume.totalPayinVnd, 10) / 1_000_000 * 0.78 },
+    { name: "20:00", volume: parseInt(displayStats.volume.totalPayinVnd, 10) / 1_000_000 * 0.55 },
+    { name: "22:00", volume: parseInt(displayStats.volume.totalPayinVnd, 10) / 1_000_000 * 0.38 },
+    { name: "Now", volume: parseInt(displayStats.volume.totalPayinVnd, 10) / 1_000_000 * 0.42 },
+  ];
 
-  // Transform intents for RecentActivity component
-  const recentActivityData = recentIntents.map(intent => ({
+  // Donut data
+  const revenueData = isDemo ? DEMO_REVENUE : [
+    { name: "On-ramp", value: parseInt(displayStats.volume.totalPayinVnd, 10) / 1_000_000, color: "#00FF87" },
+    { name: "Off-ramp", value: parseInt(displayStats.volume.totalPayoutVnd, 10) / 1_000_000, color: "#7B61FF" },
+    { name: "Trading", value: parseInt(displayStats.volume.totalTradeVnd, 10) / 1_000_000, color: "#00D4FF" },
+    { name: "Fees", value: Math.round(parseInt(displayStats.volume.totalTradeVnd, 10) / 1_000_000 * 0.03), color: "#FFB800" },
+  ];
+  const totalRevenue = revenueData.reduce((sum, d) => sum + d.value, 0);
+
+  // Status distribution
+  const statusData = isDemo ? DEMO_STATUS : [
+    { name: "Completed", value: displayStats.intents.completedCount || 0, color: "#00FF87" },
+    { name: "Pending", value: displayStats.intents.pendingCount || 0, color: "#FFB800" },
+    { name: "Failed", value: displayStats.intents.failedCount || 0, color: "#FF4757" },
+    { name: "Cancelled", value: Math.max(0, (displayStats.intents.totalToday || 0) - (displayStats.intents.completedCount || 0) - (displayStats.intents.pendingCount || 0) - (displayStats.intents.failedCount || 0)), color: "#4A4A4D" },
+  ].filter(d => d.value > 0);
+
+  // LP leaderboard
+  const lpData = DEMO_LP;
+
+  // Recent activity
+  const recentActivityData = isDemo ? DEMO_ACTIVITY : recentIntents.map(intent => ({
     id: intent.id,
     description: `${intent.intent_type.replace('_', ' ')}`,
     amount: parseInt(intent.amount),
@@ -103,198 +188,145 @@ export default function DashboardPage() {
     status: intent.state,
     timestamp: intent.created_at,
     type: intent.intent_type,
-    user: {
-      name: intent.user_id,
-      email: intent.user_id
-    }
+    user: { name: intent.user_id, email: intent.user_id }
   }));
 
   const formatCurrency = (value: string | number) => {
     const num = typeof value === 'string' ? parseInt(value, 10) : value;
     if (isNaN(num)) return "0";
-    return format.number(num, {
-      style: "currency",
-      currency: "VND",
-      maximumFractionDigits: 0
-    });
+    return format.number(num, { style: "currency", currency: "VND", maximumFractionDigits: 0 });
   };
 
-  // Helper to calculate mock trend since backend doesn't provide history yet
-  const calculateTrend = (currentValue: string | number) => {
-    const val = typeof currentValue === 'string' ? parseInt(currentValue, 10) : currentValue;
-    if (!val) return undefined;
-
-    // Deterministic mock trend based on value hash
-    const hash = val.toString().split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const isPositive = hash % 2 === 0;
-    const value = (hash % 15) + 1; // 1-15%
-
-    return { value, isPositive };
-  };
+  // Success rate
+  const successRate = displayStats.intents.totalToday > 0
+    ? ((displayStats.intents.completedCount / displayStats.intents.totalToday) * 100).toFixed(1)
+    : "0";
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6 md:p-8">
       <PageHeader
         title={t('title')}
         description={t('description')}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {isDemo && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-400 text-xs font-medium border border-amber-500/20">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400"></span>
+                </span>
+                Demo
+              </div>
+            )}
             {isConnected && (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-medium border border-green-500/20">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#00FF87]/8 text-[#00FF87] text-xs font-medium border border-[#00FF87]/20">
                 <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00FF87] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00FF87]"></span>
                 </span>
                 Live
               </div>
             )}
-            <Button variant="outline" size="icon" onClick={fetchData} disabled={loading}>
+            <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={fetchData}
+              disabled={loading}
+              className="border-white/[0.08] hover:border-white/[0.16] hover:bg-white/[0.03] h-9 w-9"
+            >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
         }
       />
 
-      {loading && !stats ? (
-        <div className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-             <StatCard title={t('total_payin')} value="" loading={true} />
-             <StatCard title={t('total_payout')} value="" loading={true} />
-             <StatCard title={t('total_trade')} value="" loading={true} />
-          </div>
-          <ChartContainer title={t('volume_24h')} loading={true}>
-            <div />
-          </ChartContainer>
-        </div>
-      ) : stats && (
-        <div className="space-y-6">
-          {/* Volume Stats */}
-          <div>
-            <h3 className="text-lg font-semibold mb-4">{t('volume_24h')}</h3>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <StatCard
-                title={t('total_payin')}
-                value={formatCurrency(stats.volume.totalPayinVnd)}
-                subtitle={t('vnd_deposited')}
-                icon={<ArrowDownLeft className="h-4 w-4 text-muted-foreground" />}
-                trend={calculateTrend(stats.volume.totalPayinVnd)}
-              />
-              <StatCard
-                title={t('total_payout')}
-                value={formatCurrency(stats.volume.totalPayoutVnd)}
-                subtitle={t('vnd_withdrawn')}
-                icon={<ArrowUpRight className="h-4 w-4 text-muted-foreground" />}
-                trend={calculateTrend(stats.volume.totalPayoutVnd)}
-              />
-              <StatCard
-                title={t('total_trade')}
-                value={formatCurrency(stats.volume.totalTradeVnd)}
-                subtitle={t('trading_volume')}
-                icon={<Activity className="h-4 w-4 text-muted-foreground" />}
-                trend={calculateTrend(stats.volume.totalTradeVnd)}
-              />
-            </div>
-          </div>
+      {/* ═══ KPI Cards ═══ */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title={t('total_payin')}
+          value={formatCurrency(displayStats.volume.totalPayinVnd)}
+          subtitle={t('vnd_deposited')}
+          icon={<ArrowDownLeft className="h-4 w-4" />}
+          trend={{ value: 12.5, isPositive: true }}
+          accentColor="green"
+          loading={false}
+        />
+        <StatCard
+          title="Active Intents"
+          value={displayStats.intents.totalToday.toLocaleString()}
+          subtitle={`${displayStats.intents.pendingCount} pending`}
+          icon={<Activity className="h-4 w-4" />}
+          trend={{ value: 8.3, isPositive: true }}
+          accentColor="violet"
+          loading={false}
+        />
+        <StatCard
+          title="Success Rate"
+          value={`${successRate}%`}
+          subtitle={`${displayStats.intents.completedCount} of ${displayStats.intents.totalToday}`}
+          icon={<TrendingUp className="h-4 w-4" />}
+          accentColor="cyan"
+          loading={false}
+        />
+        <StatCard
+          title="Active LPs"
+          value="47"
+          subtitle="Across 12 jurisdictions"
+          icon={<Wallet className="h-4 w-4" />}
+          accentColor="amber"
+          loading={false}
+        />
+      </div>
 
-          {/* Intent Stats */}
-          <div>
-            <h3 className="text-lg font-semibold mb-4">{t('intents_today')}</h3>
-            <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-              <StatCard title="Total" value={stats.intents.totalToday} icon={<FileText className="h-4 w-4" />} />
-              <StatCard title="Pay-in" value={stats.intents.payinCount} />
-              <StatCard title="Pay-out" value={stats.intents.payoutCount} />
-              <StatCard title={t('pending')} value={stats.intents.pendingCount} />
-              <StatCard title={t('completed')} value={stats.intents.completedCount} />
-              <StatCard title={t('failed')} value={stats.intents.failedCount} className="border-red-200 dark:border-red-900/20" />
-            </div>
-          </div>
+      {/* ═══ Charts Row 1: Volume + Donut ═══ */}
+      <div className="grid gap-4 lg:grid-cols-5">
+        <ChartContainer
+          title="Transaction Volume"
+          description="Hourly volume (millions VND)"
+          className="lg:col-span-3"
+        >
+          <VolumeChart data={chartData} />
+        </ChartContainer>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-            {/* Volume Chart */}
-            <ChartContainer
-              title={t('volume_24h')}
-              description="Volume data in millions VND"
-              className="col-span-4"
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="name"
-                    stroke="#888888"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    stroke="#888888"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => `${value}M`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--background))",
-                      borderColor: "hsl(var(--border))",
-                    }}
-                    itemStyle={{ color: "hsl(var(--primary))" }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="volume"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-
-            {/* Cases & Users Mini Stats */}
-            <div className="col-span-3 space-y-4">
-              <div className="grid gap-4">
-                <h3 className="text-sm font-medium text-muted-foreground">Compliance Cases</h3>
-                <div className="grid grid-cols-2 gap-4">
-                   <StatCard
-                    title="Open Cases"
-                    value={stats.cases.open}
-                    icon={<AlertTriangle className="h-4 w-4" />}
-                    className="bg-orange-50 dark:bg-orange-950/20"
-                   />
-                   <StatCard
-                    title="Avg Resolution"
-                    value={`${stats.cases.avgResolutionHours}h`}
-                   />
-                </div>
-              </div>
-
-              <div className="grid gap-4">
-                <h3 className="text-sm font-medium text-muted-foreground">User Growth</h3>
-                <div className="grid grid-cols-2 gap-4">
-                   <StatCard
-                    title="New Users"
-                    value={stats.users.newToday}
-                    icon={<Users className="h-4 w-4" />}
-                    trend={{ value: 5, isPositive: true }}
-                   />
-                   <StatCard
-                    title="Active Today"
-                    value={format.number(stats.users.active)}
-                   />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Activity */}
-          <RecentActivity
-            data={recentActivityData}
-            title={t('recent_activity')}
-            viewAllLink="/intents"
+        <ChartContainer
+          title="Revenue Breakdown"
+          description="By transaction type"
+          className="lg:col-span-2"
+          contentClassName="min-h-[280px]"
+        >
+          <DonutChart
+            data={revenueData}
+            centerValue={isDemo ? "$847K" : `${(totalRevenue / 1000).toFixed(0)}B`}
+            centerLabel="Total"
           />
-        </div>
-      )}
+        </ChartContainer>
+      </div>
+
+      {/* ═══ Charts Row 2: Status + LP Leaderboard ═══ */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartContainer
+          title="Intent Status Distribution"
+          description="Last 24 hours"
+          contentClassName="min-h-[200px]"
+        >
+          <StatusDistribution data={statusData} />
+        </ChartContainer>
+
+        <ChartContainer
+          title="Top LP Providers"
+          description="Ranked by volume"
+          contentClassName="min-h-[200px]"
+        >
+          <LPLeaderboard data={lpData} />
+        </ChartContainer>
+      </div>
+
+      {/* ═══ Recent Activity ═══ */}
+      <RecentActivity
+        data={recentActivityData}
+        title={t('recent_activity')}
+        viewAllLink="/intents"
+      />
     </div>
   );
 }

@@ -44,6 +44,8 @@ function getWebAuthnErrorMessage(err: unknown): string {
 export function PasskeyLogin({ onSuccess, onError }: PasskeyLoginProps) {
   const [state, setState] = React.useState<LoginState>("idle");
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const experimentalNote =
+    "Thiết bị đăng nhập passkey này vẫn là flow thử nghiệm; portal self-serve sign-in chưa được backend bật hoàn chỉnh.";
 
   const handleLogin = React.useCallback(async () => {
     if (!isWebAuthnSupported()) {
@@ -101,6 +103,7 @@ export function PasskeyLogin({ onSuccess, onError }: PasskeyLoginProps) {
       {state === "error" && errorMessage && (
         <p className="text-sm text-destructive">{errorMessage}</p>
       )}
+      <p className="text-xs text-muted-foreground">{experimentalNote}</p>
     </div>
   );
 }

@@ -57,6 +57,12 @@ export type ReconciliationWorkbenchResponse = {
       criticalCount: number;
       status: string;
     };
+    provenance?: {
+      sourceKind: string;
+      settlementCount: number;
+      onChainTxCount: number;
+      freshnessWarning?: string | null;
+    };
     queue: ReconciliationQueueRow[];
   };
   actionMode: string;
@@ -73,6 +79,23 @@ export type ReconciliationEvidenceResponse = {
     rootCause: string;
   };
   settlementIds: string[];
+  evidenceSources?: Array<{
+    evidenceSourceId: string;
+    sourceFamily: string;
+    sourceRef: string;
+    snapshotAt: string;
+    entityScope: string;
+    corridorCode?: string | null;
+  }>;
+  lineageRecords?: Array<{
+    lineageId: string;
+    lineageKind: string;
+    referenceId: string;
+    parentReferenceId?: string | null;
+    entityScope: string;
+    corridorCode?: string | null;
+    operatorReviewState: string;
+  }>;
   replayEntries: Array<{
     referenceId: string;
     label: string;
@@ -247,6 +270,7 @@ export function ReconciliationWorkbench() {
   };
 
   const queue = workbench?.snapshot.queue ?? [];
+  const provenance = workbench?.snapshot.provenance;
   const activeQueueItem = queue.find((item) => item.discrepancyId === activeDiscrepancyId) ?? null;
   const urgentQueueCount = queue.filter(
     (item) =>
@@ -298,7 +322,24 @@ export function ReconciliationWorkbench() {
               <CardTitle>{loading ? "..." : workbench?.snapshot.report.status ?? "N/A"}</CardTitle>
             </CardHeader>
           </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Source of truth</CardDescription>
+              <CardTitle>{loading ? "..." : provenance?.sourceKind ?? "unknown"}</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Inputs: {provenance?.settlementCount ?? 0} settlement rows,{" "}
+              {provenance?.onChainTxCount ?? 0} on-chain rows
+            </CardContent>
+          </Card>
         </div>
+
+        {provenance?.freshnessWarning ? (
+          <Alert variant="warning">
+            <AlertTitle>Provenance warning</AlertTitle>
+            <AlertDescription>{provenance.freshnessWarning}</AlertDescription>
+          </Alert>
+        ) : null}
 
         <Card className="border-blue-200 bg-blue-50/70">
           <CardHeader>
@@ -526,6 +567,35 @@ export function ReconciliationWorkbench() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <Card>
                     <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Lineage summary</CardTitle>
+                      <CardDescription>
+                        {(evidence.evidenceSources ?? []).length} evidence sources,{" "}
+                        {(evidence.lineageRecords ?? []).length} lineage records
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="max-h-72 space-y-3 overflow-y-auto pr-1">
+                      {(evidence.lineageRecords ?? []).length === 0 ? (
+                        <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+                          No lineage records attached to this discrepancy.
+                        </div>
+                      ) : (
+                        (evidence.lineageRecords ?? []).map((lineage) => (
+                          <div key={lineage.lineageId} className="rounded-lg border p-3">
+                            <div className="font-medium">{formatLabel(lineage.lineageKind)}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {lineage.referenceId}
+                            </div>
+                            <div className="mt-2 text-xs uppercase tracking-wide text-muted-foreground">
+                              Review: {formatLabel(lineage.operatorReviewState)}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2">
                       <CardTitle className="text-base">Replay trail</CardTitle>
                       <CardDescription>{evidence.replayEntries.length} linked entries</CardDescription>
                     </CardHeader>
@@ -544,10 +614,23 @@ export function ReconciliationWorkbench() {
 
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Incident links</CardTitle>
-                      <CardDescription>{evidence.incidentEntries.length} correlated items</CardDescription>
+                      <CardTitle className="text-base">Evidence sources and incident links</CardTitle>
+                      <CardDescription>
+                        {(evidence.evidenceSources ?? []).length} evidence sources,{" "}
+                        {evidence.incidentEntries.length} correlated incident items
+                      </CardDescription>
                     </CardHeader>
                     <CardContent className="max-h-72 space-y-3 overflow-y-auto pr-1">
+                      {(evidence.evidenceSources ?? []).map((source) => (
+                        <div key={source.evidenceSourceId} className="rounded-lg border p-3">
+                          <div className="font-medium">{source.sourceFamily}</div>
+                          <div className="text-sm text-muted-foreground">{source.sourceRef}</div>
+                          <div className="text-xs text-muted-foreground">{source.evidenceSourceId}</div>
+                          <div className="mt-2 text-xs uppercase tracking-wide text-muted-foreground">
+                            {formatTimestamp(source.snapshotAt)} · {source.entityScope}
+                          </div>
+                        </div>
+                      ))}
                       {evidence.incidentEntries.map((entry) => (
                         <div key={entry.sourceReferenceId} className="rounded-lg border p-3">
                           <div className="font-medium">{entry.label}</div>

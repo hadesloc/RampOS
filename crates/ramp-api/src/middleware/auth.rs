@@ -288,8 +288,7 @@ fn verify_hmac_signature(
         .ok_or(SignatureValidationError::NoApiSecret)?;
 
     let api_secret_str = String::from_utf8(
-        decode_stored_api_secret(api_secret)
-            .map_err(|_| SignatureValidationError::NoApiSecret)?,
+        decode_stored_api_secret(api_secret).map_err(|_| SignatureValidationError::NoApiSecret)?,
     )
     .map_err(|_| SignatureValidationError::NoApiSecret)?;
 

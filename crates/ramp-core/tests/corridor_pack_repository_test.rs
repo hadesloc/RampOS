@@ -1,8 +1,8 @@
 use ramp_core::repository::{
     CorridorPackRepository, PgCorridorPackRepository, UpsertCorridorComplianceHookRequest,
     UpsertCorridorCutoffPolicyRequest, UpsertCorridorEligibilityRuleRequest,
-    UpsertCorridorEndpointRequest, UpsertCorridorFeeProfileRequest,
-    UpsertCorridorPackRequest, UpsertCorridorRolloutScopeRequest,
+    UpsertCorridorEndpointRequest, UpsertCorridorFeeProfileRequest, UpsertCorridorPackRequest,
+    UpsertCorridorRolloutScopeRequest,
 };
 use sqlx::PgPool;
 

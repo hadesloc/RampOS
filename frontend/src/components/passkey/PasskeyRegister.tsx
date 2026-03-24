@@ -52,6 +52,8 @@ export function PasskeyRegister({
   const [state, setState] = React.useState<RegisterState>("idle");
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [displayName, setDisplayName] = React.useState(userName ?? "");
+  const experimentalNote =
+    "Đăng ký passkey này vẫn là flow thử nghiệm; portal self-serve registration chưa được backend bật hoàn chỉnh.";
 
   const handleRegister = React.useCallback(async () => {
     if (!isWebAuthnSupported()) {
@@ -136,6 +138,7 @@ export function PasskeyRegister({
           Dang ky passkey thanh cong. Ban co the su dung passkey de dang nhap.
         </p>
       )}
+      <p className="text-xs text-muted-foreground">{experimentalNote}</p>
     </div>
   );
 }

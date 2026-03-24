@@ -226,8 +226,8 @@ async fn test_e2e_payin_flow_via_api() {
         ws_state: None,
         metrics_registry: std::sync::Arc::new(ramp_core::service::MetricsRegistry::new()),
         document_storage: None,
-            kyc_service: None,
-            kyt_service: None,
+        kyc_service: None,
+        kyt_service: None,
     };
 
     let app = create_router(app_state);

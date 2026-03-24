@@ -19,6 +19,7 @@ class CliContext:
     timeout: float = 30.0
     api_key: str | None = None
     api_secret: str | None = None
+    admin_jwt: str | None = None
     admin_key: str | None = None
     admin_role: str | None = None
     admin_user_id: str | None = None

@@ -96,6 +96,7 @@ def build_cli_context(
         timeout=float(_resolve(args, "timeout", "RAMPOS_TIMEOUT", profile, env, DEFAULT_TIMEOUT)),
         api_key=_resolve(args, "api_key", "RAMPOS_API_KEY", profile, env),
         api_secret=_resolve(args, "api_secret", "RAMPOS_API_SECRET", profile, env),
+        admin_jwt=_resolve(args, "admin_jwt", "RAMPOS_ADMIN_JWT", profile, env),
         admin_key=_resolve(args, "admin_key", "RAMPOS_ADMIN_KEY", profile, env),
         admin_role=_resolve(args, "admin_role", "RAMPOS_ADMIN_ROLE", profile, env, "operator"),
         admin_user_id=_resolve(args, "admin_user_id", "RAMPOS_ADMIN_USER_ID", profile, env),

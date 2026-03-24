@@ -4,6 +4,7 @@ use axum::{
 };
 use chrono::Utc;
 use hmac::{Hmac, Mac};
+use jsonwebtoken::{encode, EncodingKey, Header};
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{
@@ -25,6 +26,7 @@ type HmacSha256 = Hmac<Sha256>;
 const TEST_API_KEY: &str = "liquidity_test_api_key";
 const TEST_API_SECRET: &str = "liquidity_test_api_secret";
 const TEST_ADMIN_KEY: &str = "liquidity_admin_key";
+const TEST_ADMIN_JWT_SECRET: &str = "liquidity-admin-jwt-secret";
 
 struct TestApp {
     router: axum::Router,
@@ -65,6 +67,51 @@ fn build_signed_admin_request(
         .header("X-Timestamp", &timestamp)
         .header("X-Signature", signature)
         .header("X-Admin-Key", admin_key);
+
+    if !body.is_empty() {
+        builder = builder.header("Content-Type", "application/json");
+    }
+
+    builder.body(Body::from(body.to_string())).unwrap()
+}
+
+fn make_admin_jwt(role: &str) -> String {
+    let claims = ramp_api::handlers::admin::admin_auth::AdminClaims {
+        sub: "liquidity_admin_test_user".to_string(),
+        email: "liquidity-admin@rampos.local".to_string(),
+        role: role.to_string(),
+        iat: Utc::now().timestamp(),
+        exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+        token_type: "access".to_string(),
+    };
+
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(TEST_ADMIN_JWT_SECRET.as_bytes()),
+    )
+    .expect("jwt should encode")
+}
+
+fn build_signed_admin_jwt_request(
+    method: &str,
+    uri: &str,
+    body: &str,
+    api_key: &str,
+    api_secret: &str,
+    admin_jwt: &str,
+) -> Request<Body> {
+    let timestamp = Utc::now().to_rfc3339();
+    let path = uri.split('?').next().unwrap_or(uri);
+    let signature = generate_signature(method, path, &timestamp, body, api_secret);
+
+    let mut builder = Request::builder()
+        .uri(uri)
+        .method(method)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .header("X-Timestamp", &timestamp)
+        .header("X-Signature", signature)
+        .header("X-Admin-Authorization", format!("Bearer {admin_jwt}"));
 
     if !body.is_empty() {
         builder = builder.header("Content-Type", "application/json");
@@ -179,8 +226,8 @@ async fn setup_app(tenant_id: &str) -> TestApp {
         ws_state: None,
         metrics_registry: Arc::new(ramp_core::service::MetricsRegistry::new()),
         document_storage: None,
-            kyc_service: None,
-            kyt_service: None,
+        kyc_service: None,
+        kyt_service: None,
     };
 
     TestApp {
@@ -214,16 +261,17 @@ async fn liquidity_scorecard_returns_empty_array_without_db_pool() {
 
 #[tokio::test]
 async fn liquidity_policy_compare_returns_catalog_for_requested_direction() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_liquidity_compare").await;
+    let admin_jwt = make_admin_jwt("viewer");
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/liquidity/policies/compare?direction=ONRAMP",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -244,34 +292,34 @@ async fn liquidity_policy_compare_returns_catalog_for_requested_direction() {
 
 #[tokio::test]
 async fn liquidity_policy_activation_updates_active_version_for_tenant_direction() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
-    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_liquidity_activate").await;
+    let operator_jwt = make_admin_jwt("operator");
     let activate_body = serde_json::json!({
         "version": "liquidity-policy-price-bias-v1",
         "direction": "OFFRAMP"
     })
     .to_string();
 
-    let activate_request = build_signed_admin_request(
+    let activate_request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/liquidity/policies/activate",
         &activate_body,
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &operator_jwt,
     );
 
     let activate_response = app.router.clone().oneshot(activate_request).await.unwrap();
     assert_eq!(activate_response.status(), StatusCode::OK);
 
-    let compare_request = build_signed_admin_request(
+    let compare_request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/liquidity/policies/compare?direction=OFFRAMP",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &operator_jwt,
     );
 
     let compare_response = app.router.oneshot(compare_request).await.unwrap();
@@ -284,21 +332,21 @@ async fn liquidity_policy_activation_updates_active_version_for_tenant_direction
 
     assert_eq!(payload["activeVersion"], "liquidity-policy-price-bias-v1");
     assert_eq!(payload["requestedDirection"], "OFFRAMP");
-    std::env::remove_var("RAMPOS_ADMIN_ROLE");
 }
 
 #[tokio::test]
 async fn liquidity_explainability_returns_winning_and_rejected_lane_rationale() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_liquidity_explain").await;
+    let admin_jwt = make_admin_jwt("viewer");
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/liquidity/explain?direction=OFFRAMP",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();

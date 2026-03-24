@@ -14,6 +14,20 @@ fn get_spec() -> serde_json::Value {
     serde_json::from_str(&json_str).expect("OpenAPI JSON should parse as serde_json::Value")
 }
 
+fn resolve_schema_ref<'a>(
+    spec: &'a serde_json::Value,
+    schema: &'a serde_json::Value,
+) -> &'a serde_json::Value {
+    if let Some(reference) = schema.get("$ref").and_then(|value| value.as_str()) {
+        let schema_name = reference
+            .strip_prefix("#/components/schemas/")
+            .expect("schema ref should point into components/schemas");
+        &spec["components"]["schemas"][schema_name]
+    } else {
+        schema
+    }
+}
+
 #[test]
 fn spec_generates_valid_json() {
     let spec = get_spec();
@@ -142,6 +156,7 @@ fn spec_documents_major_endpoint_paths() {
         "trade",
         "account",
         "user-operation",
+        "venue-funding",
     ];
 
     for fragment in &required_path_fragments {
@@ -152,6 +167,159 @@ fn spec_documents_major_endpoint_paths() {
             fragment, path_keys
         );
     }
+}
+
+#[test]
+fn spec_documents_portal_venue_funding_paths() {
+    let spec = get_spec();
+    let paths = spec
+        .get("paths")
+        .and_then(|v| v.as_object())
+        .expect("Spec must have 'paths' object");
+
+    for path in [
+        "/v1/portal/venue-funding/venues",
+        "/v1/portal/venue-funding/connection",
+        "/v1/portal/venue-funding/eligibility",
+        "/v1/portal/venue-funding/prepare",
+        "/v1/portal/venue-funding/{id}/submit",
+        "/v1/portal/venue-funding/{id}/status",
+    ] {
+        assert!(paths.contains_key(path), "Spec must document {}", path);
+    }
+}
+
+#[test]
+fn spec_documents_portal_venue_funding_prepare_and_status_contracts() {
+    let spec = get_spec();
+
+    let venues = spec["paths"]["/v1/portal/venue-funding/venues"]["get"]
+        .as_object()
+        .expect("spec must document GET /v1/portal/venue-funding/venues");
+    assert!(
+        venues
+            .get("responses")
+            .and_then(|value| value.get("200"))
+            .is_some(),
+        "venues operation must define a 200 response"
+    );
+
+    let connection = spec["paths"]["/v1/portal/venue-funding/connection"]["post"]
+        .as_object()
+        .expect("spec must document POST /v1/portal/venue-funding/connection");
+    assert!(
+        connection.get("requestBody").is_some(),
+        "connection operation must define a request body"
+    );
+    assert!(
+        connection
+            .get("responses")
+            .and_then(|value| value.get("200"))
+            .is_some(),
+        "connection operation must define a 200 response"
+    );
+
+    let prepare = spec["paths"]["/v1/portal/venue-funding/prepare"]["post"]
+        .as_object()
+        .expect("spec must document POST /v1/portal/venue-funding/prepare");
+    assert!(
+        prepare.get("requestBody").is_some(),
+        "prepare operation must define a request body"
+    );
+    assert!(
+        prepare
+            .get("responses")
+            .and_then(|value| value.get("200"))
+            .is_some(),
+        "prepare operation must define a 200 response"
+    );
+    let prepare_request_schema = resolve_schema_ref(
+        &spec,
+        &prepare["requestBody"]["content"]["application/json"]["schema"],
+    )
+    .as_object()
+    .expect("prepare request schema must exist");
+    let prepare_required = prepare_request_schema["required"]
+        .as_array()
+        .expect("prepare request schema must define required fields")
+        .iter()
+        .map(|value| value.as_str().expect("required field must be string"))
+        .collect::<Vec<_>>();
+    for field in [
+        "venueKey",
+        "jurisdiction",
+        "asset",
+        "network",
+        "venueConnectionId",
+        "venueAccountId",
+        "walletAttestationId",
+        "amount",
+    ] {
+        assert!(
+            prepare_required.contains(&field),
+            "prepare request must require '{}'",
+            field
+        );
+    }
+
+    let submit = spec["paths"]["/v1/portal/venue-funding/{id}/submit"]["post"]
+        .as_object()
+        .expect("spec must document POST /v1/portal/venue-funding/{id}/submit");
+    let submit_params = submit["parameters"]
+        .as_array()
+        .expect("submit operation must define path parameters");
+    assert!(
+        submit_params.iter().any(|param| param["name"] == "id"),
+        "submit operation must document 'id' parameter"
+    );
+    assert!(
+        submit.get("requestBody").is_some(),
+        "submit operation must define a request body"
+    );
+    assert!(
+        submit
+            .get("responses")
+            .and_then(|value| value.get("200"))
+            .is_some(),
+        "submit operation must define a 200 response"
+    );
+    let submit_request_schema = resolve_schema_ref(
+        &spec,
+        &submit["requestBody"]["content"]["application/json"]["schema"],
+    )
+    .as_object()
+    .expect("submit request schema must exist");
+    let submit_required = submit_request_schema["required"]
+        .as_array()
+        .expect("submit request schema must define required fields")
+        .iter()
+        .map(|value| value.as_str().expect("required field must be string"))
+        .collect::<Vec<_>>();
+    assert!(
+        submit_required.contains(&"walletTransferReference"),
+        "submit request must require walletTransferReference"
+    );
+
+    let status = spec["paths"]["/v1/portal/venue-funding/{id}/status"]["get"]
+        .as_object()
+        .expect("spec must document GET /v1/portal/venue-funding/{id}/status");
+    let params = status["parameters"]
+        .as_array()
+        .expect("status operation must define path parameters");
+    for expected in ["id"] {
+        assert!(
+            params.iter().any(|param| param["name"] == expected),
+            "status operation must document '{}' parameter",
+            expected
+        );
+    }
+    assert!(
+        status
+            .get("responses")
+            .and_then(|value| value.get("200"))
+            .is_some(),
+        "status operation must define a 200 response"
+    );
 }
 
 #[test]
@@ -772,7 +940,10 @@ fn spec_includes_settlement_admin_paths() {
         .as_object()
         .expect("spec.paths must be an object");
 
-    for path in ["/v1/admin/settlement/workbench", "/v1/admin/settlement/export"] {
+    for path in [
+        "/v1/admin/settlement/workbench",
+        "/v1/admin/settlement/export",
+    ] {
         assert!(
             paths.contains_key(path),
             "OpenAPI spec should include settlement admin path {}",
@@ -788,7 +959,10 @@ fn spec_includes_passport_admin_paths() {
         .as_object()
         .expect("spec.paths must be an object");
 
-    for path in ["/v1/admin/passport/queue", "/v1/admin/passport/packages/{id}"] {
+    for path in [
+        "/v1/admin/passport/queue",
+        "/v1/admin/passport/packages/{id}",
+    ] {
         assert!(
             paths.contains_key(path),
             "OpenAPI spec should include passport admin path {}",
@@ -827,4 +1001,600 @@ fn spec_includes_config_bundle_admin_paths() {
             path
         );
     }
+}
+
+#[test]
+fn spec_extensions_actions_document_governance_metadata() {
+    let spec = get_spec();
+    let extensions_get = spec["paths"]["/v1/admin/extensions"]["get"]
+        .as_object()
+        .expect("spec must document GET /v1/admin/extensions");
+    let action_item = extensions_get["responses"]["200"]["content"]["application/json"]["schema"]
+        ["properties"]["actions"]["items"]
+        .as_object()
+        .expect("extensions actions items schema must exist");
+    let required = action_item["required"]
+        .as_array()
+        .expect("extensions actions required fields must be documented");
+    let properties = action_item["properties"]
+        .as_object()
+        .expect("extensions action properties must be documented");
+
+    assert!(
+        required.iter().any(|value| value == "approvalStatus"),
+        "extensions action schema must require approvalStatus"
+    );
+    assert!(
+        required.iter().any(|value| value == "provenance"),
+        "extensions action schema must require provenance"
+    );
+    assert!(
+        properties.contains_key("approvalStatus"),
+        "extensions action schema must document approvalStatus"
+    );
+    assert!(
+        properties.contains_key("provenance"),
+        "extensions action schema must document provenance"
+    );
+}
+
+#[test]
+fn spec_includes_provider_routing_admin_paths() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("spec.paths must be an object");
+
+    for path in [
+        "/v1/admin/provider-routing/snapshot",
+        "/v1/admin/provider-routing/evaluate",
+    ] {
+        assert!(
+            paths.contains_key(path),
+            "OpenAPI spec should include provider routing admin path {}",
+            path
+        );
+    }
+}
+
+#[test]
+fn spec_provider_routing_evaluate_keeps_provider_family_optional() {
+    let spec = get_spec();
+    let request_schema = spec["paths"]["/v1/admin/provider-routing/evaluate"]["post"]
+        ["requestBody"]["content"]["application/json"]["schema"]
+        .as_object()
+        .expect("provider routing request schema must exist");
+    let required = request_schema
+        .get("required")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    assert!(
+        !required.contains(&"providerFamily"),
+        "providerFamily must remain optional for backward-compatible fallback evaluation"
+    );
+}
+
+#[test]
+fn spec_includes_commercial_readiness_admin_paths() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("spec.paths must be an object");
+
+    for path in [
+        "/v1/admin/commercial-readiness/snapshot",
+        "/v1/admin/commercial-readiness/check",
+    ] {
+        assert!(
+            paths.contains_key(path),
+            "OpenAPI spec should include commercial readiness admin path {}",
+            path
+        );
+    }
+}
+
+#[test]
+fn spec_commercial_readiness_snapshot_contract() {
+    let spec = get_spec();
+    let snapshot_schema = spec["paths"]["/v1/admin/commercial-readiness/snapshot"]["get"]
+        ["responses"]["200"]["content"]["application/json"]["schema"]
+        .as_object()
+        .expect("snapshot response schema must exist");
+    let required = snapshot_schema["required"]
+        .as_array()
+        .expect("snapshot schema required array must exist")
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert!(
+        required.contains(&"provenance"),
+        "snapshot response must include provenance"
+    );
+    assert!(
+        required.contains(&"extensions"),
+        "snapshot response must include extensions list"
+    );
+    let properties = snapshot_schema["properties"]
+        .as_object()
+        .expect("snapshot schema properties must exist");
+    assert_eq!(properties["extensions"]["type"], "array");
+    assert_eq!(properties["provenance"]["type"], "object");
+}
+
+#[test]
+fn spec_commercial_readiness_check_contract() {
+    let spec = get_spec();
+    let check = &spec["paths"]["/v1/admin/commercial-readiness/check"]["post"];
+    let request_schema = check["requestBody"]["content"]["application/json"]["schema"]
+        .as_object()
+        .expect("check request schema must exist");
+    let required = request_schema["required"]
+        .as_array()
+        .expect("check request schema required array must exist")
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert!(required.contains(&"extensionId"));
+    assert!(required.contains(&"availablePartnerCapabilities"));
+    assert!(request_schema["properties"]["availablePartnerCapabilities"]["type"] == "array");
+    let response_schema = check["responses"]["200"]["content"]["application/json"]["schema"]
+        .as_object()
+        .expect("check response schema must exist");
+    let response_required = response_schema["required"]
+        .as_array()
+        .expect("check response schema required array must exist")
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert!(response_required.contains(&"missingCapabilities"));
+    assert!(response_required.contains(&"provenance"));
+}
+
+#[test]
+fn spec_includes_commercialization_pack_admin_paths() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("spec.paths must be an object");
+
+    assert!(
+        paths.contains_key("/v1/admin/commercialization-packs"),
+        "OpenAPI spec should include commercialization pack admin path"
+    );
+}
+
+#[test]
+fn spec_commercialization_pack_list_contract() {
+    let spec = get_spec();
+    let list_schema = spec["paths"]["/v1/admin/commercialization-packs"]["get"]["responses"]["200"]
+        ["content"]["application/json"]["schema"]
+        .as_object()
+        .expect("commercialization pack list schema must exist");
+    let required = list_schema["required"]
+        .as_array()
+        .expect("list schema required array must exist")
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert!(required.contains(&"packs"));
+    assert!(required.contains(&"provenance"));
+    assert_eq!(list_schema["properties"]["packs"]["type"], "array");
+}
+
+#[test]
+fn spec_commercialization_pack_upsert_contract() {
+    let spec = get_spec();
+    let post = &spec["paths"]["/v1/admin/commercialization-packs"]["post"];
+    let request_schema = post["requestBody"]["content"]["application/json"]["schema"]
+        .as_object()
+        .expect("commercialization pack request schema must exist");
+    let required = request_schema["required"]
+        .as_array()
+        .expect("commercialization pack request required array must exist")
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert!(required.contains(&"commercializationPackId"));
+    assert!(required.contains(&"packCode"));
+    assert!(required.contains(&"partnerId"));
+    assert!(required.contains(&"commercialExtensionId"));
+    assert!(required.contains(&"corridorCode"));
+    let response_schema = post["responses"]["200"]["content"]["application/json"]["schema"]
+        .as_object()
+        .expect("commercialization pack response schema must exist");
+    let response_required = response_schema["required"]
+        .as_array()
+        .expect("commercialization pack response required array must exist")
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert!(response_required.contains(&"packs"));
+    assert!(response_required.contains(&"provenance"));
+}
+
+#[test]
+fn spec_execution_explainability_admin_paths() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("spec.paths must be an object");
+
+    for path in [
+        "/v1/admin/execution-explainability/explain",
+        "/v1/admin/execution-explainability/compare",
+    ] {
+        assert!(
+            paths.contains_key(path),
+            "OpenAPI spec should include execution explainability admin path {}",
+            path
+        );
+    }
+}
+
+#[test]
+fn spec_execution_explainability_explain_contract() {
+    let spec = get_spec();
+    let explain_post = spec["paths"]["/v1/admin/execution-explainability/explain"]["post"]
+        .as_object()
+        .expect("spec must document POST /v1/admin/execution-explainability/explain");
+
+    let request_schema = explain_post["requestBody"]["content"]["application/json"]["schema"]
+        .as_object()
+        .expect("explain request schema must exist");
+    let request_required = request_schema["required"]
+        .as_array()
+        .expect("explain request schema must list required fields")
+        .iter()
+        .map(|value| value.as_str().expect("required field must be string"))
+        .collect::<Vec<_>>();
+    let explain_required = [
+        "routeId",
+        "lpId",
+        "direction",
+        "asset",
+        "quotedRate",
+        "quotedVndAmount",
+        "treasuryStressActive",
+        "corridorPolicyEligible",
+        "complianceEligible",
+    ];
+    for required in explain_required {
+        assert!(
+            request_required.contains(&required),
+            "Explain request must require '{}'",
+            required
+        );
+    }
+
+    let response_schema = explain_post["responses"]["200"]["content"]["application/json"]["schema"]
+        .as_object()
+        .expect("explain response schema must exist");
+    let response_required = response_schema["required"]
+        .as_array()
+        .expect("explain response schema must list required fields")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("response required field must be string")
+        })
+        .collect::<Vec<_>>();
+    for required in &["routeId", "eligible", "factors", "provenance"] {
+        assert!(
+            response_required.contains(required),
+            "Explain response must require '{}'",
+            required
+        );
+    }
+    let properties = response_schema["properties"]
+        .as_object()
+        .expect("explain response must document properties");
+    assert!(
+        properties.contains_key("provenance"),
+        "Explain response must document provenance"
+    );
+    assert!(
+        properties.contains_key("factors"),
+        "Explain response must document factors"
+    );
+    let factor_schema = properties["factors"]["items"]
+        .as_object()
+        .expect("Explain factors must document item schema");
+    let factor_required = factor_schema["required"]
+        .as_array()
+        .expect("Explain factors must list required fields")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("factor required field must be string")
+        })
+        .collect::<Vec<_>>();
+    for required in &[
+        "factorName",
+        "weight",
+        "rawValue",
+        "contribution",
+        "explanation",
+    ] {
+        assert!(
+            factor_required.contains(required),
+            "Explain factors must require '{}'",
+            required
+        );
+    }
+}
+
+#[test]
+fn spec_execution_explainability_compare_contract() {
+    let spec = get_spec();
+    let compare_post = spec["paths"]["/v1/admin/execution-explainability/compare"]["post"]
+        .as_object()
+        .expect("spec must document POST /v1/admin/execution-explainability/compare");
+
+    let request_schema = compare_post["requestBody"]["content"]["application/json"]["schema"]
+        .as_object()
+        .expect("compare request schema must exist");
+    let request_required = request_schema["required"]
+        .as_array()
+        .expect("compare request schema must list required fields")
+        .iter()
+        .map(|value| value.as_str().expect("required field must be string"))
+        .collect::<Vec<_>>();
+    for required in &["direction", "inputs"] {
+        assert!(
+            request_required.contains(required),
+            "Compare request must require '{}'",
+            required
+        );
+    }
+    let inputs_items = request_schema["properties"]["inputs"]["items"]
+        .as_object()
+        .expect("compare inputs items schema must exist");
+    let input_required = inputs_items["required"]
+        .as_array()
+        .expect("compare input items must list required fields")
+        .iter()
+        .map(|value| value.as_str().expect("required field must be string"))
+        .collect::<Vec<_>>();
+    for required in &[
+        "routeId",
+        "lpId",
+        "direction",
+        "asset",
+        "quotedRate",
+        "quotedVndAmount",
+        "treasuryStressActive",
+        "corridorPolicyEligible",
+        "complianceEligible",
+    ] {
+        assert!(
+            input_required.contains(required),
+            "Compare input must require '{}'",
+            required
+        );
+    }
+
+    let response_schema = compare_post["responses"]["200"]["content"]["application/json"]["schema"]
+        .as_object()
+        .expect("compare response schema must exist");
+    let response_required = response_schema["required"]
+        .as_array()
+        .expect("compare response schema must list required fields")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("response required field must be string")
+        })
+        .collect::<Vec<_>>();
+    for required in &["candidates", "winningRouteId", "provenance"] {
+        assert!(
+            response_required.contains(required),
+            "Compare response must require '{}'",
+            required
+        );
+    }
+    let response_props = response_schema["properties"]
+        .as_object()
+        .expect("compare response must document properties");
+    assert!(
+        response_props.contains_key("provenance"),
+        "Compare response must document provenance"
+    );
+    assert!(
+        response_props.contains_key("candidates"),
+        "Compare response must document candidates"
+    );
+    let candidate_schema = response_props["candidates"]["items"]
+        .as_object()
+        .expect("Compare response must document candidate item schema");
+    let candidate_required = candidate_schema["required"]
+        .as_array()
+        .expect("Compare candidates must list required fields")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("candidate required field must be string")
+        })
+        .collect::<Vec<_>>();
+    for required in &[
+        "routeId",
+        "lpId",
+        "direction",
+        "compositeScore",
+        "factors",
+        "eligible",
+        "ineligibilityReasons",
+        "summary",
+        "provenance",
+    ] {
+        assert!(
+            candidate_required.contains(required),
+            "Compare candidates must require '{}'",
+            required
+        );
+    }
+}
+
+#[test]
+fn spec_includes_venue_trust_admin_paths() {
+    let spec = get_spec();
+    let paths = spec["paths"]
+        .as_object()
+        .expect("spec.paths must be an object");
+
+    for path in [
+        "/v1/admin/venue-trust/connections/{id}/review",
+        "/v1/admin/venue-trust/subjects/{subject_type}/{subject_id}",
+        "/v1/admin/venue-trust/transfers/{id}",
+        "/v1/admin/venue-trust/transfers/{id}/review",
+        "/v1/admin/venue-trust/source-of-funds-packages/{id}/review",
+        "/v1/admin/venue-trust/wallet-attestations/{id}/review",
+    ] {
+        assert!(
+            paths.contains_key(path),
+            "OpenAPI spec should include venue trust admin path {}",
+            path
+        );
+    }
+}
+
+#[test]
+fn spec_venue_trust_operator_review_paths_require_review_body() {
+    let spec = get_spec();
+
+    for path in [
+        "/v1/admin/venue-trust/connections/{id}/review",
+        "/v1/admin/venue-trust/transfers/{id}/review",
+        "/v1/admin/venue-trust/source-of-funds-packages/{id}/review",
+    ] {
+        let review_post = spec["paths"][path]["post"]
+            .as_object()
+            .unwrap_or_else(|| panic!("spec must document POST {}", path));
+
+        let request_body = review_post
+            .get("requestBody")
+            .and_then(|value| value.as_object())
+            .expect("review endpoint must define a request body");
+        assert_eq!(
+            request_body
+                .get("required")
+                .and_then(|value| value.as_bool()),
+            Some(true),
+            "review request body must be required for {}",
+            path
+        );
+
+        let request_schema = &review_post["requestBody"]["content"]["application/json"]["schema"];
+        let required = request_schema["required"]
+            .as_array()
+            .expect("review request schema must list required fields")
+            .iter()
+            .map(|value| value.as_str().expect("required field must be string"))
+            .collect::<Vec<_>>();
+        for field in ["status", "reviewReason"] {
+            assert!(
+                required.contains(&field),
+                "review request must require '{}' for {}",
+                field,
+                path
+            );
+        }
+
+        let properties = request_schema["properties"]
+            .as_object()
+            .expect("review request schema must document properties");
+        for field in ["status", "reviewReason", "failureReason", "provenance"] {
+            assert!(
+                properties.contains_key(field),
+                "review request must document '{}' for {}",
+                field,
+                path
+            );
+        }
+        assert_eq!(
+            properties["status"]["type"].as_str(),
+            Some("string"),
+            "status must be string for {}",
+            path
+        );
+        assert_eq!(
+            properties["reviewReason"]["type"].as_str(),
+            Some("string"),
+            "reviewReason must be string for {}",
+            path
+        );
+        assert_eq!(
+            properties["failureReason"]["type"].as_str(),
+            Some("string"),
+            "failureReason must be string for {}",
+            path
+        );
+        assert_eq!(
+            properties["provenance"]["type"].as_str(),
+            Some("object"),
+            "provenance must be object for {}",
+            path
+        );
+    }
+}
+
+#[test]
+fn spec_venue_trust_wallet_attestation_review_contract() {
+    let spec = get_spec();
+    let review_post = spec["paths"]["/v1/admin/venue-trust/wallet-attestations/{id}/review"]
+        ["post"]
+        .as_object()
+        .expect("spec must document POST /v1/admin/venue-trust/wallet-attestations/{id}/review");
+
+    let request_body = review_post
+        .get("requestBody")
+        .and_then(|value| value.as_object())
+        .expect("review endpoint must define a request body");
+    assert_eq!(
+        request_body
+            .get("required")
+            .and_then(|value| value.as_bool()),
+        Some(true),
+        "review request body must be required"
+    );
+
+    let request_schema = &review_post["requestBody"]["content"]["application/json"]["schema"];
+    let required = request_schema["required"]
+        .as_array()
+        .expect("review request schema must list required fields")
+        .iter()
+        .map(|value| value.as_str().expect("required field must be string"))
+        .collect::<Vec<_>>();
+    for field in ["status", "reviewReason"] {
+        assert!(
+            required.contains(&field),
+            "review request must require '{}'",
+            field
+        );
+    }
+
+    let properties = request_schema["properties"]
+        .as_object()
+        .expect("review request schema must document properties");
+    for field in ["status", "reviewReason", "failureReason", "provenance"] {
+        assert!(
+            properties.contains_key(field),
+            "review request must document '{}'",
+            field
+        );
+    }
+    assert_eq!(properties["status"]["type"].as_str(), Some("string"));
+    assert_eq!(properties["reviewReason"]["type"].as_str(), Some("string"));
+    assert_eq!(properties["failureReason"]["type"].as_str(), Some("string"));
+    assert_eq!(properties["provenance"]["type"].as_str(), Some("object"));
 }

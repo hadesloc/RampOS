@@ -145,7 +145,9 @@ pub async fn update_tenant(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::handlers::admin::admin_auth::AdminClaims;
     use chrono::Utc;
+    use jsonwebtoken::{encode, EncodingKey, Header};
     use ramp_core::{
         repository::{tenant::TenantRow, TenantRepository},
         service::ledger::LedgerService,
@@ -153,10 +155,29 @@ mod tests {
     };
     use rust_decimal_macros::dec;
 
+    const TEST_ADMIN_JWT_SECRET: &str = "onboarding-tests-admin-jwt-secret";
+
+    fn make_admin_jwt(role: &str) -> String {
+        let claims = AdminClaims {
+            sub: "onboarding_test_admin".to_string(),
+            email: "onboarding-admin@rampos.local".to_string(),
+            role: role.to_string(),
+            iat: Utc::now().timestamp(),
+            exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+            token_type: "access".to_string(),
+        };
+
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(TEST_ADMIN_JWT_SECRET.as_bytes()),
+        )
+        .expect("jwt should encode")
+    }
+
     #[tokio::test]
     async fn test_update_tenant_rejects_viewer_role() {
-        std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
-        std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
+        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
 
         let tenant_repo = Arc::new(MockTenantRepository::new());
         tenant_repo.add_tenant(TenantRow {
@@ -183,7 +204,12 @@ mod tests {
         ));
 
         let mut headers = HeaderMap::new();
-        headers.insert("X-Admin-Key", "admin-secret-key".parse().unwrap());
+        headers.insert(
+            "X-Admin-Authorization",
+            format!("Bearer {}", make_admin_jwt("viewer"))
+                .parse()
+                .unwrap(),
+        );
 
         let request = UpdateTenantRequest {
             webhook_url: Some("https://example.com/webhook".to_string()),
@@ -214,6 +240,6 @@ mod tests {
             .unwrap();
         assert_eq!(stored.webhook_url, None);
 
-        std::env::remove_var("RAMPOS_ADMIN_ROLE");
+        std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
     }
 }

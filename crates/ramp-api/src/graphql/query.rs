@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use ramp_core::repository::intent::IntentRepository;
 
-use super::require_scoped_tenant;
 use super::pagination::{self, IntentConnection, UserConnection};
+use super::require_scoped_tenant;
 use super::types::{DashboardStatsType, IntentFilter, IntentType, UserType};
 
 /// Root query object for the GraphQL API

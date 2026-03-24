@@ -544,9 +544,13 @@ mod tests {
     use super::*;
     use crate::middleware::tenant::{TenantContext, TenantTier};
     use crate::router::AppState;
+    use axum::{http::HeaderMap, Extension, Json};
+    use chrono::Utc;
+    use jsonwebtoken::{encode, EncodingKey, Header};
     use ramp_common::types::TenantId;
     use ramp_compliance::{
-        case::CaseManager, reports::ReportGenerator, storage::MockDocumentStorage, InMemoryCaseStore,
+        case::CaseManager, reports::ReportGenerator, storage::MockDocumentStorage,
+        InMemoryCaseStore,
     };
     use ramp_core::{
         billing::{mock::MockBillingDataProvider, BillingConfig, BillingService},
@@ -556,13 +560,15 @@ mod tests {
             payout::PayoutService, trade::TradeService, user::UserService, webhook::WebhookService,
             MetricsRegistry,
         },
-        stablecoin::{MockVnstProtocolDataProvider, VnstProtocolConfig, VnstProtocolService},
-        test_utils::{MockIntentRepository, MockLedgerRepository, MockTenantRepository, MockUserRepository, MockWebhookRepository},
         sso::SsoService,
+        stablecoin::{MockVnstProtocolDataProvider, VnstProtocolConfig, VnstProtocolService},
+        test_utils::{
+            MockIntentRepository, MockLedgerRepository, MockTenantRepository, MockUserRepository,
+            MockWebhookRepository,
+        },
     };
     use sqlx::PgPool;
     use std::sync::Arc;
-    use axum::{http::HeaderMap, Extension, Json};
 
     #[test]
     fn compare_query_deserializes_camel_case_filters() {
@@ -619,10 +625,29 @@ mod tests {
         assert!(!json.contains("\"intentId\""));
     }
 
+    const TEST_ADMIN_JWT_SECRET: &str = "risk-lab-tests-admin-jwt-secret";
+
+    fn make_admin_jwt(role: &str) -> String {
+        let claims = crate::handlers::admin::admin_auth::AdminClaims {
+            sub: "risk_lab_test_admin".to_string(),
+            email: "risk-lab-admin@rampos.local".to_string(),
+            role: role.to_string(),
+            iat: Utc::now().timestamp(),
+            exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+            token_type: "access".to_string(),
+        };
+
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(TEST_ADMIN_JWT_SECRET.as_bytes()),
+        )
+        .expect("jwt should encode")
+    }
+
     #[tokio::test]
     async fn replay_risk_lab_rejects_viewer_role() {
-        std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
-        std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
+        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
 
         let intent_repo = Arc::new(MockIntentRepository::new());
         let ledger_repo = Arc::new(MockLedgerRepository::new());
@@ -710,7 +735,12 @@ mod tests {
             tier: TenantTier::Standard,
         };
         let mut headers = HeaderMap::new();
-        headers.insert("X-Admin-Key", "admin-secret-key".parse().unwrap());
+        headers.insert(
+            "X-Admin-Authorization",
+            format!("Bearer {}", make_admin_jwt("viewer"))
+                .parse()
+                .unwrap(),
+        );
 
         let request = RiskLabReplayApiRequest {
             replay_id: "replay-1".to_string(),
@@ -741,6 +771,6 @@ mod tests {
             other => panic!("expected forbidden error, got {other:?}"),
         }
 
-        std::env::remove_var("RAMPOS_ADMIN_ROLE");
+        std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
     }
 }

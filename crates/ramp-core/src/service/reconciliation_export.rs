@@ -38,8 +38,18 @@ pub struct ReconciliationWorkbench {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReconciliationProvenance {
-    /// Source kind: "settlement" for real settlement data, "empty" for no-data placeholder
+    /// Source kind for the snapshot data path.
+    /// Known values:
+    /// - "sample_fallback": fixture/demo data
+    /// - "runtime_inputs": non-fixture runtime inputs supplied by caller
+    /// - "empty": no data available
     pub source_kind: String,
+    /// Classification for operators deciding whether this path is evidence-backed or bounded.
+    /// Known values:
+    /// - "evidence_backed": runtime-linked inputs
+    /// - "bounded_fallback": fixture/demo data
+    /// - "empty": no data available
+    pub source_class: String,
     /// Number of settlement records used as input
     pub settlement_count: usize,
     /// Number of on-chain transactions used as input
@@ -51,11 +61,29 @@ pub struct ReconciliationProvenance {
 impl ReconciliationProvenance {
     pub fn from_inputs(settlement_count: usize, on_chain_tx_count: usize) -> Self {
         let source_kind = if settlement_count > 0 || on_chain_tx_count > 0 {
-            "live".to_string()
+            "runtime_inputs"
         } else {
-            "empty".to_string()
+            "empty"
         };
-        let freshness_warning = if on_chain_tx_count == 0 && settlement_count > 0 {
+        Self::from_source_kind(source_kind, settlement_count, on_chain_tx_count)
+    }
+
+    pub fn from_source_kind(
+        source_kind: &str,
+        settlement_count: usize,
+        on_chain_tx_count: usize,
+    ) -> Self {
+        let source_class = match source_kind {
+            "sample_fallback" => "bounded_fallback",
+            "empty" => "empty",
+            _ => "evidence_backed",
+        };
+        let freshness_warning = if source_kind == "sample_fallback" {
+            Some(
+                "This reconciliation snapshot uses sample fixture data and should NOT be treated as evidence-backed production truth."
+                    .to_string(),
+            )
+        } else if on_chain_tx_count == 0 && settlement_count > 0 {
             Some(
                 "No on-chain transaction data was provided. Reconciliation can only detect missing on-chain confirmations."
                     .to_string(),
@@ -66,7 +94,8 @@ impl ReconciliationProvenance {
             None
         };
         Self {
-            source_kind,
+            source_kind: source_kind.to_string(),
+            source_class: source_class.to_string(),
             settlement_count,
             on_chain_tx_count,
             freshness_warning,
@@ -94,10 +123,27 @@ impl ReconciliationExportService {
         on_chain_txs: &[OnChainTransaction],
         settlements: &[SettlementRecord],
     ) -> ReconciliationWorkbenchSnapshot {
+        let source_kind = if settlements.is_empty() && on_chain_txs.is_empty() {
+            "empty"
+        } else {
+            "runtime_inputs"
+        };
+        Self::build_snapshot_with_source_kind(service, on_chain_txs, settlements, source_kind)
+    }
+
+    pub fn build_snapshot_with_source_kind(
+        service: &ReconciliationService,
+        on_chain_txs: &[OnChainTransaction],
+        settlements: &[SettlementRecord],
+        source_kind: &str,
+    ) -> ReconciliationWorkbenchSnapshot {
         let report = service.reconcile(on_chain_txs, settlements);
         let queue = service.build_break_queue(&report, settlements);
-        let provenance =
-            ReconciliationProvenance::from_inputs(settlements.len(), on_chain_txs.len());
+        let provenance = ReconciliationProvenance::from_source_kind(
+            source_kind,
+            settlements.len(),
+            on_chain_txs.len(),
+        );
 
         ReconciliationWorkbenchSnapshot {
             generated_at: Utc::now(),
@@ -175,6 +221,7 @@ impl ReconciliationExportService {
                 .collect::<Vec<_>>(),
             "report": export_report(&workbench.report),
             "queue": workbench.queue,
+            "provenance": workbench.provenance,
         }))
         .map_err(|error| format!("Failed to serialize workbench export: {}", error))?;
 
@@ -224,7 +271,9 @@ fn export_report(report: &ReconciliationReport) -> serde_json::Value {
     })
 }
 
-fn export_discrepancy(discrepancy: &crate::service::reconciliation::Discrepancy) -> serde_json::Value {
+fn export_discrepancy(
+    discrepancy: &crate::service::reconciliation::Discrepancy,
+) -> serde_json::Value {
     json!({
         "id": discrepancy.id,
         "kind": format!("{:?}", discrepancy.kind),

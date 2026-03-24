@@ -85,8 +85,10 @@ pub async fn search_incidents(
     ensure_lookup(&query)?;
 
     let timeline = load_incident_timeline(&app_state, &tenant_ctx, &query).await?;
-    let guardian = SlaGuardianService::new()
-        .summarize(&timeline, app_state.metrics_registry.incident_signal_snapshot());
+    let guardian = SlaGuardianService::new().summarize(
+        &timeline,
+        app_state.metrics_registry.incident_signal_snapshot(),
+    );
     let search_result = summarize_timeline(&timeline, &query, guardian);
 
     info!(
@@ -188,9 +190,9 @@ async fn load_incident_timeline(
             );
         } else {
             let settlement_service = SettlementService::new();
-            entries.extend(settlement_service.incident_timeline_entries_for_bank_reference(
-                bank_reference,
-            ));
+            entries.extend(
+                settlement_service.incident_timeline_entries_for_bank_reference(bank_reference),
+            );
         }
     }
 

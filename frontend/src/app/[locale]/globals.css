@@ -47,44 +47,44 @@
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
+    --background: 0 0% 3.5%; /* #09090B — Deep command center black */
+    --foreground: 0 0% 96%;
 
-    --card: 222 47% 11%; /* Match background for seamless look, or slightly lighter */
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 6.5%; /* #111113 — Elevated surface */
+    --card-foreground: 0 0% 96%;
 
-    --popover: 222 47% 11%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 6.5%;
+    --popover-foreground: 0 0% 96%;
 
-    --primary: 226 71% 55%; /* Lighter Navy for dark mode visibility */
-    --primary-foreground: 210 40% 98%;
+    --primary: 151 100% 50%; /* #00FF87 — Neon Green */
+    --primary-foreground: 0 0% 0%;
 
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 0 0% 96%;
 
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 55%;
 
-    --accent: 160 84% 39%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 253 100% 69%; /* #7B61FF — Electric Violet */
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62% 30%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 226 71% 55%;
+    --border: 0 0% 12%;
+    --input: 0 0% 12%;
+    --ring: 151 100% 50%;
 
-    --success: 160 84% 39%;
+    --success: 151 100% 50%;
     --warning: 38 92% 50%;
-    --info: 199 89% 48%;
+    --info: 193 100% 50%; /* #00D4FF — Hot Cyan */
 
-    /* Charts */
-    --chart-1: 226 71% 55%;
-    --chart-2: 160 84% 39%;
-    --chart-3: 199 89% 48%;
+    /* Charts — Neon palette */
+    --chart-1: 151 100% 50%;
+    --chart-2: 253 100% 69%;
+    --chart-3: 193 100% 50%;
     --chart-4: 38 92% 50%;
-    --chart-5: 262 83% 58%;
+    --chart-5: 330 100% 60%;
   }
 }
 
@@ -95,6 +95,20 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Glow utilities for dashboard */
+.glow-green-sm {
+  box-shadow: 0 0 10px rgba(0, 255, 135, 0.15);
+}
+.glow-green {
+  box-shadow: 0 0 20px rgba(0, 255, 135, 0.2), 0 0 40px rgba(0, 255, 135, 0.05);
+}
+.glow-violet-sm {
+  box-shadow: 0 0 10px rgba(123, 97, 255, 0.15);
+}
+.glow-cyan-sm {
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.15);
 }
 
 @keyframes shimmer {
@@ -123,6 +137,21 @@
   50% { opacity: 0.7; }
 }
 
+/* Custom scrollbar for dark dashboard */
+.dark ::-webkit-scrollbar {
+  width: 6px;
+}
+.dark ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -131,4 +160,43 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Glassmorphism card */
+.glass-card {
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.glass-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Live pulse animation */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.1); }
+}
+.animate-live-pulse {
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+/* Neon accent glow hover */
+.glow-hover-green {
+  transition: box-shadow 0.4s ease;
+}
+.glow-hover-green:hover {
+  box-shadow: 0 0 25px rgba(0, 255, 135, 0.15), inset 0 1px 0 rgba(0, 255, 135, 0.05);
+}
+.glow-hover-violet:hover {
+  box-shadow: 0 0 25px rgba(123, 97, 255, 0.15), inset 0 1px 0 rgba(123, 97, 255, 0.05);
+}
+.glow-hover-cyan:hover {
+  box-shadow: 0 0 25px rgba(0, 212, 255, 0.15), inset 0 1px 0 rgba(0, 212, 255, 0.05);
+}
+.glow-hover-amber:hover {
+  box-shadow: 0 0 25px rgba(255, 184, 0, 0.15), inset 0 1px 0 rgba(255, 184, 0, 0.05);
 }

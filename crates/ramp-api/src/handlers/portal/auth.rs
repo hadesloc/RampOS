@@ -1,11 +1,10 @@
 //! Portal Authentication Handlers
 //!
-//! Endpoints for user authentication including:
-//! - WebAuthn (Passkey) registration and login
-//! - Magic link authentication
-//! - Session management
-//!
-//! Security: Uses httpOnly cookies for token storage
+//! Endpoints for portal authentication scaffolding.
+//! Current posture:
+//! - WebAuthn and magic-link challenge/request endpoints are exposed
+//! - completion/session endpoints remain fail-closed until the backend flow is verified
+//! - logout only clears cookies and should not be read as proof of a working session system
 
 use axum::{
     extract::State,
@@ -40,8 +39,7 @@ pub struct AuthUser {
     pub created_at: String,
 }
 
-/// Response for successful authentication - only contains user info
-/// Tokens are sent via httpOnly cookies
+/// Planned success response shape for portal authentication once session issuance is enabled.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthResponse {
@@ -238,7 +236,7 @@ pub async fn webauthn_register_challenge(
     Ok(Json(response))
 }
 
-/// POST /v1/auth/webauthn/register/complete - Complete WebAuthn registration
+/// POST /v1/auth/webauthn/register/complete - Registration completion placeholder
 /// Requires real WebAuthn verification backend; does not create mock sessions.
 pub async fn webauthn_register_complete(
     State(_app_state): State<AppState>,
@@ -301,7 +299,7 @@ pub async fn webauthn_login_challenge(
     Ok(Json(response))
 }
 
-/// POST /v1/auth/webauthn/login/complete - Complete WebAuthn login
+/// POST /v1/auth/webauthn/login/complete - Login completion placeholder
 /// Requires real WebAuthn verification backend; does not create mock sessions.
 pub async fn webauthn_login_complete(
     State(_app_state): State<AppState>,

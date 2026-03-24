@@ -16,7 +16,9 @@ pub mod transaction;
 
 pub use authorization::{Authorization, AuthorizationList, Signature, SignedAuthorization};
 pub use delegation::{
-    Delegation, DelegationManager, DelegationRegistry, DelegationStatus, SessionDelegation,
+    Delegation, DelegationApprovalBoundary, DelegationExecutionEnvelope,
+    DelegationManager, DelegationPrerequisites, DelegationRegistry, DelegationStatus,
+    DelegationValidationError, SessionDelegation,
 };
 pub use transaction::{Eip7702Transaction, Eip7702TxBuilder};
 

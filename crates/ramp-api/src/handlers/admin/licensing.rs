@@ -386,7 +386,9 @@ pub async fn get_tenant_status(
     info!(tenant_id = %tenant_id, "Fetching tenant license status");
 
     let tenant_id = ensure_tenant_matches_scope(&tenant_ctx, &tenant_id)?;
-    Ok(Json(build_tenant_overview(&licensing_repo, &tenant_id).await?))
+    Ok(Json(
+        build_tenant_overview(&licensing_repo, &tenant_id).await?,
+    ))
 }
 
 /// GET /v1/admin/licensing/status - Get current tenant's license status
@@ -679,7 +681,9 @@ pub async fn upload_license_document(
         .decode(&request.file_data)
         .map_err(|_| ApiError::Validation("Invalid base64 file data".to_string()))?;
     if file_bytes.is_empty() {
-        return Err(ApiError::Validation("Uploaded document is empty".to_string()));
+        return Err(ApiError::Validation(
+            "Uploaded document is empty".to_string(),
+        ));
     }
 
     let safe_name = request

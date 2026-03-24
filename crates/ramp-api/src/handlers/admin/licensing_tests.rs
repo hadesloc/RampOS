@@ -2,12 +2,20 @@
 mod tests {
     use super::super::licensing::*;
     use crate::error::ApiError;
+    use crate::handlers::admin::admin_auth::AdminClaims;
     use crate::middleware::tenant::{TenantContext, TenantTier};
     use async_trait::async_trait;
-    use axum::{extract::{Path, State}, http::HeaderMap, Extension, Json};
+    use axum::{
+        extract::{Path, State},
+        http::HeaderMap,
+        Extension, Json,
+    };
     use chrono::Utc;
+    use jsonwebtoken::{encode, EncodingKey, Header};
     use ramp_common::{
-        licensing::{LicenseRequirementId, LicenseStatus, LicenseSubmissionId, LicenseType, SubmissionStatus},
+        licensing::{
+            LicenseRequirementId, LicenseStatus, LicenseSubmissionId, LicenseType, SubmissionStatus,
+        },
         types::TenantId,
         Result,
     };
@@ -26,31 +34,77 @@ mod tests {
 
     #[async_trait]
     impl LicensingRepository for MockLicensingRepository {
-        async fn list_requirements(&self, _limit: i64, _offset: i64) -> Result<Vec<LicenseRequirementRow>> {
+        async fn list_requirements(
+            &self,
+            _limit: i64,
+            _offset: i64,
+        ) -> Result<Vec<LicenseRequirementRow>> {
             Ok(self.requirements.lock().unwrap().clone())
         }
 
-        async fn get_requirement(&self, id: &LicenseRequirementId) -> Result<Option<LicenseRequirementRow>> {
-            Ok(self.requirements.lock().unwrap().iter().find(|row| row.id == id.0).cloned())
+        async fn get_requirement(
+            &self,
+            id: &LicenseRequirementId,
+        ) -> Result<Option<LicenseRequirementRow>> {
+            Ok(self
+                .requirements
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|row| row.id == id.0)
+                .cloned())
         }
 
-        async fn create_requirement(&self, _req: &CreateLicenseRequirementRequest) -> Result<LicenseRequirementRow> {
+        async fn create_requirement(
+            &self,
+            _req: &CreateLicenseRequirementRequest,
+        ) -> Result<LicenseRequirementRow> {
             unimplemented!("not needed for tests")
         }
 
-        async fn get_tenant_license_statuses(&self, tenant_id: &TenantId) -> Result<Vec<TenantLicenseStatusRow>> {
-            Ok(self.statuses.lock().unwrap().iter().filter(|row| row.tenant_id == tenant_id.0).cloned().collect())
+        async fn get_tenant_license_statuses(
+            &self,
+            tenant_id: &TenantId,
+        ) -> Result<Vec<TenantLicenseStatusRow>> {
+            Ok(self
+                .statuses
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|row| row.tenant_id == tenant_id.0)
+                .cloned()
+                .collect())
         }
 
-        async fn get_tenant_license_status(&self, tenant_id: &TenantId, requirement_id: &LicenseRequirementId) -> Result<Option<TenantLicenseStatusRow>> {
-            Ok(self.statuses.lock().unwrap().iter().find(|row| row.tenant_id == tenant_id.0 && row.requirement_id == requirement_id.0).cloned())
+        async fn get_tenant_license_status(
+            &self,
+            tenant_id: &TenantId,
+            requirement_id: &LicenseRequirementId,
+        ) -> Result<Option<TenantLicenseStatusRow>> {
+            Ok(self
+                .statuses
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|row| row.tenant_id == tenant_id.0 && row.requirement_id == requirement_id.0)
+                .cloned())
         }
 
-        async fn upsert_tenant_license_status(&self, _tenant_id: &TenantId, _requirement_id: &LicenseRequirementId, _status: LicenseStatus, _license_number: Option<&str>, _expiry_date: Option<chrono::DateTime<Utc>>) -> Result<TenantLicenseStatusRow> {
+        async fn upsert_tenant_license_status(
+            &self,
+            _tenant_id: &TenantId,
+            _requirement_id: &LicenseRequirementId,
+            _status: LicenseStatus,
+            _license_number: Option<&str>,
+            _expiry_date: Option<chrono::DateTime<Utc>>,
+        ) -> Result<TenantLicenseStatusRow> {
             unimplemented!("not needed for tests")
         }
 
-        async fn create_submission(&self, req: &CreateLicenseSubmissionRequest) -> Result<LicenseSubmissionRow> {
+        async fn create_submission(
+            &self,
+            req: &CreateLicenseSubmissionRequest,
+        ) -> Result<LicenseSubmissionRow> {
             let submission = LicenseSubmissionRow {
                 id: "sub_001".to_string(),
                 tenant_id: req.tenant_id.0.clone(),
@@ -66,17 +120,40 @@ mod tests {
             Ok(submission)
         }
 
-        async fn list_submissions(&self, tenant_id: &TenantId, requirement_id: Option<&LicenseRequirementId>, _limit: i64, _offset: i64) -> Result<Vec<LicenseSubmissionRow>> {
-            Ok(self.submissions.lock().unwrap().iter().filter(|row| {
-                row.tenant_id == tenant_id.0 && requirement_id.is_none_or(|id| row.requirement_id == id.0)
-            }).cloned().collect())
+        async fn list_submissions(
+            &self,
+            tenant_id: &TenantId,
+            requirement_id: Option<&LicenseRequirementId>,
+            _limit: i64,
+            _offset: i64,
+        ) -> Result<Vec<LicenseSubmissionRow>> {
+            Ok(self
+                .submissions
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|row| {
+                    row.tenant_id == tenant_id.0
+                        && requirement_id.is_none_or(|id| row.requirement_id == id.0)
+                })
+                .cloned()
+                .collect())
         }
 
-        async fn update_submission_status(&self, _submission_id: &LicenseSubmissionId, _status: SubmissionStatus, _reviewer_notes: Option<&str>) -> Result<()> {
+        async fn update_submission_status(
+            &self,
+            _submission_id: &LicenseSubmissionId,
+            _status: SubmissionStatus,
+            _reviewer_notes: Option<&str>,
+        ) -> Result<()> {
             Ok(())
         }
 
-        async fn get_upcoming_deadlines(&self, _tenant_id: &TenantId, _days_ahead: i32) -> Result<Vec<(LicenseRequirementRow, Option<TenantLicenseStatusRow>)>> {
+        async fn get_upcoming_deadlines(
+            &self,
+            _tenant_id: &TenantId,
+            _days_ahead: i32,
+        ) -> Result<Vec<(LicenseRequirementRow, Option<TenantLicenseStatusRow>)>> {
             Ok(vec![])
         }
 
@@ -88,19 +165,22 @@ mod tests {
     fn seeded_repo() -> Arc<MockLicensingRepository> {
         let repo = Arc::new(MockLicensingRepository::default());
         let now = Utc::now();
-        repo.requirements.lock().unwrap().push(LicenseRequirementRow {
-            id: "req_vasp".to_string(),
-            name: "VASP License".to_string(),
-            description: "Required".to_string(),
-            license_type: LicenseType::SbvPaymentLicense.as_str().to_string(),
-            regulatory_body: "SBV".to_string(),
-            deadline: None,
-            renewal_period_days: None,
-            required_documents: serde_json::json!(["form-a"]),
-            is_mandatory: true,
-            created_at: now,
-            updated_at: now,
-        });
+        repo.requirements
+            .lock()
+            .unwrap()
+            .push(LicenseRequirementRow {
+                id: "req_vasp".to_string(),
+                name: "VASP License".to_string(),
+                description: "Required".to_string(),
+                license_type: LicenseType::SbvPaymentLicense.as_str().to_string(),
+                regulatory_body: "SBV".to_string(),
+                deadline: None,
+                renewal_period_days: None,
+                required_documents: serde_json::json!(["form-a"]),
+                is_mandatory: true,
+                created_at: now,
+                updated_at: now,
+            });
         repo.statuses.lock().unwrap().push(TenantLicenseStatusRow {
             id: "status_other".to_string(),
             tenant_id: "tenant_other".to_string(),
@@ -125,13 +205,38 @@ mod tests {
         }
     }
 
+    const TEST_ADMIN_JWT_SECRET: &str = "licensing-tests-admin-jwt-secret";
+
+    fn make_admin_jwt(role: &str) -> String {
+        let claims = AdminClaims {
+            sub: "licensing_test_admin".to_string(),
+            email: "licensing-admin@rampos.local".to_string(),
+            role: role.to_string(),
+            iat: Utc::now().timestamp(),
+            exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+            token_type: "access".to_string(),
+        };
+
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(TEST_ADMIN_JWT_SECRET.as_bytes()),
+        )
+        .expect("jwt should encode")
+    }
+
     #[tokio::test]
     async fn get_tenant_status_rejects_cross_tenant_reads() {
-        std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
+        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
         let repo = seeded_repo();
         let repo_state: Arc<dyn LicensingRepository> = repo.clone();
         let mut headers = HeaderMap::new();
-        headers.insert("X-Admin-Key", "admin-secret-key".parse().unwrap());
+        headers.insert(
+            "X-Admin-Authorization",
+            format!("Bearer {}", make_admin_jwt("viewer"))
+                .parse()
+                .unwrap(),
+        );
 
         let err = get_tenant_status(
             headers,
@@ -146,16 +251,22 @@ mod tests {
             ApiError::NotFound(message) => assert!(message.contains("tenant_other")),
             other => panic!("expected not found error, got {other:?}"),
         }
+
+        std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
     }
 
     #[tokio::test]
     async fn submit_license_rejects_viewer_role() {
-        std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
-        std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
+        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
         let repo = seeded_repo();
         let repo_state: Arc<dyn LicensingRepository> = repo.clone();
         let mut headers = HeaderMap::new();
-        headers.insert("X-Admin-Key", "admin-secret-key".parse().unwrap());
+        headers.insert(
+            "X-Admin-Authorization",
+            format!("Bearer {}", make_admin_jwt("viewer"))
+                .parse()
+                .unwrap(),
+        );
 
         let request = SubmitLicenseRequest {
             requirement_id: "req_vasp".to_string(),
@@ -182,12 +293,12 @@ mod tests {
             other => panic!("expected forbidden error, got {other:?}"),
         }
 
-        std::env::remove_var("RAMPOS_ADMIN_ROLE");
+        std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
     }
 
     #[tokio::test]
     async fn get_current_tenant_status_returns_scoped_overview() {
-        std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
+        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
         let repo = seeded_repo();
         let now = Utc::now();
         repo.statuses.lock().unwrap().push(TenantLicenseStatusRow {
@@ -205,15 +316,23 @@ mod tests {
         });
         let repo_state: Arc<dyn LicensingRepository> = repo.clone();
         let mut headers = HeaderMap::new();
-        headers.insert("X-Admin-Key", "admin-secret-key".parse().unwrap());
+        headers.insert(
+            "X-Admin-Authorization",
+            format!("Bearer {}", make_admin_jwt("viewer"))
+                .parse()
+                .unwrap(),
+        );
 
-        let response = get_current_tenant_status(headers, Extension(tenant_ctx()), State(repo_state))
-            .await
-            .unwrap()
-            .0;
+        let response =
+            get_current_tenant_status(headers, Extension(tenant_ctx()), State(repo_state))
+                .await
+                .unwrap()
+                .0;
 
         assert_eq!(response.tenant_id, "tenant_self");
         assert_eq!(response.approved_count, 1);
         assert_eq!(response.licenses.len(), 1);
+
+        std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
     }
 }

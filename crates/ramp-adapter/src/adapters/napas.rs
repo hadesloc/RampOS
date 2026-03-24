@@ -305,12 +305,9 @@ impl NapasAdapter {
             }
         };
 
-        signature::UnparsedPublicKey::new(
-            &signature::RSA_PKCS1_2048_8192_SHA256,
-            public_key_der,
-        )
-        .verify(payload.as_bytes(), &sig_bytes)
-        .is_ok()
+        signature::UnparsedPublicKey::new(&signature::RSA_PKCS1_2048_8192_SHA256, public_key_der)
+            .verify(payload.as_bytes(), &sig_bytes)
+            .is_ok()
     }
 
     /// Convert Napas status string to PayoutStatus

@@ -24,7 +24,9 @@ pub trait SecretProvider: Send + Sync + std::fmt::Debug {
 
     /// Get a secret with a fallback default value.
     async fn get_secret_or(&self, key: &str, default: &str) -> String {
-        self.get_secret(key).await.unwrap_or_else(|_| default.to_string())
+        self.get_secret(key)
+            .await
+            .unwrap_or_else(|_| default.to_string())
     }
 
     /// Provider name for diagnostics (e.g., "env", "vault", "aws-sm")
@@ -44,9 +46,8 @@ pub struct EnvSecretProvider;
 #[async_trait]
 impl SecretProvider for EnvSecretProvider {
     async fn get_secret(&self, key: &str) -> crate::Result<String> {
-        std::env::var(key).map_err(|_| {
-            crate::Error::Config(format!("Secret '{}' not found in environment", key))
-        })
+        std::env::var(key)
+            .map_err(|_| crate::Error::Config(format!("Secret '{}' not found in environment", key)))
     }
 
     fn provider_name(&self) -> &'static str {
@@ -101,7 +102,9 @@ mod tests {
     #[tokio::test]
     async fn test_env_secret_provider_get_or_default() {
         let provider = EnvSecretProvider;
-        let result = provider.get_secret_or("NONEXISTENT_KEY_DEFAULT", "fallback").await;
+        let result = provider
+            .get_secret_or("NONEXISTENT_KEY_DEFAULT", "fallback")
+            .await;
         assert_eq!(result, "fallback");
     }
 

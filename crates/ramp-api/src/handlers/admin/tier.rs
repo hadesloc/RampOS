@@ -103,42 +103,41 @@ pub struct AdminAuth {
 /// Check admin authentication and extract role information.
 ///
 /// SECURITY: Supports two authentication strategies:
-///   1. **JWT Bearer token** (preferred) — `Authorization: Bearer <token>`
+///   1. **JWT Bearer token** (preferred) — `X-Admin-Authorization: Bearer <token>`
 ///      Role is extracted from the JWT claims.
 ///   2. **Legacy X-Admin-Key** (deprecated, transition period) — `X-Admin-Key: <key>`
 ///      Role is derived from server configuration only, never from caller-controlled headers.
 ///
-/// JWT is checked first. If no Bearer token is present, falls back to legacy key.
+/// Admin JWT is checked first. If no JWT header is present, falls back to legacy key.
 pub(crate) fn check_admin_key_with_role(
     headers: &HeaderMap,
     required_role: AdminRole,
 ) -> Result<AdminAuth, ApiError> {
     // ── Strategy 1: JWT Bearer token (preferred) ────────────────────────
-    if headers.get("X-Admin-Key").is_none() {
-        if let Some(token) = super::admin_auth::extract_bearer_token(headers) {
-            if token.split('.').count() == 3 {
-                let claims = super::admin_auth::verify_admin_jwt(token)?;
-                let role = AdminRole::from_str(&claims.role)
-                    .unwrap_or(AdminRole::Viewer);
+    if let Some(token) = extract_admin_bearer_token(headers) {
+        let claims = super::admin_auth::verify_admin_jwt(token)?;
+        let role = AdminRole::from_str(&claims.role).unwrap_or(AdminRole::Viewer);
 
-                if role < required_role {
-                    return Err(ApiError::Forbidden(format!(
-                        "Insufficient permissions. Required: {:?}, Have: {:?}",
-                        required_role, role
-                    )));
-                }
-
-                return Ok(AdminAuth {
-                    role,
-                    user_id: Some(claims.sub),
-                });
-            }
+        if role < required_role {
+            return Err(ApiError::Forbidden(format!(
+                "Insufficient permissions. Required: {:?}, Have: {:?}",
+                required_role, role
+            )));
         }
+
+        return Ok(AdminAuth {
+            role,
+            user_id: Some(claims.sub),
+        });
     }
 
     // ── Strategy 2: Legacy X-Admin-Key (deprecated) ─────────────────────
-    let expected_key = std::env::var("RAMPOS_ADMIN_KEY")
-        .map_err(|_| ApiError::Forbidden("Admin auth required: use Authorization: Bearer <token> or X-Admin-Key".to_string()))?;
+    let expected_key = std::env::var("RAMPOS_ADMIN_KEY").map_err(|_| {
+        ApiError::Forbidden(
+            "Admin auth required: use X-Admin-Authorization: Bearer <token> or X-Admin-Key"
+                .to_string(),
+        )
+    })?;
     let expected_parts: Vec<&str> = expected_key.splitn(2, ':').collect();
     let configured_key = expected_parts[0];
     let configured_role = std::env::var("RAMPOS_ADMIN_ROLE")
@@ -151,7 +150,12 @@ pub(crate) fn check_admin_key_with_role(
     let header_value = headers
         .get("X-Admin-Key")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| ApiError::Forbidden("Admin auth required: use Authorization: Bearer <token> or X-Admin-Key".to_string()))?;
+        .ok_or_else(|| {
+            ApiError::Forbidden(
+                "Admin auth required: use X-Admin-Authorization: Bearer <token> or X-Admin-Key"
+                    .to_string(),
+            )
+        })?;
 
     // Parse format: <key> or <key>:<ignored-suffix>
     let parts: Vec<&str> = header_value.splitn(2, ':').collect();
@@ -190,6 +194,22 @@ pub(crate) fn check_admin_key_with_role(
 pub(crate) fn check_admin_key(headers: &HeaderMap) -> Result<(), ApiError> {
     check_admin_key_with_role(headers, AdminRole::Viewer)?;
     Ok(())
+}
+
+fn extract_admin_bearer_token(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get("X-Admin-Authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))
+        .or_else(|| {
+            super::admin_auth::extract_bearer_token(headers).and_then(|token| {
+                if token.split('.').count() == 3 {
+                    Some(token)
+                } else {
+                    None
+                }
+            })
+        })
 }
 
 /// Check admin key with Operator role requirement
@@ -552,5 +572,44 @@ mod tests {
         let headers = HeaderMap::new();
         let result = check_admin_key(&headers);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_check_admin_key_prefers_admin_jwt_header_over_legacy_key() {
+        use chrono::Utc;
+        use jsonwebtoken::{encode, EncodingKey, Header};
+
+        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", "jwt-priority-test-secret");
+        std::env::set_var("RAMPOS_ADMIN_KEY", "wrong-legacy-key");
+
+        let claims = crate::handlers::admin::admin_auth::AdminClaims {
+            sub: "admin_123".to_string(),
+            email: "admin@example.com".to_string(),
+            role: "admin".to_string(),
+            iat: Utc::now().timestamp(),
+            exp: (Utc::now() + chrono::Duration::minutes(5)).timestamp(),
+            token_type: "access".to_string(),
+        };
+
+        let token = encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret("jwt-priority-test-secret".as_bytes()),
+        )
+        .expect("jwt should encode");
+
+        let mut headers = HeaderMap::new();
+        headers.insert("X-Admin-Key", "definitely-invalid".parse().unwrap());
+        headers.insert(
+            "X-Admin-Authorization",
+            format!("Bearer {token}").parse().unwrap(),
+        );
+
+        let auth = check_admin_key_operator(&headers).expect("jwt header should win");
+        assert_eq!(auth.role, AdminRole::Admin);
+        assert_eq!(auth.user_id.as_deref(), Some("admin_123"));
+
+        std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
+        std::env::remove_var("RAMPOS_ADMIN_KEY");
     }
 }

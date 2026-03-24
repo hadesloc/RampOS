@@ -88,7 +88,10 @@ impl CorridorPackRepository for MockCorridorRepository {
         Ok(())
     }
 
-    async fn upsert_cutoff_policy(&self, request: &UpsertCorridorCutoffPolicyRequest) -> Result<()> {
+    async fn upsert_cutoff_policy(
+        &self,
+        request: &UpsertCorridorCutoffPolicyRequest,
+    ) -> Result<()> {
         let mut records = self.records.lock().expect("records lock");
         if let Some(record) = records
             .iter_mut()
@@ -107,7 +110,10 @@ impl CorridorPackRepository for MockCorridorRepository {
         Ok(())
     }
 
-    async fn upsert_compliance_hook(&self, request: &UpsertCorridorComplianceHookRequest) -> Result<()> {
+    async fn upsert_compliance_hook(
+        &self,
+        request: &UpsertCorridorComplianceHookRequest,
+    ) -> Result<()> {
         let mut records = self.records.lock().expect("records lock");
         if let Some(record) = records
             .iter_mut()
@@ -125,7 +131,10 @@ impl CorridorPackRepository for MockCorridorRepository {
         Ok(())
     }
 
-    async fn upsert_rollout_scope(&self, request: &UpsertCorridorRolloutScopeRequest) -> Result<()> {
+    async fn upsert_rollout_scope(
+        &self,
+        request: &UpsertCorridorRolloutScopeRequest,
+    ) -> Result<()> {
         let mut records = self.records.lock().expect("records lock");
         if let Some(record) = records
             .iter_mut()
@@ -154,20 +163,25 @@ impl CorridorPackRepository for MockCorridorRepository {
             .iter_mut()
             .find(|record| record.corridor_pack_id == request.corridor_pack_id)
         {
-            record.eligibility_rules.push(CorridorEligibilityRuleRecord {
-                eligibility_rule_id: request.eligibility_rule_id.clone(),
-                partner_id: request.partner_id.clone(),
-                entity_type: request.entity_type.clone(),
-                method_family: request.method_family.clone(),
-                amount_bounds: request.amount_bounds.clone(),
-                compliance_requirements: request.compliance_requirements.clone(),
-                metadata: request.metadata.clone(),
-            });
+            record
+                .eligibility_rules
+                .push(CorridorEligibilityRuleRecord {
+                    eligibility_rule_id: request.eligibility_rule_id.clone(),
+                    partner_id: request.partner_id.clone(),
+                    entity_type: request.entity_type.clone(),
+                    method_family: request.method_family.clone(),
+                    amount_bounds: request.amount_bounds.clone(),
+                    compliance_requirements: request.compliance_requirements.clone(),
+                    metadata: request.metadata.clone(),
+                });
         }
         Ok(())
     }
 
-    async fn list_corridor_packs(&self, tenant_id: Option<&str>) -> Result<Vec<CorridorPackRecord>> {
+    async fn list_corridor_packs(
+        &self,
+        tenant_id: Option<&str>,
+    ) -> Result<Vec<CorridorPackRecord>> {
         let records = self.records.lock().expect("records lock");
         Ok(records
             .iter()

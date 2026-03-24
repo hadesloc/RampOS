@@ -19,7 +19,7 @@ This directory contains comprehensive API examples and documentation for integra
 2. Import `postman-environment.json` as an environment
 3. Fill in your credentials in the environment:
    - `API_KEY`: Your tenant API key
-   - `ADMIN_KEY`: Your admin key
+   - `ADMIN_JWT`: Your admin access token (JWT)
    - `TENANT_ID`: Your tenant ID
 4. Start making requests
 
@@ -55,7 +55,8 @@ All API requests (except `/health` and `/ready`) require:
 2. **Timestamp**: `X-Timestamp: <ISO8601_TIMESTAMP>`
 
 Admin endpoints additionally require:
-- **Admin Key**: `X-Admin-Key: <ADMIN_KEY>`
+- **Admin JWT (canonical)**: `X-Admin-Authorization: Bearer <admin-jwt>`
+- **Legacy fallback (deprecated)**: `X-Admin-Key: <ADMIN_KEY>`
 
 ## Key Concepts
 

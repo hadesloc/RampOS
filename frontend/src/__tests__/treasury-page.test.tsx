@@ -16,6 +16,13 @@ const activeResponse = {
     actionMode: "recommendation_only",
     bufferTargetPercent: 20,
     policyHint: "Balanced posture keeps instant-access reserves ahead of parking lanes.",
+    dataSource: "sample",
+    provenance: {
+      sourceKind: "sample",
+      evidenceImportIds: [],
+      freshnessWarning:
+        "This snapshot uses sample data and should NOT be used for production treasury decisions.",
+    },
     floatSlices: [
       {
         segment: "bank:vcb/vnd",
@@ -87,6 +94,12 @@ const stableResponse = {
   ...activeResponse,
   snapshot: {
     ...activeResponse.snapshot,
+    dataSource: "evidence",
+    provenance: {
+      sourceKind: "evidence",
+      evidenceImportIds: ["tei_bank_vcb_001"],
+      freshnessWarning: null,
+    },
     forecasts: [
       {
         asset: "VND",
@@ -132,12 +145,17 @@ describe("TreasuryPage", () => {
     expect(await screen.findByText(/treasury control tower/i)).toBeInTheDocument();
     expect(screen.getByText(/prefund the highest-pressure bank rail/i)).toBeInTheDocument();
     expect(screen.getByText(/recommendation only/i)).toBeInTheDocument();
+    expect(screen.getByText(/source of truth/i)).toBeInTheDocument();
+    expect(screen.getByText(/^sample$/i)).toBeInTheDocument();
+    expect(screen.getByText(/sample fallback in use/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /stable control/i }));
+    fireEvent.click(screen.getByRole("button", { name: /stable scenario/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/treasury posture is healthy/i)).toBeInTheDocument();
     });
+    expect(screen.getByText(/^evidence$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/sample fallback in use/i)).not.toBeInTheDocument();
 
     expect(mockFetch).toHaveBeenNthCalledWith(1, "/api/proxy/v1/admin/treasury/workbench");
     expect(mockFetch).toHaveBeenNthCalledWith(

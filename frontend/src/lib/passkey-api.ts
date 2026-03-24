@@ -1,8 +1,9 @@
 /**
  * Passkey API Client
  *
- * Communicates with the backend passkey endpoints for WebAuthn
- * registration, authentication, and credential management.
+ * Experimental client for backend passkey endpoints.
+ * The shipped portal auth flow is currently constrained and should not treat
+ * these endpoints as a verified end-to-end login/session contract.
  */
 
 import {

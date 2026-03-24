@@ -354,11 +354,7 @@ pub async fn submit_kyc(
 
     app_state
         .user_service
-        .update_user_risk_flags(
-            &tenant_id,
-            &user_id,
-            submission_metadata,
-        )
+        .update_user_risk_flags(&tenant_id, &user_id, submission_metadata)
         .await
         .map_err(|e| ApiError::Internal(format!("Failed to store KYC submission data: {}", e)))?;
 
@@ -392,7 +388,14 @@ pub async fn submit_kyc(
                     // Update user KYC status and tier
                     let new_tier = result.verified_tier.map(|t| t as i16);
                     if let Err(e) = user_service
-                        .update_user(&bg_tenant_id, &bg_user_id, Some(new_status.to_string()), new_tier, None, None)
+                        .update_user(
+                            &bg_tenant_id,
+                            &bg_user_id,
+                            Some(new_status.to_string()),
+                            new_tier,
+                            None,
+                            None,
+                        )
                         .await
                     {
                         tracing::error!(error = %e, "Failed to update user after KYC verification");
@@ -565,8 +568,12 @@ pub async fn get_tier(
     let limits = TierLimits {
         daily_deposit_limit: current_tier.daily_payin_limit_vnd().to_string(),
         daily_withdrawal_limit: current_tier.daily_payout_limit_vnd().to_string(),
-        monthly_deposit_limit: (current_tier.daily_payin_limit_vnd() * rust_decimal::Decimal::from(30)).to_string(),
-        monthly_withdrawal_limit: (current_tier.daily_payout_limit_vnd() * rust_decimal::Decimal::from(30)).to_string(),
+        monthly_deposit_limit: (current_tier.daily_payin_limit_vnd()
+            * rust_decimal::Decimal::from(30))
+        .to_string(),
+        monthly_withdrawal_limit: (current_tier.daily_payout_limit_vnd()
+            * rust_decimal::Decimal::from(30))
+        .to_string(),
     };
 
     // Compute next tier requirements

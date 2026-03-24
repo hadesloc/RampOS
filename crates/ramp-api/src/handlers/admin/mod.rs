@@ -27,6 +27,7 @@ pub mod admin_auth;
 pub mod audit;
 pub mod bridge;
 pub mod commercial_readiness;
+pub mod commercialization_pack;
 pub mod config_bundle;
 pub mod documents;
 pub mod execution_explainability;
@@ -38,16 +39,18 @@ pub mod intent;
 pub mod kyb;
 pub mod ledger;
 pub mod licensing;
+#[cfg(test)]
+mod licensing_tests;
 pub mod limits;
 pub mod liquidity;
 pub mod offramp;
 pub mod onboarding;
-pub mod passport;
 pub mod partners;
+pub mod passport;
 pub mod provider_routing;
-pub mod reports;
-pub mod reconciliation;
 pub mod readiness_gate;
+pub mod reconciliation;
+pub mod reports;
 pub mod rescreening;
 pub mod rfq;
 pub mod risk_lab;
@@ -55,16 +58,16 @@ pub mod rules;
 pub mod sandbox;
 pub mod settlement;
 pub mod tier;
-pub mod treasury;
 pub mod travel_rule;
+pub mod venue_trust;
+pub mod treasury;
 pub mod webhooks;
 pub mod yield_strategy;
-#[cfg(test)]
-mod licensing_tests;
 
 pub use audit::*;
 pub use bridge::*;
 pub use commercial_readiness::*;
+pub use commercialization_pack::*;
 pub use config_bundle::*;
 pub use documents::*;
 pub use execution_explainability::*;
@@ -80,12 +83,12 @@ pub use limits::*;
 pub use liquidity::*;
 pub use offramp::*;
 pub use onboarding::*;
-pub use passport::*;
 pub use partners::*;
+pub use passport::*;
 pub use provider_routing::*;
-pub use reports::*;
-pub use reconciliation::*;
 pub use readiness_gate::*;
+pub use reconciliation::*;
+pub use reports::*;
 pub use rescreening::*;
 pub use rfq::*;
 pub use risk_lab::*;
@@ -93,8 +96,9 @@ pub use rules::*;
 pub use sandbox::*;
 pub use settlement::*;
 pub use tier::*;
-pub use treasury::*;
 pub use travel_rule::*;
+pub use venue_trust::*;
+pub use treasury::*;
 pub use webhooks::*;
 pub use yield_strategy::*;
 
@@ -1156,18 +1160,44 @@ fn map_user_response(user: &UserRow) -> UserResponse {
 #[cfg(test)]
 mod security_tests {
     use super::*;
+    use crate::handlers::admin::admin_auth::AdminClaims;
     use crate::middleware::tenant::{TenantContext, TenantTier};
     use axum::{http::HeaderMap, Json};
     use chrono::{Duration, Utc};
+    use jsonwebtoken::{encode, EncodingKey, Header};
     use ramp_common::types::TenantId;
+
+    const TEST_ADMIN_JWT_SECRET: &str = "admin-mod-security-jwt-secret";
+
+    fn make_admin_jwt(role: &str) -> String {
+        let claims = AdminClaims {
+            sub: "admin_mod_security".to_string(),
+            email: "admin-mod-security@rampos.local".to_string(),
+            role: role.to_string(),
+            iat: Utc::now().timestamp(),
+            exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+            token_type: "access".to_string(),
+        };
+
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(TEST_ADMIN_JWT_SECRET.as_bytes()),
+        )
+        .expect("jwt should encode")
+    }
 
     #[tokio::test]
     async fn create_recon_batch_rejects_viewer_role() {
-        std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
-        std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
+        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
 
         let mut headers = HeaderMap::new();
-        headers.insert("X-Admin-Key", "admin-secret-key".parse().unwrap());
+        headers.insert(
+            "X-Admin-Authorization",
+            format!("Bearer {}", make_admin_jwt("viewer"))
+                .parse()
+                .unwrap(),
+        );
 
         let tenant_ctx = TenantContext {
             tenant_id: TenantId::new("tenant_recon_scope"),
@@ -1190,7 +1220,7 @@ mod security_tests {
             other => panic!("expected forbidden error, got {other:?}"),
         }
 
-        std::env::remove_var("RAMPOS_ADMIN_ROLE");
+        std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
     }
 }
 
@@ -1219,9 +1249,31 @@ fn parse_case_severity(severity: &str) -> Result<CaseSeverity, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::handlers::admin::admin_auth::AdminClaims;
     use crate::middleware::tenant::{TenantContext, TenantTier};
     use axum::{extract::Extension, http::HeaderMap, Json};
+    use jsonwebtoken::{encode, EncodingKey, Header};
     use ramp_common::types::TenantId;
+
+    const TEST_ADMIN_JWT_SECRET: &str = "admin-mod-tests-jwt-secret";
+
+    fn make_admin_jwt(role: &str) -> String {
+        let claims = AdminClaims {
+            sub: "admin_mod_tests".to_string(),
+            email: "admin-mod-tests@rampos.local".to_string(),
+            role: role.to_string(),
+            iat: Utc::now().timestamp(),
+            exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+            token_type: "access".to_string(),
+        };
+
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(TEST_ADMIN_JWT_SECRET.as_bytes()),
+        )
+        .expect("jwt should encode")
+    }
 
     #[test]
     fn test_case_stats_serialization() {
@@ -1247,11 +1299,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_recon_batch_rejects_viewer_role() {
-        std::env::set_var("RAMPOS_ADMIN_KEY", "recon-secret");
-        std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
+        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
 
         let mut headers = HeaderMap::new();
-        headers.insert("X-Admin-Key", "recon-secret".parse().unwrap());
+        headers.insert(
+            "X-Admin-Authorization",
+            format!("Bearer {}", make_admin_jwt("viewer"))
+                .parse()
+                .unwrap(),
+        );
 
         let err = create_recon_batch(
             headers,
@@ -1274,6 +1330,6 @@ mod tests {
             other => panic!("expected forbidden error, got {other:?}"),
         }
 
-        std::env::remove_var("RAMPOS_ADMIN_ROLE");
+        std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
     }
 }

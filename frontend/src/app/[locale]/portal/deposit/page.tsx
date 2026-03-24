@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHeader } from "@/components/layout/page-header";
 import { useTranslations } from "next-intl";
+import { Link } from "@/navigation";
 
 const depositSchema = z.object({
   amount: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, {
@@ -164,6 +165,19 @@ export default function DepositPage() {
       <PageHeader title={t('title')} description={t('description')} />
 
       <div className="max-w-3xl mx-auto space-y-6">
+      <Card className="border-primary/10 bg-primary/5">
+        <CardContent className="space-y-3 py-5">
+          <p className="text-sm font-medium text-foreground">Wallet deposit and venue funding are separate actions.</p>
+          <p className="text-sm text-muted-foreground">
+            This page settles fiat or crypto into your governed wallet. Once the wallet leg is complete,
+            use the dedicated venue funding flow to move those funds into a connected venue.
+          </p>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/portal/venues">Open venue funding</Link>
+          </Button>
+        </CardContent>
+      </Card>
+
       {error && (
         <Alert variant="destructive" className="mb-6">
           <AlertCircle className="h-4 w-4" />
@@ -184,6 +198,7 @@ export default function DepositPage() {
         walletAddress={cryptoDepositInfo?.depositAddress}
         network={cryptoDepositInfo?.network}
         qrCode={cryptoDepositInfo?.qrCodeUrl}
+        venueFundingHref="/portal/venues"
         instructions={
              activeTab === 'vnd' ? (
                 <Form {...form}>

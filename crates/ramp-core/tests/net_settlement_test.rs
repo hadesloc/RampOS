@@ -40,8 +40,12 @@ fn net_settlement_can_build_single_bilateral_proposal_from_settlements() {
         },
     ];
 
-    let proposals = NetSettlementService::new()
-        .build_bilateral_proposals("tenant_demo", "lp_alpha", "USDT", &settlements);
+    let proposals = NetSettlementService::new().build_bilateral_proposals(
+        "tenant_demo",
+        "lp_alpha",
+        "USDT",
+        &settlements,
+    );
 
     assert_eq!(proposals.len(), 1);
     assert_eq!(proposals[0].counterparty_id, "lp_alpha");

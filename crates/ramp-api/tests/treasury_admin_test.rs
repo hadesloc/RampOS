@@ -4,6 +4,7 @@ use axum::{
 };
 use chrono::Utc;
 use hmac::{Hmac, Mac};
+use jsonwebtoken::{encode, EncodingKey, Header};
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{
@@ -13,8 +14,10 @@ use ramp_core::event::InMemoryEventPublisher;
 use ramp_core::repository::tenant::TenantRow;
 use ramp_core::service::{
     ledger::LedgerService, payin::PayinService, payout::PayoutService, trade::TradeService,
+    TreasuryEvidenceImportStore, UpsertTreasuryEvidenceImportRequest,
 };
 use ramp_core::test_utils::*;
+use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -24,7 +27,7 @@ type HmacSha256 = Hmac<Sha256>;
 
 const TEST_API_KEY: &str = "treasury_test_api_key";
 const TEST_API_SECRET: &str = "treasury_test_api_secret";
-const TEST_ADMIN_KEY: &str = "treasury_admin_key";
+const TEST_ADMIN_JWT_SECRET: &str = "treasury-admin-jwt-secret";
 
 struct TestApp {
     router: axum::Router,
@@ -46,13 +49,31 @@ fn generate_signature(
     hex::encode(mac.finalize().into_bytes())
 }
 
-fn build_signed_admin_request(
+fn make_admin_jwt(role: &str) -> String {
+    let claims = ramp_api::handlers::admin::admin_auth::AdminClaims {
+        sub: "treasury_admin_test_user".to_string(),
+        email: "treasury-admin@rampos.local".to_string(),
+        role: role.to_string(),
+        iat: Utc::now().timestamp(),
+        exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+        token_type: "access".to_string(),
+    };
+
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(TEST_ADMIN_JWT_SECRET.as_bytes()),
+    )
+    .expect("jwt should encode")
+}
+
+fn build_signed_admin_jwt_request(
     method: &str,
     uri: &str,
     body: &str,
     api_key: &str,
     api_secret: &str,
-    admin_key: &str,
+    admin_jwt: &str,
 ) -> Request<Body> {
     let timestamp = Utc::now().to_rfc3339();
     let path = uri.split('?').next().unwrap_or(uri);
@@ -64,7 +85,7 @@ fn build_signed_admin_request(
         .header("Authorization", format!("Bearer {api_key}"))
         .header("X-Timestamp", &timestamp)
         .header("X-Signature", signature)
-        .header("X-Admin-Key", admin_key);
+        .header("X-Admin-Authorization", format!("Bearer {admin_jwt}"));
 
     if !body.is_empty() {
         builder = builder.header("Content-Type", "application/json");
@@ -74,6 +95,10 @@ fn build_signed_admin_request(
 }
 
 async fn setup_app(tenant_id: &str) -> TestApp {
+    setup_app_with_pool(tenant_id, None).await
+}
+
+async fn setup_app_with_pool(tenant_id: &str, db_pool: Option<PgPool>) -> TestApp {
     let intent_repo = Arc::new(MockIntentRepository::new());
     let ledger_repo = Arc::new(MockLedgerRepository::new());
     let user_repo = Arc::new(MockUserRepository::new());
@@ -174,13 +199,13 @@ async fn setup_app(tenant_id: &str) -> TestApp {
             Arc::new(ramp_core::stablecoin::MockVnstProtocolDataProvider::new()),
         )),
         event_publisher: event_publisher.clone(),
-        db_pool: None,
+        db_pool,
         ctr_service: None,
         ws_state: None,
         metrics_registry: Arc::new(ramp_core::service::MetricsRegistry::new()),
         document_storage: None,
-            kyc_service: None,
-            kyt_service: None,
+        kyc_service: None,
+        kyt_service: None,
     };
 
     TestApp {
@@ -192,16 +217,17 @@ async fn setup_app(tenant_id: &str) -> TestApp {
 
 #[tokio::test]
 async fn treasury_workbench_returns_recommendation_snapshot() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_treasury_workbench").await;
+    let admin_jwt = make_admin_jwt("viewer");
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/treasury/workbench",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -213,6 +239,11 @@ async fn treasury_workbench_returns_recommendation_snapshot() {
     assert_eq!(payload["actionMode"], "recommendation_only");
     assert!(payload["recommendationCount"].as_u64().unwrap() >= 1);
     assert!(payload["stressAlertCount"].as_u64().unwrap() >= 1);
+    assert_eq!(payload["snapshot"]["dataSource"], "sample");
+    assert!(payload["snapshot"]["provenance"]["freshnessWarning"]
+        .as_str()
+        .unwrap()
+        .contains("sample data"));
     assert!(payload["snapshot"]["recommendations"]
         .as_array()
         .unwrap()
@@ -221,17 +252,103 @@ async fn treasury_workbench_returns_recommendation_snapshot() {
 }
 
 #[tokio::test]
-async fn treasury_workbench_supports_stable_fixture_scenario() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
-    let app = setup_app("tenant_treasury_stable").await;
+async fn treasury_workbench_prefers_evidence_source_when_import_exists() {
+    let database_url = match std::env::var("DATABASE_URL") {
+        Ok(url) => url,
+        Err(_) => return,
+    };
 
-    let request = build_signed_admin_request(
+    let pool = PgPool::connect(&database_url)
+        .await
+        .expect("database connection should succeed");
+
+    sqlx::migrate!("../../migrations")
+        .run(&pool)
+        .await
+        .expect("migrations should succeed");
+
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
+    let tenant_id = "tenant_treasury_evidence_default";
+    let app = setup_app_with_pool(tenant_id, Some(pool.clone())).await;
+    let admin_jwt = make_admin_jwt("viewer");
+
+    sqlx::query(
+        r#"
+        INSERT INTO tenants (
+            id, name, status, api_key_hash, webhook_secret_hash, config, created_at, updated_at
+        ) VALUES ($1, 'Treasury Evidence Tenant', 'ACTIVE', 'hash', 'secret', '{}'::jsonb, NOW(), NOW())
+        ON CONFLICT (id) DO NOTHING
+        "#,
+    )
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .expect("seed tenant");
+
+    let store = TreasuryEvidenceImportStore::new(pool.clone());
+    let unique = Utc::now()
+        .timestamp_nanos_opt()
+        .unwrap_or_else(|| Utc::now().timestamp_micros() * 1_000);
+    let evidence_id = format!("tei_treasury_{unique}");
+    let idempotency_key = format!("treasury_import_{unique}");
+    let now = Utc::now();
+
+    store
+        .import_evidence(&UpsertTreasuryEvidenceImportRequest {
+            evidence_import_id: evidence_id.clone(),
+            tenant_id: tenant_id.to_string(),
+            source_family: "bank".to_string(),
+            source_ref: "bank://vcb/main".to_string(),
+            account_scope: "bank:vcb/vnd".to_string(),
+            asset_code: "VND".to_string(),
+            idempotency_key,
+            snapshot_at: now,
+            available_balance: Decimal::from(5000000_i64),
+            reserved_balance: Decimal::from(1200000_i64),
+            source_lineage: serde_json::json!({"statementId":"stmt_treasury_001"}),
+            metadata: serde_json::json!({"source":"bank_statement"}),
+        })
+        .await
+        .expect("insert treasury evidence import");
+
+    let request = build_signed_admin_jwt_request(
+        "GET",
+        "/v1/admin/treasury/workbench",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        &admin_jwt,
+    );
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(payload["snapshot"]["dataSource"], "evidence");
+    assert!(payload["snapshot"]["provenance"]["evidenceImportIds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id.as_str() == Some(evidence_id.as_str())));
+    assert!(payload["snapshot"]["provenance"]["freshnessWarning"].is_null());
+    std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
+}
+
+#[tokio::test]
+async fn treasury_workbench_supports_stable_fixture_scenario() {
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
+    let app = setup_app("tenant_treasury_stable").await;
+    let admin_jwt = make_admin_jwt("viewer");
+
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/treasury/workbench?scenario=stable",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -249,16 +366,17 @@ async fn treasury_workbench_supports_stable_fixture_scenario() {
 
 #[tokio::test]
 async fn treasury_workbench_includes_safeguarding_and_reserve_overlays() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_treasury_overlays").await;
+    let admin_jwt = make_admin_jwt("viewer");
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/treasury/workbench",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -267,7 +385,13 @@ async fn treasury_workbench_includes_safeguarding_and_reserve_overlays() {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
-    assert!(payload["snapshot"]["safeguardingOverlays"].as_array().unwrap().len() >= 1);
+    assert!(
+        payload["snapshot"]["safeguardingOverlays"]
+            .as_array()
+            .unwrap()
+            .len()
+            >= 1
+    );
     assert_eq!(
         payload["snapshot"]["safeguardingOverlays"][0]["ledgerMode"],
         "overlay_only"
@@ -288,16 +412,17 @@ async fn treasury_workbench_includes_safeguarding_and_reserve_overlays() {
 
 #[tokio::test]
 async fn treasury_export_json_includes_overlay_context() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_treasury_export_json").await;
+    let admin_jwt = make_admin_jwt("viewer");
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/treasury/export?format=json",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -322,16 +447,17 @@ async fn treasury_export_json_includes_overlay_context() {
 
 #[tokio::test]
 async fn treasury_workbench_export_returns_csv_attachment() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_treasury_export").await;
+    let admin_jwt = make_admin_jwt("viewer");
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/treasury/export?format=csv",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();

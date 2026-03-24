@@ -9,6 +9,7 @@ interface DepositCardProps {
   type?: 'VND' | 'CRYPTO';
   onTypeChange?: (type: 'VND' | 'CRYPTO') => void;
   instructions?: React.ReactNode;
+  venueFundingHref?: string;
   qrCode?: string;
   loading?: boolean;
   bankDetails?: {
@@ -25,6 +26,7 @@ export function DepositCard({
     type = 'VND',
     onTypeChange,
     instructions,
+    venueFundingHref,
     qrCode,
     loading,
     bankDetails,
@@ -61,8 +63,10 @@ export function DepositCard({
     return (
         <Card className="w-full">
             <CardHeader>
-                <CardTitle>Deposit</CardTitle>
-                <CardDescription>Select a payment method to deposit funds</CardDescription>
+                <CardTitle>Deposit to Wallet</CardTitle>
+                <CardDescription>
+                    Fund your governed RampOS wallet first. Venue funding remains a separate wallet-to-venue workflow.
+                </CardDescription>
             </CardHeader>
             <CardContent>
                 <Tabs value={activeType} onValueChange={handleTypeChange} className="w-full">
@@ -128,6 +132,18 @@ export function DepositCard({
                              {instructions && (
                                 <div className="mt-6 pt-4 border-t text-sm text-muted-foreground">
                                     {instructions}
+                                </div>
+                            )}
+
+                            {venueFundingHref && (
+                                <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                                    <p className="text-sm font-medium text-foreground">Need to move wallet funds into a venue?</p>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        Finish the wallet deposit first, then continue in the dedicated venue funding workspace.
+                                    </p>
+                                    <Button asChild variant="outline" size="sm" className="mt-3">
+                                        <a href={venueFundingHref}>Open Venue Funding</a>
+                                    </Button>
                                 </div>
                             )}
                         </div>

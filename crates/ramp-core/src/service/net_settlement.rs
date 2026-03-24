@@ -63,10 +63,7 @@ impl NetSettlementService {
         Self
     }
 
-    pub fn build_workbench(
-        &self,
-        scenario: Option<&str>,
-    ) -> NetSettlementWorkbenchSnapshot {
+    pub fn build_workbench(&self, scenario: Option<&str>) -> NetSettlementWorkbenchSnapshot {
         let proposals = sample_proposals(scenario);
         let alerts = build_alerts(&proposals);
 
@@ -126,7 +123,11 @@ impl NetSettlementService {
             checker_user_id: None,
             delegated_approver_id: Some("treasury_delegate_demo".to_string()),
             delegation_expires_at: Some((Utc::now() + Duration::hours(4)).to_rfc3339()),
-            approval_reference_id: Some(format!("approval_{}_{}", counterparty_id, asset.to_ascii_lowercase())),
+            approval_reference_id: Some(format!(
+                "approval_{}_{}",
+                counterparty_id,
+                asset.to_ascii_lowercase()
+            )),
             summary: format!(
                 "Bilateral net settlement against {} leaves a {} {} position awaiting approval.",
                 counterparty_id,
@@ -192,9 +193,8 @@ fn sample_proposals(scenario: Option<&str>) -> Vec<NetSettlementProposal> {
             delegated_approver_id: Some("treasury_delegate_demo".to_string()),
             delegation_expires_at: Some((Utc::now() + Duration::hours(2)).to_rfc3339()),
             approval_reference_id: Some("approval_pending_lp_alpha".to_string()),
-            summary:
-                "Approval queue is holding a bilateral payout recommendation for lp_alpha."
-                    .to_string(),
+            summary: "Approval queue is holding a bilateral payout recommendation for lp_alpha."
+                .to_string(),
         }];
     }
 
@@ -243,9 +243,8 @@ fn sample_proposals(scenario: Option<&str>) -> Vec<NetSettlementProposal> {
             delegated_approver_id: None,
             delegation_expires_at: None,
             approval_reference_id: Some("approval_active_bank_vcb".to_string()),
-            summary:
-                "bank_vcb remains net receivable; keep this bilateral package approval-gated."
-                    .to_string(),
+            summary: "bank_vcb remains net receivable; keep this bilateral package approval-gated."
+                .to_string(),
         },
     ]
 }
@@ -256,13 +255,17 @@ fn build_alerts(proposals: &[NetSettlementProposal]) -> Vec<NetSettlementAlert> 
             id: "net_settlement_clear".to_string(),
             severity: "low".to_string(),
             title: "No bilateral settlement package is required".to_string(),
-            summary: "Current settlement rows do not produce a material bilateral netting proposal."
-                .to_string(),
+            summary:
+                "Current settlement rows do not produce a material bilateral netting proposal."
+                    .to_string(),
         }];
     }
 
     let mut alerts = Vec::new();
-    if proposals.iter().any(|proposal| proposal.status == "pending_approval") {
+    if proposals
+        .iter()
+        .any(|proposal| proposal.status == "pending_approval")
+    {
         alerts.push(NetSettlementAlert {
             id: "net_settlement_pending_approval".to_string(),
             severity: "medium".to_string(),

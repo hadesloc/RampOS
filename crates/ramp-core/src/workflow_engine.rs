@@ -6,8 +6,9 @@
 //! - `InProcessEngine`: Executes workflows in-process using tokio tasks. Suitable for
 //!   development and testing. State is stored in memory (lost on restart).
 //!
-//! - `TemporalEngine`: Connects to a real Temporal server via gRPC for production use.
-//!   Provides durable execution, automatic retries, and workflow visibility.
+//! - `TemporalEngine`: A transitional Temporal adapter. It submits via gRPC when
+//!   reachable, but still relies on in-process fallback behavior for execution,
+//!   degraded signal/cancel handling, and last-known local status.
 //!
 //! The engine is selected at startup based on the `TEMPORAL_URL` environment variable:
 //! - If `TEMPORAL_URL` is set: Uses `TemporalEngine` connected to that server.
@@ -17,6 +18,11 @@
 //!
 //! When using `InProcessEngine`, workflow state can optionally be persisted to the
 //! database via `WorkflowStateRepository` to survive restarts in non-Temporal mode.
+//!
+//! Runtime truth: the presence of this abstraction does not by itself mean the
+//! main `ramp-api` runtime already uses it as the authoritative workflow control
+//! path. Treat `TemporalEngine` as transitional until operator-facing docs and
+//! readiness surfaces explicitly say otherwise.
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -872,7 +878,10 @@ mod tests {
             })
             .await
             .unwrap();
-        assert!(payin_id.starts_with("payin-"), "payin ID must start with 'payin-'");
+        assert!(
+            payin_id.starts_with("payin-"),
+            "payin ID must start with 'payin-'"
+        );
 
         let payout_id = engine
             .start_payout(PayoutWorkflowInput {
@@ -889,7 +898,10 @@ mod tests {
             })
             .await
             .unwrap();
-        assert!(payout_id.starts_with("payout-"), "payout ID must start with 'payout-'");
+        assert!(
+            payout_id.starts_with("payout-"),
+            "payout ID must start with 'payout-'"
+        );
 
         let trade_id = engine
             .start_trade(TradeWorkflowInput {
@@ -905,7 +917,10 @@ mod tests {
             })
             .await
             .unwrap();
-        assert!(trade_id.starts_with("trade-"), "trade ID must start with 'trade-'");
+        assert!(
+            trade_id.starts_with("trade-"),
+            "trade ID must start with 'trade-'"
+        );
     }
 
     #[tokio::test]

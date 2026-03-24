@@ -22,6 +22,9 @@ use crate::event::EventPublisher;
 use crate::repository::{
     intent::{IntentRepository, IntentRow},
     ledger::LedgerRepository,
+    onchain_observation::{
+        OnchainObservationRepository, OnchainObservationStatus, UpsertOnchainObservationRequest,
+    },
     user::UserRepository,
 };
 use crate::service::withdraw_policy_provider::IntentBasedWithdrawPolicyDataProvider;
@@ -83,6 +86,7 @@ pub struct WithdrawService {
     ledger_repo: Arc<dyn LedgerRepository>,
     user_repo: Arc<dyn UserRepository>,
     event_publisher: Arc<dyn EventPublisher>,
+    onchain_observation_repo: Option<Arc<dyn OnchainObservationRepository>>,
     /// Optional policy engine for comprehensive policy checking
     policy_engine: Option<Arc<WithdrawPolicyEngine>>,
     /// KYT score threshold for flagging (0.0 - 1.0, higher = riskier)
@@ -103,6 +107,7 @@ impl WithdrawService {
             ledger_repo,
             user_repo,
             event_publisher,
+            onchain_observation_repo: None,
             policy_engine: None,
             kyt_threshold: 0.7,
             max_withdraw_amount: Decimal::from(100), // 100 units max per tx
@@ -118,6 +123,14 @@ impl WithdrawService {
     /// Create a withdraw service with custom max amount
     pub fn with_max_amount(mut self, max_amount: Decimal) -> Self {
         self.max_withdraw_amount = max_amount;
+        self
+    }
+
+    pub fn with_onchain_observation_repo(
+        mut self,
+        repo: Arc<dyn OnchainObservationRepository>,
+    ) -> Self {
+        self.onchain_observation_repo = Some(repo);
         self
     }
 
@@ -174,6 +187,7 @@ impl WithdrawService {
             ledger_repo,
             user_repo,
             event_publisher,
+            onchain_observation_repo: None,
             policy_engine: Some(Arc::new(policy_engine)),
             kyt_threshold: 0.7,
             max_withdraw_amount: Decimal::from(100),
@@ -568,6 +582,8 @@ impl WithdrawService {
         }
 
         let crypto_currency = LedgerCurrency::from_symbol(&intent.currency);
+        self.upsert_onchain_observation_for_confirm(&intent, &req)
+            .await?;
 
         if req.success {
             // Update state to confirmed
@@ -648,6 +664,57 @@ impl WithdrawService {
                 "Withdraw transaction failed - funds returned to user"
             );
         }
+
+        Ok(())
+    }
+
+    async fn upsert_onchain_observation_for_confirm(
+        &self,
+        intent: &IntentRow,
+        req: &ConfirmWithdrawRequest,
+    ) -> Result<()> {
+        let Some(repo) = &self.onchain_observation_repo else {
+            return Ok(());
+        };
+        let (Some(chain_id), Some(from_address), Some(to_address)) = (
+            intent
+                .chain_id
+                .as_ref()
+                .and_then(|value| value.parse::<i64>().ok()),
+            intent.from_address.clone(),
+            intent.to_address.clone(),
+        ) else {
+            return Ok(());
+        };
+        let now = Utc::now();
+
+        repo.upsert_observation(&UpsertOnchainObservationRequest {
+            tenant_id: req.tenant_id.0.clone(),
+            intent_id: Some(req.intent_id.0.clone()),
+            offramp_intent_id: None,
+            tx_hash: req.tx_hash.0.clone(),
+            chain_id,
+            asset_code: intent.currency.clone(),
+            amount: intent.amount,
+            from_address,
+            to_address,
+            status: if req.success {
+                OnchainObservationStatus::Confirmed
+            } else {
+                OnchainObservationStatus::Failed
+            },
+            confirmations: if req.success { 1 } else { 0 },
+            required_confirmations: 1,
+            block_number: Some(req.block_number as i64),
+            observation_source: "withdraw_confirm".to_string(),
+            raw_payload: None,
+            metadata: serde_json::json!({
+                "intentId": req.intent_id.0,
+            }),
+            observed_at: now,
+            confirmed_at: req.success.then_some(now),
+        })
+        .await?;
 
         Ok(())
     }
@@ -832,13 +899,81 @@ fn symbol_to_ledger_currency(symbol: &CryptoSymbol) -> LedgerCurrency {
 mod tests {
     use super::*;
     use crate::event::InMemoryEventPublisher;
+    use crate::repository::onchain_observation::{
+        OnchainObservationRepository, OnchainObservationRow, UpsertOnchainObservationRequest,
+    };
     use crate::repository::user::UserRow;
     use crate::test_utils::{MockIntentRepository, MockLedgerRepository, MockUserRepository};
+    use async_trait::async_trait;
     use ramp_compliance::{
         InMemoryCaseStore, MockTransactionHistoryStore, MockWithdrawPolicyDataProvider,
         WithdrawPolicyConfig,
     };
     use rust_decimal_macros::dec;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone, Default)]
+    struct SpyOnchainObservationRepository {
+        writes: Arc<Mutex<Vec<UpsertOnchainObservationRequest>>>,
+    }
+
+    #[async_trait]
+    impl OnchainObservationRepository for SpyOnchainObservationRepository {
+        async fn upsert_observation(
+            &self,
+            request: &UpsertOnchainObservationRequest,
+        ) -> Result<OnchainObservationRow> {
+            self.writes.lock().unwrap().push(request.clone());
+            Ok(OnchainObservationRow {
+                id: "OCO_TEST".to_string(),
+                tenant_id: request.tenant_id.clone(),
+                intent_id: request.intent_id.clone(),
+                offramp_intent_id: request.offramp_intent_id.clone(),
+                tx_hash: request.tx_hash.clone(),
+                chain_id: request.chain_id,
+                asset_code: request.asset_code.clone(),
+                amount: request.amount,
+                from_address: request.from_address.clone(),
+                to_address: request.to_address.clone(),
+                status: request.status.as_str().to_string(),
+                confirmations: request.confirmations,
+                required_confirmations: request.required_confirmations,
+                block_number: request.block_number,
+                observation_source: request.observation_source.clone(),
+                raw_payload: request.raw_payload.clone(),
+                metadata: request.metadata.clone(),
+                observed_at: request.observed_at,
+                confirmed_at: request.confirmed_at,
+                created_at: request.observed_at,
+                updated_at: request.observed_at,
+            })
+        }
+
+        async fn get_by_tx_hash(
+            &self,
+            _tenant_id: &TenantId,
+            _chain_id: i64,
+            _tx_hash: &str,
+        ) -> Result<Option<OnchainObservationRow>> {
+            Ok(None)
+        }
+
+        async fn list_by_offramp_intent(
+            &self,
+            _tenant_id: &TenantId,
+            _offramp_intent_id: &str,
+        ) -> Result<Vec<OnchainObservationRow>> {
+            Ok(Vec::new())
+        }
+
+        async fn list_by_intent(
+            &self,
+            _tenant_id: &TenantId,
+            _intent_id: &str,
+        ) -> Result<Vec<OnchainObservationRow>> {
+            Ok(Vec::new())
+        }
+    }
 
     fn create_test_user() -> UserRow {
         UserRow {
@@ -1177,6 +1312,74 @@ mod tests {
         // Verify ledger transactions (initiate + confirm)
         let txs = ledger_repo.transactions.lock().unwrap();
         assert_eq!(txs.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_confirm_withdraw_writes_onchain_observation_when_fields_exist() {
+        let intent_repo = Arc::new(MockIntentRepository::new());
+        let ledger_repo = Arc::new(MockLedgerRepository::new());
+        let user_repo = Arc::new(MockUserRepository::new());
+        let event_publisher = Arc::new(InMemoryEventPublisher::new());
+        let observation_repo = Arc::new(SpyOnchainObservationRepository::default());
+
+        let mut user = create_test_user();
+        user.kyc_tier = 2;
+        user_repo.add_user(user);
+
+        ledger_repo.set_balance(
+            &TenantId::new("tenant1"),
+            Some(&UserId::new("user1")),
+            &AccountType::LiabilityUserCrypto,
+            &LedgerCurrency::ETH,
+            dec!(5.0),
+        );
+
+        let service =
+            WithdrawService::new(intent_repo.clone(), ledger_repo, user_repo, event_publisher)
+                .with_policy_engine(create_test_policy_engine())
+                .with_onchain_observation_repo(observation_repo.clone());
+
+        let create_res = service
+            .create_withdraw(CreateWithdrawRequest {
+                tenant_id: TenantId::new("tenant1"),
+                user_id: UserId::new("user1"),
+                chain_id: ChainId::Ethereum,
+                token_address: None,
+                amount: dec!(1.0),
+                symbol: CryptoSymbol::ETH,
+                to_address: WalletAddress::new("0x2222222222222222222222222222222222222222"),
+                idempotency_key: None,
+                metadata: serde_json::json!({}),
+            })
+            .await
+            .unwrap();
+
+        {
+            let mut intents = intent_repo.intents.lock().unwrap();
+            let intent = intents
+                .iter_mut()
+                .find(|item| item.id == create_res.intent_id.0)
+                .unwrap();
+            intent.state = WithdrawState::Confirming.to_string();
+            intent.from_address = Some("0x3333333333333333333333333333333333333333".to_string());
+        }
+
+        service
+            .confirm_withdraw(ConfirmWithdrawRequest {
+                tenant_id: TenantId::new("tenant1"),
+                intent_id: create_res.intent_id,
+                tx_hash: TxHash::new("0xwithdrawtx"),
+                block_number: 999,
+                success: true,
+            })
+            .await
+            .unwrap();
+
+        let writes = observation_repo.writes.lock().unwrap();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(writes[0].observation_source, "withdraw_confirm");
+        assert_eq!(writes[0].status, OnchainObservationStatus::Confirmed);
+        assert_eq!(writes[0].block_number, Some(999));
     }
 
     #[tokio::test]

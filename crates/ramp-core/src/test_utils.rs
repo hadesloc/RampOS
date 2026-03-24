@@ -131,6 +131,7 @@ pub fn sandbox_offramp_fixture(tenant_id: &TenantId, user_id: &UserId) -> Sandbo
             id: "sandbox_offramp_baseline".to_string(),
             tenant_id: tenant_id.0.clone(),
             user_id: user_id.0.clone(),
+            chain_id: Some(137),
             crypto_asset: "USDT".to_string(),
             crypto_amount: Decimal::new(250, 0),
             exchange_rate: Decimal::from(25_400),
@@ -1199,9 +1200,11 @@ impl WebhookRepository for MockWebhookRepository {
     ) -> Result<()> {
         let mut events = self.events.lock().unwrap();
         if let Some(event) = events.iter_mut().find(|e| e.id == id.0) {
-            event.status = "FAILED".to_string();
+            event.status = "PENDING".to_string();
             event.last_error = Some(error.to_string());
             event.next_attempt_at = Some(next_attempt_at);
+            event.delivered_at = None;
+            event.response_status = None;
             event.attempts += 1;
         }
         Ok(())
@@ -1212,6 +1215,9 @@ impl WebhookRepository for MockWebhookRepository {
         if let Some(event) = events.iter_mut().find(|e| e.id == id.0) {
             event.status = "PERMANENTLY_FAILED".to_string();
             event.last_error = Some(error.to_string());
+            event.next_attempt_at = None;
+            event.delivered_at = None;
+            event.response_status = None;
         }
         Ok(())
     }
@@ -1265,6 +1271,9 @@ impl WebhookRepository for MockWebhookRepository {
         {
             event.status = "PENDING".to_string();
             event.next_attempt_at = Some(Utc::now());
+            event.last_error = None;
+            event.delivered_at = None;
+            event.response_status = None;
         }
         Ok(())
     }

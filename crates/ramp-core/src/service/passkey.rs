@@ -85,7 +85,9 @@ impl PasskeyService {
     /// This backend is intended for focused tests and local ceremony simulation.
     pub fn new() -> Self {
         Self {
-            backend: PasskeyBackend::InMemory(Arc::new(RwLock::new(InMemoryPasskeyStore::default()))),
+            backend: PasskeyBackend::InMemory(Arc::new(RwLock::new(
+                InMemoryPasskeyStore::default(),
+            ))),
         }
     }
 
@@ -206,7 +208,9 @@ impl PasskeyService {
 
                 match credential {
                     Some(credential) => Ok(credential),
-                    None if user_exists => Err(PasskeyError::CredentialNotFound(credential_id.to_string())),
+                    None if user_exists => {
+                        Err(PasskeyError::CredentialNotFound(credential_id.to_string()))
+                    }
                     None => Err(PasskeyError::UserNotFound(user_id.to_string())),
                 }
             }
@@ -289,7 +293,9 @@ impl PasskeyService {
                 let credential = user_creds
                     .iter_mut()
                     .find(|c| c.credential_id == request.credential_id)
-                    .ok_or_else(|| PasskeyError::CredentialNotFound(request.credential_id.clone()))?;
+                    .ok_or_else(|| {
+                        PasskeyError::CredentialNotFound(request.credential_id.clone())
+                    })?;
 
                 credential.smart_account_address = Some(request.smart_account_address.clone());
             }
@@ -418,13 +424,12 @@ impl PasskeyService {
     async fn user_has_any_credential(&self, user_id: &str) -> Result<bool, PasskeyError> {
         match &self.backend {
             PasskeyBackend::Postgres(pool) => {
-                let row: Option<(i64,)> = sqlx::query_as(
-                    "SELECT COUNT(*) FROM passkey_credentials WHERE user_id = $1",
-                )
-                .bind(user_id)
-                .fetch_optional(pool)
-                .await
-                .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
+                let row: Option<(i64,)> =
+                    sqlx::query_as("SELECT COUNT(*) FROM passkey_credentials WHERE user_id = $1")
+                        .bind(user_id)
+                        .fetch_optional(pool)
+                        .await
+                        .map_err(|e| PasskeyError::DatabaseError(e.to_string()))?;
 
                 Ok(row.map(|(count,)| count > 0).unwrap_or(false))
             }

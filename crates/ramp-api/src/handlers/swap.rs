@@ -1,17 +1,20 @@
 use axum::{
     extract::Query,
     routing::{get, post},
-    Extension,
-    Json, Router,
+    Extension, Json, Router,
 };
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::{Mutex, OnceLock}};
+use std::{
+    collections::HashMap,
+    sync::{Mutex, OnceLock},
+};
 
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
 
-static SWAP_HISTORY: OnceLock<Mutex<HashMap<String, Vec<SwapTransactionResponse>>>> = OnceLock::new();
+static SWAP_HISTORY: OnceLock<Mutex<HashMap<String, Vec<SwapTransactionResponse>>>> =
+    OnceLock::new();
 
 fn history_store() -> &'static Mutex<HashMap<String, Vec<SwapTransactionResponse>>> {
     SWAP_HISTORY.get_or_init(|| Mutex::new(HashMap::new()))
@@ -119,10 +122,16 @@ pub async fn get_quote(
     let to_token = query.to_token.to_uppercase();
 
     if !supported_tokens().contains(&from_token.as_str()) {
-        return Err(ApiError::Validation(format!("unsupported from_token {}", from_token)));
+        return Err(ApiError::Validation(format!(
+            "unsupported from_token {}",
+            from_token
+        )));
     }
     if !supported_tokens().contains(&to_token.as_str()) {
-        return Err(ApiError::Validation(format!("unsupported to_token {}", to_token)));
+        return Err(ApiError::Validation(format!(
+            "unsupported to_token {}",
+            to_token
+        )));
     }
     if from_token == to_token {
         return Err(ApiError::Validation(
@@ -157,7 +166,9 @@ pub async fn execute_swap(
         return Err(ApiError::Validation("quoteId is required".to_string()));
     }
     if request.slippage < 0.0 {
-        return Err(ApiError::Validation("slippage must be non-negative".to_string()));
+        return Err(ApiError::Validation(
+            "slippage must be non-negative".to_string(),
+        ));
     }
 
     let from_token = request.from_token.to_uppercase();
@@ -199,7 +210,10 @@ pub async fn get_history(
     let store = history_store()
         .lock()
         .map_err(|_| ApiError::Internal("swap history lock poisoned".to_string()))?;
-    let tenant_history = store.get(&tenant_ctx.tenant_id.0).cloned().unwrap_or_default();
+    let tenant_history = store
+        .get(&tenant_ctx.tenant_id.0)
+        .cloned()
+        .unwrap_or_default();
     let total = tenant_history.len();
     let start = (page - 1) * per_page;
     let data = tenant_history
@@ -233,11 +247,14 @@ mod tests {
 
     #[tokio::test]
     async fn quote_rejects_same_token_pair() {
-        let result = get_quote(Extension(tenant_ctx()), Query(SwapQuoteQuery {
-            from_token: "USDC".to_string(),
-            to_token: "USDC".to_string(),
-            amount: "10".to_string(),
-        }))
+        let result = get_quote(
+            Extension(tenant_ctx()),
+            Query(SwapQuoteQuery {
+                from_token: "USDC".to_string(),
+                to_token: "USDC".to_string(),
+                amount: "10".to_string(),
+            }),
+        )
         .await;
 
         assert!(matches!(result, Err(ApiError::Validation(_))));
@@ -247,23 +264,29 @@ mod tests {
     async fn execute_swap_persists_history() {
         history_store().lock().unwrap().clear();
 
-        let tx = execute_swap(Extension(tenant_ctx()), Json(ExecuteSwapRequest {
-            quote_id: "quote_test".to_string(),
-            from_token: "ETH".to_string(),
-            to_token: "USDC".to_string(),
-            amount: "1.5".to_string(),
-            slippage: 0.5,
-        }))
+        let tx = execute_swap(
+            Extension(tenant_ctx()),
+            Json(ExecuteSwapRequest {
+                quote_id: "quote_test".to_string(),
+                from_token: "ETH".to_string(),
+                to_token: "USDC".to_string(),
+                amount: "1.5".to_string(),
+                slippage: 0.5,
+            }),
+        )
         .await
         .expect("swap should succeed")
         .0;
 
         assert_eq!(tx.status, "success");
 
-        let history = get_history(Extension(tenant_ctx()), Query(HistoryQuery {
-            page: Some(1),
-            per_page: Some(10),
-        }))
+        let history = get_history(
+            Extension(tenant_ctx()),
+            Query(HistoryQuery {
+                page: Some(1),
+                per_page: Some(10),
+            }),
+        )
         .await
         .expect("history should load")
         .0;

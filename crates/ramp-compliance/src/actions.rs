@@ -223,6 +223,9 @@ mod tests {
             .await
             .expect("case lookup should succeed");
 
-        assert!(case.is_some(), "expected persisted case to reuse generated id");
+        assert!(
+            case.is_some(),
+            "expected persisted case to reuse generated id"
+        );
     }
 }

@@ -51,6 +51,11 @@ pub struct WebhookReplayResponse {
     pub event_id: String,
     pub status: String,
     pub event_type: String,
+    pub event_status: String,
+    pub next_attempt_at: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+    pub response_status: Option<i32>,
+    pub delivered_at: Option<DateTime<Utc>>,
 }
 
 fn default_limit() -> i64 {
@@ -241,6 +246,11 @@ pub async fn replay_webhook_event(
         event_id: event.id,
         status: "REPLAY_SCHEDULED".to_string(),
         event_type: event.event_type,
+        event_status: event.status,
+        next_attempt_at: event.next_attempt_at,
+        last_error: event.last_error,
+        response_status: event.response_status,
+        delivered_at: event.delivered_at,
     }))
 }
 

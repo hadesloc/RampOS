@@ -113,7 +113,8 @@ services:
       RAMPOS__NATS__URL: nats://nats:4222
       RAMPOS__SERVER__HOST: 0.0.0.0
       RAMPOS__SERVER__PORT: 8080
-      RAMPOS_ADMIN_KEY: ${RAMPOS_ADMIN_KEY:?RAMPOS_ADMIN_KEY must be set}
+      RAMPOS_ADMIN_JWT_SECRET: ${RAMPOS_ADMIN_JWT_SECRET:?RAMPOS_ADMIN_JWT_SECRET must be set}
+      RAMPOS_ADMIN_KEY: ${RAMPOS_ADMIN_KEY:-}
       RAMPOS_ADMIN_ROLE: ${RAMPOS_ADMIN_ROLE:-operator}
       JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
@@ -149,6 +150,10 @@ services:
           memory: 64M
     environment:
       NODE_ENV: production
+      API_URL: ${API_URL:-http://api:8080}
+      API_KEY: ${API_KEY:-}
+      API_SECRET: ${API_SECRET:-}
+      RAMPOS_ADMIN_JWT_SECRET: ${RAMPOS_ADMIN_JWT_SECRET:?RAMPOS_ADMIN_JWT_SECRET must be set}
     depends_on:
       api:
         condition: service_healthy

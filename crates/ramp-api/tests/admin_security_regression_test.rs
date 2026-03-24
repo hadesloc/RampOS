@@ -5,6 +5,7 @@ use axum::{
 };
 use chrono::Utc;
 use hmac::{Hmac, Mac};
+use jsonwebtoken::{encode, EncodingKey, Header};
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_common::licensing::{LicenseRequirementId, LicenseStatus, SubmissionStatus};
@@ -248,6 +249,56 @@ fn build_signed_admin_request(
     builder.body(Body::from(body.to_string())).unwrap()
 }
 
+fn make_admin_jwt(role: &str, secret: &str) -> String {
+    let claims = ramp_api::handlers::admin::admin_auth::AdminClaims {
+        sub: "admin_security_test_user".to_string(),
+        email: "security-admin@rampos.local".to_string(),
+        role: role.to_string(),
+        iat: Utc::now().timestamp(),
+        exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+        token_type: "access".to_string(),
+    };
+
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .expect("jwt should encode")
+}
+
+fn build_signed_admin_request_with_jwt(
+    method: &str,
+    uri: &str,
+    body: &str,
+    api_key: &str,
+    api_secret: &str,
+    admin_jwt: &str,
+    legacy_admin_key: Option<&str>,
+) -> Request<Body> {
+    let timestamp = Utc::now().to_rfc3339();
+    let path = uri.split('?').next().unwrap_or(uri);
+    let signature = generate_signature(method, path, &timestamp, body, api_secret);
+
+    let mut builder = Request::builder()
+        .uri(uri)
+        .method(method)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .header("X-Timestamp", &timestamp)
+        .header("X-Signature", signature)
+        .header("X-Admin-Authorization", format!("Bearer {admin_jwt}"));
+
+    if let Some(legacy_key) = legacy_admin_key {
+        builder = builder.header("X-Admin-Key", legacy_key);
+    }
+
+    if !body.is_empty() {
+        builder = builder.header("Content-Type", "application/json");
+    }
+
+    builder.body(Body::from(body.to_string())).unwrap()
+}
+
 async fn setup_app() -> TestApp {
     let intent_repo = Arc::new(MockIntentRepository::new());
     let ledger_repo = Arc::new(MockLedgerRepository::new());
@@ -348,11 +399,8 @@ async fn setup_app() -> TestApp {
         onboarding_service,
         user_service,
         webhook_service: Arc::new(
-            ramp_core::service::webhook::WebhookService::new(
-                webhook_repo,
-                tenant_repo.clone(),
-            )
-            .unwrap(),
+            ramp_core::service::webhook::WebhookService::new(webhook_repo, tenant_repo.clone())
+                .unwrap(),
         ),
         tenant_repo,
         intent_repo,
@@ -386,8 +434,8 @@ async fn setup_app() -> TestApp {
         ws_state: None,
         metrics_registry: Arc::new(ramp_core::service::MetricsRegistry::new()),
         document_storage: None,
-            kyc_service: None,
-            kyt_service: None,
+        kyc_service: None,
+        kyt_service: None,
     };
 
     TestApp {
@@ -415,6 +463,35 @@ async fn licensing_status_rejects_cross_tenant_lookup() {
 
     let response = app.router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn licensing_status_prefers_admin_jwt_header_over_invalid_legacy_key() {
+    let _guard = env_lock().lock().unwrap();
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", "admin-security-test-secret");
+    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
+    std::env::remove_var("RAMPOS_ADMIN_ROLE");
+    let app = setup_app().await;
+    let admin_jwt = make_admin_jwt("viewer", "admin-security-test-secret");
+
+    let request = build_signed_admin_request_with_jwt(
+        "GET",
+        "/v1/admin/licensing/status/tenant_other",
+        "",
+        &app.api_key,
+        &app.api_secret,
+        &admin_jwt,
+        Some("invalid-legacy-key"),
+    );
+
+    let response = app.router.oneshot(request).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "Canonical admin JWT header should authorize request even when legacy key is invalid"
+    );
+
+    std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
 }
 
 #[tokio::test]

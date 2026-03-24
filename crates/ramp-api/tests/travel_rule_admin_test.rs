@@ -4,6 +4,7 @@ use axum::{
 };
 use chrono::Utc;
 use hmac::{Hmac, Mac};
+use jsonwebtoken::{encode, EncodingKey, Header};
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{
@@ -24,7 +25,7 @@ type HmacSha256 = Hmac<Sha256>;
 
 const TEST_API_KEY: &str = "travel_rule_test_api_key";
 const TEST_API_SECRET: &str = "travel_rule_test_api_secret";
-const TEST_ADMIN_KEY: &str = "travel_rule_admin_key";
+const TEST_ADMIN_JWT_SECRET: &str = "travel-rule-admin-jwt-secret";
 
 struct TestApp {
     router: axum::Router,
@@ -46,13 +47,31 @@ fn generate_signature(
     hex::encode(mac.finalize().into_bytes())
 }
 
-fn build_signed_admin_request(
+fn make_admin_jwt(role: &str) -> String {
+    let claims = ramp_api::handlers::admin::admin_auth::AdminClaims {
+        sub: "travel_rule_admin_test_user".to_string(),
+        email: "travel-rule-admin@rampos.local".to_string(),
+        role: role.to_string(),
+        iat: Utc::now().timestamp(),
+        exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+        token_type: "access".to_string(),
+    };
+
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(TEST_ADMIN_JWT_SECRET.as_bytes()),
+    )
+    .expect("jwt should encode")
+}
+
+fn build_signed_admin_jwt_request(
     method: &str,
     uri: &str,
     body: &str,
     api_key: &str,
     api_secret: &str,
-    admin_key: &str,
+    admin_jwt: &str,
 ) -> Request<Body> {
     let timestamp = Utc::now().to_rfc3339();
     let path = uri.split('?').next().unwrap_or(uri);
@@ -64,7 +83,7 @@ fn build_signed_admin_request(
         .header("Authorization", format!("Bearer {api_key}"))
         .header("X-Timestamp", &timestamp)
         .header("X-Signature", signature)
-        .header("X-Admin-Key", admin_key);
+        .header("X-Admin-Authorization", format!("Bearer {admin_jwt}"));
 
     if !body.is_empty() {
         builder = builder.header("Content-Type", "application/json");
@@ -150,11 +169,8 @@ async fn setup_app_with_pool(tenant_id: &str, db_pool: Option<PgPool>) -> TestAp
         onboarding_service,
         user_service,
         webhook_service: Arc::new(
-            ramp_core::service::webhook::WebhookService::new(
-                webhook_repo,
-                tenant_repo.clone(),
-            )
-            .unwrap(),
+            ramp_core::service::webhook::WebhookService::new(webhook_repo, tenant_repo.clone())
+                .unwrap(),
         ),
         tenant_repo,
         intent_repo,
@@ -188,8 +204,8 @@ async fn setup_app_with_pool(tenant_id: &str, db_pool: Option<PgPool>) -> TestAp
         metrics_registry: Arc::new(ramp_core::service::MetricsRegistry::new()),
         event_publisher,
         document_storage: None,
-            kyc_service: None,
-            kyt_service: None,
+        kyc_service: None,
+        kyt_service: None,
     };
 
     TestApp {
@@ -201,9 +217,10 @@ async fn setup_app_with_pool(tenant_id: &str, db_pool: Option<PgPool>) -> TestAp
 
 #[tokio::test]
 async fn travel_rule_registry_can_create_and_list_vasp_records() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
-    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_travel_rule_registry").await;
+    let operator_jwt = make_admin_jwt("operator");
+    let viewer_jwt = make_admin_jwt("viewer");
     let body = serde_json::json!({
         "vaspCode": "vasp-sg-1",
         "legalName": "Example VASP Ltd",
@@ -218,29 +235,31 @@ async fn travel_rule_registry_can_create_and_list_vasp_records() {
     })
     .to_string();
 
-    let create_request = build_signed_admin_request(
+    let create_request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/travel-rule/registry",
         &body,
         &app.api_key,
         &app.api_secret,
-        &format!("{TEST_ADMIN_KEY}:operator"),
+        &operator_jwt,
     );
     let create_response = app.router.clone().oneshot(create_request).await.unwrap();
     assert_eq!(create_response.status(), StatusCode::OK);
 
-    let list_request = build_signed_admin_request(
+    let list_request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/travel-rule/registry",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &viewer_jwt,
     );
     let list_response = app.router.oneshot(list_request).await.unwrap();
     assert_eq!(list_response.status(), StatusCode::OK);
 
-    let body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
+    let body = to_bytes(list_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(payload.as_array().unwrap().len(), 1);
@@ -250,9 +269,10 @@ async fn travel_rule_registry_can_create_and_list_vasp_records() {
 
 #[tokio::test]
 async fn travel_rule_retry_flow_can_open_and_resolve_exception_queue() {
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
-    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app("tenant_travel_rule_queue").await;
+    let operator_jwt = make_admin_jwt("operator");
+    let viewer_jwt = make_admin_jwt("viewer");
     let disclosure_body = serde_json::json!({
         "disclosureId": "trd_test_001",
         "direction": "OUTBOUND",
@@ -264,58 +284,67 @@ async fn travel_rule_retry_flow_can_open_and_resolve_exception_queue() {
     })
     .to_string();
 
-    let create_disclosure = build_signed_admin_request(
+    let create_disclosure = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/travel-rule/disclosures",
         &disclosure_body,
         &app.api_key,
         &app.api_secret,
-        &format!("{TEST_ADMIN_KEY}:operator"),
+        &operator_jwt,
     );
     let create_response = app.router.clone().oneshot(create_disclosure).await.unwrap();
     assert_eq!(create_response.status(), StatusCode::OK);
 
     let retry_body = serde_json::json!({ "simulatedStatus": "TIMEOUT" }).to_string();
-    let retry_request = build_signed_admin_request(
+    let retry_request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/travel-rule/disclosures/trd_test_001/retry",
         &retry_body,
         &app.api_key,
         &app.api_secret,
-        &format!("{TEST_ADMIN_KEY}:operator"),
+        &operator_jwt,
     );
     let retry_response = app.router.clone().oneshot(retry_request).await.unwrap();
     assert_eq!(retry_response.status(), StatusCode::OK);
 
-    let exceptions_request = build_signed_admin_request(
+    let exceptions_request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/travel-rule/exceptions",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &viewer_jwt,
     );
-    let exceptions_response = app.router.clone().oneshot(exceptions_request).await.unwrap();
+    let exceptions_response = app
+        .router
+        .clone()
+        .oneshot(exceptions_request)
+        .await
+        .unwrap();
     assert_eq!(exceptions_response.status(), StatusCode::OK);
 
-    let body = to_bytes(exceptions_response.into_body(), usize::MAX).await.unwrap();
+    let body = to_bytes(exceptions_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(payload.as_array().unwrap().len(), 1);
     assert_eq!(payload[0]["status"], "OPEN");
 
     let resolve_body = serde_json::json!({ "resolutionNote": "manual retry approved" }).to_string();
-    let resolve_request = build_signed_admin_request(
+    let resolve_request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/travel-rule/exceptions/tre_trd_test_001/resolve",
         &resolve_body,
         &app.api_key,
         &app.api_secret,
-        &format!("{TEST_ADMIN_KEY}:operator"),
+        &operator_jwt,
     );
     let resolve_response = app.router.clone().oneshot(resolve_request).await.unwrap();
     assert_eq!(resolve_response.status(), StatusCode::OK);
 
-    let body = to_bytes(resolve_response.into_body(), usize::MAX).await.unwrap();
+    let body = to_bytes(resolve_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(payload["status"], "RESOLVED");
 }
@@ -336,9 +365,9 @@ async fn travel_rule_registry_reads_db_backed_records_when_pool_is_available() {
         .await
         .expect("migrations should succeed");
 
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
-    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app_with_pool("tenant_travel_rule_db", Some(pool.clone())).await;
+    let admin_jwt = make_admin_jwt("viewer");
 
     sqlx::query(
         r#"
@@ -380,13 +409,13 @@ async fn travel_rule_registry_reads_db_backed_records_when_pool_is_available() {
     .await
     .expect("insert travel rule vasp");
 
-    let request = build_signed_admin_request(
+    let request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/travel-rule/registry",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &admin_jwt,
     );
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -399,7 +428,6 @@ async fn travel_rule_registry_reads_db_backed_records_when_pool_is_available() {
     assert_eq!(payload[0]["review"]["status"], "APPROVED");
     assert_eq!(payload[0]["interoperability"]["status"], "READY");
 }
-
 
 #[tokio::test]
 async fn travel_rule_registry_writes_db_backed_review_and_interoperability_updates() {
@@ -417,9 +445,10 @@ async fn travel_rule_registry_writes_db_backed_review_and_interoperability_updat
         .await
         .expect("migrations should succeed");
 
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
-    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app_with_pool("tenant_travel_rule_db_write", Some(pool.clone())).await;
+    let operator_jwt = make_admin_jwt("operator");
+    let viewer_jwt = make_admin_jwt("viewer");
 
     let create_body = serde_json::json!({
         "vaspCode": "vasp-db-write-001",
@@ -435,13 +464,13 @@ async fn travel_rule_registry_writes_db_backed_review_and_interoperability_updat
     })
     .to_string();
 
-    let create_request = build_signed_admin_request(
+    let create_request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/travel-rule/registry",
         &create_body,
         &app.api_key,
         &app.api_secret,
-        &format!("{TEST_ADMIN_KEY}:operator"),
+        &operator_jwt,
     );
     let create_response = app.router.clone().oneshot(create_request).await.unwrap();
     assert_eq!(create_response.status(), StatusCode::OK);
@@ -453,13 +482,13 @@ async fn travel_rule_registry_writes_db_backed_review_and_interoperability_updat
     })
     .to_string();
 
-    let review_request = build_signed_admin_request(
+    let review_request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/travel-rule/registry/vasp-db-write-001/review",
         &review_body,
         &app.api_key,
         &app.api_secret,
-        &format!("{TEST_ADMIN_KEY}:operator"),
+        &operator_jwt,
     );
     let review_response = app.router.clone().oneshot(review_request).await.unwrap();
     assert_eq!(review_response.status(), StatusCode::OK);
@@ -472,13 +501,13 @@ async fn travel_rule_registry_writes_db_backed_review_and_interoperability_updat
     })
     .to_string();
 
-    let interoperability_request = build_signed_admin_request(
+    let interoperability_request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/travel-rule/registry/vasp-db-write-001/interoperability",
         &interoperability_body,
         &app.api_key,
         &app.api_secret,
-        &format!("{TEST_ADMIN_KEY}:operator"),
+        &operator_jwt,
     );
     let interoperability_response = app
         .router
@@ -488,24 +517,29 @@ async fn travel_rule_registry_writes_db_backed_review_and_interoperability_updat
         .unwrap();
     assert_eq!(interoperability_response.status(), StatusCode::OK);
 
-    let list_request = build_signed_admin_request(
+    let list_request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/travel-rule/registry?reviewStatus=APPROVED",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &viewer_jwt,
     );
     let list_response = app.router.oneshot(list_request).await.unwrap();
     assert_eq!(list_response.status(), StatusCode::OK);
 
-    let body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
+    let body = to_bytes(list_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(payload.as_array().unwrap().len(), 1);
     assert_eq!(payload[0]["review"]["status"], "APPROVED");
     assert_eq!(payload[0]["review"]["reviewedBy"], "ops-reviewer");
     assert_eq!(payload[0]["interoperability"]["status"], "READY");
-    assert_eq!(payload[0]["interoperability"]["notes"], "connectivity verified");
+    assert_eq!(
+        payload[0]["interoperability"]["notes"],
+        "connectivity verified"
+    );
     assert_eq!(payload[0]["endpointUri"], "https://persisted.example/live");
 }
 
@@ -525,9 +559,10 @@ async fn travel_rule_retry_flow_persists_exceptions_when_pool_is_available() {
         .await
         .expect("migrations should succeed");
 
-    std::env::set_var("RAMPOS_ADMIN_KEY", TEST_ADMIN_KEY);
-    std::env::set_var("RAMPOS_ADMIN_ROLE", "operator");
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
     let app = setup_app_with_pool("tenant_travel_rule_db_retry", Some(pool.clone())).await;
+    let operator_jwt = make_admin_jwt("operator");
+    let viewer_jwt = make_admin_jwt("viewer");
 
     let disclosure_body = serde_json::json!({
         "disclosureId": "trd_db_001",
@@ -540,49 +575,58 @@ async fn travel_rule_retry_flow_persists_exceptions_when_pool_is_available() {
     })
     .to_string();
 
-    let create_disclosure = build_signed_admin_request(
+    let create_disclosure = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/travel-rule/disclosures",
         &disclosure_body,
         &app.api_key,
         &app.api_secret,
-        &format!("{TEST_ADMIN_KEY}:operator"),
+        &operator_jwt,
     );
     let create_response = app.router.clone().oneshot(create_disclosure).await.unwrap();
     assert_eq!(create_response.status(), StatusCode::OK);
 
     let retry_body = serde_json::json!({ "simulatedStatus": "TIMEOUT" }).to_string();
-    let retry_request = build_signed_admin_request(
+    let retry_request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/travel-rule/disclosures/trd_db_001/retry",
         &retry_body,
         &app.api_key,
         &app.api_secret,
-        &format!("{TEST_ADMIN_KEY}:operator"),
+        &operator_jwt,
     );
     let retry_response = app.router.clone().oneshot(retry_request).await.unwrap();
     assert_eq!(retry_response.status(), StatusCode::OK);
 
     let retry_payload: serde_json::Value = serde_json::from_slice(
-        &to_bytes(retry_response.into_body(), usize::MAX).await.unwrap(),
+        &to_bytes(retry_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
     )
     .unwrap();
     assert_eq!(retry_payload["stage"], "EXCEPTION");
     assert_eq!(retry_payload["queueStatus"], "OPEN");
 
-    let exceptions_request = build_signed_admin_request(
+    let exceptions_request = build_signed_admin_jwt_request(
         "GET",
         "/v1/admin/travel-rule/exceptions?status=OPEN",
         "",
         &app.api_key,
         &app.api_secret,
-        TEST_ADMIN_KEY,
+        &viewer_jwt,
     );
-    let exceptions_response = app.router.clone().oneshot(exceptions_request).await.unwrap();
+    let exceptions_response = app
+        .router
+        .clone()
+        .oneshot(exceptions_request)
+        .await
+        .unwrap();
     assert_eq!(exceptions_response.status(), StatusCode::OK);
 
     let exceptions_payload: serde_json::Value = serde_json::from_slice(
-        &to_bytes(exceptions_response.into_body(), usize::MAX).await.unwrap(),
+        &to_bytes(exceptions_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
     )
     .unwrap();
     assert_eq!(exceptions_payload.as_array().unwrap().len(), 1);
@@ -590,19 +634,21 @@ async fn travel_rule_retry_flow_persists_exceptions_when_pool_is_available() {
     assert_eq!(exceptions_payload[0]["status"], "OPEN");
 
     let resolve_body = serde_json::json!({ "resolutionNote": "manual db resolution" }).to_string();
-    let resolve_request = build_signed_admin_request(
+    let resolve_request = build_signed_admin_jwt_request(
         "POST",
         "/v1/admin/travel-rule/exceptions/tre_trd_db_001/resolve",
         &resolve_body,
         &app.api_key,
         &app.api_secret,
-        &format!("{TEST_ADMIN_KEY}:operator"),
+        &operator_jwt,
     );
     let resolve_response = app.router.clone().oneshot(resolve_request).await.unwrap();
     assert_eq!(resolve_response.status(), StatusCode::OK);
 
     let resolve_payload: serde_json::Value = serde_json::from_slice(
-        &to_bytes(resolve_response.into_body(), usize::MAX).await.unwrap(),
+        &to_bytes(resolve_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
     )
     .unwrap();
     assert_eq!(resolve_payload["status"], "RESOLVED");

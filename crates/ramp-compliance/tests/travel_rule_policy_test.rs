@@ -2,8 +2,8 @@ use rust_decimal_macros::dec;
 
 use ramp_compliance::{
     AmountThreshold, AssetScope, CounterpartyScope, TravelRuleAction, TravelRuleCounterparty,
-    TravelRuleDirection, TravelRuleDirectionScope, TravelRuleEvaluationRequest,
-    TravelRulePolicy, TravelRulePolicyEngine, VaspInteroperabilityStatus, VaspReviewStatus,
+    TravelRuleDirection, TravelRuleDirectionScope, TravelRuleEvaluationRequest, TravelRulePolicy,
+    TravelRulePolicyEngine, VaspInteroperabilityStatus, VaspReviewStatus,
 };
 
 fn sample_policy() -> TravelRulePolicy {
@@ -61,7 +61,10 @@ fn policy_engine_triggers_disclosure_for_matching_outbound_counterparty() {
     assert_eq!(result.matched_policy_code.as_deref(), Some("fatf-default"));
     assert_eq!(result.action, TravelRuleAction::DiscloseBeforeSettlement);
     assert!(result.disclosure_required);
-    assert_eq!(result.selected_transport_profile.as_deref(), Some("trp-bridge"));
+    assert_eq!(
+        result.selected_transport_profile.as_deref(),
+        Some("trp-bridge")
+    );
 }
 
 #[test]

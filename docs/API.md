@@ -309,6 +309,10 @@ Operational behavior:
 - The endpoint prefers the latest active `approved` registry-backed bundle for the tenant.
 - If no approved persisted bundle is active, RampOS returns an explicit fallback artifact with `source = "fallback"` and `approvalStatus = "fallback"`.
 - Response metadata now includes approval state, rollout scope, provenance, and source so operators and automation can tell whether they are looking at governed or fallback data.
+- `payload.offramp.depositAddressesByChain` is optional and additive.
+- Keys under `payload.offramp.depositAddressesByChain` are numeric chain IDs encoded as strings.
+  - For `chain_id = 1/56/101/137/43114`, BL-T-UW-008-01 now has targeted allocator and portal sub-slices that consume eligible registry/env-locator records before falling back to strict tenant bundles.
+  - Global bundles and fallback bundles do not authorize those governed-first portal issuance paths, and the verification here is seam-level only (no Docker-backed end-to-end proof has been captured on this host).
 
 Representative response fields:
 ```json
@@ -336,7 +340,7 @@ List governed extension actions on the existing admin control surface.
 
 Operational behavior:
 - Response remains whitelisted-only; no arbitrary extension runtime is exposed.
-- Each action may include `approvalRequired`, `rolloutScope`, and `source` to distinguish governed registry-backed actions from explicit fallback actions.
+- Each action now carries `approvalRequired`, `approvalStatus`, `rolloutScope`, `provenance`, and `source` so clients can distinguish governed registry-backed rows from bounded fallback rows without guessing from labels.
 
 #### GET /v1/admin/intents
 
@@ -383,9 +387,99 @@ Upsert a partner with capabilities, approval references, and credential referenc
 
 List all corridor packs with fee profiles, cutoff policies, compliance hooks, and eligibility rules. Auth: Admin key.
 
-#### GET /v1/admin/provider-routing
+#### GET /v1/admin/provider-routing/snapshot
 
-List provider routing policies for the authenticated tenant. Auth: Admin key.
+Return the current provider routing runtime snapshot. When a DB-backed policy store is available, this surface reflects authoritative persisted policy state and top-level provenance. Auth: Admin key.
+
+#### POST /v1/admin/provider-routing/evaluate
+
+Evaluate provider routing for a supplied context. `providerFamily` is optional for backward-compatible fallback evaluation; when it is supplied and persisted policy state exists, the decision reflects authoritative policy selection and matched-policy provenance. Auth: Admin key.
+
+#### POST /v1/admin/execution-explainability/explain
+
+Scores a single execution route candidate using runtime LP, treasury, corridor, and compliance signals, returning eligibility, contributing factors, and provenance metadata. Auth: Admin key.
+
+**Request** (application/json): must include `routeId`, `lpId`, `direction`, `asset`, `treasuryStressActive`, `corridorPolicyEligible`, `complianceEligible`, `quotedRate`, and `quotedVndAmount`. `corridorCode`, `providerFamily`, and detached LP/treasury hints remain additive context when runtime-backed inputs are unavailable.
+
+**Response** (200 OK):
+```json
+{
+  "routeId": "route_demo_001",
+  "eligible": true,
+  "factors": [
+    {
+      "factorName": "lpReliability",
+      "weight": "0.35",
+      "rawValue": "91.50000",
+      "contribution": "32.02500",
+      "explanation": "runtime LP score"
+    }
+  ],
+  "provenance": {
+    "sourceClass": "runtime_composed",
+    "sources": {
+      "liquidity": "lp_reliability_snapshots",
+      "treasury": "treasury_evidence_imports",
+      "corridor": "corridor_packs",
+      "compliance": "provider_routing_policies"
+    },
+    "tenantId": "tenant_demo"
+  }
+}
+```
+Provenance metadata distinguishes runtime-composed evaluations from request-only fallback heuristics and keeps the upstream data sources machine-readable.
+
+#### POST /v1/admin/execution-explainability/compare
+
+Ranks a list of execution routes in the supplied context and exposes the candidate snapshot plus the winning route ID when determinable, along with provenance describing the comparison. Auth: Admin key.
+
+**Request** (application/json): requires `direction` plus an `inputs` array where each item mirrors the explain request payload, including `quotedVndAmount`, `treasuryStressActive`, `corridorPolicyEligible`, and `complianceEligible`.
+
+**Response** (200 OK):
+```json
+{
+  "candidates": [
+    {
+      "routeId": "route_demo_001",
+      "eligible": true,
+      "provenance": {
+        "sourceClass": "runtime_composed"
+      }
+    }
+  ],
+  "winningRouteId": "route_demo_001",
+  "provenance": {
+    "sourceClass": "runtime_composed",
+    "sources": {
+      "liquidity": "lp_reliability_snapshots",
+      "treasury": "treasury_evidence_imports",
+      "corridor": "corridor_packs",
+      "compliance": "provider_routing_policies"
+    },
+    "tenantId": "tenant_demo"
+  }
+}
+```
+`winningRouteId` may be `null` when the comparison remains tied, but provenance is always returned to signal the decision basis.
+
+#### GET /v1/admin/commercial-readiness/snapshot
+
+Return the commercial readiness control-plane snapshot. Governed partner registry, corridor pack, compliance, and approval records are used by default when available; otherwise a bounded fallback catalog is returned with explicit provenance. Auth: Admin key.
+
+#### POST /v1/admin/commercial-readiness/check
+
+Evaluates whether a bounded commercial readiness extension can be enabled and returns missing prerequisites clearly, together with provenance for the readiness record used. The request body must include `extensionId`, the partner capabilities and corridor packs available to the tenant, and the compliance checks that already passed before invoking the check. Auth: Admin key.
+
+Representative request body:
+
+```json
+{
+  "extensionId": "legacy-extension",
+  "availablePartnerCapabilities": ["enabler", "compliance"],
+  "availableCorridorPacks": ["vn-usdt"],
+  "complianceChecksPassed": ["kyb.onfido"]
+}
+```
 
 #### GET /v1/admin/kyb-evidence
 
@@ -692,7 +786,10 @@ The complete OpenAPI 3.0 specification is available at:
 - **Bank-Ready Control Plane** — Partner Registry, Corridor Packs, Payment Method Capabilities, Provider Routing
   - `GET/PUT /v1/admin/partners` — Partner lifecycle management
   - `GET /v1/admin/corridor-packs` — Payment corridor configurations
-  - `GET /v1/admin/provider-routing` — Multi-dimensional routing policies
+- `GET /v1/admin/provider-routing/snapshot` — Runtime snapshot of provider routing state
+- `POST /v1/admin/provider-routing/evaluate` — Authoritative provider selection for a supplied routing context
+- `POST /v1/admin/execution-explainability/explain` — Explain one governed route with eligibility, score, and provenance details
+- `POST /v1/admin/execution-explainability/compare` — Side-by-side explainability of two candidate routes for operator insight
   - `GET /v1/admin/kyb-evidence` — KYB evidence packages
   - `GET /v1/admin/treasury-evidence` — Treasury balance imports
 - New DB tables: `partners`, `partner_capabilities`, `corridor_packs`, `corridor_fee_profiles`, `provider_routing_policies`, `kyb_evidence_packages`, `treasury_evidence_imports` + more (migrations 043-048)
