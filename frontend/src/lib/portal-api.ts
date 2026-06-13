@@ -10,7 +10,16 @@
  */
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+function getPublicApiBaseUrl(): string {
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+  if (process.env.NODE_ENV?.trim().toLowerCase() === 'production') {
+    throw new Error('Missing required production environment variable: NEXT_PUBLIC_API_URL');
+  }
+  return 'http://localhost:3000';
+}
 
 // Types
 export interface AuthUser {
@@ -328,7 +337,7 @@ async function portalRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = `${getPublicApiBaseUrl()}${endpoint}`;
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -473,7 +482,7 @@ export const kycApi = {
     formData.append('type', type);
     formData.append('file', file);
 
-    const response = await fetch(`${API_BASE_URL}/v1/portal/kyc/documents`, {
+    const response = await fetch(`${getPublicApiBaseUrl()}/v1/portal/kyc/documents`, {
       method: 'POST',
       body: formData,
       credentials: 'include', // Send cookies with requests

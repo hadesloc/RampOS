@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 
-use crate::middleware::tenant::TenantContext;
+use crate::middleware::{portal_auth::PortalUser, tenant::TenantContext};
 
 /// Idempotency configuration
 #[derive(Debug, Clone)]
@@ -302,6 +302,18 @@ impl IdempotencyHandler {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdempotencyKeyContext(pub String);
+
+pub fn extract_idempotency_key_from_headers(headers: &axum::http::HeaderMap) -> Option<String> {
+    headers
+        .get("X-Idempotency-Key")
+        .or_else(|| headers.get("Idempotency-Key"))
+        .and_then(|v| v.to_str().ok())
+        .filter(|key| !key.is_empty())
+        .map(ToString::to_string)
+}
+
 /// Idempotency middleware
 ///
 /// Expects header: Idempotency-Key: <unique-key>
@@ -322,25 +334,31 @@ pub async fn idempotency_middleware(
     }
 
     // Extract idempotency key from header
-    let idempotency_key = req
-        .headers()
-        .get("X-Idempotency-Key")
-        .or_else(|| req.headers().get("Idempotency-Key"))
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
+    let idempotency_key = extract_idempotency_key_from_headers(req.headers());
 
     // If no idempotency key, proceed normally
     let idempotency_key = match idempotency_key {
-        Some(key) if !key.is_empty() => key,
+        Some(key) => key,
         _ => return Ok(next.run(req).await),
     };
 
-    // Get tenant ID
+    // Build the idempotency scope. Portal users must be scoped by tenant and
+    // user so one user cannot replay another user's money-mutation response.
+    // Tenant/API callers keep the historical tenant-level scope.
     let tenant_id = req
         .extensions()
-        .get::<TenantContext>()
-        .map(|ctx| ctx.tenant_id.0.clone())
+        .get::<PortalUser>()
+        .map(|user| format!("portal:{}:{}", user.tenant_id, user.user_id))
+        .or_else(|| {
+            req.extensions()
+                .get::<TenantContext>()
+                .map(|ctx| ctx.tenant_id.0.clone())
+        })
         .unwrap_or_else(|| "anonymous".to_string());
+
+    let mut req = req;
+    req.extensions_mut()
+        .insert(IdempotencyKeyContext(idempotency_key.clone()));
 
     // Check if we have a stored response
     if let Some(stored) = handler.get(&tenant_id, &idempotency_key).await {
@@ -422,26 +440,33 @@ pub async fn idempotency_middleware(
         content_type: content_type.clone(),
     };
 
-    // Store response (best effort)
-    if let Err(e) = handler.store(&tenant_id, &idempotency_key, &stored).await {
-        warn!(error = %e, "Failed to store idempotent response; lock retained");
-        let mut response = (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({
-                "error": "idempotency_store_unavailable",
-                "message": "Idempotency store error; request may have been processed"
-            })),
-        )
-            .into_response();
-        response.headers_mut().insert(
-            "Retry-After",
-            "60".parse()
-                .unwrap_or(axum::http::HeaderValue::from_static("60")),
-        );
-        return Ok(response);
+    // Cache only successful responses. Do not pin transient failures or
+    // validation errors behind an idempotency key; release the lock so callers
+    // can retry and execute fresh.
+    if parts.status.is_success() || parts.status.is_redirection() {
+        // Store response (best effort)
+        if let Err(e) = handler.store(&tenant_id, &idempotency_key, &stored).await {
+            warn!(error = %e, "Failed to store idempotent response; releasing lock");
+            let _ = handler.unlock(&tenant_id, &idempotency_key).await;
+            let mut response = (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({
+                    "error": "idempotency_store_unavailable",
+                    "message": "Idempotency store error; request may have been processed"
+                })),
+            )
+                .into_response();
+            response.headers_mut().insert(
+                "Retry-After",
+                "60".parse()
+                    .unwrap_or(axum::http::HeaderValue::from_static("60")),
+            );
+            return Ok(response);
+        }
     }
 
-    // Release lock
+    // Release lock. If the process panics before this point, the store's 60s
+    // lock TTL remains the fallback.
     let _ = handler.unlock(&tenant_id, &idempotency_key).await;
 
     // Rebuild response

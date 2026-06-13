@@ -46,6 +46,12 @@ vi.mock('lucide-react', () => ({
   Sun: () => <span data-testid="icon-sun" />,
   Laptop: () => <span data-testid="icon-laptop" />,
   Search: () => <span data-testid="icon-search" />,
+  Gavel: () => <span data-testid="icon-gavel" />,
+  FileText: () => <span data-testid="icon-file-text" />,
+  AlertTriangle: () => <span data-testid="icon-alert-triangle" />,
+  FileCheck2: () => <span data-testid="icon-file-check" />,
+  Banknote: () => <span data-testid="icon-banknote" />,
+  Radio: () => <span data-testid="icon-radio" />,
 }))
 
 // Mock @radix-ui/react-dialog

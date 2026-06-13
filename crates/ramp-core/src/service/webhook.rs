@@ -299,16 +299,17 @@ impl WebhookService {
         Ok(())
     }
 
-    /// Stub deliver_event when http-client feature is not enabled
+    /// Fail-closed deliver_event when http-client feature is not enabled
     #[cfg(not(feature = "http-client"))]
     async fn deliver_event(&self, event: &WebhookEventRow) -> Result<()> {
-        // Without HTTP client, we just log and mark as pending for external delivery
-        info!(
+        let error = "Webhook delivery is not compiled in; enable the ramp-core/http-client feature";
+        error!(
             event_id = %event.id,
             event_type = %event.event_type,
-            "Webhook event ready for external delivery (http-client feature disabled)"
+            error = %error,
+            "Webhook delivery unavailable"
         );
-        Ok(())
+        Err(ramp_common::Error::Internal(error.into()))
     }
 
     /// Schedule a retry with exponential backoff

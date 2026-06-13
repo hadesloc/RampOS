@@ -2,11 +2,13 @@ use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
     AeadCore, Aes256Gcm, Nonce,
 };
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
 use ramp_common::Result;
 use tracing::warn;
 
 pub const ENCRYPTED_SECRET_PREFIX: &[u8] = b"enc:v1:";
 pub const PLAINTEXT_SECRET_PREFIX: &[u8] = b"plain:v1:";
+pub const ENCRYPTED_TEXT_PREFIX: &str = "enc:v1:";
 
 /// Service for encrypting/decrypting secrets at rest using AES-256-GCM.
 ///
@@ -71,6 +73,39 @@ impl CryptoService {
         self.cipher
             .decrypt(nonce, ciphertext)
             .map_err(|e| ramp_common::Error::Encryption(format!("Decryption failed: {}", e)))
+    }
+
+    /// Encrypt UTF-8 text into a versioned storage string: `enc:v1:<base64(nonce+ciphertext)>`.
+    pub fn encrypt_text_for_storage(&self, plaintext: &str) -> Result<String> {
+        let (nonce, ciphertext) = self.encrypt_secret(plaintext.as_bytes())?;
+        let mut payload = Vec::with_capacity(nonce.len() + ciphertext.len());
+        payload.extend_from_slice(&nonce);
+        payload.extend_from_slice(&ciphertext);
+        Ok(format!(
+            "{}{}",
+            ENCRYPTED_TEXT_PREFIX,
+            BASE64_STANDARD.encode(payload)
+        ))
+    }
+
+    /// Decrypt a value produced by `encrypt_text_for_storage`.
+    pub fn decrypt_text_from_storage(&self, stored: &str) -> Result<String> {
+        let payload = stored.strip_prefix(ENCRYPTED_TEXT_PREFIX).ok_or_else(|| {
+            ramp_common::Error::Encryption("Encrypted text is missing enc:v1 prefix".to_string())
+        })?;
+        let decoded = BASE64_STANDARD.decode(payload).map_err(|e| {
+            ramp_common::Error::Encryption(format!("Encrypted text payload is not base64: {}", e))
+        })?;
+        if decoded.len() <= 12 {
+            return Err(ramp_common::Error::Encryption(
+                "Encrypted text payload is too short".to_string(),
+            ));
+        }
+        let (nonce, ciphertext) = decoded.split_at(12);
+        let plaintext = self.decrypt_secret(nonce, ciphertext)?;
+        String::from_utf8(plaintext).map_err(|e| {
+            ramp_common::Error::Encryption(format!("Encrypted text is not valid UTF-8: {}", e))
+        })
     }
 }
 
@@ -226,6 +261,25 @@ mod tests {
         // Both should decrypt correctly
         assert_eq!(svc.decrypt_secret(&nonce1, &ct1).unwrap(), plaintext);
         assert_eq!(svc.decrypt_secret(&nonce2, &ct2).unwrap(), plaintext);
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_text_for_storage_round_trip() {
+        let svc = CryptoService::from_key(&test_key());
+        let stored = svc.encrypt_text_for_storage("Nguyen Van A").unwrap();
+        assert!(stored.starts_with(ENCRYPTED_TEXT_PREFIX));
+        assert!(!stored.contains("Nguyen"));
+        assert_eq!(
+            svc.decrypt_text_from_storage(&stored).unwrap(),
+            "Nguyen Van A"
+        );
+    }
+
+    #[test]
+    fn test_decrypt_text_from_storage_rejects_plaintext() {
+        let svc = CryptoService::from_key(&test_key());
+        let err = svc.decrypt_text_from_storage("Nguyen Van A").unwrap_err();
+        assert!(format!("{err}").contains("enc:v1"));
     }
 
     #[test]

@@ -59,7 +59,13 @@ impl VenueTrustRepository for MockVenueTrustRepository {
             .unwrap()
             .values()
             .filter(|record| record.tenant_id == filter.tenant_id)
-            .filter(|record| filter.user_id.as_ref().map(|id| &record.user_id == id).unwrap_or(true))
+            .filter(|record| {
+                filter
+                    .user_id
+                    .as_ref()
+                    .map(|id| &record.user_id == id)
+                    .unwrap_or(true)
+            })
             .cloned()
             .collect())
     }
@@ -114,7 +120,11 @@ impl VenueTrustRepository for MockVenueTrustRepository {
         panic!("upsert_account should not be called in reporting tests")
     }
 
-    async fn get_account(&self, tenant_id: &str, account_id: &str) -> Result<Option<VenueAccountRecord>> {
+    async fn get_account(
+        &self,
+        tenant_id: &str,
+        account_id: &str,
+    ) -> Result<Option<VenueAccountRecord>> {
         Ok(self
             .accounts
             .lock()
@@ -209,14 +219,23 @@ impl VenueTrustRepository for MockVenueTrustRepository {
             .cloned())
     }
 
-    async fn list_transfers(&self, filter: &VenueTransferFilter) -> Result<Vec<VenueTransferRecord>> {
+    async fn list_transfers(
+        &self,
+        filter: &VenueTransferFilter,
+    ) -> Result<Vec<VenueTransferRecord>> {
         Ok(self
             .transfers
             .lock()
             .unwrap()
             .values()
             .filter(|record| record.tenant_id == filter.tenant_id)
-            .filter(|record| filter.user_id.as_ref().map(|id| &record.user_id == id).unwrap_or(true))
+            .filter(|record| {
+                filter
+                    .user_id
+                    .as_ref()
+                    .map(|id| &record.user_id == id)
+                    .unwrap_or(true)
+            })
             .filter(|record| {
                 filter
                     .venue_connection_id
@@ -231,7 +250,13 @@ impl VenueTrustRepository for MockVenueTrustRepository {
                     .map(|value| &record.venue_account_id == value)
                     .unwrap_or(true)
             })
-            .filter(|record| filter.status.as_ref().map(|value| &record.status == value).unwrap_or(true))
+            .filter(|record| {
+                filter
+                    .status
+                    .as_ref()
+                    .map(|value| &record.status == value)
+                    .unwrap_or(true)
+            })
             .cloned()
             .collect())
     }
@@ -490,7 +515,9 @@ async fn venue_trust_report_exports_evidence_json_contract() {
         .expect("evidence export should build");
 
     assert_eq!(artifact.media_type, "application/json");
-    assert!(artifact.file_name.starts_with("venue_trust_evidence_user_user-a"));
+    assert!(artifact
+        .file_name
+        .starts_with("venue_trust_evidence_user_user-a"));
 
     let exported: serde_json::Value =
         serde_json::from_slice(&artifact.contents).expect("evidence export JSON should decode");

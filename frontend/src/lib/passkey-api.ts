@@ -12,7 +12,16 @@ import {
   type AuthenticationChallenge,
 } from './webauthn';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+function getPublicApiBaseUrl(): string {
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+  if (process.env.NODE_ENV?.trim().toLowerCase() === 'production') {
+    throw new Error('Missing required production environment variable: NEXT_PUBLIC_API_URL');
+  }
+  return 'http://localhost:3000';
+}
 
 export class PasskeyApiError extends Error {
   constructor(
@@ -29,7 +38,7 @@ async function passkeyRequest<T>(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = `${getPublicApiBaseUrl()}${endpoint}`;
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',

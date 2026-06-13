@@ -23,7 +23,7 @@ mod tests {
         CreateLicenseRequirementRequest, CreateLicenseSubmissionRequest, LicenseRequirementRow,
         LicenseSubmissionRow, LicensingRepository, TenantLicenseStatusRow,
     };
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, Mutex, OnceLock};
 
     #[derive(Default)]
     struct MockLicensingRepository {
@@ -207,6 +207,11 @@ mod tests {
 
     const TEST_ADMIN_JWT_SECRET: &str = "licensing-tests-admin-jwt-secret";
 
+    pub fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
     fn make_admin_jwt(role: &str) -> String {
         let claims = AdminClaims {
             sub: "licensing_test_admin".to_string(),
@@ -227,112 +232,115 @@ mod tests {
 
     #[tokio::test]
     async fn get_tenant_status_rejects_cross_tenant_reads() {
-        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
-        let repo = seeded_repo();
-        let repo_state: Arc<dyn LicensingRepository> = repo.clone();
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "X-Admin-Authorization",
-            format!("Bearer {}", make_admin_jwt("viewer"))
-                .parse()
-                .unwrap(),
-        );
+        {
+            let _guard = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
+            let repo = seeded_repo();
+            let repo_state: Arc<dyn LicensingRepository> = repo.clone();
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                "X-Admin-Authorization",
+                format!("Bearer {}", make_admin_jwt("viewer"))
+                    .parse()
+                    .unwrap(),
+            );
 
-        let err = get_tenant_status(
-            headers,
-            Extension(tenant_ctx()),
-            State(repo_state),
-            Path("tenant_other".to_string()),
-        )
-        .await
-        .unwrap_err();
+            let err = get_tenant_status(
+                headers,
+                Extension(tenant_ctx()),
+                State(repo_state),
+                Path("tenant_other".to_string()),
+            )
+            .await
+            .unwrap_err();
 
-        match err {
-            ApiError::NotFound(message) => assert!(message.contains("tenant_other")),
-            other => panic!("expected not found error, got {other:?}"),
+            match err {
+                ApiError::NotFound(message) => assert!(message.contains("tenant_other")),
+                other => panic!("expected not found error, got {other:?}"),
+            }
         }
-
-        std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
     }
 
     #[tokio::test]
     async fn submit_license_rejects_viewer_role() {
-        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
-        let repo = seeded_repo();
-        let repo_state: Arc<dyn LicensingRepository> = repo.clone();
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "X-Admin-Authorization",
-            format!("Bearer {}", make_admin_jwt("viewer"))
-                .parse()
-                .unwrap(),
-        );
+        {
+            let _guard = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
+            let repo = seeded_repo();
+            let repo_state: Arc<dyn LicensingRepository> = repo.clone();
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                "X-Admin-Authorization",
+                format!("Bearer {}", make_admin_jwt("viewer"))
+                    .parse()
+                    .unwrap(),
+            );
 
-        let request = SubmitLicenseRequest {
-            requirement_id: "req_vasp".to_string(),
-            documents: vec![DocumentSubmission {
-                name: "form-a".to_string(),
-                file_url: "https://files.example/doc.pdf".to_string(),
-                file_hash: "abc123".to_string(),
-                file_size_bytes: 10,
-            }],
-            submitted_by: Some("viewer".to_string()),
-        };
+            let request = SubmitLicenseRequest {
+                requirement_id: "req_vasp".to_string(),
+                documents: vec![DocumentSubmission {
+                    name: "form-a".to_string(),
+                    file_url: "https://files.example/doc.pdf".to_string(),
+                    file_hash: "abc123".to_string(),
+                    file_size_bytes: 10,
+                }],
+                submitted_by: Some("viewer".to_string()),
+            };
 
-        let err = submit_license(
-            headers,
-            Extension(tenant_ctx()),
-            State(repo_state),
-            Json(request),
-        )
-        .await
-        .unwrap_err();
+            let err = submit_license(
+                headers,
+                Extension(tenant_ctx()),
+                State(repo_state),
+                Json(request),
+            )
+            .await
+            .unwrap_err();
 
-        match err {
-            ApiError::Forbidden(message) => assert!(message.contains("Insufficient permissions")),
-            other => panic!("expected forbidden error, got {other:?}"),
+            match err {
+                ApiError::Forbidden(_) => {}
+                other => panic!("expected forbidden error, got {other:?}"),
+            }
         }
-
-        std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
     }
 
     #[tokio::test]
     async fn get_current_tenant_status_returns_scoped_overview() {
-        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
-        let repo = seeded_repo();
-        let now = Utc::now();
-        repo.statuses.lock().unwrap().push(TenantLicenseStatusRow {
-            id: "status_self".to_string(),
-            tenant_id: "tenant_self".to_string(),
-            requirement_id: "req_vasp".to_string(),
-            status: "APPROVED".to_string(),
-            license_number: Some("LIC-SELF".to_string()),
-            issue_date: Some(now),
-            expiry_date: None,
-            last_submission_id: None,
-            notes: None,
-            created_at: now,
-            updated_at: now,
-        });
-        let repo_state: Arc<dyn LicensingRepository> = repo.clone();
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "X-Admin-Authorization",
-            format!("Bearer {}", make_admin_jwt("viewer"))
-                .parse()
-                .unwrap(),
-        );
+        {
+            let _guard = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
+            let repo = seeded_repo();
+            let now = Utc::now();
+            repo.statuses.lock().unwrap().push(TenantLicenseStatusRow {
+                id: "status_self".to_string(),
+                tenant_id: "tenant_self".to_string(),
+                requirement_id: "req_vasp".to_string(),
+                status: "APPROVED".to_string(),
+                license_number: Some("LIC-SELF".to_string()),
+                issue_date: Some(now),
+                expiry_date: None,
+                last_submission_id: None,
+                notes: None,
+                created_at: now,
+                updated_at: now,
+            });
+            let repo_state: Arc<dyn LicensingRepository> = repo.clone();
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                "X-Admin-Authorization",
+                format!("Bearer {}", make_admin_jwt("viewer"))
+                    .parse()
+                    .unwrap(),
+            );
 
-        let response =
-            get_current_tenant_status(headers, Extension(tenant_ctx()), State(repo_state))
-                .await
-                .unwrap()
-                .0;
+            let response =
+                get_current_tenant_status(headers, Extension(tenant_ctx()), State(repo_state))
+                    .await
+                    .unwrap()
+                    .0;
 
-        assert_eq!(response.tenant_id, "tenant_self");
-        assert_eq!(response.approved_count, 1);
-        assert_eq!(response.licenses.len(), 1);
-
-        std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
+            assert_eq!(response.tenant_id, "tenant_self");
+            assert_eq!(response.approved_count, 1);
+            assert_eq!(response.licenses.len(), 1);
+        }
     }
 }

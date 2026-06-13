@@ -214,7 +214,7 @@ contract DeployArbitrumPaymaster is Script {
  *    --constructor-args $(cast abi-encode "constructor(address)" 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789)
  */
 contract VerifyArbitrum is Script {
-    function run() external view {
+    function run() external pure {
         console.log("========================================");
         console.log("  Contract Verification Commands");
         console.log("========================================");

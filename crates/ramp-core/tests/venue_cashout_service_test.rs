@@ -7,12 +7,12 @@ use ramp_common::{types::TenantId, Result};
 use ramp_core::event::InMemoryEventPublisher;
 use ramp_core::repository::{
     BeneficiaryProfileFilter, BeneficiaryProfileRecord, EnsureWalletAttestationRequest,
-    LpReliabilitySnapshotRow, RfqBidRow, RfqRepository, RfqRequestRow,
-    SourceOfFundsPackageFilter, SourceOfFundsPackageRecord, UpsertBeneficiaryProfileRequest,
-    UpsertSourceOfFundsPackageRequest, UpsertVenueAccountRequest, UpsertVenueConnectionRequest,
-    UpsertVenueTransferRequest, VenueAccountFilter, VenueAccountRecord, VenueConnectionFilter,
-    VenueConnectionRecord, VenueTransferFilter, VenueTransferRecord, VenueTrustRepository,
-    WalletAttestationFilter, WalletAttestationRecord,
+    LpReliabilitySnapshotRow, RfqBidRow, RfqRepository, RfqRequestRow, SourceOfFundsPackageFilter,
+    SourceOfFundsPackageRecord, UpsertBeneficiaryProfileRequest, UpsertSourceOfFundsPackageRequest,
+    UpsertVenueAccountRequest, UpsertVenueConnectionRequest, UpsertVenueTransferRequest,
+    VenueAccountFilter, VenueAccountRecord, VenueConnectionFilter, VenueConnectionRecord,
+    VenueTransferFilter, VenueTransferRecord, VenueTrustRepository, WalletAttestationFilter,
+    WalletAttestationRecord,
 };
 use ramp_core::service::rfq::RfqService;
 use ramp_core::service::venue_cashout::{
@@ -89,7 +89,11 @@ impl VenueTrustRepository for MockVenueTrustRepository {
         panic!("upsert_account should not be called in venue cashout tests")
     }
 
-    async fn get_account(&self, tenant_id: &str, account_id: &str) -> Result<Option<VenueAccountRecord>> {
+    async fn get_account(
+        &self,
+        tenant_id: &str,
+        account_id: &str,
+    ) -> Result<Option<VenueAccountRecord>> {
         Ok(self
             .accounts
             .lock()
@@ -162,7 +166,11 @@ impl VenueTrustRepository for MockVenueTrustRepository {
         Ok(())
     }
 
-    async fn get_transfer(&self, tenant_id: &str, transfer_id: &str) -> Result<Option<VenueTransferRecord>> {
+    async fn get_transfer(
+        &self,
+        tenant_id: &str,
+        transfer_id: &str,
+    ) -> Result<Option<VenueTransferRecord>> {
         Ok(self
             .transfers
             .lock()
@@ -172,7 +180,10 @@ impl VenueTrustRepository for MockVenueTrustRepository {
             .cloned())
     }
 
-    async fn list_transfers(&self, _filter: &VenueTransferFilter) -> Result<Vec<VenueTransferRecord>> {
+    async fn list_transfers(
+        &self,
+        _filter: &VenueTransferFilter,
+    ) -> Result<Vec<VenueTransferRecord>> {
         panic!("list_transfers should not be called in venue cashout tests")
     }
 
@@ -269,7 +280,10 @@ impl RfqRepository for TestRfqRepository {
         panic!("update_bid_state should not be called in venue cashout tests")
     }
 
-    async fn upsert_reliability_snapshot(&self, _snapshot: &LpReliabilitySnapshotRow) -> Result<()> {
+    async fn upsert_reliability_snapshot(
+        &self,
+        _snapshot: &LpReliabilitySnapshotRow,
+    ) -> Result<()> {
         panic!("upsert_reliability_snapshot should not be called in venue cashout tests")
     }
 
@@ -464,8 +478,14 @@ async fn confirm_wallet_receipt_backfills_rfq_and_marks_transfer_submitted() {
         .unwrap()
         .expect("transfer should persist");
     assert_eq!(stored_transfer.status, "submitted");
-    assert_eq!(stored_transfer.wallet_tx_hash.as_deref(), Some("0xwalletreceipt"));
-    assert_eq!(stored_transfer.rfq_id.as_deref(), Some(confirmed.rfq_id.as_str()));
+    assert_eq!(
+        stored_transfer.wallet_tx_hash.as_deref(),
+        Some("0xwalletreceipt")
+    );
+    assert_eq!(
+        stored_transfer.rfq_id.as_deref(),
+        Some(confirmed.rfq_id.as_str())
+    );
 
     let rfq = rfq_repo
         .get_request(&TenantId("tenant-a".to_string()), &confirmed.rfq_id)
@@ -475,5 +495,8 @@ async fn confirm_wallet_receipt_backfills_rfq_and_marks_transfer_submitted() {
     assert_eq!(rfq.direction, "OFFRAMP");
     assert_eq!(rfq.crypto_asset, "USDT");
     assert_eq!(rfq.crypto_amount, dec!(42));
-    assert_eq!(rfq.offramp_id.as_deref(), Some(confirmed.offramp_reference.as_str()));
+    assert_eq!(
+        rfq.offramp_id.as_deref(),
+        Some(confirmed.offramp_reference.as_str())
+    );
 }

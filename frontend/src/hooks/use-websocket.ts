@@ -70,7 +70,7 @@ export function useWebSocket({
     }
 
     try {
-      const wsUrl = authToken ? `${url}${url.includes('?') ? '&' : '?'}token=${authToken}` : url;
+      const wsUrl = authToken ? `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(authToken)}` : url;
       setStatus('connecting');
       ws.current = new WebSocket(wsUrl, protocols);
 

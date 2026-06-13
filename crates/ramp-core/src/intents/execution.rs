@@ -415,14 +415,13 @@ impl ExecutionEngine {
 
             execution.start_current_step();
 
-            // Simulate step execution
-            // In production, this would call actual on-chain operations
+            // Execute step. Fail closed until real on-chain submission/confirmation exists.
             match self
                 .execute_step(&execution.steps[step_idx as usize].kind)
                 .await
             {
-                Ok((tx_hash, gas)) => {
-                    execution.complete_current_step(tx_hash, gas);
+                Ok(()) => {
+                    execution.complete_current_step(None, None);
                 }
                 Err(e) => {
                     error!(
@@ -527,39 +526,20 @@ impl ExecutionEngine {
         self.execute(&execution.id).await
     }
 
-    /// Execute a single step (mock implementation)
-    async fn execute_step(
-        &self,
-        kind: &ExecutionStepKind,
-    ) -> Result<(Option<String>, Option<u64>)> {
-        // In production, this would interact with actual blockchain/DEX/bridge APIs
-        match kind {
-            ExecutionStepKind::Approve { .. } => {
-                // Mock: generate random tx hash
-                let tx_hash = format!("0x{}", hex::encode(rand::random::<[u8; 32]>()));
-                Ok((Some(tx_hash), Some(50_000)))
-            }
-            ExecutionStepKind::Swap { .. } => {
-                let tx_hash = format!("0x{}", hex::encode(rand::random::<[u8; 32]>()));
-                Ok((Some(tx_hash), Some(200_000)))
-            }
-            ExecutionStepKind::Bridge { .. } => {
-                let tx_hash = format!("0x{}", hex::encode(rand::random::<[u8; 32]>()));
-                Ok((Some(tx_hash), Some(250_000)))
-            }
-            ExecutionStepKind::Transfer { .. } => {
-                let tx_hash = format!("0x{}", hex::encode(rand::random::<[u8; 32]>()));
-                Ok((Some(tx_hash), Some(65_000)))
-            }
-            ExecutionStepKind::Stake { .. } => {
-                let tx_hash = format!("0x{}", hex::encode(rand::random::<[u8; 32]>()));
-                Ok((Some(tx_hash), Some(150_000)))
-            }
-            ExecutionStepKind::WaitForBridge { .. } => {
-                // No tx hash for waiting
-                Ok((None, None))
-            }
-        }
+    /// Execute a single step.
+    ///
+    /// EXPERIMENTAL — not launch scope (D-03). Fail-closed until real on-chain
+    /// transaction submission and confirmation are implemented.
+    async fn execute_step(&self, kind: &ExecutionStepKind) -> Result<()> {
+        info!(
+            step_kind = ?kind,
+            "Rejecting intent execution because on-chain submission is not implemented"
+        );
+
+        Err(Error::NotImplemented(
+            "intent execution is experimental and disabled until real on-chain submission and confirmation are implemented"
+                .to_string(),
+        ))
     }
 
     /// Rollback completed steps in reverse order
@@ -784,17 +764,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_engine_submit_and_execute() {
+    async fn test_engine_execute_fails_closed_without_fake_confirmation() {
         let solver = Arc::new(LocalSolver::new());
-        let engine = ExecutionEngine::new(solver);
+        let engine = ExecutionEngine::new(solver).with_auto_rollback(false);
 
         let spec = make_test_spec();
         let submitted = engine.submit(spec).await.unwrap();
         let exec_id = submitted.id.clone();
 
         let result = engine.execute(&exec_id).await.unwrap();
-        assert_eq!(result.state, ExecutionState::Completed);
-        assert!(result.all_steps_completed());
+        assert_eq!(result.state, ExecutionState::Failed);
+        assert!(!result.all_steps_completed());
+        assert_eq!(result.steps[0].status, StepExecutionStatus::Failed);
+        assert!(result.steps[0].tx_hash.is_none());
+        assert!(result.steps[0].gas_used.is_none());
+        assert!(result.steps[0]
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Not implemented"));
     }
 
     #[tokio::test]

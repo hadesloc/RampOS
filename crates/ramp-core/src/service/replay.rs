@@ -234,7 +234,11 @@ mod tests {
 
         let settlement_entry = ReplayTimelineEntry::from_settlement(Settlement {
             id: "stl_sandbox_001".to_string(),
+            tenant_id: None,
             offramp_intent_id: offramp.intent.id.clone(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: crate::service::settlement::SettlementStatus::Processing,
             bank_reference: Some("RAMP-SBX1".to_string()),
             error_message: None,

@@ -1,93 +1,79 @@
 # RampOS Current Status
 
-_Last updated: 2026-03-21_
+_Last updated: 2026-06-12_
 
-This file is the human-readable status normalization point for the current repo state.
-When trackers disagree, use the priority order below.
+This file is the codebase-first status normalization point for the current workspace.
+Legacy RC signoff orchestration packets were removed from the active workflow on `2026-04-18`. Keep using preserved technical evidence only as historical reference, not as a live execution board.
 
 ## Source Priority
 
 1. Codebase and recent git history
-2. `docs/COMPLETION_STATUS.md` for latest implementation state
-3. `docs/operations/bank-grade-signoff-ledger.md` and `docs/operations/evidence/rc-268670d74-signoff/summary.md` for current release-truth blockers
-4. `docs/security/reports/2026-03-13-rc-268670d74/` for the latest attached security evidence window
-5. `.codex/uw/` artifacts only when they have been explicitly refreshed against the current workspace
+2. `docs/COMPLETION_STATUS.md`
+3. `docs/superpowers/plans/2026-04-10-offramp-rfq-settlement-kickoff.md`
+4. `docs/security/reports/2026-03-13-rc-268670d74/` for historical technical evidence only
 
 ## Current Verdict
 
-- The repo is no longer primarily in a feature-build phase.
-- The latest implementation milestone is **Phase 1: Bank-Grade Core Hardening**, marked complete on `2026-03-17`.
-- The project is currently in **review / signoff closure**.
-- Bank-grade labeling is still blocked until release evidence is refreshed and approvers are assigned.
+- The latest implementation milestone is **OFFRAMP RFQ Match -> Settlement linkage**, implemented in the working tree and locally verified on `2026-05-13`.
+- The repo contains JWT admin authentication, secrets abstraction, PostgreSQL-backed passkey persistence, readiness gating, and RFQ/admin/webhook replay coverage.
+- OFFRAMP execution linkage now follows `docs/superpowers/plans/2026-04-10-offramp-rfq-settlement-kickoff.md`.
+- `BL-T-UW-008-01` is historical / backlog-only context and is not the active forward implementation pointer.
+- This host has a usable Rust/cargo toolchain (`rustc 1.95.0`, `cargo 1.95.0`); do not treat Rust execution as blocked here.
 
-## Central Blocker Register
+## What Is Implemented in the Working Tree
 
-Use `docs/operations/bank-grade-signoff-ledger.md` as the current blocker register for signoff closure. As of `2026-03-18`, the open blockers are:
-
-- missing attributable staging validation evidence for RC `268670d74`
-- stale Trivy evidence after the latest dependency-remediation batch
-- residual `rsa` advisory still awaiting closure or explicit risk acceptance
-- missing independent external security review outputs
-- missing named release, engineering, security, and operations approvers
-
-## What Is Landed
-
-- March 2026 implementation work materially landed in the workspace.
-- Later hardening follow-up landed:
+- March 2026 implementation work is materially implemented in the working tree (uncommitted as of 2026-06-12).
+- Later hardening follow-up is implemented in the working tree (uncommitted as of 2026-06-12):
   - JWT admin authentication
   - secrets abstraction
   - PostgreSQL-backed passkey persistence
   - readiness gate
   - RFQ/admin auth/webhook replay E2E coverage
+- OFFRAMP RFQ Match -> Settlement linkage is implemented for the documented bounded paths:
+  - migration `064_offramp_rfq_settlement_linkage.sql`
+  - `LinkedOfframpExecutionService`
+  - linked RFQ/LP/rate/settlement persistence on off-ramp intents and settlements
+  - portal/admin status linkage fields
+  - admin settlement outcome application with replay-safe terminal handling
+  - payout bank rejection expectation corrected to `REVERSED`
 
 ## What Is Still Open
 
-- Staging validation evidence
-- Independent external security review
-- Trivy refresh against the newer post-hardening codebase
-- Residual `rsa` advisory disposition
-- Named approvers in the signoff ledger
-- Explicit staging-host access or CI-host evidence path for the current RC
-- Explicit workflow runtime truth for Temporal versus in-process fallback semantics
-- Explicit treasury default-read truth (evidence-backed vs sample fallback) across admin UI/CLI and operator docs
-- Explicit reconciliation default-read and lineage truth (fixture fallback vs evidence-backed inputs) across admin UI/CLI and operator docs
-- Explicit off-ramp truth across product/runtime surfaces (do not conflate detection coverage with deposit-address issuance):
-  - Live detect lanes (onchain observation / monitor coverage) remain bounded and incomplete, but currently include:
-    - EVM `USDT/USDC` (including Avalanche `chain_id = 43114`)
-    - native `ETH`
-    - native `BNB`
-    - native `MATIC`
-  - Governed-first portal deposit-address issuance (custody registry env-locator, then strict tenant bundle, then placeholder) is currently implemented and verified only for:
-    - `chain_id = 101` (Solana)
-    - `chain_id = 56` (BNB)
-    - `chain_id = 137` (Polygon / MATIC)
-    - `chain_id = 43114` (Avalanche)
-    - `chain_id = 1` (Ethereum)
-  - Solana `chain_id = 101` issuance ordering:
-    - first checks an approved healthy custody partner-registry env locator (`credential_kind=offramp_deposit_address_solana`, `locator=env://<ENV_KEY>`)
-    - if a custody registry match exists but the locator is missing/invalid/unresolved/ambiguous, issuance fails closed and does not fall through to bundle fallback
-    - when no approved healthy custody registry match exists, portal issuance can use `payload.offramp.depositAddressesByChain["101"]` from an exact tenant-scoped approved config bundle
-    - fails closed when no valid address is available from either registry env locator or strict tenant config bundle
-  - EVM governed issuance note:
-    - `chain_id = 1/56/137/43114` now check approved healthy custody partner-registry env locators for eligible off-ramp deposit-address credential kinds before strict tenant bundle fallback.
-    - if an eligible registry match exists but locator resolution is missing/invalid/unresolved/ambiguous, issuance fails closed and does not fall through to bundle or placeholder
-  - This remains a bounded static-address contract, not a general custody allocator, and broader authoritative monitor coverage remains incomplete outside the bounded lanes above.
+- Contract verification now runs through `C:\Users\hades\.foundry\bin\forge.exe`; `forge build --sizes` and `forge test -vvv` passed on `2026-05-13`.
+- Foundry build/test output still includes non-failing dependency revision mismatch warnings and Solidity lint warnings (`block.timestamp`, unchecked test ERC20 transfers, unsafe test typecasts).
+- Docker Compose config now renders when required env is supplied for smoke validation.
+- Kubernetes render smoke now passes for `k8s`, `k8s/overlays/dev`, `k8s/overlays/staging`, and `k8s/overlays/prod` without deprecation warnings.
+- Workflow runtime behavior is still transitional: `TEMPORAL_URL` selects a Temporal adapter, but some degraded paths still depend on in-process execution and local status tracking.
+- Treasury default-read truth still needs consistent evidence-backed wording across admin UI, CLI, and operator docs.
+- Reconciliation default-read and lineage truth still need consistent wording across admin UI, CLI, and operator docs.
+- OFFRAMP runtime truth is still bounded, not general-purpose custody allocation:
+  - live detect lanes currently include EVM `USDT/USDC`, native `ETH`, native `BNB`, and native `MATIC`
+  - governed-first deposit-address issuance is currently implemented and verified only for Solana (`101`), BNB (`56`), Polygon (`137`), Avalanche (`43114`), and Ethereum (`1`)
+  - broader authoritative monitor coverage remains incomplete outside those bounded lanes
 
-## Workflow Runtime Truth
+## 2026-06-13 — Commercial-readiness status (authoritative)
 
-- The repo contains a workflow-engine abstraction in `ramp-core`, but the current runtime contract is still transitional.
-- `TEMPORAL_URL` selects a Temporal adapter, not a fully authoritative Temporal-only execution plane.
-- Degraded/fallback behavior still depends on in-process execution and local status tracking for some paths.
-- Operators should use `docs/architecture/workflow-runtime-contract.md` as the current source of truth for these limits.
+**See `.workflow/commercial-readiness/final-report.md` for the definitive commercial-readiness certification.**
 
-## Known Tracker Drift
+This repo is **REPO_READY_WITH_ACCEPTED_RISKS** (code-side), but **BLOCKED_BY_EXTERNAL_REQUIREMENTS** (commercial launch). All critical/high gaps are closed with adversarial review; remaining items are MED/LOW (docs, one trait footgun, display/compute reviews). External blockers (staging validation, external security review, bank/chain credentials, licensing) must be handled outside the repo.
 
-- `.codex/uw/context/dashboard.md` previously contained stale `17/26` task counts from an earlier plan slice.
-- There are two overlapping numbering systems in repo history:
-  - legacy roadmap `W1-W16`
-  - later hardening-phase `W1-W6`
-- Do not infer current progress from numbering alone.
+The active evidence ledger for this remediation wave is `.workflow/commercial-readiness/evidence.md`.
+As of `2026-06-13`, Tier-1 CRIT/HIGH remediation work recorded there includes:
+
+- Webhook delivery now fails closed when the `http-client` feature is absent, and the Docker build enables `nats,http-client` so the production image uses the real delivery path.
+- Production provider validation includes rails real-API requirements; simulation rails and mock adapters are rejected or excluded in production.
+- Napas real-API verification is RSA-only, with simulation HMAC fallback removed from the production path and the rsa advisory documented as signing/verification-only rather than decryption use.
+- `PgBillingDataProvider` is wired for `BILLING_PROVIDER=postgres`, and live VNST is capability-gated as read-only supply until mint/burn/reserve proof sources are implemented and verified.
+- WebAuthn portal implementation is blocked on the host OpenSSL toolchain required by the preferred `webauthn-rs` dependency (`EXT-09`); no hand-rolled WebAuthn ceremony was added.
+- On-chain execution paths are fail-closed or test-only where real submission/confirmation is absent, including relay, intent execution, bridge, EVM send, TON missing-hash, yield, paymaster approval, and account-abstraction builder paths.
+- Portal idempotency is scoped per portal user as well as tenant, with 2xx/3xx-only response caching and service-layer cross-user duplicate-key rejection.
+- Portal KYC case writes encrypt PII at the application layer when a database pool is present; duplicate plaintext PII in `risk_flags` and logs remains tracked as follow-up scope.
+
+## Historical Security Evidence
+
+Preserved raw and summary security artifacts remain under `docs/security/reports/2026-03-13-rc-268670d74/`.
+Treat that directory as historical technical evidence for the old RC review window, not as the active project workflow.
 
 ## Recommended Next Move
 
-Mainline UW plan is bounded-complete through `T-UW-035` and continuation is now explicitly post-plan backlog. Dispatch `BL-T-UW-008-01` as the active manual wave: broaden authoritative custody-backed issuance beyond the original Solana/Avalanche posture. As of 2026-03-21, governed-first sub-slices are now verified for `chain_id = 1/56/101/137/43114`; keep the scope bounded to already-supported live detect lanes, do not add new route surfaces, and record any remaining monitor-coverage or full-wave verification gaps explicitly under the backlog wave rather than reopening `T-UW-008-U1`.
+Treat the remaining items as hardening follow-ups rather than current command blockers: Foundry lint/dependency warnings and broader product-scope truth wording for transitional runtime areas. The Rust, Docker-backed OFFRAMP, contract, Docker Compose config, K8s render, frontend, SDK, widget, Python, Go, and RustSec gates listed in `docs/COMPLETION_STATUS.md` have current local evidence from `2026-05-13`.

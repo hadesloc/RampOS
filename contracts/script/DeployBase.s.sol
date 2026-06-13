@@ -140,7 +140,7 @@ contract DeployBase is Script {
  * @notice Quick deployment to Base Sepolia for testing
  */
 contract DeployBaseTestnet is DeployBase {
-    function setUp() public {
+    function setUp() public view {
         // Pre-check for testnet
         require(block.chainid == 84532, "Must be on Base Sepolia");
     }
@@ -151,7 +151,7 @@ contract DeployBaseTestnet is DeployBase {
  * @notice Production deployment to Base Mainnet
  */
 contract DeployBaseMainnet is DeployBase {
-    function setUp() public {
+    function setUp() public view {
         // Pre-check for mainnet
         require(block.chainid == 8453, "Must be on Base Mainnet");
     }

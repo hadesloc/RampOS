@@ -216,32 +216,27 @@ impl CrossChainRelayer {
         Ok(record.confirmations)
     }
 
-    /// Execute relay transaction on destination chain
+    /// Execute relay transaction on destination chain.
+    ///
+    /// EXPERIMENTAL — not launch scope (D-03). Fail-closed until real destination-chain
+    /// transaction submission and confirmation are implemented.
     async fn execute_relay(&self, record: &mut RelayRecord) -> Result<TxHash> {
         record.status = MessageStatus::Relaying;
         record.attempts += 1;
         record.last_attempt_at = Some(Utc::now());
 
-        // In production:
-        // 1. Build relay transaction with message proof
-        // 2. Estimate gas
-        // 3. Sign and submit transaction
-        // 4. Wait for confirmation
-
         info!(
             message_id = %record.message.id,
             dest_chain = record.message.dest_chain,
             attempt = record.attempts,
-            "Executing relay"
+            "Rejecting relay execution because destination-chain submission is not implemented"
         );
 
-        // Mock successful relay
-        let tx_hash = B256::from(rand::random::<[u8; 32]>());
-        record.dest_tx_hash = Some(tx_hash);
-        record.gas_used = Some(U256::from(100000u64));
-        record.status = MessageStatus::Delivered;
-
-        Ok(tx_hash)
+        record.status = MessageStatus::ReadyToRelay;
+        Err(Error::NotImplemented(
+            "cross-chain relay execution is experimental and disabled until destination-chain submission and confirmation are implemented"
+                .to_string(),
+        ))
     }
 
     /// Process pending messages
@@ -376,66 +371,19 @@ impl ProofVerifier {
         }
     }
 
-    // SECURITY WARNING: Proof verification is currently a placeholder.
-    // In production, this MUST implement real Merkle proof verification
-    // against trusted block headers. Without proper verification, an attacker
-    // could forge cross-chain messages and steal funds.
-    // TODO(security): Implement full Merkle Patricia proof verification before mainnet.
-    /// Verify a message proof
+    /// EXPERIMENTAL — not launch scope (D-03). Fail-closed: MPT proof verification is not implemented and always errors.
     pub async fn verify_proof(&self, message: &CrossChainMessage, proof: &[u8]) -> Result<bool> {
-        // Basic sanity checks to reject obviously invalid proofs.
-        // These are NOT sufficient for production security - real Merkle proof
-        // verification must be implemented before deployment.
-        if proof.is_empty() {
-            return Err(Error::Validation(
-                "Proof verification failed: proof data is empty".to_string(),
-            ));
-        }
-
-        // Minimum proof length check - a valid Merkle proof requires at least
-        // a 32-byte hash node
-        if proof.len() < 32 {
-            return Err(Error::Validation(
-                "Proof verification failed: proof data too short (minimum 32 bytes required)"
-                    .to_string(),
-            ));
-        }
-
-        // Verify the proof is not all zeros (malformed placeholder)
-        if proof.iter().all(|&b| b == 0) {
-            return Err(Error::Validation(
-                "Proof verification failed: proof data is all zeros".to_string(),
-            ));
-        }
-
-        // Verify that the message has valid chain IDs
-        if message.source_chain == 0 || message.dest_chain == 0 {
-            return Err(Error::Validation(
-                "Proof verification failed: invalid chain ID (0)".to_string(),
-            ));
-        }
-
-        // Verify source and destination are different chains
-        if message.source_chain == message.dest_chain {
-            return Err(Error::Validation(
-                "Proof verification failed: source and destination chains are the same".to_string(),
-            ));
-        }
-
         info!(
             message_id = %message.id,
             source_chain = message.source_chain,
             proof_len = proof.len(),
-            "Verifying message proof (placeholder - real verification pending)"
+            "Rejecting cross-chain proof verification because MPT verification is not implemented"
         );
 
-        // PLACEHOLDER: Accept proofs that pass basic sanity checks above.
-        // In production, this would:
-        // 1. Decode Merkle proof structure
-        // 2. Verify proof against trusted block header for source_chain
-        // 3. Validate message hash matches the proven leaf
-        // 4. Check that the block header is recent and from a trusted source
-        Ok(true)
+        Err(Error::NotImplemented(
+            "MPT proof verification not implemented — crosschain relay is experimental and disabled"
+                .to_string(),
+        ))
     }
 
     /// Update trusted headers
@@ -461,6 +409,7 @@ impl Default for ProofVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ramp_common::onchain_gate::{test_env_lock, EXPERIMENTAL_ONCHAIN_EXECUTION_ENV};
 
     #[test]
     fn test_relayer_config() {
@@ -533,7 +482,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_proof_verifier() {
+    async fn test_proof_verifier_always_fails_closed() {
+        let _guard = test_env_lock();
+        std::env::remove_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
+
         let verifier = ProofVerifier::new();
 
         let message = CrossChainMessage::new(
@@ -545,27 +497,41 @@ mod tests {
             Bytes::new(),
         );
 
-        // Empty proof should be rejected
-        let result = verifier.verify_proof(&message, &[]).await;
-        assert!(result.is_err(), "Empty proof should be rejected");
+        for proof in [&[][..], &[1u8; 16][..], &[0u8; 64][..], &[1u8; 64][..]] {
+            let err = verifier
+                .verify_proof(&message, proof)
+                .await
+                .expect_err("MPT proof verification must not return success");
+            assert!(err
+                .to_string()
+                .contains("MPT proof verification not implemented"));
+        }
+    }
 
-        // Too-short proof should be rejected
-        let short_proof = vec![1u8; 16];
-        let result = verifier.verify_proof(&message, &short_proof).await;
-        assert!(result.is_err(), "Short proof should be rejected");
+    #[tokio::test]
+    async fn test_proof_verifier_errors_even_with_experimental_gate_enabled() {
+        let _guard = test_env_lock();
+        std::env::set_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV, "true");
 
-        // All-zeros proof should be rejected
-        let zero_proof = vec![0u8; 64];
-        let result = verifier.verify_proof(&message, &zero_proof).await;
-        assert!(result.is_err(), "All-zeros proof should be rejected");
-
-        // Valid-looking proof (non-empty, >= 32 bytes, not all zeros) should pass placeholder check
-        let valid_proof = vec![1u8; 64];
-        let result = verifier.verify_proof(&message, &valid_proof).await.unwrap();
-        assert!(
-            result,
-            "Valid-looking proof should pass placeholder verification"
+        let verifier = ProofVerifier::new();
+        let message = CrossChainMessage::new(
+            1,
+            42161,
+            B256::from(rand::random::<[u8; 32]>()),
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
         );
+
+        let err = verifier
+            .verify_proof(&message, &[1u8; 64])
+            .await
+            .expect_err("gate must not enable fake MPT verification");
+        assert!(err
+            .to_string()
+            .contains("MPT proof verification not implemented"));
+
+        std::env::remove_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
     }
 
     #[test]
@@ -740,7 +706,37 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_process_pending_delivers_messages() {
+    async fn test_execute_relay_fails_closed_without_fake_delivery() {
+        let relayer = CrossChainRelayer::with_default_config();
+
+        let message = CrossChainMessage::new(
+            1,
+            42161,
+            B256::from(rand::random::<[u8; 32]>()),
+            Address::ZERO,
+            Address::ZERO,
+            Bytes::new(),
+        );
+        let mut record = RelayRecord::new(message);
+        record.status = MessageStatus::ReadyToRelay;
+
+        let err = relayer
+            .execute_relay(&mut record)
+            .await
+            .expect_err("relay execution must fail closed until real submission exists");
+
+        assert!(err
+            .to_string()
+            .contains("cross-chain relay execution is experimental and disabled"));
+        assert_eq!(record.status, MessageStatus::ReadyToRelay);
+        assert_eq!(record.attempts, 1);
+        assert!(record.last_attempt_at.is_some());
+        assert!(record.dest_tx_hash.is_none());
+        assert!(record.gas_used.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_process_pending_does_not_fake_delivered_messages() {
         let relayer = CrossChainRelayer::with_default_config();
 
         let message = CrossChainMessage::new(
@@ -754,16 +750,22 @@ mod tests {
         let id = relayer.submit_message(message).await.unwrap();
 
         // First process: PendingConfirmation -> ReadyToRelay
-        relayer.process_pending().await.unwrap();
-
-        // Second process: ReadyToRelay -> Delivered
         let processed = relayer.process_pending().await.unwrap();
-        assert_eq!(processed, 1);
+        assert_eq!(processed, 0);
+
+        // Second process attempts relay, which must fail closed rather than fabricate delivery.
+        let processed = relayer.process_pending().await.unwrap();
+        assert_eq!(processed, 0);
 
         let record = relayer.get_status(&id).await.unwrap().unwrap();
-        assert_eq!(record.status, MessageStatus::Delivered);
-        assert!(record.dest_tx_hash.is_some());
-        assert!(record.gas_used.is_some());
+        assert_eq!(record.status, MessageStatus::ReadyToRelay);
+        assert_eq!(record.attempts, 1);
+        assert!(record.dest_tx_hash.is_none());
+        assert!(record.gas_used.is_none());
+        assert_eq!(record.errors.len(), 1);
+        assert!(
+            record.errors[0].contains("cross-chain relay execution is experimental and disabled")
+        );
     }
 
     #[tokio::test]

@@ -464,6 +464,13 @@ mod tests {
 
     const TEST_ADMIN_JWT_SECRET: &str = "audit-tests-admin-jwt-secret";
 
+    use std::sync::OnceLock;
+
+    fn env_lock() -> &'static std::sync::Mutex<()> {
+        static LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+    }
+
     fn make_admin_jwt(role: &str) -> String {
         let claims = crate::handlers::admin::admin_auth::AdminClaims {
             sub: "audit_test_admin".to_string(),
@@ -540,7 +547,9 @@ mod tests {
 
     #[tokio::test]
     async fn break_glass_actions_are_filtered_and_export_linked() {
-        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
+        {
+            let _guard = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
         let now = Utc::now();
         let audit_state = AuditState {
             audit_service: Arc::new(ComplianceAuditService::new(Arc::new(
@@ -632,8 +641,7 @@ mod tests {
             "/v1/admin/audit/export?format=json"
         );
         assert_eq!(payload["chainVerified"], true);
-
-        std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
+        }
     }
 
     #[test]

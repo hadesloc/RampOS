@@ -162,12 +162,6 @@ async fn load_incident_timeline(
 ) -> Result<IncidentTimeline, ApiError> {
     let mut entries = Vec::new();
 
-    if state.db_pool.is_some() && query.bank_reference.is_some() {
-        return Err(ApiError::Validation(
-            "bankReference incident lookups are disabled until tenant-scoped settlement correlation is available".to_string(),
-        ));
-    }
-
     if let Some(webhook_id) = &query.webhook_id {
         if let Some(entry) = state
             .webhook_service
@@ -180,11 +174,19 @@ async fn load_incident_timeline(
     }
 
     if let Some(bank_reference) = &query.bank_reference {
+        // Use the tenant-scoped lookup when a repository is available; this ensures
+        // results are confined to the authenticated tenant and no cross-tenant data
+        // leaks via a shared bank reference string.  If no repo is configured
+        // (in-memory / test mode) we fall back to the in-memory store which is
+        // already isolated by process boundary.
         if let Some(pool) = &state.db_pool {
             let settlement_service = make_settlement_service(pool.clone());
             entries.extend(
                 settlement_service
-                    .incident_timeline_entries_for_bank_reference_async(bank_reference)
+                    .incident_timeline_entries_for_bank_reference_in_tenant_async(
+                        &tenant_ctx.tenant_id,
+                        bank_reference,
+                    )
                     .await
                     .map_err(ApiError::from)?,
             );
@@ -223,14 +225,21 @@ async fn load_incident_timeline(
                 .map_err(ApiError::from)?,
         );
 
-        if state.db_pool.is_none() {
-            // Repository-backed settlement correlation remains disabled until settlement
-            // persistence carries an enforceable tenant scope.
-        } else if let Some(pool) = &state.db_pool {
-            let _ = pool;
-        }
-
-        if state.db_pool.is_none() {
+        // Correlate settlements for this offramp intent using the tenant-scoped lookup.
+        // When a repository is configured we enforce tenant isolation via
+        // list_by_offramp_in_tenant; failing closed returns an empty Vec, not a guess.
+        if let Some(pool) = &state.db_pool {
+            let settlement_service = make_settlement_service(pool.clone());
+            entries.extend(
+                settlement_service
+                    .incident_timeline_entries_for_offramp_in_tenant_async(
+                        &tenant_ctx.tenant_id,
+                        &intent_id.0,
+                    )
+                    .await
+                    .map_err(ApiError::from)?,
+            );
+        } else {
             let settlement_service = SettlementService::new();
             entries.extend(settlement_service.incident_timeline_entries_for_offramp(&intent_id.0));
         }
@@ -348,4 +357,160 @@ fn collect_related_reference_ids(entries: &[IncidentTimelineEntry]) -> Vec<Strin
     }
 
     related
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ramp_common::types::TenantId;
+    use ramp_core::repository::{
+        InMemorySettlementRepository, SettlementRepository, SettlementRow,
+    };
+    use ramp_core::service::SettlementService;
+
+    fn make_row(id: &str, offramp_id: &str, bank_ref: &str) -> SettlementRow {
+        SettlementRow {
+            id: id.to_string(),
+            tenant_id: None,
+            offramp_intent_id: offramp_id.to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
+            status: "COMPLETED".to_string(),
+            bank_reference: Some(bank_ref.to_string()),
+            error_message: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        }
+    }
+
+    // --- pure-function tests ---
+
+    #[test]
+    fn test_sanitize_reference_replaces_non_alphanumeric() {
+        assert_eq!(sanitize_reference("REF-123/ABC"), "REF_123_ABC");
+        assert_eq!(sanitize_reference("RAMP20240101"), "RAMP20240101");
+        assert_eq!(sanitize_reference("ref ref"), "ref_ref");
+    }
+
+    #[test]
+    fn test_build_incident_id_prefers_intent() {
+        let query = IncidentLookupQuery {
+            intent_id: Some("ofr_001".to_string()),
+            bank_reference: Some("REF-X".to_string()),
+            webhook_id: None,
+            rfq_id: None,
+        };
+        let id = build_incident_id(&query, Some("ofr_001"), &[]);
+        assert_eq!(id, "incident_intent_ofr_001");
+    }
+
+    #[test]
+    fn test_build_incident_id_falls_back_to_bank_reference() {
+        let query = IncidentLookupQuery {
+            intent_id: None,
+            bank_reference: Some("REF-42/A".to_string()),
+            webhook_id: None,
+            rfq_id: None,
+        };
+        let id = build_incident_id(&query, None, &[]);
+        assert_eq!(id, "incident_bank_REF_42_A");
+    }
+
+    // --- tenant-isolation tests (via in-memory SettlementService) ---
+
+    /// bank_reference lookup in-memory: no repo → returns entries from in-memory store
+    /// (single-tenant in-memory, used by test/no-DB code path)
+    #[tokio::test]
+    async fn test_bank_reference_inmemory_returns_entry() {
+        let svc = SettlementService::new();
+        let _ = svc.trigger_settlement("ofr_bank_test").unwrap();
+        // In-memory store is not tenant-scoped; any bank reference hit is returned.
+        // This validates the fallback path.
+        let entry = svc.incident_timeline_entries_for_bank_reference("NONEXISTENT_REF");
+        assert!(
+            entry.is_empty(),
+            "in-memory lookup with unknown reference should return empty, not fabricate entries"
+        );
+    }
+
+    /// tenant-scoped bank_reference lookup: correct tenant returns entry, wrong tenant is empty
+    #[tokio::test]
+    async fn test_bank_reference_tenant_scoped_correlation_isolates_tenants() {
+        let repo = Arc::new(InMemorySettlementRepository::new());
+
+        let tenant_a = TenantId::new("tenant_incidents_a");
+        let tenant_b = TenantId::new("tenant_incidents_b");
+
+        // Bind the two offramp IDs to their respective tenants
+        repo.bind_offramp_to_tenant("ofr_incidents_a", &tenant_a);
+        repo.bind_offramp_to_tenant("ofr_incidents_b", &tenant_b);
+
+        let mut row_a = make_row("stl_incidents_a", "ofr_incidents_a", "SHARED-REF-INC");
+        row_a.tenant_id = Some(tenant_a.0.clone());
+        let mut row_b = make_row("stl_incidents_b", "ofr_incidents_b", "SHARED-REF-INC");
+        row_b.tenant_id = Some(tenant_b.0.clone());
+
+        repo.create(&row_a).await.unwrap();
+        repo.create(&row_b).await.unwrap();
+
+        let svc = SettlementService::with_repository(repo);
+
+        // Tenant A sees only its own settlement
+        let entries_a = svc
+            .incident_timeline_entries_for_bank_reference_in_tenant_async(
+                &tenant_a,
+                "SHARED-REF-INC",
+            )
+            .await
+            .unwrap();
+        assert_eq!(entries_a.len(), 1, "tenant A must see exactly one entry");
+        assert_eq!(entries_a[0].source_reference_id, "stl_incidents_a");
+
+        // Tenant B sees only its own settlement — cross-tenant isolation confirmed
+        let entries_b = svc
+            .incident_timeline_entries_for_bank_reference_in_tenant_async(
+                &tenant_b,
+                "SHARED-REF-INC",
+            )
+            .await
+            .unwrap();
+        assert_eq!(entries_b.len(), 1, "tenant B must see exactly one entry");
+        assert_eq!(entries_b[0].source_reference_id, "stl_incidents_b");
+    }
+
+    /// tenant-scoped offramp correlation: cross-tenant lookup returns empty (fail-closed)
+    #[tokio::test]
+    async fn test_offramp_tenant_scoped_correlation_excludes_other_tenant() {
+        let repo = Arc::new(InMemorySettlementRepository::new());
+
+        let tenant_a = TenantId::new("tenant_offramp_a");
+        let tenant_b = TenantId::new("tenant_offramp_b");
+
+        repo.bind_offramp_to_tenant("ofr_offramp_a", &tenant_a);
+        repo.bind_offramp_to_tenant("ofr_offramp_b", &tenant_b);
+
+        let row_b = make_row("stl_offramp_b", "ofr_offramp_b", "REF-OFR-B");
+        repo.create(&row_b).await.unwrap();
+
+        let svc = SettlementService::with_repository(repo);
+
+        // Tenant A asking for tenant B's offramp ID must get nothing (fail-closed)
+        let cross_tenant = svc
+            .incident_timeline_entries_for_offramp_in_tenant_async(&tenant_a, "ofr_offramp_b")
+            .await
+            .unwrap();
+        assert!(
+            cross_tenant.is_empty(),
+            "cross-tenant offramp lookup must return empty, not leak data"
+        );
+
+        // Tenant B asking for its own offramp ID gets the entry
+        let own_tenant = svc
+            .incident_timeline_entries_for_offramp_in_tenant_async(&tenant_b, "ofr_offramp_b")
+            .await
+            .unwrap();
+        assert_eq!(own_tenant.len(), 1, "tenant B must see its own entry");
+        assert_eq!(own_tenant[0].source_reference_id, "stl_offramp_b");
+    }
 }

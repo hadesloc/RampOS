@@ -312,7 +312,8 @@ Operational behavior:
 - `payload.offramp.depositAddressesByChain` is optional and additive.
 - Keys under `payload.offramp.depositAddressesByChain` are numeric chain IDs encoded as strings.
   - For `chain_id = 1/56/101/137/43114`, BL-T-UW-008-01 now has targeted allocator and portal sub-slices that consume eligible registry/env-locator records before falling back to strict tenant bundles.
-  - Global bundles and fallback bundles do not authorize those governed-first portal issuance paths, and the verification here is seam-level only (no Docker-backed end-to-end proof has been captured on this host).
+  - Global bundles and fallback bundles do not authorize those governed-first portal issuance paths.
+  - Verification on this host now includes targeted Docker-backed off-ramp E2E proof for exact precedence/fail-closed/strict-bundle/placeholder cases plus a passing full `e2e_offramp_test` binary, but not full-repo or full-matrix verification.
 
 Representative response fields:
 ```json

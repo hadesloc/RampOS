@@ -22,6 +22,7 @@ use thiserror::Error;
 pub mod abstraction;
 pub mod bridge;
 pub mod evm;
+#[cfg(test)]
 pub mod execution;
 pub mod solana;
 pub mod solver;
@@ -34,6 +35,7 @@ pub use bridge::{
     MockBridgeAdapter,
 };
 pub use evm::{EvmChain, EvmChainConfig};
+#[cfg(test)]
 pub use execution::{ExecutionEngine, ExecutionResult, ExecutionStatus, ExecutionStep, StepStatus};
 pub use solana::{SolanaChain, SolanaChainConfig};
 pub use solver::{ExecutionRoute, Intent, IntentSolver, RouteAction};

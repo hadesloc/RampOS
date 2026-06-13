@@ -3,22 +3,40 @@
 //! Config-driven provider selection. In production mode (`RUST_ENV=production`),
 //! startup will fail if any mock/in-memory provider is configured.
 
+use sqlx::PgPool;
 use std::sync::Arc;
 use tracing::{info, warn};
 
 use ramp_core::{
-    billing::{BillingConfig, BillingDataProvider, BillingService},
+    billing::{BillingConfig, BillingDataProvider, BillingService, PgBillingDataProvider},
     event::{EventPublisher, InMemoryEventPublisher},
-    stablecoin::{VnstProtocolConfig, VnstProtocolDataProvider, VnstProtocolService},
+    stablecoin::{
+        LiveVnstProtocolDataProvider, VnstProtocolConfig, VnstProtocolDataProvider,
+        VnstProtocolService,
+    },
 };
 
 /// Returns true when the process is running in production mode.
 ///
-/// Checks `RUST_ENV` (or `RAMPOS_ENV`) for the value `"production"`.
+/// Checks non-empty `RUST_ENV` first, then non-empty `RAMPOS_ENV`, for the
+/// case-insensitive value `"production"`. Keep this mirrored with
+/// `ramp-adapter::factory::is_production`.
 fn is_production() -> bool {
     std::env::var("RUST_ENV")
-        .or_else(|_| std::env::var("RAMPOS_ENV"))
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| {
+            std::env::var("RAMPOS_ENV")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+        })
         .map(|v| v.eq_ignore_ascii_case("production"))
+        .unwrap_or(false)
+}
+
+fn env_flag_enabled(name: &str) -> bool {
+    std::env::var(name)
+        .map(|v| v == "true" || v == "1")
         .unwrap_or(false)
 }
 
@@ -119,9 +137,11 @@ pub async fn build_event_publisher(
 /// Build the billing data provider based on `BILLING_PROVIDER` env var.
 ///
 /// Accepted values:
-/// - `"postgres"` – uses the database-backed provider (TODO: implement PgBillingDataProvider)
+/// - `"postgres"` – uses the database-backed provider (requires a `PgPool`)
 /// - `"mock"` / absent – uses `MockBillingDataProvider` (rejected in production)
-pub fn build_billing_provider() -> anyhow::Result<Arc<dyn BillingDataProvider>> {
+pub fn build_billing_provider(
+    pool: Option<PgPool>,
+) -> anyhow::Result<Arc<dyn BillingDataProvider>> {
     let kind = std::env::var("BILLING_PROVIDER").unwrap_or_else(|_| "mock".to_string());
 
     match kind.to_lowercase().as_str() {
@@ -138,10 +158,13 @@ pub fn build_billing_provider() -> anyhow::Result<Arc<dyn BillingDataProvider>> 
             ))
         }
         "postgres" => {
-            anyhow::bail!(
-                "BILLING_PROVIDER=postgres selected but PgBillingDataProvider is not yet implemented. \
-                 Use BILLING_PROVIDER=mock for dev/test until postgres provider is available."
-            );
+            let pool = pool.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "BILLING_PROVIDER=postgres requires a PostgreSQL pool. \
+                     Pass the application PgPool into build_billing_provider/build_billing_service."
+                )
+            })?;
+            Ok(Arc::new(PgBillingDataProvider::with_pool(pool)))
         }
         other => {
             anyhow::bail!(
@@ -153,8 +176,8 @@ pub fn build_billing_provider() -> anyhow::Result<Arc<dyn BillingDataProvider>> 
 }
 
 /// Build `BillingService` using config-driven provider selection.
-pub fn build_billing_service() -> anyhow::Result<BillingService> {
-    let provider = build_billing_provider()?;
+pub fn build_billing_service(pool: Option<PgPool>) -> anyhow::Result<BillingService> {
+    let provider = build_billing_provider(pool)?;
     Ok(BillingService::new(BillingConfig::default(), provider))
 }
 
@@ -165,7 +188,7 @@ pub fn build_billing_service() -> anyhow::Result<BillingService> {
 /// Build the VNST protocol data provider based on `VNST_PROVIDER` env var.
 ///
 /// Accepted values:
-/// - `"live"` – uses a live on-chain provider (TODO: implement)
+/// - `"live"` – uses a live on-chain provider
 /// - `"mock"` / absent – uses `MockVnstProtocolDataProvider` (rejected in production)
 pub fn build_vnst_provider() -> anyhow::Result<Arc<dyn VnstProtocolDataProvider>> {
     let kind = std::env::var("VNST_PROVIDER").unwrap_or_else(|_| "mock".to_string());
@@ -184,10 +207,10 @@ pub fn build_vnst_provider() -> anyhow::Result<Arc<dyn VnstProtocolDataProvider>
             ))
         }
         "live" => {
-            anyhow::bail!(
-                "VNST_PROVIDER=live selected but live VnstProtocolDataProvider is not yet implemented. \
-                 Use VNST_PROVIDER=mock for dev/test until live provider is available."
+            warn!(
+                "Using LiveVnstProtocolDataProvider with read-only capability: on-chain supply only; VNST issuance, reserves, and peg/oracle endpoints require additional providers"
             );
+            Ok(Arc::new(LiveVnstProtocolDataProvider::from_env()?))
         }
         other => {
             anyhow::bail!(
@@ -233,13 +256,42 @@ pub fn validate_production_providers() -> anyhow::Result<()> {
     }
     if billing.is_empty() || billing.eq_ignore_ascii_case("mock") {
         errors.push("BILLING_PROVIDER must not be 'mock' in production (set to 'postgres')");
-    } else if billing.eq_ignore_ascii_case("postgres") {
-        errors.push("BILLING_PROVIDER=postgres is configured but PgBillingDataProvider is not implemented yet");
     }
     if vnst.is_empty() || vnst.eq_ignore_ascii_case("mock") {
         errors.push("VNST_PROVIDER must not be 'mock' in production (set to 'live')");
     } else if vnst.eq_ignore_ascii_case("live") {
-        errors.push("VNST_PROVIDER=live is configured but live VnstProtocolDataProvider is not implemented yet");
+        warn!(
+            "Production VNST_PROVIDER=live is accepted with read-only capability: on-chain supply only; issuance, reserves, and peg/oracle require additional providers"
+        );
+    }
+
+    let vietqr_configured = std::env::var("VIETQR_API_KEY").is_ok();
+    let napas_configured = std::env::var("NAPAS_API_KEY").is_ok();
+    let vietqr_real_api = env_flag_enabled("VIETQR_ENABLE_REAL_API");
+    let napas_real_api = env_flag_enabled("NAPAS_ENABLE_REAL_API");
+
+    if vietqr_configured && !vietqr_real_api {
+        errors.push(
+            "VIETQR_API_KEY is configured but VIETQR_ENABLE_REAL_API is not true in production",
+        );
+    }
+    if napas_configured && !napas_real_api {
+        errors.push(
+            "NAPAS_API_KEY is configured but NAPAS_ENABLE_REAL_API is not true in production",
+        );
+    }
+    if vietqr_real_api && !vietqr_configured {
+        errors.push("VIETQR_ENABLE_REAL_API=true but VIETQR_API_KEY is not configured");
+    }
+    if napas_real_api && !napas_configured {
+        errors.push("NAPAS_ENABLE_REAL_API=true but NAPAS_API_KEY is not configured");
+    }
+    if !(vietqr_configured && vietqr_real_api) && !(napas_configured && napas_real_api) {
+        errors.push(
+            "At least one real rails adapter must be configured in production \
+             (set NAPAS_API_KEY with NAPAS_ENABLE_REAL_API=true or \
+             VIETQR_API_KEY with VIETQR_ENABLE_REAL_API=true)",
+        );
     }
 
     if errors.is_empty() {
@@ -267,6 +319,14 @@ mod tests {
         std::env::remove_var("EVENT_PUBLISHER");
         std::env::remove_var("BILLING_PROVIDER");
         std::env::remove_var("VNST_PROVIDER");
+        std::env::remove_var("VNST_RPC_URL");
+        std::env::remove_var("VNST_CHAIN_ID");
+        std::env::remove_var("VNST_CONTRACT_ADDRESS");
+        std::env::remove_var("BSC_RPC_URL");
+        std::env::remove_var("VIETQR_API_KEY");
+        std::env::remove_var("VIETQR_ENABLE_REAL_API");
+        std::env::remove_var("NAPAS_API_KEY");
+        std::env::remove_var("NAPAS_ENABLE_REAL_API");
     }
 
     #[test]
@@ -295,12 +355,22 @@ mod tests {
     }
 
     #[test]
+    fn test_is_production_ignores_empty_rust_env_and_falls_through_to_rampos_env() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("RUST_ENV", "   ");
+        std::env::set_var("RAMPOS_ENV", "production");
+        assert!(is_production());
+        clear_env();
+    }
+
+    #[test]
     fn test_production_rejects_mock_billing() {
         let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         clear_env();
         std::env::set_var("RUST_ENV", "production");
         std::env::set_var("BILLING_PROVIDER", "mock");
-        let result = build_billing_provider();
+        let result = build_billing_provider(None);
         assert!(result.is_err());
         let err_msg = result.err().unwrap().to_string();
         assert!(err_msg.contains("not allowed in production"));
@@ -312,7 +382,7 @@ mod tests {
         let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         clear_env();
         std::env::set_var("RUST_ENV", "production");
-        let result = build_billing_provider();
+        let result = build_billing_provider(None);
         assert!(result.is_err());
         clear_env();
     }
@@ -335,7 +405,7 @@ mod tests {
         let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         clear_env();
         std::env::set_var("BILLING_PROVIDER", "mock");
-        let result = build_billing_provider();
+        let result = build_billing_provider(None);
         assert!(result.is_ok());
         clear_env();
     }
@@ -351,26 +421,91 @@ mod tests {
     }
 
     #[test]
-    fn test_dev_rejects_unimplemented_postgres_billing() {
+    fn test_postgres_billing_requires_pool() {
         let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         clear_env();
         std::env::set_var("BILLING_PROVIDER", "postgres");
-        let result = build_billing_provider();
+        let result = build_billing_provider(None);
         assert!(result.is_err());
         let err = result.err().unwrap().to_string();
-        assert!(err.contains("not yet implemented"));
+        assert!(err.contains("requires a PostgreSQL pool"));
+        clear_env();
+    }
+
+    #[tokio::test]
+    async fn test_dev_builds_postgres_billing_with_pool() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("BILLING_PROVIDER", "postgres");
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://user:password@localhost/rampos")
+            .expect("lazy pool URL should parse");
+        let result = build_billing_provider(Some(pool));
+        assert!(result.is_ok());
         clear_env();
     }
 
     #[test]
-    fn test_dev_rejects_unimplemented_live_vnst() {
+    fn test_live_vnst_requires_rpc_url() {
         let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         clear_env();
         std::env::set_var("VNST_PROVIDER", "live");
+        std::env::set_var(
+            "VNST_CONTRACT_ADDRESS",
+            "0x1234567890123456789012345678901234567890",
+        );
         let result = build_vnst_provider();
         assert!(result.is_err());
         let err = result.err().unwrap().to_string();
-        assert!(err.contains("not yet implemented"));
+        assert!(err.contains("VNST_RPC_URL") || err.contains("BSC_RPC_URL"));
+        clear_env();
+    }
+
+    #[test]
+    fn test_live_vnst_requires_contract_address() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("VNST_PROVIDER", "live");
+        std::env::set_var("VNST_RPC_URL", "https://rpc.example.invalid");
+        let result = build_vnst_provider();
+        assert!(result.is_err());
+        let err = result.err().unwrap().to_string();
+        assert!(err.contains("VNST_CONTRACT_ADDRESS"));
+        clear_env();
+    }
+
+    #[test]
+    fn test_dev_builds_live_vnst_with_config() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("VNST_PROVIDER", "live");
+        std::env::set_var("VNST_RPC_URL", "https://rpc.example.invalid");
+        std::env::set_var(
+            "VNST_CONTRACT_ADDRESS",
+            "0x1234567890123456789012345678901234567890",
+        );
+        let result = build_vnst_provider();
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap().capabilities(),
+            ramp_core::stablecoin::VnstProviderCapability::ReadOnlySupply
+        );
+        clear_env();
+    }
+
+    #[test]
+    fn test_live_vnst_rejects_zero_contract_address() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("VNST_PROVIDER", "live");
+        std::env::set_var("VNST_RPC_URL", "https://rpc.example.invalid");
+        std::env::set_var(
+            "VNST_CONTRACT_ADDRESS",
+            "0x0000000000000000000000000000000000000000",
+        );
+        let result = build_vnst_provider();
+        assert!(result.is_err());
+        assert!(result.err().unwrap().to_string().contains("non-zero"));
         clear_env();
     }
 
@@ -379,7 +514,7 @@ mod tests {
         let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         clear_env();
         std::env::set_var("BILLING_PROVIDER", "invalid");
-        let result = build_billing_provider();
+        let result = build_billing_provider(None);
         assert!(result.is_err());
         let err_msg = result.err().unwrap().to_string();
         assert!(err_msg.contains("Unknown"));
@@ -403,7 +538,63 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_production_providers_fails_when_real_providers_unimplemented() {
+    fn test_validate_production_providers_allows_postgres_billing_and_live_vnst() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("RUST_ENV", "production");
+        std::env::set_var("EVENT_PUBLISHER", "nats");
+        std::env::set_var("BILLING_PROVIDER", "postgres");
+        std::env::set_var("VNST_PROVIDER", "live");
+        std::env::set_var("NAPAS_API_KEY", "napas_key");
+        std::env::set_var("NAPAS_ENABLE_REAL_API", "true");
+
+        let result = validate_production_providers();
+        assert!(result.is_ok());
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_validate_production_providers_rejects_mock_vnst_even_with_real_rails() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("RUST_ENV", "production");
+        std::env::set_var("EVENT_PUBLISHER", "nats");
+        std::env::set_var("BILLING_PROVIDER", "postgres");
+        std::env::set_var("VNST_PROVIDER", "mock");
+        std::env::set_var("NAPAS_API_KEY", "napas_key");
+        std::env::set_var("NAPAS_ENABLE_REAL_API", "true");
+
+        let result = validate_production_providers();
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("VNST_PROVIDER"));
+        assert!(err.contains("mock"));
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_validate_production_providers_rejects_simulation_rails() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("RUST_ENV", "production");
+        std::env::set_var("EVENT_PUBLISHER", "nats");
+        std::env::set_var("BILLING_PROVIDER", "postgres");
+        std::env::set_var("VNST_PROVIDER", "live");
+        std::env::set_var("NAPAS_API_KEY", "napas_key");
+        std::env::set_var("NAPAS_ENABLE_REAL_API", "false");
+
+        let result = validate_production_providers();
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("NAPAS_ENABLE_REAL_API"));
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_validate_production_providers_rejects_no_real_rails() {
         let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         clear_env();
         std::env::set_var("RUST_ENV", "production");
@@ -414,8 +605,24 @@ mod tests {
         let result = validate_production_providers();
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("PgBillingDataProvider is not implemented"));
-        assert!(err.contains("VnstProtocolDataProvider is not implemented"));
+        assert!(err.contains("At least one real rails adapter"));
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_validate_production_providers_allows_configured_real_rail() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("RUST_ENV", "production");
+        std::env::set_var("EVENT_PUBLISHER", "nats");
+        std::env::set_var("BILLING_PROVIDER", "postgres");
+        std::env::set_var("VNST_PROVIDER", "live");
+        std::env::set_var("VIETQR_API_KEY", "vietqr_key");
+        std::env::set_var("VIETQR_ENABLE_REAL_API", "true");
+
+        let result = validate_production_providers();
+        assert!(result.is_ok());
 
         clear_env();
     }

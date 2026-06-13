@@ -87,13 +87,11 @@ pub use tenant::TenantRepository;
 pub use user::UserRepository;
 pub use venue_trust::{
     BeneficiaryProfileFilter, BeneficiaryProfileRecord, EnsureWalletAttestationRequest,
-    PgVenueTrustRepository,
-    SourceOfFundsPackageFilter, SourceOfFundsPackageRecord, UpsertBeneficiaryProfileRequest,
-    UpsertSourceOfFundsPackageRequest, UpsertVenueAccountRequest,
+    PgVenueTrustRepository, SourceOfFundsPackageFilter, SourceOfFundsPackageRecord,
+    UpsertBeneficiaryProfileRequest, UpsertSourceOfFundsPackageRequest, UpsertVenueAccountRequest,
     UpsertVenueConnectionRequest, UpsertVenueTransferRequest, VenueAccountFilter,
     VenueAccountRecord, VenueConnectionFilter, VenueConnectionRecord, VenueTransferFilter,
-    VenueTransferRecord, VenueTrustRepository, WalletAttestationFilter,
-    WalletAttestationRecord,
+    VenueTransferRecord, VenueTrustRepository, WalletAttestationFilter, WalletAttestationRecord,
 };
 pub use webhook::WebhookRepository;
 

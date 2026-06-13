@@ -29,7 +29,7 @@
 
 ## Overview
 
-RampOS is a **production-grade on/off ramp orchestration layer** that lets any exchange, wallet, or fintech app convert between fiat and crypto. It handles the entire ramp lifecycle — **fiat deposit (on-ramp) → custody → crypto delivery** and **crypto receipt → settlement → fiat withdrawal (off-ramp)** — with built-in compliance, LP auction pricing, and multi-tenant isolation.
+RampOS is an **on/off ramp orchestration layer under active hardening** that lets any exchange, wallet, or fintech app convert between fiat and crypto. It handles the ramp lifecycle — **fiat deposit (on-ramp) → custody → crypto delivery** and **crypto receipt → settlement → fiat withdrawal (off-ramp)** — with built-in compliance, LP auction pricing, and multi-tenant isolation; current production-readiness evidence is bounded by `docs/current-status.md`.
 
 Built with **Rust** for performance and memory safety, **Solidity** for on-chain logic, and **Next.js** for the admin dashboard.
 
@@ -44,7 +44,7 @@ The **on/off ramp** is the critical bridge between traditional finance and crypt
 
 ### 🆕 Recent Updates (March 2026)
 - **RFQ Auction Layer**: Bidirectional LP price discovery for VND/USDT (Completed 2026-03-08).
-- **Compliance Hardening**: Landed **Travel Rule Foundation**, **KYC Passport**, **KYB Graph**, **Risk Lab Replay**, and **Continuous Rescreening** (Migrations 037-041).
+- **Compliance Hardening**: **Travel Rule Foundation**, **KYC Passport**, **KYB Graph**, **Risk Lab Replay**, and **Continuous Rescreening** are implemented in the working tree (uncommitted as of 2026-06-12) (Migrations 037-041).
 - **Governed Config Bundles**: Admin config-bundle export and extensions registry now surface registry-backed approval, rollout, provenance, and source metadata, with explicit fallback artifacts when no approved record is active.
 - **Operational Excellence**: Added **Sandbox Presets**, **LP Reliability Scoring**, **Treasury**, and **SLA Guardian** services.
 - **Security Audit**: Completed deep audit of HMAC signatures, RLS fail-closed policies, and repository sanitization.
@@ -916,7 +916,7 @@ More details:
 
 ## Infrastructure
 
-### Kubernetes (Production-Ready)
+### Kubernetes (Locally Render-Verified)
 - **PostgreSQL HA** — Primary + streaming replicas with automated failover
 - **PgBouncer** — Connection pooling for high concurrency
 - **Automated Backups** — Postgres, Redis, NATS → S3 with retention policies

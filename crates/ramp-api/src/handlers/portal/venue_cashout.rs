@@ -6,10 +6,10 @@ use axum::{
     Json, Router,
 };
 use ramp_core::repository::{PgRfqRepository, PgVenueTrustRepository};
+use ramp_core::service::rfq::RfqService;
 use ramp_core::service::{
     ConfirmVenueCashoutReceiptRequest, PrepareHyperliquidCashoutRequest, VenueCashoutService,
 };
-use ramp_core::service::rfq::RfqService;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ApiError;
@@ -60,12 +60,17 @@ pub struct HyperliquidCashoutReceiptResponse {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/hyperliquid/prepare", post(prepare_hyperliquid_cashout))
-        .route("/:transfer_id/wallet-received", post(confirm_hyperliquid_wallet_receipt))
+        .route(
+            "/:transfer_id/wallet-received",
+            post(confirm_hyperliquid_wallet_receipt),
+        )
 }
 
 fn build_cashout_service(state: &AppState) -> Result<VenueCashoutService, ApiError> {
     let pool = state.db_pool.clone().ok_or_else(|| {
-        ApiError::Internal("Venue cashout runtime is unavailable: database not configured".to_string())
+        ApiError::Internal(
+            "Venue cashout runtime is unavailable: database not configured".to_string(),
+        )
     })?;
 
     Ok(VenueCashoutService::new(

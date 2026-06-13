@@ -18,7 +18,7 @@ Welcome to the RampOS Enterprise documentation. This guide covers deployment, co
 
 ## Enterprise Overview
 
-RampOS Enterprise provides a complete fiat on/off-ramp solution with enterprise-grade features:
+RampOS Enterprise documents planned and implemented enterprise on/off-ramp capabilities; readiness depends on the evidence in `docs/current-status.md` and remaining hardening follow-ups:
 
 ### Key Features
 

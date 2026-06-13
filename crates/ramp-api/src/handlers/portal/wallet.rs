@@ -17,6 +17,7 @@ use ramp_common::types::{TenantId, UserId};
 use ramp_core::repository::CreateSmartAccountRequest;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use tracing::{info, warn};
 
 use crate::error::ApiError;
@@ -243,9 +244,12 @@ pub async fn get_balances(
             ApiError::Internal("Failed to retrieve balances".to_string())
         })?;
 
-    // Convert ledger balance rows to API response format
-    let balances: Vec<Balance> = if balance_rows.is_empty() {
-        // Return default empty balances if no records found
+    let locked_by_currency = compute_locked_balances(&app_state, &tenant_id, &user_id).await?;
+
+    // Convert ledger balance rows to API response format. Ledger rows are treated as
+    // total balances; pending/in-flight debits are reported as locked and deducted
+    // from available without fabricating a separate ledger reserve account.
+    let balances: Vec<Balance> = if balance_rows.is_empty() && locked_by_currency.is_empty() {
         vec![Balance {
             currency: "VND".to_string(),
             available: "0".to_string(),
@@ -253,14 +257,15 @@ pub async fn get_balances(
             total: "0".to_string(),
         }]
     } else {
-        balance_rows
+        let mut balances: Vec<Balance> = balance_rows
             .into_iter()
             .map(|row| {
-                // The ledger stores the total balance
-                // TODO: Calculate locked amounts from pending intents
-                let available = row.balance;
-                let locked = Decimal::ZERO; // TODO: Query pending intent amounts
-                let total = available + locked;
+                let locked = locked_by_currency
+                    .get(&row.currency)
+                    .copied()
+                    .unwrap_or(Decimal::ZERO);
+                let total = row.balance;
+                let available = total - locked;
 
                 Balance {
                     currency: row.currency,
@@ -269,10 +274,92 @@ pub async fn get_balances(
                     total: total.to_string(),
                 }
             })
-            .collect()
+            .collect();
+
+        for (currency, locked) in locked_by_currency {
+            if !balances.iter().any(|balance| balance.currency == currency) {
+                balances.push(Balance {
+                    currency,
+                    available: (-locked).to_string(),
+                    locked: locked.to_string(),
+                    total: "0".to_string(),
+                });
+            }
+        }
+
+        balances
     };
 
     Ok(Json(balances))
+}
+
+async fn compute_locked_balances(
+    app_state: &AppState,
+    tenant_id: &TenantId,
+    user_id: &UserId,
+) -> Result<BTreeMap<String, Decimal>, ApiError> {
+    if let Some(pool) = app_state.db_pool.as_ref() {
+        let rows: Vec<(String, Decimal)> = sqlx::query_as(
+            r#"
+            SELECT currency, COALESCE(SUM(amount), 0) AS locked
+            FROM intents
+            WHERE tenant_id = $1
+              AND user_id = $2
+              AND intent_type IN ('PAYOUT_VND', 'PAY_OUT', 'WITHDRAW_ONCHAIN')
+              AND state IN (
+                  'CREATED', 'PENDING', 'PAYOUT_CREATED', 'POLICY_APPROVED',
+                  'PAYOUT_SUBMITTED', 'SIGNED', 'BROADCASTED', 'CONFIRMING',
+                  'PROCESSING', 'MANUAL_REVIEW'
+              )
+            GROUP BY currency
+            "#,
+        )
+        .bind(&tenant_id.0)
+        .bind(&user_id.0)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to calculate locked balances from pending intents");
+            ApiError::Internal("Failed to retrieve balances".to_string())
+        })?;
+
+        return Ok(rows.into_iter().collect());
+    }
+
+    let intent_rows = app_state
+        .intent_repo
+        .list_by_user(tenant_id, user_id, i64::MAX, 0)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to calculate locked balances from intent repo");
+            ApiError::Internal("Failed to retrieve balances".to_string())
+        })?;
+
+    let mut locked = BTreeMap::new();
+    for row in intent_rows {
+        if is_locking_intent(&row.intent_type, &row.state) {
+            *locked.entry(row.currency).or_insert(Decimal::ZERO) += row.amount;
+        }
+    }
+
+    Ok(locked)
+}
+
+fn is_locking_intent(intent_type: &str, state: &str) -> bool {
+    matches!(intent_type, "PAYOUT_VND" | "PAY_OUT" | "WITHDRAW_ONCHAIN")
+        && matches!(
+            state,
+            "CREATED"
+                | "PENDING"
+                | "PAYOUT_CREATED"
+                | "POLICY_APPROVED"
+                | "PAYOUT_SUBMITTED"
+                | "SIGNED"
+                | "BROADCASTED"
+                | "CONFIRMING"
+                | "PROCESSING"
+                | "MANUAL_REVIEW"
+        )
 }
 
 /// POST /v1/portal/wallet/session-key - Create session key for smart account
@@ -455,5 +542,114 @@ mod tests {
     #[test]
     fn test_default_session_duration() {
         assert_eq!(default_session_duration(), 24);
+    }
+
+    #[test]
+    fn payout_manual_review_locks_wallet_funds() {
+        assert!(is_locking_intent("PAYOUT_VND", "MANUAL_REVIEW"));
+        assert!(is_locking_intent("PAY_OUT", "MANUAL_REVIEW"));
+    }
+
+    #[test]
+    fn withdraw_manual_review_locks_wallet_funds() {
+        assert!(is_locking_intent("WITHDRAW_ONCHAIN", "MANUAL_REVIEW"));
+    }
+
+    /// GAP-034 regression: locked balance is the SUM of amounts on in-flight
+    /// payout/withdraw intents, never a hardcoded Decimal::ZERO.
+    /// This mirrors the in-memory fallback path in compute_locked_balances.
+    #[test]
+    fn locked_balance_accumulates_in_flight_payout_amounts() {
+        use rust_decimal::Decimal;
+        use std::collections::BTreeMap;
+
+        // Simulate three intents for the same user, two locking, one not.
+        struct FakeIntent {
+            intent_type: &'static str,
+            state: &'static str,
+            currency: &'static str,
+            amount: Decimal,
+        }
+
+        let intents = vec![
+            FakeIntent {
+                intent_type: "PAYOUT_VND",
+                state: "PAYOUT_CREATED",
+                currency: "VND",
+                amount: Decimal::from(500_000),
+            },
+            FakeIntent {
+                intent_type: "PAY_OUT",
+                state: "PROCESSING",
+                currency: "VND",
+                amount: Decimal::from(200_000),
+            },
+            // completed payout — must NOT be locked
+            FakeIntent {
+                intent_type: "PAYOUT_VND",
+                state: "COMPLETED",
+                currency: "VND",
+                amount: Decimal::from(1_000_000),
+            },
+        ];
+
+        // Same logic as compute_locked_balances in-memory path
+        let mut locked: BTreeMap<String, Decimal> = BTreeMap::new();
+        for row in &intents {
+            if is_locking_intent(row.intent_type, row.state) {
+                *locked
+                    .entry(row.currency.to_string())
+                    .or_insert(Decimal::ZERO) += row.amount;
+            }
+        }
+
+        let vnd_locked = locked.get("VND").copied().unwrap_or(Decimal::ZERO);
+        assert_eq!(
+            vnd_locked,
+            Decimal::from(700_000),
+            "locked must be 500_000 + 200_000 = 700_000; COMPLETED intent must not count"
+        );
+        assert_ne!(
+            vnd_locked,
+            Decimal::ZERO,
+            "locked balance must not be hardcoded zero when in-flight intents exist"
+        );
+    }
+
+    /// GAP-034: all locking states are covered by is_locking_intent.
+    #[test]
+    fn all_locking_states_recognised() {
+        let locking_states = [
+            "CREATED",
+            "PENDING",
+            "PAYOUT_CREATED",
+            "POLICY_APPROVED",
+            "PAYOUT_SUBMITTED",
+            "SIGNED",
+            "BROADCASTED",
+            "CONFIRMING",
+            "PROCESSING",
+            "MANUAL_REVIEW",
+        ];
+        for state in &locking_states {
+            assert!(
+                is_locking_intent("PAYOUT_VND", state),
+                "PAYOUT_VND/{} must be locking",
+                state
+            );
+            assert!(
+                is_locking_intent("WITHDRAW_ONCHAIN", state),
+                "WITHDRAW_ONCHAIN/{} must be locking",
+                state
+            );
+        }
+        // Terminal states must NOT lock
+        for terminal in &["COMPLETED", "FAILED", "CANCELLED", "REJECTED", "EXPIRED"] {
+            assert!(
+                !is_locking_intent("PAYOUT_VND", terminal),
+                "PAYOUT_VND/{} must NOT be locking",
+                terminal
+            );
+        }
     }
 }

@@ -9,10 +9,35 @@ import {
   readAdminSessionToken,
 } from '@/lib/admin-auth';
 
-const API_URL = process.env.API_URL || 'http://localhost:8080';
-const API_KEY = process.env.API_KEY || '';
-const API_SECRET = process.env.API_SECRET || '';
-const ADMIN_SESSION_SECRET = process.env.RAMPOS_ADMIN_JWT_SECRET || '';
+export const dynamic = 'force-dynamic';
+
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV?.trim().toLowerCase() === 'production';
+}
+
+function requiredServerEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (value) {
+    return value;
+  }
+  if (isProductionRuntime()) {
+    throw new Error(`Missing required production environment variable: ${name}`);
+  }
+  return '';
+}
+
+function getApiUrl(): string {
+  return requiredServerEnv('API_URL') || 'http://localhost:8080';
+}
+function getApiKey(): string {
+  return requiredServerEnv('API_KEY');
+}
+function getApiSecret(): string {
+  return requiredServerEnv('API_SECRET');
+}
+function getAdminSessionSecret(): string {
+  return requiredServerEnv('RAMPOS_ADMIN_JWT_SECRET');
+}
 
 async function handleRequest(req: NextRequest, props: { params: Promise<{ path: string[] }> }) {
   const cookieStore = await cookies();
@@ -21,6 +46,11 @@ async function handleRequest(req: NextRequest, props: { params: Promise<{ path: 
   if (!csrfCookie || !csrfHeader || !constantTimeEqual(csrfCookie, csrfHeader)) {
     return NextResponse.json({ message: 'CSRF check failed' }, { status: 403 });
   }
+
+  const API_URL = getApiUrl();
+  const API_KEY = getApiKey();
+  const API_SECRET = getApiSecret();
+  const ADMIN_SESSION_SECRET = getAdminSessionSecret();
 
   const token = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
   const session = readAdminSessionToken(token, ADMIN_SESSION_SECRET);

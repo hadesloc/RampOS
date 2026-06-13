@@ -3,10 +3,10 @@ use uuid::Uuid;
 
 use ramp_core::repository::{
     BeneficiaryProfileFilter, EnsureWalletAttestationRequest, PgVenueTrustRepository,
-    SourceOfFundsPackageFilter, UpsertBeneficiaryProfileRequest,
-    UpsertSourceOfFundsPackageRequest, UpsertVenueAccountRequest,
-    UpsertVenueConnectionRequest, UpsertVenueTransferRequest, VenueAccountFilter,
-    VenueConnectionFilter, VenueTransferFilter, VenueTrustRepository, WalletAttestationFilter,
+    SourceOfFundsPackageFilter, UpsertBeneficiaryProfileRequest, UpsertSourceOfFundsPackageRequest,
+    UpsertVenueAccountRequest, UpsertVenueConnectionRequest, UpsertVenueTransferRequest,
+    VenueAccountFilter, VenueConnectionFilter, VenueTransferFilter, VenueTrustRepository,
+    WalletAttestationFilter,
 };
 
 #[tokio::test]
@@ -25,8 +25,8 @@ async fn venue_trust_repository_persists_and_reads_subject_graph() {
         .await
         .expect("migrations should succeed");
 
-    let attestation_id = Uuid::parse_str("10000000-0000-0000-0000-000000000023")
-        .expect("attestation uuid");
+    let attestation_id =
+        Uuid::parse_str("10000000-0000-0000-0000-000000000023").expect("attestation uuid");
     let repository = PgVenueTrustRepository::new(pool.clone());
     repository
         .ensure_wallet_attestation(&EnsureWalletAttestationRequest {
@@ -220,7 +220,10 @@ async fn venue_trust_repository_persists_and_reads_subject_graph() {
         .await
         .expect("transfers should load");
     assert_eq!(transfers.len(), 1);
-    assert_eq!(transfers[0].wallet_tx_hash.as_deref(), Some("0xtransferhash"));
+    assert_eq!(
+        transfers[0].wallet_tx_hash.as_deref(),
+        Some("0xtransferhash")
+    );
 
     let packages = repository
         .list_source_of_funds_packages(&SourceOfFundsPackageFilter {

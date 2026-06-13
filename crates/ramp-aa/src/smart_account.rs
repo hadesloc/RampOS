@@ -1,8 +1,11 @@
 use alloy::primitives::{keccak256, Address, Bytes, U256};
 use async_trait::async_trait;
 use ramp_common::{
+    onchain_gate::{
+        experimental_onchain_execution_disabled_message, experimental_onchain_execution_enabled,
+    },
     types::{TenantId, UserId},
-    Result,
+    Error, Result,
 };
 use tracing::info;
 
@@ -241,7 +244,7 @@ impl SmartAccountService {
         Ok(Bytes::from(data))
     }
 
-    /// Build UserOperation for a token transfer
+    /// EXPERIMENTAL — not launch scope (D-03). Fail-closed: execution calldata builders error unless explicitly enabled.
     pub fn build_transfer_op(
         &self,
         account: &SmartAccount,
@@ -249,6 +252,14 @@ impl SmartAccountService {
         value: U256,
         data: Option<Bytes>,
     ) -> Result<UserOperation> {
+        if !experimental_onchain_execution_enabled() {
+            return Err(Error::NotImplemented(
+                experimental_onchain_execution_disabled_message(
+                    "AA transfer UserOperation execution",
+                ),
+            ));
+        }
+
         // Build execute(address,uint256,bytes) call
         let selector = [0xb6, 0x1d, 0x27, 0xf6]; // keccak256("execute(address,uint256,bytes)")[:4]
 
@@ -265,12 +276,18 @@ impl SmartAccountService {
         ))
     }
 
-    /// Build UserOperation for batch execution
+    /// EXPERIMENTAL — not launch scope (D-03). Fail-closed: batch execution calldata builders error unless explicitly enabled.
     pub fn build_batch_op(
         &self,
         account: &SmartAccount,
         calls: Vec<(Address, U256, Bytes)>,
     ) -> Result<UserOperation> {
+        if !experimental_onchain_execution_enabled() {
+            return Err(Error::NotImplemented(
+                experimental_onchain_execution_disabled_message("AA batch UserOperation execution"),
+            ));
+        }
+
         // Build executeBatch(address[],uint256[],bytes[]) call
         let selector = [0x34, 0xfc, 0xd5, 0xbe]; // keccak256("executeBatch(address[],uint256[],bytes[])")[:4]
 

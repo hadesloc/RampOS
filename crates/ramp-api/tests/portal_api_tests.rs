@@ -5,13 +5,20 @@
 use axum::{
     body::Body,
     http::{Request, StatusCode},
+    middleware,
+    response::IntoResponse,
+    routing::post,
+    Router,
 };
 use base64::Engine;
 use chrono::Utc;
 use hmac::Mac;
 use jsonwebtoken::{encode, EncodingKey, Header};
-use ramp_api::middleware::{PortalAuthConfig, PortalClaims};
+use ramp_api::middleware::{
+    idempotency_middleware, IdempotencyConfig, IdempotencyHandler, PortalAuthConfig, PortalClaims,
+};
 use ramp_api::{create_router, AppState};
+use ramp_common::ledger::{AccountType, LedgerCurrency};
 use ramp_compliance::{
     case::CaseManager, reports::ReportGenerator, storage::MockDocumentStorage, InMemoryCaseStore,
 };
@@ -27,6 +34,7 @@ use ramp_core::test_utils::*;
 use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -45,6 +53,7 @@ struct TestPortalApp {
     intent_repo: Arc<MockIntentRepository>,
     #[allow(dead_code)]
     ledger_repo: Arc<MockLedgerRepository>,
+    user_repo: Arc<MockUserRepository>,
     jwt_token: String,
 }
 
@@ -79,6 +88,10 @@ fn create_unique_jwt_token(email: &str) -> String {
 }
 
 async fn setup_portal_app() -> TestPortalApp {
+    setup_portal_app_with_idempotency(false).await
+}
+
+async fn setup_portal_app_with_idempotency(enable_idempotency: bool) -> TestPortalApp {
     // Setup repositories
     let intent_repo = Arc::new(MockIntentRepository::new());
     let ledger_repo = Arc::new(MockLedgerRepository::new());
@@ -136,6 +149,14 @@ async fn setup_portal_app() -> TestPortalApp {
         updated_at: Utc::now(),
     });
 
+    ledger_repo.set_balance(
+        &ramp_common::types::TenantId::new(TEST_TENANT_ID),
+        Some(&ramp_common::types::UserId::new(TEST_USER_ID)),
+        &AccountType::LiabilityUserVnd,
+        &LedgerCurrency::VND,
+        Decimal::new(10_000_000, 0),
+    );
+
     // Setup services
     let payin_service = Arc::new(PayinService::new(
         intent_repo.clone(),
@@ -191,7 +212,12 @@ async fn setup_portal_app() -> TestPortalApp {
         case_manager,
         rule_manager: None,
         rate_limiter: None,
-        idempotency_handler: None,
+        idempotency_handler: enable_idempotency.then(|| {
+            Arc::new(IdempotencyHandler::with_memory(IdempotencyConfig {
+                ttl_seconds: 60,
+                key_prefix: "portal_api_test:idempotency".to_string(),
+            }))
+        }),
         aa_service: None,
         portal_auth_config: create_portal_auth_config(),
         bank_confirmation_repo: None,
@@ -225,6 +251,7 @@ async fn setup_portal_app() -> TestPortalApp {
         router,
         intent_repo,
         ledger_repo,
+        user_repo,
         jwt_token,
     }
 }
@@ -682,6 +709,339 @@ async fn test_create_deposit_intent() {
 
     assert!(body.get("id").is_some());
     assert_eq!(body["type"], "PAY_IN");
+}
+
+#[tokio::test]
+async fn test_create_deposit_intent_idempotency_replays_response() {
+    let app = setup_portal_app_with_idempotency(true).await;
+
+    let payload = serde_json::json!({
+        "method": "VND_BANK",
+        "amount": "1000000",
+        "currency": "VND"
+    });
+    let body = serde_json::to_string(&payload).unwrap();
+
+    let request1 = Request::builder()
+        .uri("/v1/portal/intents/deposit")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", app.jwt_token))
+        .header("Content-Type", "application/json")
+        .header("Idempotency-Key", "portal-deposit-key-1")
+        .body(Body::from(body.clone()))
+        .unwrap();
+
+    let response1 = app.router.clone().oneshot(request1).await.unwrap();
+    assert_eq!(response1.status(), StatusCode::OK);
+    let first_body = axum::body::to_bytes(response1.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let first_json: serde_json::Value = serde_json::from_slice(&first_body).unwrap();
+
+    let request2 = Request::builder()
+        .uri("/v1/portal/intents/deposit")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", app.jwt_token))
+        .header("Content-Type", "application/json")
+        .header("Idempotency-Key", "portal-deposit-key-1")
+        .body(Body::from(body))
+        .unwrap();
+
+    let response2 = app.router.clone().oneshot(request2).await.unwrap();
+    assert_eq!(response2.status(), StatusCode::OK);
+    assert!(response2.headers().contains_key("Idempotent-Replayed"));
+    let second_body = axum::body::to_bytes(response2.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let second_json: serde_json::Value = serde_json::from_slice(&second_body).unwrap();
+
+    assert_eq!(second_json, first_json);
+    assert_eq!(app.intent_repo.intents.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn test_idempotency_middleware_does_not_cache_5xx_responses() {
+    let handler = Arc::new(IdempotencyHandler::with_memory(IdempotencyConfig {
+        ttl_seconds: 60,
+        key_prefix: "portal_api_test:transient".to_string(),
+    }));
+    let attempts = Arc::new(AtomicUsize::new(0));
+    let attempts_for_route = attempts.clone();
+    let router = Router::new()
+        .route(
+            "/transient",
+            post(move || {
+                let attempts = attempts_for_route.clone();
+                async move {
+                    let attempt = attempts.fetch_add(1, Ordering::SeqCst) + 1;
+                    if attempt == 1 {
+                        (StatusCode::INTERNAL_SERVER_ERROR, "transient failure").into_response()
+                    } else {
+                        (StatusCode::OK, "fresh success").into_response()
+                    }
+                }
+            }),
+        )
+        .layer(middleware::from_fn_with_state(
+            handler,
+            idempotency_middleware,
+        ));
+
+    let request1 = Request::builder()
+        .uri("/transient")
+        .method("POST")
+        .header("Idempotency-Key", "transient-key-1")
+        .body(Body::empty())
+        .unwrap();
+    let response1 = router.clone().oneshot(request1).await.unwrap();
+    assert_eq!(response1.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+    let request2 = Request::builder()
+        .uri("/transient")
+        .method("POST")
+        .header("Idempotency-Key", "transient-key-1")
+        .body(Body::empty())
+        .unwrap();
+    let response2 = router.oneshot(request2).await.unwrap();
+    assert_eq!(response2.status(), StatusCode::OK);
+    assert!(!response2.headers().contains_key("Idempotent-Replayed"));
+    assert_eq!(attempts.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn test_idempotency_middleware_scopes_portal_users_independently() {
+    let handler = Arc::new(IdempotencyHandler::with_memory(IdempotencyConfig {
+        ttl_seconds: 60,
+        key_prefix: "portal_api_test:scope".to_string(),
+    }));
+    let attempts = Arc::new(AtomicUsize::new(0));
+    let attempts_for_route = attempts.clone();
+    let tenant_id = Uuid::new_v4();
+    let user_a = Uuid::new_v4();
+    let user_b = Uuid::new_v4();
+
+    let router = Router::new()
+        .route(
+            "/scoped",
+            post(move || {
+                let attempts = attempts_for_route.clone();
+                async move {
+                    let attempt = attempts.fetch_add(1, Ordering::SeqCst) + 1;
+                    (StatusCode::OK, format!("fresh-{attempt}")).into_response()
+                }
+            }),
+        )
+        .layer(middleware::from_fn_with_state(
+            handler.clone(),
+            idempotency_middleware,
+        ));
+
+    let mut request1 = Request::builder()
+        .uri("/scoped")
+        .method("POST")
+        .header("Idempotency-Key", "same-key")
+        .body(Body::empty())
+        .unwrap();
+    request1
+        .extensions_mut()
+        .insert(ramp_api::middleware::PortalUser {
+            user_id: user_a,
+            tenant_id,
+            email: "a@example.com".to_string(),
+        });
+    let response1 = router.clone().oneshot(request1).await.unwrap();
+    assert_eq!(response1.status(), StatusCode::OK);
+    let first_body = axum::body::to_bytes(response1.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(String::from_utf8(first_body.to_vec()).unwrap(), "fresh-1");
+
+    let attempts_for_route_b = attempts.clone();
+    let router_b = Router::new()
+        .route(
+            "/scoped",
+            post(move || {
+                let attempts = attempts_for_route_b.clone();
+                async move {
+                    let attempt = attempts.fetch_add(1, Ordering::SeqCst) + 1;
+                    (StatusCode::OK, format!("fresh-{attempt}")).into_response()
+                }
+            }),
+        )
+        .layer(middleware::from_fn_with_state(
+            handler,
+            idempotency_middleware,
+        ));
+
+    let mut request2 = Request::builder()
+        .uri("/scoped")
+        .method("POST")
+        .header("Idempotency-Key", "same-key")
+        .body(Body::empty())
+        .unwrap();
+    request2
+        .extensions_mut()
+        .insert(ramp_api::middleware::PortalUser {
+            user_id: user_b,
+            tenant_id,
+            email: "b@example.com".to_string(),
+        });
+    let response2 = router_b.oneshot(request2).await.unwrap();
+    assert_eq!(response2.status(), StatusCode::OK);
+    assert!(!response2.headers().contains_key("Idempotent-Replayed"));
+    let second_body = axum::body::to_bytes(response2.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(String::from_utf8(second_body.to_vec()).unwrap(), "fresh-2");
+    assert_eq!(attempts.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn test_create_deposit_intent_idempotency_is_scoped_per_portal_user() {
+    let app = setup_portal_app_with_idempotency(true).await;
+    let other_user_id = Uuid::new_v4().to_string();
+    app.user_repo.add_user(UserRow {
+        id: other_user_id.clone(),
+        tenant_id: TEST_TENANT_ID.to_string(),
+        status: "ACTIVE".to_string(),
+        kyc_tier: 1,
+        kyc_status: "VERIFIED".to_string(),
+        kyc_verified_at: Some(Utc::now()),
+        risk_score: None,
+        risk_flags: serde_json::json!({}),
+        daily_payin_limit_vnd: None,
+        daily_payout_limit_vnd: None,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    });
+    let other_token = create_jwt_token(&other_user_id, TEST_TENANT_ID, "other@example.com");
+
+    let payload = serde_json::json!({
+        "method": "VND_BANK",
+        "amount": "1000000",
+        "currency": "VND"
+    });
+    let body = serde_json::to_string(&payload).unwrap();
+
+    let request1 = Request::builder()
+        .uri("/v1/portal/intents/deposit")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", app.jwt_token))
+        .header("Content-Type", "application/json")
+        .header("Idempotency-Key", "portal-cross-user-key-1")
+        .body(Body::from(body.clone()))
+        .unwrap();
+
+    let response1 = app.router.clone().oneshot(request1).await.unwrap();
+    assert_eq!(response1.status(), StatusCode::OK);
+    let first_body = axum::body::to_bytes(response1.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let first_json: serde_json::Value = serde_json::from_slice(&first_body).unwrap();
+
+    let request2 = Request::builder()
+        .uri("/v1/portal/intents/deposit")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", other_token))
+        .header("Content-Type", "application/json")
+        .header("Idempotency-Key", "portal-cross-user-key-1")
+        .body(Body::from(body))
+        .unwrap();
+
+    let response2 = app.router.clone().oneshot(request2).await.unwrap();
+    assert_eq!(response2.status(), StatusCode::BAD_REQUEST);
+    assert!(!response2.headers().contains_key("Idempotent-Replayed"));
+    let second_body = axum::body::to_bytes(response2.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let second_json: serde_json::Value = serde_json::from_slice(&second_body).unwrap();
+
+    assert_ne!(second_json, first_json);
+    assert_eq!(second_json["error"]["code"], "BAD_REQUEST");
+    assert!(second_json["error"]["message"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("idempotency key already used by another user"));
+    assert_eq!(app.intent_repo.intents.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn test_create_deposit_intent_without_idempotency_key_creates_each_time() {
+    let app = setup_portal_app_with_idempotency(true).await;
+
+    let payload = serde_json::json!({
+        "method": "VND_BANK",
+        "amount": "1000000",
+        "currency": "VND"
+    });
+    let body = serde_json::to_string(&payload).unwrap();
+
+    for _ in 0..2 {
+        let request = Request::builder()
+            .uri("/v1/portal/intents/deposit")
+            .method("POST")
+            .header("Authorization", format!("Bearer {}", app.jwt_token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(body.clone()))
+            .unwrap();
+
+        let response = app.router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(!response.headers().contains_key("Idempotent-Replayed"));
+    }
+
+    assert_eq!(app.intent_repo.intents.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn test_create_withdraw_intent_idempotency_replays_response() {
+    let app = setup_portal_app_with_idempotency(true).await;
+
+    let payload = serde_json::json!({
+        "method": "VND_BANK",
+        "amount": "500000",
+        "currency": "VND",
+        "bankName": "Vietcombank",
+        "accountNumber": "1234567890123",
+        "accountName": "Nguyen Van A"
+    });
+    let body = serde_json::to_string(&payload).unwrap();
+
+    let request1 = Request::builder()
+        .uri("/v1/portal/intents/withdraw")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", app.jwt_token))
+        .header("Content-Type", "application/json")
+        .header("Idempotency-Key", "portal-withdraw-key-1")
+        .body(Body::from(body.clone()))
+        .unwrap();
+
+    let response1 = app.router.clone().oneshot(request1).await.unwrap();
+    assert_eq!(response1.status(), StatusCode::OK);
+    let first_body = axum::body::to_bytes(response1.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let first_json: serde_json::Value = serde_json::from_slice(&first_body).unwrap();
+
+    let request2 = Request::builder()
+        .uri("/v1/portal/intents/withdraw")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", app.jwt_token))
+        .header("Content-Type", "application/json")
+        .header("Idempotency-Key", "portal-withdraw-key-1")
+        .body(Body::from(body))
+        .unwrap();
+
+    let response2 = app.router.clone().oneshot(request2).await.unwrap();
+    assert_eq!(response2.status(), StatusCode::OK);
+    assert!(response2.headers().contains_key("Idempotent-Replayed"));
+    let second_body = axum::body::to_bytes(response2.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let second_json: serde_json::Value = serde_json::from_slice(&second_body).unwrap();
+
+    assert_eq!(second_json, first_json);
+    assert_eq!(app.intent_repo.intents.lock().unwrap().len(), 1);
 }
 
 #[tokio::test]

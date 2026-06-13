@@ -11,8 +11,11 @@ use axum::{
 };
 use ramp_common::types::TenantId;
 use ramp_core::repository::RfqRequestRow;
-use ramp_core::repository::{PgRfqRepository, RfqRepository};
+use ramp_core::repository::{
+    PgOfframpIntentRepository, PgRfqRepository, PgSettlementRepository, RfqRepository,
+};
 use ramp_core::service::rfq::RfqService;
+use ramp_core::service::LinkedOfframpExecutionService;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
@@ -89,6 +92,19 @@ fn make_rfq_service(pool: sqlx::PgPool, state: &AppState) -> RfqService {
     RfqService::new(
         Arc::new(PgRfqRepository::new(pool)),
         state.event_publisher.clone(),
+    )
+}
+
+fn make_linked_execution_service(
+    pool: sqlx::PgPool,
+    state: &AppState,
+) -> LinkedOfframpExecutionService {
+    let rfq_repo = Arc::new(PgRfqRepository::new(pool.clone()));
+    LinkedOfframpExecutionService::new(
+        RfqService::new(rfq_repo.clone(), state.event_publisher.clone()),
+        rfq_repo,
+        Arc::new(PgOfframpIntentRepository::new(pool.clone())),
+        Arc::new(PgSettlementRepository::new(pool)),
     )
 }
 
@@ -187,7 +203,7 @@ pub async fn finalize_rfq(
 
     let pool = ensure_pool(&app_state)?.clone();
     let tenant_id = TenantId(tenant_ctx.tenant_id.0.clone());
-    let svc = make_rfq_service(pool, &app_state);
+    let svc = make_linked_execution_service(pool, &app_state);
 
     let result = svc
         .finalize_rfq(&tenant_id, &id)

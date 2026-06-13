@@ -122,8 +122,7 @@ async fn setup_app() -> axum::Router {
     ));
     let user_service = Arc::new(UserService::new(user_repo.clone(), event_publisher.clone()));
     let report_generator = Arc::new(ReportGenerator::new(
-        PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
-            .expect("lazy pool"),
+        PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres").expect("lazy pool"),
         Arc::new(MockDocumentStorage::new()),
     ));
     let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));

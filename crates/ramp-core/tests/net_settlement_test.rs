@@ -22,7 +22,11 @@ fn net_settlement_can_build_single_bilateral_proposal_from_settlements() {
     let settlements = vec![
         Settlement {
             id: "stl_w10_001".to_string(),
+            tenant_id: None,
             offramp_intent_id: "tenant_demo_lp_alpha_ofr_001".to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: SettlementStatus::Processing,
             bank_reference: Some("RAMP-W10-001".to_string()),
             error_message: None,
@@ -31,7 +35,11 @@ fn net_settlement_can_build_single_bilateral_proposal_from_settlements() {
         },
         Settlement {
             id: "stl_w10_002".to_string(),
+            tenant_id: None,
             offramp_intent_id: "tenant_demo_lp_alpha_ofr_002".to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: SettlementStatus::Completed,
             bank_reference: Some("RAMP-W10-002".to_string()),
             error_message: None,

@@ -18,6 +18,7 @@ pub mod incident_timeline;
 pub mod intelligence_sequencing;
 pub mod ledger;
 pub mod license;
+pub mod linked_offramp_execution;
 pub mod liquidity_policy;
 pub mod liquidity_reliability;
 pub mod metrics;
@@ -53,8 +54,8 @@ pub mod treasury_evidence;
 pub mod user;
 pub mod venue_cashout;
 pub mod venue_funding;
-pub mod venue_trust_reporting;
 pub mod venue_trust;
+pub mod venue_trust_reporting;
 pub mod webhook;
 pub mod webhook_delivery;
 #[cfg(test)]
@@ -112,6 +113,7 @@ pub use intelligence_sequencing::{
 };
 pub use ledger::LedgerService;
 pub use license::LicenseService;
+pub use linked_offramp_execution::LinkedOfframpExecutionService;
 pub use liquidity_policy::{
     LiquidityPolicyCandidate, LiquidityPolicyConfig, LiquidityPolicyDecision,
     LiquidityPolicyDirection, LiquidityPolicyEvaluator, LiquidityPolicyFallbackReason,
@@ -173,7 +175,10 @@ pub use sandbox::{
     SandboxScenarioRun, SandboxScenarioRunRequest, SandboxScenarioRunner, SandboxScenarioStatus,
     SandboxSeedRequest, SandboxSeedResult, SandboxService,
 };
-pub use settlement::{Settlement, SettlementService, SettlementStatus};
+pub use settlement::{
+    ApplySettlementOutcomeRequest, Settlement, SettlementOutcome, SettlementService,
+    SettlementStatus, TriggerSettlementRequest,
+};
 pub use sla_guardian::{
     SlaGuardianAlert, SlaGuardianOwnerLane, SlaGuardianRiskLevel, SlaGuardianService,
     SlaGuardianSnapshot,
@@ -196,16 +201,16 @@ pub use venue_cashout::{
 };
 pub use venue_funding::{
     PersistedVenueFundingTransfer, PrepareVenueFundingTransferRequest,
-    PreparedVenueFundingTransfer, SubmitVenueFundingTransferRequest,
-    SubmittedVenueFundingTransfer, VenueFundingService,
-};
-pub use venue_trust_reporting::{
-    VenueTrustDirectionSummary, VenueTrustEvidenceExportArtifact,
-    VenueTrustEvidenceReference, VenueTrustReport, VenueTrustReportingService,
+    PreparedVenueFundingTransfer, SubmitVenueFundingTransferRequest, SubmittedVenueFundingTransfer,
+    VenueFundingService,
 };
 pub use venue_trust::{
     CexConnectorReadiness, LighterConnectorReadiness, VenueConnectorReadinessRequirement,
     VenueSubjectSnapshot, VenueTransferDetail, VenueTrustService,
+};
+pub use venue_trust_reporting::{
+    VenueTrustDirectionSummary, VenueTrustEvidenceExportArtifact, VenueTrustEvidenceReference,
+    VenueTrustReport, VenueTrustReportingService,
 };
 pub use webhook::WebhookService;
 pub use withdraw::WithdrawService;

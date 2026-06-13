@@ -8,12 +8,11 @@ use ramp_common::Result;
 
 use crate::repository::{
     BeneficiaryProfileFilter, BeneficiaryProfileRecord, EnsureWalletAttestationRequest,
-    WalletAttestationFilter, WalletAttestationRecord,
     PgVenueTrustRepository, SourceOfFundsPackageFilter, SourceOfFundsPackageRecord,
     UpsertBeneficiaryProfileRequest, UpsertSourceOfFundsPackageRequest, UpsertVenueAccountRequest,
     UpsertVenueConnectionRequest, UpsertVenueTransferRequest, VenueAccountFilter,
     VenueAccountRecord, VenueConnectionFilter, VenueConnectionRecord, VenueTransferRecord,
-    VenueTrustRepository,
+    VenueTrustRepository, WalletAttestationFilter, WalletAttestationRecord,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -526,9 +525,9 @@ impl VenueTrustService {
             .as_ref()
             .and_then(|record| metadata_string(&record.metadata, "institutional_evidence_status"))
             .or_else(|| {
-                account
-                    .as_ref()
-                    .and_then(|record| metadata_string(&record.metadata, "institutional_evidence_status"))
+                account.as_ref().and_then(|record| {
+                    metadata_string(&record.metadata, "institutional_evidence_status")
+                })
             });
 
         let requirements = vec![
@@ -557,9 +556,8 @@ impl VenueTrustService {
                         Some("verified" | "linked" | "institutional_linked")
                     ),
                 source: "venue_connection.status+metadata.operator_linkage_status".to_string(),
-                message:
-                    "Lighter must be operator-linked with an active connection before use."
-                        .to_string(),
+                message: "Lighter must be operator-linked with an active connection before use."
+                    .to_string(),
             },
             VenueConnectorReadinessRequirement {
                 code: "lighter_institutional_evidence".to_string(),
@@ -568,9 +566,8 @@ impl VenueTrustService {
                     Some("approved" | "ready" | "complete")
                 ),
                 source: "venue_connection.metadata.institutional_evidence_status".to_string(),
-                message:
-                    "Lighter requires institutional evidence to be approved or marked ready."
-                        .to_string(),
+                message: "Lighter requires institutional evidence to be approved or marked ready."
+                    .to_string(),
             },
         ];
 
@@ -584,7 +581,9 @@ impl VenueTrustService {
             } else {
                 "attention_required".to_string()
             },
-            connection_id: connection.as_ref().map(|record| record.connection_id.clone()),
+            connection_id: connection
+                .as_ref()
+                .map(|record| record.connection_id.clone()),
             account_id: account.as_ref().map(|record| record.account_id.clone()),
             public_pool_mode,
             proof_anchor_mode,
@@ -639,8 +638,7 @@ impl VenueTrustService {
                 code: "cex_api_key_mode".to_string(),
                 satisfied: readiness_mode_configured(api_key_mode.as_deref()),
                 source: "venue_connection.metadata.api_key_mode".to_string(),
-                message: "CEX connector requires an API key mode to be configured."
-                    .to_string(),
+                message: "CEX connector requires an API key mode to be configured.".to_string(),
             },
             VenueConnectorReadinessRequirement {
                 code: "cex_subaccount_mode".to_string(),
@@ -656,9 +654,8 @@ impl VenueTrustService {
                     Some("verified" | "enabled" | "approved" | "ready")
                 ),
                 source: "venue_connection.metadata.withdrawal_allowlist_status".to_string(),
-                message:
-                    "CEX connector requires a verified withdrawal allowlist before use."
-                        .to_string(),
+                message: "CEX connector requires a verified withdrawal allowlist before use."
+                    .to_string(),
             },
             VenueConnectorReadinessRequirement {
                 code: "cex_custody_boundary".to_string(),
@@ -680,7 +677,9 @@ impl VenueTrustService {
             } else {
                 "attention_required".to_string()
             },
-            connection_id: connection.as_ref().map(|record| record.connection_id.clone()),
+            connection_id: connection
+                .as_ref()
+                .map(|record| record.connection_id.clone()),
             account_id: account.as_ref().map(|record| record.account_id.clone()),
             api_key_mode,
             subaccount_mode,

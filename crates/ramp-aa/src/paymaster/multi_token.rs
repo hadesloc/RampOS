@@ -5,7 +5,13 @@
 use alloy::primitives::{Address, Bytes, U256};
 use async_trait::async_trait;
 use chrono::Utc;
-use ramp_common::{types::TenantId, Error, Result};
+use ramp_common::{
+    onchain_gate::{
+        experimental_onchain_execution_disabled_message, experimental_onchain_execution_enabled,
+    },
+    types::TenantId,
+    Error, Result,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -366,12 +372,12 @@ impl MultiTokenPaymaster {
         })
     }
 
-    /// Check if user has approved enough tokens
+    /// EXPERIMENTAL — not launch scope (D-03). Fail-closed: token allowance checks error until real on-chain reads are implemented.
     pub async fn check_token_approval(
         &self,
         _user: Address,
         token: GasToken,
-        required_amount: U256,
+        _required_amount: U256,
     ) -> Result<TokenApprovalStatus> {
         let _token_config = self
             .config
@@ -380,26 +386,15 @@ impl MultiTokenPaymaster {
             .find(|t| t.token == token && t.chain_id == self.config.chain_id)
             .ok_or_else(|| Error::NotFound(format!("Token {:?} not configured", token)))?;
 
-        // In production, would query the token contract for allowance
-        // For now, return a mock status
-        let current_allowance = U256::ZERO; // Would be fetched from chain
+        if !experimental_onchain_execution_enabled() {
+            return Err(Error::NotImplemented(
+                experimental_onchain_execution_disabled_message("Paymaster token approval checks"),
+            ));
+        }
 
-        let token_address = self
-            .config
-            .supported_tokens
-            .iter()
-            .find(|t| t.token == token && t.chain_id == self.config.chain_id)
-            .map(|t| t.token_address)
-            .unwrap_or(Address::ZERO);
-
-        Ok(TokenApprovalStatus {
-            token,
-            token_address,
-            spender: self.config.paymaster_address,
-            current_allowance,
-            required_allowance: required_amount,
-            needs_approval: current_allowance < required_amount,
-        })
+        Err(Error::NotImplemented(
+            "Paymaster token approval checks are experimental and not implemented — real on-chain allowance reads required (D-03)".to_string(),
+        ))
     }
 
     /// Generate approval transaction data
@@ -588,6 +583,7 @@ impl MultiTokenPaymaster {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ramp_common::onchain_gate::{test_env_lock, EXPERIMENTAL_ONCHAIN_EXECUTION_ENV};
 
     fn test_config() -> MultiTokenPaymasterConfig {
         MultiTokenPaymasterConfig {
@@ -683,6 +679,54 @@ mod tests {
 
         // Check length: 4 (selector) + 32 (spender) + 32 (amount) = 68
         assert_eq!(data.len(), 68);
+    }
+
+    #[tokio::test]
+    async fn test_check_token_approval_fails_closed_when_gate_off() {
+        let _guard = test_env_lock();
+        std::env::remove_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
+
+        let oracle = Arc::new(MockPriceOracle::new());
+        let config = test_config();
+        let paymaster = MultiTokenPaymaster::new(config, oracle);
+
+        let err = paymaster
+            .check_token_approval(
+                Address::from([0x11u8; 20]),
+                GasToken::USDT,
+                U256::from(1000000),
+            )
+            .await
+            .expect_err("token approval checks should fail closed by default");
+
+        assert!(err.to_string().contains("Paymaster token approval checks"));
+        assert!(err.to_string().contains("experimental and disabled"));
+    }
+
+    #[tokio::test]
+    async fn test_check_token_approval_errors_even_with_gate_enabled() {
+        let _guard = test_env_lock();
+        std::env::set_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV, "true");
+
+        let oracle = Arc::new(MockPriceOracle::new());
+        let config = test_config();
+        let paymaster = MultiTokenPaymaster::new(config, oracle);
+
+        let err = paymaster
+            .check_token_approval(
+                Address::from([0x11u8; 20]),
+                GasToken::USDT,
+                U256::from(1000000),
+            )
+            .await
+            .expect_err("token approval checks must not mock success");
+
+        assert!(err.to_string().contains("not implemented"));
+        assert!(err
+            .to_string()
+            .contains("real on-chain allowance reads required"));
+
+        std::env::remove_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
     }
 
     #[tokio::test]

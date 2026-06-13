@@ -116,7 +116,7 @@ services:
       RAMPOS_ADMIN_JWT_SECRET: ${RAMPOS_ADMIN_JWT_SECRET:?RAMPOS_ADMIN_JWT_SECRET must be set}
       RAMPOS_ADMIN_KEY: ${RAMPOS_ADMIN_KEY:-}
       RAMPOS_ADMIN_ROLE: ${RAMPOS_ADMIN_ROLE:-operator}
-      JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       RUST_LOG: info,ramp_api=debug,ramp_core=debug
     depends_on:

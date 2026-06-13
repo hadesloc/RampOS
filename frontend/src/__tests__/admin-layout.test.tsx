@@ -55,7 +55,10 @@ describe("AdminLayout", () => {
       }),
     ).rejects.toThrow("NEXT_REDIRECT");
 
-    expect(redirectMock).toHaveBeenCalledWith("/admin-login");
+    expect(redirectMock).toHaveBeenCalledWith({
+      href: "/admin-login",
+      locale: "en",
+    });
   });
 
   it("renders admin pages when the request has a valid admin session", async () => {

@@ -8,6 +8,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use chrono::Utc;
+use hmac::{Hmac, Mac};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
@@ -41,6 +42,8 @@ use testcontainers_modules::postgres::Postgres;
 use tower::ServiceExt;
 
 const TEST_ADMIN_JWT_SECRET: &str = "offramp-admin-jwt-secret";
+const TEST_API_SECRET: &str = "offramp_api_secret";
+type HmacSha256 = Hmac<sha2::Sha256>;
 
 /// Helper to build a JWT token for portal auth
 fn build_portal_jwt(user_id: &str, tenant_id: &str, secret: &str) -> String {
@@ -81,6 +84,47 @@ fn build_admin_jwt(role: &str) -> String {
     .expect("Failed to create admin JWT")
 }
 
+fn generate_signature(
+    method: &str,
+    path: &str,
+    timestamp: &str,
+    body: &str,
+    secret: &str,
+) -> String {
+    let message = format!("{}\n{}\n{}\n{}", method, path, timestamp, body);
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take any size key");
+    mac.update(message.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
+
+fn build_signed_admin_jwt_request(
+    method: &str,
+    uri: &str,
+    body: &str,
+    api_key: &str,
+    api_secret: &str,
+    admin_jwt: &str,
+) -> Request<Body> {
+    let timestamp = Utc::now().to_rfc3339();
+    let path = uri.split('?').next().unwrap_or(uri);
+    let signature = generate_signature(method, path, &timestamp, body, api_secret);
+
+    let mut builder = Request::builder()
+        .uri(uri)
+        .method(method)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("X-Timestamp", timestamp)
+        .header("X-Signature", signature)
+        .header("X-Admin-Authorization", format!("Bearer {}", admin_jwt));
+
+    if !body.is_empty() {
+        builder = builder.header("Content-Type", "application/json");
+    }
+
+    builder.body(Body::from(body.to_string())).unwrap()
+}
+
 /// Helper to build AppState with testcontainers DB
 async fn build_test_app(pool: sqlx::PgPool) -> (axum::Router, String, String) {
     let intent_repo = Arc::new(PgIntentRepository::new(pool.clone()));
@@ -103,7 +147,10 @@ async fn build_test_app(pool: sqlx::PgPool) -> (axum::Router, String, String) {
             name: "Offramp E2E Tenant".to_string(),
             status: "ACTIVE".to_string(),
             api_key_hash,
-            api_secret_encrypted: None,
+            api_secret_encrypted: Some(
+                ramp_core::service::crypto::encode_secret_for_storage(TEST_API_SECRET.as_bytes())
+                    .expect("test API secret should encode"),
+            ),
             webhook_secret_hash: "secret".to_string(),
             webhook_secret_encrypted: None,
             webhook_url: Some("http://localhost/webhook".to_string()),
@@ -261,11 +308,13 @@ async fn run_test_migrations(pool: &sqlx::PgPool) {
             .expect("system clock should be after UNIX_EPOCH")
             .as_nanos()
     );
-    let temp_dir = std::env::temp_dir().join(format!("rampos-e2e-offramp-migrations-{unique_suffix}"));
+    let temp_dir =
+        std::env::temp_dir().join(format!("rampos-e2e-offramp-migrations-{unique_suffix}"));
     std::fs::create_dir_all(&temp_dir).expect("Failed to create temp migration directory");
     let mut deferred_enum_additions: Vec<String> = Vec::new();
 
-    for entry in std::fs::read_dir(&source_dir).expect("Failed to list migration source directory") {
+    for entry in std::fs::read_dir(&source_dir).expect("Failed to list migration source directory")
+    {
         let entry = entry.expect("Failed to read migration directory entry");
         let path = entry.path();
         if !path.is_file() {
@@ -275,9 +324,7 @@ async fn run_test_migrations(pool: &sqlx::PgPool) {
             continue;
         }
 
-        let file_name = path
-            .file_name()
-            .expect("Migration file should have a name");
+        let file_name = path.file_name().expect("Migration file should have a name");
         let mut sql = std::fs::read_to_string(&path).expect("Failed to read migration SQL");
         if matches!(
             file_name.to_str(),
@@ -324,6 +371,134 @@ fn docker_available() -> bool {
         .output()
         .map(|output| output.status.success())
         .unwrap_or(false)
+}
+
+async fn seed_lp_key(pool: &sqlx::PgPool, tenant_id: &str, lp_id: &str, secret: &str) {
+    let mut hasher = Sha256::new();
+    hasher.update(secret.as_bytes());
+    let key_hash = hex::encode(hasher.finalize());
+
+    sqlx::query(
+        r#"
+        INSERT INTO registered_lp_keys (
+            id, tenant_id, lp_id, lp_name, key_hash, can_bid_offramp, can_bid_onramp, is_active
+        ) VALUES ($1, $2, $3, $4, $5, true, true, true)
+        "#,
+    )
+    .bind(format!("lp_key_{}", lp_id))
+    .bind(tenant_id)
+    .bind(lp_id)
+    .bind(format!("{} Test LP", lp_id))
+    .bind(key_hash)
+    .execute(pool)
+    .await
+    .expect("seed LP key");
+}
+
+async fn post_json(
+    app: axum::Router,
+    uri: String,
+    jwt: &str,
+    payload: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
+    let req = Request::builder()
+        .uri(uri)
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", jwt))
+        .header("Content-Type", "application/json")
+        .body(Body::from(payload.to_string()))
+        .unwrap();
+    let response = app.oneshot(req).await.unwrap();
+    let status = response.status();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json = serde_json::from_slice(&body).unwrap_or_else(|_| json!({}));
+    (status, json)
+}
+
+async fn create_linked_offramp_settlement(
+    app: axum::Router,
+    jwt: &str,
+    tenant_id: &str,
+    lp_id: &str,
+    lp_secret: &str,
+) -> (String, String) {
+    let (status, quote_resp) = post_json(
+        app.clone(),
+        "/v1/portal/offramp/quote".to_string(),
+        jwt,
+        json!({
+            "cryptoAsset": "USDT",
+            "amount": "100",
+            "bankCode": "VCB",
+            "accountNumber": "1234567890",
+            "accountName": "Linked Offramp Test"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "quote response: {quote_resp}");
+    let offramp_id = quote_resp["quoteId"].as_str().unwrap().to_string();
+
+    let (status, rfq_resp) = post_json(
+        app.clone(),
+        "/v1/portal/rfq".to_string(),
+        jwt,
+        json!({
+            "direction": "OFFRAMP",
+            "cryptoAsset": "USDT",
+            "cryptoAmount": "100",
+            "offrampId": offramp_id,
+            "ttlMinutes": 5
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "rfq response: {rfq_resp}");
+    let rfq_id = rfq_resp["id"].as_str().unwrap().to_string();
+
+    let lp_key = format!("{lp_id}:{tenant_id}:{lp_secret}");
+    let req = Request::builder()
+        .uri(format!("/v1/lp/rfq/{}/bid", rfq_id))
+        .method("POST")
+        .header("X-LP-Key", lp_key)
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            json!({
+                "exchangeRate": "26000",
+                "vndAmount": "2600000",
+                "lpName": "Linked LP",
+                "validMinutes": 5
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let (status, accept_resp) = post_json(
+        app.clone(),
+        format!("/v1/portal/rfq/{}/accept", rfq_id),
+        jwt,
+        json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "accept response: {accept_resp}");
+
+    let req = Request::builder()
+        .uri(format!("/v1/portal/offramp/{}/status", offramp_id))
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", jwt))
+        .body(Body::empty())
+        .unwrap();
+    let response = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let status_resp: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let settlement_id = status_resp["settlementId"].as_str().unwrap().to_string();
+
+    (offramp_id, settlement_id)
 }
 
 // ============================================================================
@@ -1441,6 +1616,166 @@ async fn test_offramp_settlement_trigger() {
     assert_eq!(crypto_received_resp["txHash"], "0xofframpobs002");
 
     println!("test_offramp_settlement_trigger PASSED");
+}
+
+#[tokio::test]
+async fn test_portal_accept_linked_offramp_rfq_creates_settlement() {
+    if !docker_available() {
+        eprintln!("Skipping e2e_offramp_test: Docker daemon unavailable");
+        return;
+    }
+    let tenant_id = "00000000-0000-0000-0000-000000000001";
+    let pool = setup_db().await;
+    let (app, _api_key, jwt) = build_test_app(pool.clone()).await;
+    seed_lp_key(&pool, tenant_id, "lp_linked_accept", "secret_linked_accept").await;
+
+    let (offramp_id, settlement_id) = create_linked_offramp_settlement(
+        app.clone(),
+        &jwt,
+        tenant_id,
+        "lp_linked_accept",
+        "secret_linked_accept",
+    )
+    .await;
+
+    let req = Request::builder()
+        .uri(format!("/v1/portal/offramp/{}/status", offramp_id))
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", jwt))
+        .body(Body::empty())
+        .unwrap();
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let status_resp: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(status_resp["winningLpId"], "lp_linked_accept");
+    assert_eq!(status_resp["matchedRate"], "26000");
+    assert_eq!(status_resp["settlementId"], settlement_id);
+    assert!(status_resp["linkedRfqId"]
+        .as_str()
+        .unwrap()
+        .starts_with("rfq_"));
+}
+
+#[tokio::test]
+async fn test_admin_settlement_outcome_completes_linked_offramp() {
+    if !docker_available() {
+        eprintln!("Skipping e2e_offramp_test: Docker daemon unavailable");
+        return;
+    }
+    let tenant_id = "00000000-0000-0000-0000-000000000001";
+    let pool = setup_db().await;
+    let (app, api_key, jwt) = build_test_app(pool.clone()).await;
+    seed_lp_key(
+        &pool,
+        tenant_id,
+        "lp_linked_complete",
+        "secret_linked_complete",
+    )
+    .await;
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
+    let admin_jwt = build_admin_jwt("operator");
+
+    let (offramp_id, settlement_id) = create_linked_offramp_settlement(
+        app.clone(),
+        &jwt,
+        tenant_id,
+        "lp_linked_complete",
+        "secret_linked_complete",
+    )
+    .await;
+
+    let uri = format!("/v1/admin/settlement/{}/outcome", settlement_id);
+    let body = json!({"outcome": "COMPLETED"}).to_string();
+    let req =
+        build_signed_admin_jwt_request("POST", &uri, &body, &api_key, TEST_API_SECRET, &admin_jwt);
+    let response = app.clone().oneshot(req).await.unwrap();
+    let status = response.status();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "settlement outcome response: {}",
+        String::from_utf8_lossy(&body)
+    );
+
+    let req = Request::builder()
+        .uri(format!("/v1/portal/offramp/{}/status", offramp_id))
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", jwt))
+        .body(Body::empty())
+        .unwrap();
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let status_resp: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(status_resp["state"], "COMPLETED");
+    assert_eq!(status_resp["settlementId"], settlement_id);
+    std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
+}
+
+#[tokio::test]
+async fn test_replayed_failed_callback_does_not_reopen_completed_linked_offramp() {
+    if !docker_available() {
+        eprintln!("Skipping e2e_offramp_test: Docker daemon unavailable");
+        return;
+    }
+    let tenant_id = "00000000-0000-0000-0000-000000000001";
+    let pool = setup_db().await;
+    let (app, api_key, jwt) = build_test_app(pool.clone()).await;
+    seed_lp_key(&pool, tenant_id, "lp_linked_replay", "secret_linked_replay").await;
+    std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
+    let admin_jwt = build_admin_jwt("operator");
+
+    let (offramp_id, settlement_id) = create_linked_offramp_settlement(
+        app.clone(),
+        &jwt,
+        tenant_id,
+        "lp_linked_replay",
+        "secret_linked_replay",
+    )
+    .await;
+
+    for outcome in ["COMPLETED", "FAILED"] {
+        let uri = format!("/v1/admin/settlement/{}/outcome", settlement_id);
+        let body = json!({"outcome": outcome}).to_string();
+        let req = build_signed_admin_jwt_request(
+            "POST",
+            &uri,
+            &body,
+            &api_key,
+            TEST_API_SECRET,
+            &admin_jwt,
+        );
+        let response = app.clone().oneshot(req).await.unwrap();
+        if outcome == "COMPLETED" {
+            assert_eq!(response.status(), StatusCode::OK);
+        } else {
+            assert_eq!(response.status(), StatusCode::CONFLICT);
+        }
+    }
+
+    let req = Request::builder()
+        .uri(format!("/v1/portal/offramp/{}/status", offramp_id))
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", jwt))
+        .body(Body::empty())
+        .unwrap();
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let status_resp: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(status_resp["state"], "COMPLETED");
+    std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
 }
 
 #[tokio::test]

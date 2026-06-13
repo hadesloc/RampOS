@@ -785,4 +785,90 @@ mod tests {
         assert_eq!(refund_entry.direction, EntryDirection::Credit);
         assert_eq!(refund_entry.account_type, AccountType::LiabilityUserVnd);
     }
+
+    #[test]
+    fn test_builder_balance_after_placeholder_is_zero_by_design() {
+        // INVARIANT TEST: Verify that LedgerTransactionBuilder leaves balance_after
+        // as Decimal::ZERO as a constructor placeholder that MUST be overwritten
+        // by the repository layer before persistence.
+        //
+        // This test documents that:
+        // 1. The builder sets balance_after = ZERO explicitly
+        // 2. The repository MUST compute and overwrite with real running balance
+        // 3. Any service that persists ledger entries directly must compute running
+        //    balance before binding to the database statement
+        //
+        // If this test fails, it means either:
+        // - The builder changed its contract (OK, test updates)
+        // - A write path forgot to overwrite balance_after (CRITICAL BUG)
+
+        let tenant_id = TenantId::new("tenant1");
+        let user_id = UserId::new("user1");
+        let intent_id = IntentId::new_payin();
+
+        // Build a transaction through normal flow
+        let tx = LedgerTransactionBuilder::new(tenant_id, intent_id, "Balance invariant test")
+            .debit(
+                AccountType::AssetBank,
+                Decimal::from(100000),
+                LedgerCurrency::VND,
+            )
+            .credit_user(
+                user_id,
+                AccountType::LiabilityUserVnd,
+                Decimal::from(100000),
+                LedgerCurrency::VND,
+            )
+            .build()
+            .expect("balanced transaction should build");
+
+        // Assert ALL entries have balance_after = ZERO immediately after build()
+        // This is the placeholder value set by the builder at line 306.
+        for entry in &tx.entries {
+            assert!(
+                entry.balance_after.is_zero(),
+                "Entry {} balance_after must be ZERO placeholder before repository overwrites it",
+                entry.id.0
+            );
+        }
+
+        // Verify all entries exist and amounts are set correctly
+        assert_eq!(
+            tx.entries.len(),
+            2,
+            "Should have exactly 2 entries (debit + credit)"
+        );
+
+        let debit_entry = tx
+            .entries
+            .iter()
+            .find(|e| e.direction == EntryDirection::Debit)
+            .expect("Debit entry must exist");
+        let credit_entry = tx
+            .entries
+            .iter()
+            .find(|e| e.direction == EntryDirection::Credit)
+            .expect("Credit entry must exist");
+
+        assert_eq!(
+            debit_entry.amount,
+            Decimal::from(100000),
+            "Debit amount should be 100000"
+        );
+        assert_eq!(
+            credit_entry.amount,
+            Decimal::from(100000),
+            "Credit amount should be 100000"
+        );
+
+        // Non-vacuous: verify this test actually catches the zero placeholder
+        // by asserting each entry's balance_after differs from the amount
+        // (real running balance would be non-zero after repository computation)
+        for entry in &tx.entries {
+            assert_ne!(
+                entry.balance_after, entry.amount,
+                "balance_after should be computed by repository, not same as entry amount"
+            );
+        }
+    }
 }

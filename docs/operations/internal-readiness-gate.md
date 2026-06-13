@@ -1,6 +1,6 @@
 # Internal Readiness Gate
 
-This document defines the canonical internal readiness package for RampOS. It replaces the prior ad-hoc collection of reports and checklists with a single gate that must pass before any release candidate can be promoted. External audit is explicitly deferred for this cycle.
+This document defines the canonical internal readiness package for RampOS. It replaces the prior ad-hoc collection of reports and checklists with a single gate that must pass before any release candidate can be promoted.
 
 ## Scope
 
@@ -71,18 +71,18 @@ Every release candidate must provide evidence for the following families. Each f
 | Workflow readiness gate | `/v1/admin/readiness` `workflow_runtime` gate | Same SHA | Runtime mode and durability limits are explicit |
 | Env contract reconciliation | `TEMPORAL_URL` / `TEMPORAL_SERVER_URL` contract reviewed | Same SHA | No ambiguous operator guidance remains |
 
-### 7. External Audit Deferral
+### 7. Independent External Review
 
-> **This cycle explicitly defers external audit completion.**
+> **The current RC still requires attributable independent external security review output before bank-grade signoff can close.**
 
-The external audit is documented and tracked but is NOT a blocking requirement for the internal readiness gate during this cycle. The following conditions apply:
+The external review is documented and tracked as an active signoff requirement for RC `268670d74`, not as a waived gate for the current cycle. The following conditions apply:
 
 - The independent security review plan exists at [`docs/security/independent-security-review-plan.md`](../security/independent-security-review-plan.md).
-- The review window, reviewer assignment, and finding ledger are tracked in that plan.
-- No `critical` or `high` internal findings may be deferred. Only the **external** review completion is deferred.
-- The bank-grade signoff ledger at [`docs/operations/bank-grade-signoff-ledger.md`](bank-grade-signoff-ledger.md) records the deferral explicitly.
+- Review kickoff, reviewer assignment, artifact routing, and immutable handback must be attributable for the candidate SHA.
+- No `critical` or `high` internal findings may be deferred.
+- The bank-grade signoff ledger at [`docs/operations/bank-grade-signoff-ledger.md`](bank-grade-signoff-ledger.md) and the RC signoff summary track the open external-review blocker explicitly.
 
-**Expiry**: This deferral expires when the external review begins, when the RC SHA changes, or at the end of the current cycle (whichever comes first).
+**Closure condition**: This requirement closes only when attributable external review outputs are attached for the candidate SHA or its explicitly named successor record.
 
 ## Gate Decision Rules
 
@@ -93,7 +93,7 @@ The internal readiness gate passes if and only if:
 3. Every pass criterion is met, or the failing item has a formal waiver with named approver and expiry in the signoff ledger.
 4. No `critical` security finding is open from any internal scan.
 5. No `high` security finding is open without explicit risk acceptance.
-6. The external audit deferral is recorded in the signoff ledger.
+6. Attributable independent external review output is attached for the candidate SHA, or the active release-truth record explicitly names a successor candidate that now owns that review requirement.
 
 ## Gate Lifecycle
 
@@ -112,7 +112,7 @@ Collect release evidence (Family 5)
     ↓
 Record workflow runtime truth (Family 6)
     ↓
-Record external audit deferral (Family 7)
+Attach independent external review output (Family 7)
     ↓
 Gate Decision → PASS / BLOCKED
     ↓
@@ -126,7 +126,7 @@ Record decision in bank-grade signoff ledger
 | Release candidate SHA | `268670d74` |
 | Freeze date | `2026-03-13` |
 | Gate status | `blocked` |
-| Blocking items | Missing staging proof, stale Trivy evidence post-dependency-remediation, residual `rsa` advisory disposition, missing workflow-runtime operator truth, and missing named approvers for any required waivers or gate decisions |
+| Blocking items | Missing staging proof, refreshed Trivy findings still awaiting triage/disposition, residual `rsa` advisory disposition, missing independent external review output, expired ledger entries requiring refresh or explicit supersession, and missing attributable approval decisions and timestamps for any required waivers or gate decisions |
 | Signoff ledger | [`docs/operations/bank-grade-signoff-ledger.md`](bank-grade-signoff-ledger.md) |
 
 ## References

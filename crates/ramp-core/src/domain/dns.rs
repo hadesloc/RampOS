@@ -5,8 +5,10 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use hickory_resolver::config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts};
-use hickory_resolver::TokioAsyncResolver;
+use hickory_resolver::config::{NameServerConfig, ResolveHosts, ResolverConfig, ResolverOpts};
+use hickory_resolver::net::runtime::TokioRuntimeProvider;
+use hickory_resolver::proto::rr::RData;
+use hickory_resolver::TokioResolver;
 use ramp_common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -118,7 +120,7 @@ pub struct SystemDnsProvider {
     /// DNS timeout in seconds
     timeout_secs: u64,
     /// The async DNS resolver
-    resolver: TokioAsyncResolver,
+    resolver: TokioResolver,
 }
 
 impl SystemDnsProvider {
@@ -130,9 +132,15 @@ impl SystemDnsProvider {
         let mut opts = ResolverOpts::default();
         opts.timeout = Duration::from_secs(timeout_secs);
         opts.attempts = 2;
-        opts.use_hosts_file = false;
+        opts.use_hosts_file = ResolveHosts::Never;
 
-        let resolver = TokioAsyncResolver::tokio(ResolverConfig::default(), opts);
+        let resolver = TokioResolver::builder_with_config(
+            ResolverConfig::default(),
+            TokioRuntimeProvider::default(),
+        )
+        .with_options(opts)
+        .build()
+        .expect("default DNS resolver configuration should be valid");
 
         Self {
             timeout_secs,
@@ -163,7 +171,14 @@ impl DnsProvider for SystemDnsProvider {
         match record_type {
             DnsRecordType::A => match self.resolver.ipv4_lookup(name).await {
                 Ok(lookup) => {
-                    let values: Vec<String> = lookup.iter().map(|ip| ip.to_string()).collect();
+                    let values: Vec<String> = lookup
+                        .answers()
+                        .iter()
+                        .filter_map(|record| match &record.data {
+                            RData::A(ip) => Some(ip.0.to_string()),
+                            _ => None,
+                        })
+                        .collect();
                     Ok(vec![DnsRecord {
                         name: name.to_string(),
                         record_type,
@@ -179,7 +194,14 @@ impl DnsProvider for SystemDnsProvider {
             },
             DnsRecordType::Aaaa => match self.resolver.ipv6_lookup(name).await {
                 Ok(lookup) => {
-                    let values: Vec<String> = lookup.iter().map(|ip| ip.to_string()).collect();
+                    let values: Vec<String> = lookup
+                        .answers()
+                        .iter()
+                        .filter_map(|record| match &record.data {
+                            RData::AAAA(ip) => Some(ip.0.to_string()),
+                            _ => None,
+                        })
+                        .collect();
                     Ok(vec![DnsRecord {
                         name: name.to_string(),
                         record_type,
@@ -201,11 +223,14 @@ impl DnsProvider for SystemDnsProvider {
                 {
                     Ok(lookup) => {
                         let values: Vec<String> = lookup
+                            .answers()
                             .iter()
-                            .filter_map(|rdata| {
-                                rdata.as_cname().map(|cname| {
-                                    cname.0.to_string().trim_end_matches('.').to_string()
-                                })
+                            .filter_map(|record| {
+                                if let RData::CNAME(cname) = &record.data {
+                                    Some(cname.0.to_string().trim_end_matches('.').to_string())
+                                } else {
+                                    None
+                                }
                             })
                             .collect();
                         Ok(vec![DnsRecord {
@@ -224,7 +249,14 @@ impl DnsProvider for SystemDnsProvider {
             }
             DnsRecordType::Txt => match self.resolver.txt_lookup(name).await {
                 Ok(lookup) => {
-                    let values: Vec<String> = lookup.iter().map(|txt| txt.to_string()).collect();
+                    let values: Vec<String> = lookup
+                        .answers()
+                        .iter()
+                        .filter_map(|record| match &record.data {
+                            RData::TXT(txt) => Some(txt.to_string()),
+                            _ => None,
+                        })
+                        .collect();
                     Ok(vec![DnsRecord {
                         name: name.to_string(),
                         record_type,
@@ -241,13 +273,18 @@ impl DnsProvider for SystemDnsProvider {
             DnsRecordType::Mx => match self.resolver.mx_lookup(name).await {
                 Ok(lookup) => {
                     let values: Vec<String> = lookup
+                        .answers()
                         .iter()
-                        .map(|mx| {
-                            format!(
-                                "{} {}",
-                                mx.preference(),
-                                mx.exchange().to_string().trim_end_matches('.')
-                            )
+                        .filter_map(|record| {
+                            if let RData::MX(mx) = &record.data {
+                                Some(format!(
+                                    "{} {}",
+                                    mx.preference,
+                                    mx.exchange.to_string().trim_end_matches('.')
+                                ))
+                            } else {
+                                None
+                            }
                         })
                         .collect();
                     Ok(vec![DnsRecord {
@@ -266,8 +303,15 @@ impl DnsProvider for SystemDnsProvider {
             DnsRecordType::Ns => match self.resolver.ns_lookup(name).await {
                 Ok(lookup) => {
                     let values: Vec<String> = lookup
+                        .answers()
                         .iter()
-                        .map(|ns| ns.0.to_string().trim_end_matches('.').to_string())
+                        .filter_map(|record| {
+                            if let RData::NS(ns) = &record.data {
+                                Some(ns.0.to_string().trim_end_matches('.').to_string())
+                            } else {
+                                None
+                            }
+                        })
                         .collect();
                     Ok(vec![DnsRecord {
                         name: name.to_string(),
@@ -1016,16 +1060,26 @@ impl DnsPropagationChecker {
                     let mut opts = ResolverOpts::default();
                     opts.timeout = Duration::from_secs(3);
                     opts.attempts = 1;
-                    let nameserver =
-                        NameServerConfig::new(std::net::SocketAddr::new(ip, 53), Protocol::Udp);
+                    let nameserver = NameServerConfig::udp(ip);
                     let config = ResolverConfig::from_parts(None, vec![], vec![nameserver]);
-                    let resolver = TokioAsyncResolver::tokio(config, opts);
-
-                    match resolver.txt_lookup(record_name).await {
-                        Ok(lookup) => lookup.iter().any(|txt| {
-                            let val = txt.to_string();
-                            val.trim_matches('"') == expected_value
-                        }),
+                    match TokioResolver::builder_with_config(
+                        config,
+                        TokioRuntimeProvider::default(),
+                    )
+                    .with_options(opts)
+                    .build()
+                    {
+                        Ok(resolver) => match resolver.txt_lookup(record_name).await {
+                            Ok(lookup) => lookup.answers().iter().any(|record| {
+                                if let RData::TXT(txt) = &record.data {
+                                    let val = txt.to_string();
+                                    val.trim_matches('"') == expected_value
+                                } else {
+                                    false
+                                }
+                            }),
+                            Err(_) => false,
+                        },
                         Err(_) => false,
                     }
                 }

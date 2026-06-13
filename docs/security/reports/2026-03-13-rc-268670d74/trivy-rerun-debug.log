@@ -1,0 +1,67 @@
+2026-04-09T11:03:57Z	DEBUG	No plugins loaded
+2026-04-09T11:03:57Z	DEBUG	Default config file "file_path=trivy.yaml" not found, using built in values
+2026-04-09T11:03:57Z	DEBUG	Cache dir	dir="/root/.cache/trivy"
+2026-04-09T11:03:57Z	DEBUG	Cache dir	dir="/root/.cache/trivy"
+2026-04-09T11:03:57Z	DEBUG	Parsed severities	severities=[UNKNOWN LOW MEDIUM HIGH CRITICAL]
+2026-04-09T11:03:57Z	WARN	'--scanners config' is deprecated. Use '--scanners misconfig' instead. See https://github.com/aquasecurity/trivy/discussions/5586 for the detail.
+2026-04-09T11:03:57Z	DEBUG	Ignore statuses	statuses=[]
+2026-04-09T11:03:57Z	DEBUG	[vulndb] There is no db file
+2026-04-09T11:03:57Z	DEBUG	[vulndb] There is no valid metadata file	err="file open error: open /root/.cache/trivy/db/metadata.json: no such file or directory"
+2026-04-09T11:03:57Z	INFO	[vulndb] Need to update DB
+2026-04-09T11:03:57Z	DEBUG	[vulndb] No metadata file
+2026-04-09T11:03:57Z	INFO	[vulndb] Downloading vulnerability DB...
+2026-04-09T11:03:57Z	INFO	[vulndb] Downloading artifact...	repo="mirror.gcr.io/aquasec/trivy-db:2"
+285.82 KiB / 89.74 MiB [>____________________________________________________________] 0.31% ? p/s ?2.16 MiB / 89.74 MiB [->_____________________________________________________________] 2.40% ? p/s ?6.10 MiB / 89.74 MiB [---->__________________________________________________________] 6.79% ? p/s ?11.26 MiB / 89.74 MiB [------>_________________________________________] 12.55% 18.30 MiB p/s ETA 4s15.64 MiB / 89.74 MiB [-------->_______________________________________] 17.43% 18.30 MiB p/s ETA 4s19.56 MiB / 89.74 MiB [---------->_____________________________________] 21.79% 18.30 MiB p/s ETA 3s24.22 MiB / 89.74 MiB [------------>___________________________________] 26.99% 18.52 MiB p/s ETA 3s28.63 MiB / 89.74 MiB [--------------->________________________________] 31.90% 18.52 MiB p/s ETA 3s33.76 MiB / 89.74 MiB [------------------>_____________________________] 37.62% 18.52 MiB p/s ETA 3s38.66 MiB / 89.74 MiB [-------------------->___________________________] 43.08% 18.87 MiB p/s ETA 2s43.78 MiB / 89.74 MiB [----------------------->________________________] 48.78% 18.87 MiB p/s ETA 2s49.35 MiB / 89.74 MiB [-------------------------->_____________________] 54.99% 18.87 MiB p/s ETA 2s53.64 MiB / 89.74 MiB [---------------------------->___________________] 59.77% 19.27 MiB p/s ETA 1s58.28 MiB / 89.74 MiB [------------------------------->________________] 64.94% 19.27 MiB p/s ETA 1s63.25 MiB / 89.74 MiB [--------------------------------->______________] 70.48% 19.27 MiB p/s ETA 1s67.38 MiB / 89.74 MiB [------------------------------------>___________] 75.08% 19.50 MiB p/s ETA 1s72.17 MiB / 89.74 MiB [-------------------------------------->_________] 80.42% 19.50 MiB p/s ETA 0s77.12 MiB / 89.74 MiB [----------------------------------------->______] 85.93% 19.50 MiB p/s ETA 0s81.78 MiB / 89.74 MiB [------------------------------------------->____] 91.13% 19.79 MiB p/s ETA 0s86.19 MiB / 89.74 MiB [---------------------------------------------->_] 96.05% 19.79 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 19.79 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 19.37 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 19.37 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 19.37 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 18.12 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 18.12 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 18.12 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 16.95 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 16.95 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 16.95 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 15.86 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 15.86 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 15.86 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 14.83 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 14.83 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 14.83 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 13.88 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 13.88 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 13.88 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 12.98 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [---------------------------------------------->] 100.00% 12.98 MiB p/s ETA 0s89.74 MiB / 89.74 MiB [-------------------------------------------------] 100.00% 10.95 MiB p/s 8.4s2026-04-09T11:04:06Z	INFO	[vulndb] Artifact successfully downloaded	repo="mirror.gcr.io/aquasec/trivy-db:2"
+2026-04-09T11:04:06Z	DEBUG	Updating database metadata...
+2026-04-09T11:04:06Z	DEBUG	DB info	schema=2 updated_at=2026-04-09T07:00:19.772723866Z next_update=2026-04-10T07:00:19.772723395Z downloaded_at=2026-04-09T11:04:06.774382615Z
+2026-04-09T11:04:06Z	DEBUG	[pkg] Package types	types=[os library]
+2026-04-09T11:04:06Z	DEBUG	[pkg] Package relationships	relationships=[unknown root workspace direct indirect]
+2026-04-09T11:04:06Z	INFO	[vuln] Vulnerability scanning is enabled
+2026-04-09T11:04:06Z	INFO	[misconfig] Misconfiguration scanning is enabled
+2026-04-09T11:04:06Z	DEBUG	[misconfig] Failed to open the check metadata	err="open /root/.cache/trivy/policy/metadata.json: no such file or directory"
+2026-04-09T11:04:06Z	INFO	[misconfig] Need to update the checks bundle
+2026-04-09T11:04:06Z	INFO	[misconfig] Downloading the checks bundle...
+2026-04-09T11:04:06Z	DEBUG	[misconfig] Loading check bundle	repository="mirror.gcr.io/aquasec/trivy-checks:1"
+165.46 KiB / 165.46 KiB [--------------------------------------------------------->] 100.00% ? p/s ?165.46 KiB / 165.46 KiB [-----------------------------------------------] 100.00% 1.65 MiB p/s 300ms2026-04-09T11:04:07Z	DEBUG	[misconfig] Digest of the built-in checks	digest="sha256:0491169789b867ae5a7353381220c1d4d97b3a0d6d9dfd84a25d06f0ba68aa93"
+2026-04-09T11:04:07Z	DEBUG	[misconfig] Checks successfully loaded from disk
+2026-04-09T11:04:07Z	INFO	[secret] Secret scanning is enabled
+2026-04-09T11:04:07Z	INFO	[secret] If your scanning is slow, please try '--scanners vuln' to disable secret scanning
+2026-04-09T11:04:07Z	INFO	[secret] Please see also https://trivy.dev/v0.61/docs/scanner/secret#recommendation for faster secret detection
+2026-04-09T11:04:07Z	DEBUG	Enabling misconfiguration scanners	scanners=[azure-arm cloudformation dockerfile helm kubernetes terraform terraformplan-json terraformplan-snapshot]
+2026-04-09T11:04:07Z	DEBUG	Initializing scan cache...	type="memory"
+2026-04-09T11:04:07Z	DEBUG	[secret] No secret config detected	config_path="trivy-secret.yaml"
+2026-04-09T11:04:07Z	DEBUG	[fs] Analyzing...	root="."
+2026-04-09T11:23:04Z	DEBUG	[fs] Random cache key will be used	err="repository is dirty"
+2026-04-09T11:23:04Z	WARN	Provide a higher timeout value, see https://trivy.dev/v0.61/docs/configuration
+2026-04-09T11:23:04Z	FATAL	Fatal error
+  - fs scan error:
+    github.com/aquasecurity/trivy/pkg/commands/artifact.Run
+        /home/runner/work/trivy/trivy/pkg/commands/artifact/run.go:403
+  - scan error:
+    github.com/aquasecurity/trivy/pkg/commands/artifact.(*runner).scanArtifact
+        /home/runner/work/trivy/trivy/pkg/commands/artifact/run.go:262
+  - scan failed:
+    github.com/aquasecurity/trivy/pkg/commands/artifact.(*runner).scan
+        /home/runner/work/trivy/trivy/pkg/commands/artifact/run.go:630
+  - failed analysis:
+    github.com/aquasecurity/trivy/pkg/scan.Service.ScanArtifact
+        /home/runner/work/trivy/trivy/pkg/scan/service.go:166
+  - analyze with traversal:
+    github.com/aquasecurity/trivy/pkg/fanal/artifact/local.Artifact.Inspect
+        /home/runner/work/trivy/trivy/pkg/fanal/artifact/local/fs.go:183
+  - walk dir error:
+    github.com/aquasecurity/trivy/pkg/fanal/walker.(*FS).Walk
+        /home/runner/work/trivy/trivy/pkg/fanal/walker/fs.go:35
+  - unknown error with .claude/.dashboard-reminder-throttle:
+    github.com/aquasecurity/trivy/pkg/fanal/walker.(*FS).Walk.(*FS).onError.func2
+        /home/runner/work/trivy/trivy/pkg/fanal/walker/fs.go:92
+  - failed to analyze file:
+    github.com/aquasecurity/trivy/pkg/fanal/walker.(*FS).Walk.(*FS).WalkDirFunc.func1
+        /home/runner/work/trivy/trivy/pkg/fanal/walker/fs.go:73
+  - analyze file (.claude/.dashboard-reminder-throttle):
+    github.com/aquasecurity/trivy/pkg/fanal/artifact/local.Artifact.analyzeWithTraversal.func1
+        /home/runner/work/trivy/trivy/pkg/fanal/artifact/local/fs.go:273
+  - semaphore acquire:
+    github.com/aquasecurity/trivy/pkg/fanal/analyzer.AnalyzerGroup.AnalyzeFile
+        /home/runner/work/trivy/trivy/pkg/fanal/analyzer/analyzer.go:445
+  - context deadline exceeded

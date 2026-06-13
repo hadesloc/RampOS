@@ -146,6 +146,10 @@ pub fn sandbox_offramp_fixture(tenant_id: &TenantId, user_id: &UserId) -> Sandbo
             deposit_address: Some("0xsandboxdeposit0001".to_string()),
             tx_hash: None,
             bank_reference: Some("SBX-OFFRAMP-001".to_string()),
+            linked_rfq_id: None,
+            winning_lp_id: None,
+            matched_rate: None,
+            settlement_id: None,
             state: "QUOTE_LOCKED".to_string(),
             state_history: serde_json::json!([
                 {"state": "CREATED", "at": timestamp.to_rfc3339()},

@@ -7,7 +7,8 @@
 //! - Reserve proof integration
 //! - Collateralization ratio monitoring
 
-use alloy::primitives::{Address, B256, U256};
+use alloy::primitives::{Address, Bytes, B256, U256};
+use alloy::providers::Provider;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ramp_common::{
@@ -204,10 +205,25 @@ pub enum PegHealthStatus {
     Unknown,
 }
 
-/// Data provider trait for VNST protocol
+/// VNST protocol provider capabilities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VnstProviderCapability {
+    /// Full protocol functionality: supply, reserves, peg/oracle, operation recording, and execution.
+    Full,
+    /// Only on-chain ERC-20 total supply is available. Issuance, reserves, and peg/oracle are disabled.
+    ReadOnlySupply,
+}
+
+/// Data provider trait for VNST protocol.
+///
+/// `get_total_supply` returns VNST in ERC-20 base units (10^18 base units per VNST).
 #[async_trait]
 pub trait VnstProtocolDataProvider: Send + Sync {
-    /// Get VNST total supply from chain
+    /// Return the capabilities available from this provider.
+    /// Every provider must explicitly declare its capability; there is no default.
+    fn capabilities(&self) -> VnstProviderCapability;
+
+    /// Get VNST total supply from chain, in 10^18 base units
     async fn get_total_supply(&self, chain_id: u64) -> Result<U256>;
 
     /// Get VND reserves from custodian
@@ -304,8 +320,19 @@ impl VnstProtocolService {
         vnst_amount * U256::from(self.config.burn_fee_bps) / U256::from(10_000u64)
     }
 
+    fn ensure_full_capability(&self) -> Result<()> {
+        match self.data_provider.capabilities() {
+            VnstProviderCapability::Full => Ok(()),
+            VnstProviderCapability::ReadOnlySupply => Err(Error::Validation(
+                "issuance not enabled in this deployment: live VNST provider is read-only (on-chain supply only)".to_string(),
+            )),
+        }
+    }
+
     /// Mint VNST with VND deposit
     pub async fn mint(&self, request: VnstMintRequest) -> Result<VnstMintResponse> {
+        self.ensure_full_capability()?;
+
         // Validate amount
         if request.vnd_amount < self.config.min_mint_vnd {
             return Err(Error::Validation(format!(
@@ -325,9 +352,10 @@ impl VnstProtocolService {
 
         // Check peg health before minting
         let peg_status = self.check_peg().await?;
-        if peg_status.status == PegHealthStatus::Critical {
+        if peg_status.status != PegHealthStatus::Healthy {
             return Err(Error::Validation(
-                "VNST minting is temporarily suspended due to peg deviation".to_string(),
+                "VNST minting is temporarily suspended because peg status is not healthy"
+                    .to_string(),
             ));
         }
 
@@ -397,6 +425,8 @@ impl VnstProtocolService {
 
     /// Burn VNST for VND withdrawal
     pub async fn burn(&self, request: VnstBurnRequest) -> Result<VnstBurnResponse> {
+        self.ensure_full_capability()?;
+
         // Validate amount
         if request.vnst_amount < self.config.min_burn_vnst {
             return Err(Error::Validation(format!(
@@ -414,9 +444,10 @@ impl VnstProtocolService {
 
         // Check peg health
         let peg_status = self.check_peg().await?;
-        if peg_status.status == PegHealthStatus::Critical {
+        if peg_status.status != PegHealthStatus::Healthy {
             return Err(Error::Validation(
-                "VNST burning is temporarily suspended due to peg deviation".to_string(),
+                "VNST burning is temporarily suspended because peg status is not healthy"
+                    .to_string(),
             ));
         }
 
@@ -469,6 +500,8 @@ impl VnstProtocolService {
 
     /// Get reserve information
     pub async fn get_reserves(&self, tenant_id: &TenantId) -> Result<VnstReserveInfo> {
+        self.ensure_full_capability()?;
+
         let total_supply = self
             .data_provider
             .get_total_supply(self.config.primary_chain_id)
@@ -531,11 +564,12 @@ impl VnstProtocolService {
 
     /// Check VND/VNST peg status
     pub async fn check_peg(&self) -> Result<VnstPegStatus> {
-        let current_rate = self
-            .data_provider
-            .get_current_rate()
-            .await
-            .unwrap_or(Decimal::ONE);
+        let current_rate = self.data_provider.get_current_rate().await.map_err(|e| {
+            Error::Validation(format!(
+                "VNST peg status unknown: exchange-rate source is unavailable or not configured: {}",
+                e
+            ))
+        })?;
         let target_rate = Decimal::ONE;
 
         let deviation_decimal =
@@ -590,6 +624,226 @@ impl VnstProtocolService {
     }
 }
 
+/// Live VNST data provider backed by on-chain ERC-20 reads.
+#[derive(Debug)]
+pub struct LiveVnstProtocolDataProvider {
+    chain_id: u64,
+    contract_address: Address,
+    provider: alloy::providers::RootProvider<alloy::transports::http::Http<reqwest::Client>>,
+}
+
+impl LiveVnstProtocolDataProvider {
+    /// Build a live VNST provider from explicit configuration.
+    pub fn new(rpc_url: &str, contract_address: Address, chain_id: u64) -> Result<Self> {
+        let rpc_url = rpc_url.trim();
+        if rpc_url.is_empty() {
+            return Err(Error::Config(
+                "VNST live provider requires a non-empty RPC URL".to_string(),
+            ));
+        }
+        if contract_address == Address::ZERO {
+            return Err(Error::Config(
+                "VNST live provider requires a non-zero VNST_CONTRACT_ADDRESS".to_string(),
+            ));
+        }
+
+        let url: reqwest::Url = rpc_url
+            .parse()
+            .map_err(|e| Error::Config(format!("VNST live provider RPC URL is invalid: {}", e)))?;
+        // alloy-provider 0.1.4's public `ProviderBuilder::on_http` path does not expose
+        // a custom reqwest client hook, so timeout must be enforced by upstream RPC infra
+        // until this workspace upgrades to an Alloy version with custom transport wiring.
+        let provider = alloy::providers::ProviderBuilder::new().on_http(url);
+
+        Ok(Self {
+            chain_id,
+            contract_address,
+            provider,
+        })
+    }
+
+    /// Build a live VNST provider from production environment variables.
+    ///
+    /// Required:
+    /// - `VNST_RPC_URL` or chain-specific fallback (`BSC_RPC_URL` for chain 56, etc.)
+    /// - `VNST_CONTRACT_ADDRESS`
+    ///
+    /// Optional:
+    /// - `VNST_CHAIN_ID` (defaults to 56 / BSC)
+    pub fn from_env() -> Result<Self> {
+        let chain_id = match std::env::var("VNST_CHAIN_ID") {
+            Ok(value) if !value.trim().is_empty() => value.trim().parse::<u64>().map_err(|e| {
+                Error::Config(format!("VNST_CHAIN_ID must be an integer chain id: {}", e))
+            })?,
+            _ => 56,
+        };
+
+        let rpc_url = vnst_rpc_url_for_chain(chain_id)?;
+        let contract_address = std::env::var("VNST_CONTRACT_ADDRESS").map_err(|_| {
+            Error::Config("VNST_PROVIDER=live requires VNST_CONTRACT_ADDRESS".to_string())
+        })?;
+        let contract_address = contract_address.trim().parse::<Address>().map_err(|e| {
+            Error::Config(format!(
+                "VNST_CONTRACT_ADDRESS is not a valid EVM address: {}",
+                e
+            ))
+        })?;
+
+        Self::new(&rpc_url, contract_address, chain_id)
+    }
+
+    pub fn chain_id(&self) -> u64 {
+        self.chain_id
+    }
+
+    pub fn contract_address(&self) -> Address {
+        self.contract_address
+    }
+
+    async fn erc20_call_u256(&self, selector: [u8; 4]) -> Result<U256> {
+        let call = alloy::rpc::types::TransactionRequest::default()
+            .to(self.contract_address)
+            .input(alloy::rpc::types::TransactionInput::new(Bytes::from(
+                selector,
+            )));
+
+        let result = self
+            .provider
+            .call(&call)
+            .await
+            .map_err(|e| Error::ExternalService {
+                service: "vnst_onchain_rpc".to_string(),
+                message: e.to_string(),
+            })?;
+        let bytes: &[u8] = result.as_ref();
+        if bytes.len() < 32 {
+            return Err(Error::ExternalService {
+                service: "vnst_onchain_rpc".to_string(),
+                message: format!(
+                    "VNST ERC-20 call returned {} bytes; expected at least 32",
+                    bytes.len()
+                ),
+            });
+        }
+
+        Ok(U256::from_be_slice(&bytes[..32]))
+    }
+}
+
+fn vnst_rpc_url_for_chain(chain_id: u64) -> Result<String> {
+    if let Ok(value) = std::env::var("VNST_RPC_URL") {
+        if !value.trim().is_empty() {
+            return Ok(value);
+        }
+    }
+
+    let fallback = match chain_id {
+        1 => "MAINNET_RPC_URL",
+        56 => "BSC_RPC_URL",
+        137 => "POLYGON_RPC_URL",
+        42161 => "ARBITRUM_RPC_URL",
+        8453 => "BASE_RPC_URL",
+        10 => "OPTIMISM_RPC_URL",
+        _ => {
+            return Err(Error::Config(format!(
+                "VNST_PROVIDER=live requires VNST_RPC_URL for unsupported chain {}",
+                chain_id
+            )))
+        }
+    };
+
+    std::env::var(fallback)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            Error::Config(format!(
+                "VNST_PROVIDER=live requires VNST_RPC_URL or {} for chain {}",
+                fallback, chain_id
+            ))
+        })
+}
+
+#[async_trait]
+impl VnstProtocolDataProvider for LiveVnstProtocolDataProvider {
+    fn capabilities(&self) -> VnstProviderCapability {
+        VnstProviderCapability::ReadOnlySupply
+    }
+
+    async fn get_total_supply(&self, chain_id: u64) -> Result<U256> {
+        if chain_id != self.chain_id {
+            return Err(Error::Validation(format!(
+                "VNST live provider configured for chain {}, cannot read chain {}",
+                self.chain_id, chain_id
+            )));
+        }
+
+        self.erc20_call_u256([0x18, 0x16, 0x0d, 0xdd]).await
+    }
+
+    async fn get_vnd_reserves(&self, _tenant_id: &TenantId) -> Result<Decimal> {
+        Err(Error::NotImplemented(
+            "Live VNST VND reserve/custodian data is not available from ERC-20 on-chain state; configure a real reserve-proof source before using reserve endpoints".to_string(),
+        ))
+    }
+
+    async fn get_current_rate(&self) -> Result<Decimal> {
+        Err(Error::NotImplemented(
+            "Live VNST exchange-rate data is not available from ERC-20 on-chain state; configure a real oracle/source before peg checks".to_string(),
+        ))
+    }
+
+    async fn get_reserve_proof(&self) -> Result<Option<String>> {
+        Err(Error::NotImplemented(
+            "Live VNST reserve proof attestation is not available from ERC-20 on-chain state; configure a real attestation source before reserve endpoints".to_string(),
+        ))
+    }
+
+    async fn record_mint(
+        &self,
+        _tenant_id: &TenantId,
+        _user_id: &UserId,
+        _vnd_amount: Decimal,
+        _vnst_amount: U256,
+        _chain_id: u64,
+        _recipient: Address,
+    ) -> Result<String> {
+        Err(Error::NotImplemented(
+            "Live VNST mint operation recording requires a durable operation store; none is configured for VnstProtocolDataProvider".to_string(),
+        ))
+    }
+
+    async fn record_burn(
+        &self,
+        _tenant_id: &TenantId,
+        _user_id: &UserId,
+        _vnst_amount: U256,
+        _vnd_amount: Decimal,
+        _chain_id: u64,
+        _bank_account_ref: &str,
+    ) -> Result<String> {
+        Err(Error::NotImplemented(
+            "Live VNST burn operation recording requires a durable operation store; none is configured for VnstProtocolDataProvider".to_string(),
+        ))
+    }
+
+    async fn execute_mint(
+        &self,
+        _chain_id: u64,
+        _recipient: Address,
+        _amount: U256,
+    ) -> Result<B256> {
+        Err(Error::NotImplemented(
+            "Live VNST mint execution requires signer/minter integration; read-only provider will not fabricate transaction hashes".to_string(),
+        ))
+    }
+
+    async fn execute_burn(&self, _chain_id: u64, _from: Address, _amount: U256) -> Result<B256> {
+        Err(Error::NotImplemented(
+            "Live VNST burn execution requires signer/burner integration; read-only provider will not fabricate transaction hashes".to_string(),
+        ))
+    }
+}
+
 /// Mock data provider for testing
 pub struct MockVnstProtocolDataProvider {
     pub total_supply: std::sync::Mutex<U256>,
@@ -626,6 +880,10 @@ impl Default for MockVnstProtocolDataProvider {
 
 #[async_trait]
 impl VnstProtocolDataProvider for MockVnstProtocolDataProvider {
+    fn capabilities(&self) -> VnstProviderCapability {
+        VnstProviderCapability::Full
+    }
+
     async fn get_total_supply(&self, _chain_id: u64) -> Result<U256> {
         Ok(*self.total_supply.lock().expect("Lock poisoned"))
     }
@@ -739,6 +997,146 @@ mod tests {
         let burn_fee = service.calculate_burn_fee(vnst_amount);
         let expected_fee = vnst_amount / U256::from(1000u64); // 0.1%
         assert_eq!(burn_fee, expected_fee);
+    }
+
+    #[test]
+    fn live_provider_rejects_empty_rpc_url() {
+        let contract: Address = "0x1234567890123456789012345678901234567890"
+            .parse()
+            .unwrap();
+        let result = LiveVnstProtocolDataProvider::new("", contract, 56);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("RPC URL"));
+    }
+
+    #[test]
+    fn live_provider_rejects_invalid_rpc_url() {
+        let contract: Address = "0x1234567890123456789012345678901234567890"
+            .parse()
+            .unwrap();
+        let result = LiveVnstProtocolDataProvider::new("not a url", contract, 56);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("invalid"));
+    }
+
+    #[test]
+    fn live_provider_rejects_zero_contract_address() {
+        let result =
+            LiveVnstProtocolDataProvider::new("https://rpc.example.invalid", Address::ZERO, 56);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("non-zero"));
+    }
+
+    #[test]
+    fn live_provider_constructs_from_explicit_config() {
+        let contract: Address = "0x1234567890123456789012345678901234567890"
+            .parse()
+            .unwrap();
+        let provider =
+            LiveVnstProtocolDataProvider::new("https://rpc.example.invalid", contract, 56).unwrap();
+        assert_eq!(provider.chain_id(), 56);
+        assert_eq!(provider.contract_address(), contract);
+        assert_eq!(
+            provider.capabilities(),
+            VnstProviderCapability::ReadOnlySupply
+        );
+    }
+
+    #[tokio::test]
+    async fn live_provider_rejects_unconfigured_chain_reads_without_rpc_call() {
+        let contract: Address = "0x1234567890123456789012345678901234567890"
+            .parse()
+            .unwrap();
+        let provider =
+            LiveVnstProtocolDataProvider::new("https://rpc.example.invalid", contract, 56).unwrap();
+        let result = provider.get_total_supply(1).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("configured for chain 56"));
+    }
+
+    #[tokio::test]
+    async fn live_provider_fails_closed_for_non_onchain_data() {
+        let contract: Address = "0x1234567890123456789012345678901234567890"
+            .parse()
+            .unwrap();
+        let provider =
+            LiveVnstProtocolDataProvider::new("https://rpc.example.invalid", contract, 56).unwrap();
+        let tenant = TenantId::new("tenant1");
+
+        assert!(provider.get_vnd_reserves(&tenant).await.is_err());
+        assert!(provider.get_current_rate().await.is_err());
+        assert!(provider.get_reserve_proof().await.is_err());
+    }
+
+    fn live_read_only_service() -> VnstProtocolService {
+        let contract: Address = "0x1234567890123456789012345678901234567890"
+            .parse()
+            .unwrap();
+        let provider = Arc::new(
+            LiveVnstProtocolDataProvider::new("https://rpc.example.invalid", contract, 56).unwrap(),
+        );
+        VnstProtocolService::new(VnstProtocolConfig::default(), provider)
+    }
+
+    #[tokio::test]
+    async fn live_provider_capability_gates_mint_before_peg_or_recording() {
+        let service = live_read_only_service();
+        let request = VnstMintRequest {
+            tenant_id: TenantId::new("tenant1"),
+            user_id: UserId::new("user1"),
+            vnd_amount: Decimal::from(1_000_000),
+            chain_id: 56,
+            recipient_address: "0x1234567890123456789012345678901234567890"
+                .parse()
+                .unwrap(),
+            idempotency_key: None,
+        };
+
+        let err = service.mint(request).await.unwrap_err().to_string();
+        assert!(err.contains("issuance not enabled in this deployment"));
+        assert!(err.contains("read-only"));
+    }
+
+    #[tokio::test]
+    async fn live_provider_capability_gates_burn_before_peg_or_recording() {
+        let service = live_read_only_service();
+        let request = VnstBurnRequest {
+            tenant_id: TenantId::new("tenant1"),
+            user_id: UserId::new("user1"),
+            vnst_amount: U256::from(1_000_000u64) * U256::from(10u64).pow(U256::from(18)),
+            chain_id: 56,
+            bank_account_ref: "bank_ref_123".to_string(),
+            idempotency_key: None,
+        };
+
+        let err = service.burn(request).await.unwrap_err().to_string();
+        assert!(err.contains("issuance not enabled in this deployment"));
+        assert!(err.contains("read-only"));
+    }
+
+    #[tokio::test]
+    async fn live_provider_capability_gates_reserves_before_partial_data_reads() {
+        let service = live_read_only_service();
+
+        let err = service
+            .get_reserves(&TenantId::new("tenant1"))
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("issuance not enabled in this deployment"));
+        assert!(err.contains("read-only"));
+    }
+
+    #[tokio::test]
+    async fn check_peg_fails_closed_when_rate_source_errors() {
+        let service = live_read_only_service();
+
+        let err = service.check_peg().await.unwrap_err().to_string();
+        assert!(err.contains("peg status unknown"));
+        assert!(err.contains("exchange-rate source"));
     }
 
     #[tokio::test]

@@ -321,7 +321,11 @@ fn settlement_from_row(row: &SettlementRow) -> Result<Settlement, ApiError> {
         .map_err(|error| ApiError::Internal(error.to_string()))?;
     Ok(Settlement {
         id: row.id.clone(),
+        tenant_id: row.tenant_id.clone(),
         offramp_intent_id: row.offramp_intent_id.clone(),
+        rfq_id: row.rfq_id.clone(),
+        lp_id: row.lp_id.clone(),
+        final_rate: row.final_rate,
         status,
         bank_reference: row.bank_reference.clone(),
         error_message: row.error_message.clone(),
@@ -427,7 +431,11 @@ fn sample_fixture_set(
         };
         let settlement = Settlement {
             id: settlement_record.id.clone(),
+            tenant_id: None,
             offramp_intent_id: "ofr_recon_clean_001".to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: SettlementStatus::Completed,
             bank_reference: Some("RAMP-CLEAN".to_string()),
             error_message: None,
@@ -474,7 +482,11 @@ fn sample_fixture_set(
     let settlements = vec![
         Settlement {
             id: "stl_recon_processing_001".to_string(),
+            tenant_id: None,
             offramp_intent_id: "ofr_recon_processing_001".to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: SettlementStatus::Processing,
             bank_reference: Some("RAMP-PROCESS".to_string()),
             error_message: None,
@@ -483,7 +495,11 @@ fn sample_fixture_set(
         },
         Settlement {
             id: "stl_recon_status_001".to_string(),
+            tenant_id: None,
             offramp_intent_id: "ofr_recon_status_001".to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: SettlementStatus::Completed,
             bank_reference: Some("RAMP-STATUS".to_string()),
             error_message: None,

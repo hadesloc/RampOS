@@ -12,8 +12,11 @@ use axum::{
     Json, Router,
 };
 use ramp_common::types::TenantId;
-use ramp_core::repository::{PgRfqRepository, RfqRepository};
+use ramp_core::repository::{
+    PgOfframpIntentRepository, PgRfqRepository, PgSettlementRepository, RfqRepository,
+};
 use ramp_core::service::rfq::{CreateRfqRequest, RfqService};
+use ramp_core::service::LinkedOfframpExecutionService;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -114,6 +117,19 @@ fn make_rfq_service(pool: sqlx::PgPool, state: &AppState) -> RfqService {
     RfqService::new(
         Arc::new(PgRfqRepository::new(pool)),
         state.event_publisher.clone(),
+    )
+}
+
+fn make_linked_execution_service(
+    pool: sqlx::PgPool,
+    state: &AppState,
+) -> LinkedOfframpExecutionService {
+    let rfq_repo = Arc::new(PgRfqRepository::new(pool.clone()));
+    LinkedOfframpExecutionService::new(
+        RfqService::new(rfq_repo.clone(), state.event_publisher.clone()),
+        rfq_repo,
+        Arc::new(PgOfframpIntentRepository::new(pool.clone())),
+        Arc::new(PgSettlementRepository::new(pool)),
     )
 }
 
@@ -291,8 +307,8 @@ pub async fn accept_rfq(
         return Err(ApiError::NotFound("RFQ not found".to_string()));
     }
 
-    // Finalize via service
-    let svc = make_rfq_service(pool.clone(), &app_state);
+    // Finalize via linked execution coordinator so OFFRAMP matches kick settlement.
+    let svc = make_linked_execution_service(pool.clone(), &app_state);
     let result = svc
         .finalize_rfq(&tenant_id, &id)
         .await

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import MockAdapter from 'axios-mock-adapter';
 import { IntentService } from '../services/intent.service';
-import { CreatePayinRequest, CreatePayoutRequest } from '../types/intent';
+import { CreatePayinRequest } from '../types/intent';
 
 describe('PayinService (via IntentService)', () => {
   let mock: MockAdapter;

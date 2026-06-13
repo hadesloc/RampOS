@@ -76,8 +76,8 @@ After every restore, confirm all of the following:
 
 - `curl -sf <environment>/health`
 - KYB evidence list and one detail lookup succeed
-- treasury workbench and export succeed
-- reconciliation workbench and one evidence detail succeed
+- treasury workbench and export succeed, with `dataSource` captured so `TreasuryDataSource::Sample` synthetic fixtures are not mistaken for live balance evidence
+- reconciliation workbench and one evidence detail succeed, with provenance captured because reconciliation is caller/backend-supplied comparison only
 - liquidity explainability still renders route rationale
 - audit export succeeds
 - break-glass audit export succeeds

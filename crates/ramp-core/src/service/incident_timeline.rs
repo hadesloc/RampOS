@@ -658,7 +658,11 @@ mod tests {
 
         let settlement_entry = IncidentTimelineEntry::from_settlement(Settlement {
             id: "stl_002".to_string(),
+            tenant_id: None,
             offramp_intent_id: "ofr_002".to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: SettlementStatus::Failed,
             bank_reference: Some("RAMP-FAIL2".to_string()),
             error_message: Some("bank partner timeout".to_string()),

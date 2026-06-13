@@ -117,11 +117,22 @@ function debugLog(debug: boolean, ...args: unknown[]): void {
 // Client
 // ---------------------------------------------------------------------------
 
-const DEFAULT_CONFIG: Required<ApiClientConfig> = {
-  baseUrl:
-    typeof window === 'undefined'
-      ? process.env.API_URL || 'http://localhost:8080'
-      : '/api/proxy',
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV?.trim().toLowerCase() === 'production';
+}
+
+function requiredServerEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (value) {
+    return value;
+  }
+  if (isProductionRuntime()) {
+    throw new Error(`Missing required production environment variable: ${name}`);
+  }
+  return '';
+}
+
+const DEFAULT_CONFIG: Omit<Required<ApiClientConfig>, 'baseUrl'> = {
   getAuthToken: () => null,
   csrfCookieName: 'rampos_csrf',
   csrfEndpoint: '/api/csrf',
@@ -132,12 +143,21 @@ const DEFAULT_CONFIG: Required<ApiClientConfig> = {
 };
 
 export class ApiClient {
-  private config: Required<ApiClientConfig>;
+  private config: Required<Omit<ApiClientConfig, 'baseUrl'>> & { baseUrl?: string };
   private requestInterceptors: RequestInterceptor[] = [];
   private responseInterceptors: ResponseInterceptor[] = [];
 
   constructor(config: ApiClientConfig = {}) {
+    // Do NOT resolve baseUrl here — module-level instantiation (export const apiClient)
+    // runs at build time when env vars are absent.  baseUrl is resolved lazily per-request.
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  private resolveBaseUrl(): string {
+    if (this.config.baseUrl) return this.config.baseUrl;
+    return typeof window === 'undefined'
+      ? requiredServerEnv('API_URL') || 'http://localhost:8080'
+      : '/api/proxy';
   }
 
   // -- Interceptors ---------------------------------------------------------
@@ -196,7 +216,7 @@ export class ApiClient {
       ...fetchOptions
     } = options;
 
-    const url = buildUrl(this.config.baseUrl, path, params);
+    const url = buildUrl(this.resolveBaseUrl(), path, params);
 
     // Build headers
     const headers: Record<string, string> = {

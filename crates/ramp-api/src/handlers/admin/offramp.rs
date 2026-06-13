@@ -15,7 +15,7 @@ use ramp_common::types::TenantId;
 use ramp_core::repository::{OfframpIntentRepository, OfframpIntentRow, PgOfframpIntentRepository};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
@@ -55,6 +55,14 @@ pub struct AdminOfframpResponse {
     pub tx_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bank_reference: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub linked_rfq_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub winning_lp_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_rate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settlement_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -97,6 +105,10 @@ fn map_admin_response(intent: &OfframpIntentRow) -> AdminOfframpResponse {
         deposit_address: intent.deposit_address.clone(),
         tx_hash: intent.tx_hash.clone(),
         bank_reference: intent.bank_reference.clone(),
+        linked_rfq_id: intent.linked_rfq_id.clone(),
+        winning_lp_id: intent.winning_lp_id.clone(),
+        matched_rate: intent.matched_rate.map(|rate| rate.to_string()),
+        settlement_id: intent.settlement_id.clone(),
         created_at: intent.created_at.to_rfc3339(),
         updated_at: intent.updated_at.to_rfc3339(),
     }
@@ -153,9 +165,28 @@ pub async fn list_pending_offramps(
     let repo = PgOfframpIntentRepository::new(pool.clone());
     let tenant_id = TenantId(tenant_ctx.tenant_id.0.clone());
 
-    let fetch_limit = query.limit.saturating_add(query.offset);
+    let total: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*)
+        FROM offramp_intents
+        WHERE tenant_id = $1 AND state = $2
+        "#,
+    )
+    .bind(&tenant_id.0)
+    .bind("CRYPTO_RECEIVED")
+    .fetch_one(pool)
+    .await
+    .map_err(|e| {
+        warn!(error = %e, "Failed to count pending off-ramp requests");
+        ApiError::Internal("Failed to retrieve pending off-ramp requests".to_string())
+    })?;
+
     let rows = repo
-        .list_by_status(&tenant_id, "CRYPTO_RECEIVED", fetch_limit)
+        .list_by_status(
+            &tenant_id,
+            "CRYPTO_RECEIVED",
+            query.limit.saturating_add(query.offset),
+        )
         .await?;
     let data: Vec<AdminOfframpResponse> = rows
         .into_iter()
@@ -173,7 +204,7 @@ pub async fn list_pending_offramps(
     );
 
     Ok(Json(ListOfframpResponse {
-        total: data.len() as i64,
+        total,
         data,
         limit: query.limit,
         offset: query.offset,
@@ -319,6 +350,10 @@ mod tests {
             deposit_address: Some("0x123".to_string()),
             tx_hash: None,
             bank_reference: None,
+            linked_rfq_id: None,
+            winning_lp_id: None,
+            matched_rate: None,
+            settlement_id: None,
             created_at: "2024-01-01T00:00:00Z".to_string(),
             updated_at: "2024-01-01T00:00:00Z".to_string(),
         };

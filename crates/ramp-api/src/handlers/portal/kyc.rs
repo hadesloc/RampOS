@@ -12,8 +12,10 @@ use axum::{
     Json, Router,
 };
 use chrono::Utc;
+use ramp_core::service::crypto::{CryptoService, ENCRYPTED_TEXT_PREFIX};
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use sqlx::PgPool;
+use tracing::{info, warn};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -182,6 +184,204 @@ pub struct ZkCredentialResponse {
 static ZK_KYC_SERVICE: OnceLock<ZkKycService> = OnceLock::new();
 static ZK_CREDENTIAL_ISSUER: OnceLock<ZkCredentialIssuer> = OnceLock::new();
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct KycPiiFields {
+    full_name: String,
+    date_of_birth: String,
+    document_type: String,
+    document_number: Option<String>,
+    address: String,
+}
+
+fn is_production() -> bool {
+    ramp_common::onchain_gate::is_production()
+}
+
+fn kyc_pii_crypto() -> Result<Option<CryptoService>, ApiError> {
+    match CryptoService::from_env() {
+        Ok(crypto) => Ok(Some(crypto)),
+        Err(error) if is_production() => Err(ApiError::Internal(format!(
+            "KYC PII encryption key is required in production: {}",
+            error
+        ))),
+        Err(error) => {
+            warn!(
+                error = %error,
+                "ENCRYPTION_MASTER_KEY not configured; storing KYC PII as plaintext outside production"
+            );
+            Ok(None)
+        }
+    }
+}
+
+fn encrypt_optional_pii(
+    crypto: Option<&CryptoService>,
+    value: Option<&str>,
+    field_name: &str,
+) -> Result<Option<String>, ApiError> {
+    value
+        .map(|value| encrypt_pii(crypto, value, field_name))
+        .transpose()
+}
+
+fn encrypt_pii(
+    crypto: Option<&CryptoService>,
+    value: &str,
+    field_name: &str,
+) -> Result<String, ApiError> {
+    match crypto {
+        Some(crypto) => crypto
+            .encrypt_text_for_storage(value)
+            .map_err(|e| ApiError::Internal(format!("Failed to encrypt KYC {field_name}: {e}"))),
+        None => Ok(value.to_string()),
+    }
+}
+
+fn decrypt_optional_pii(
+    crypto: Option<&CryptoService>,
+    value: Option<String>,
+    field_name: &str,
+) -> Result<Option<String>, ApiError> {
+    value
+        .map(|value| decrypt_pii(crypto, value, field_name))
+        .transpose()
+}
+
+fn decrypt_pii(
+    crypto: Option<&CryptoService>,
+    value: String,
+    field_name: &str,
+) -> Result<String, ApiError> {
+    if value.starts_with(ENCRYPTED_TEXT_PREFIX) {
+        let crypto = crypto.ok_or_else(|| {
+            ApiError::Internal(format!(
+                "KYC {field_name} is encrypted but ENCRYPTION_MASTER_KEY is not configured"
+            ))
+        })?;
+        return crypto
+            .decrypt_text_from_storage(&value)
+            .map_err(|e| ApiError::Internal(format!("Failed to decrypt KYC {field_name}: {e}")));
+    }
+
+    if is_production() {
+        warn!(
+            field = field_name,
+            "Reading legacy plaintext KYC PII in production; migrate row to encrypted storage"
+        );
+    }
+
+    Ok(value)
+}
+
+async fn store_kyc_case(
+    pool: Option<&PgPool>,
+    tenant_id: &str,
+    user_id: &str,
+    pii: &KycPiiFields,
+) -> Result<(), ApiError> {
+    let crypto = kyc_pii_crypto()?;
+
+    let Some(pool) = pool else {
+        if is_production() {
+            return Err(ApiError::Internal(
+                "KYC case database is required in production".to_string(),
+            ));
+        }
+        warn!(
+            tenant_id = tenant_id,
+            user_id = user_id,
+            "KYC case database unavailable; skipping local KYC case persistence outside production"
+        );
+        return Ok(());
+    };
+    let encrypted_full_name = encrypt_pii(crypto.as_ref(), &pii.full_name, "full_name")?;
+    let encrypted_date_of_birth =
+        encrypt_pii(crypto.as_ref(), &pii.date_of_birth, "date_of_birth")?;
+    let encrypted_document_type =
+        encrypt_pii(crypto.as_ref(), &pii.document_type, "document_type")?;
+    let encrypted_document_number = encrypt_optional_pii(
+        crypto.as_ref(),
+        pii.document_number.as_deref(),
+        "document_number",
+    )?;
+    let encrypted_address = encrypt_pii(crypto.as_ref(), &pii.address, "address")?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO portal_kyc_cases (
+            user_id,
+            tenant_id,
+            status,
+            tier,
+            full_name,
+            date_of_birth,
+            document_type,
+            document_number,
+            address
+        )
+        VALUES ($1, $2, 'PENDING', 1, $3, $4, $5, $6, $7)
+        "#,
+    )
+    .bind(user_id)
+    .bind(tenant_id)
+    .bind(encrypted_full_name)
+    .bind(encrypted_date_of_birth)
+    .bind(encrypted_document_type)
+    .bind(encrypted_document_number)
+    .bind(encrypted_address)
+    .execute(pool)
+    .await
+    .map_err(|e| ApiError::Internal(format!("Failed to store KYC case: {}", e)))?;
+
+    Ok(())
+}
+
+#[allow(dead_code)]
+async fn load_latest_kyc_case(
+    pool: &PgPool,
+    tenant_id: &str,
+    user_id: &str,
+) -> Result<Option<KycPiiFields>, ApiError> {
+    let row = sqlx::query_as::<_, (String, String, String, Option<String>, String)>(
+        r#"
+        SELECT full_name, date_of_birth, document_type, document_number, address
+        FROM portal_kyc_cases
+        WHERE tenant_id = $1 AND user_id = $2
+        ORDER BY submitted_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| ApiError::Internal(format!("Failed to read KYC case: {}", e)))?;
+
+    let Some((full_name, date_of_birth, document_type, document_number, address)) = row else {
+        return Ok(None);
+    };
+
+    let crypto = match CryptoService::from_env() {
+        Ok(crypto) => Some(crypto),
+        Err(error) if is_production() => {
+            warn!(
+                error = %error,
+                "ENCRYPTION_MASTER_KEY not configured while reading KYC PII in production"
+            );
+            None
+        }
+        Err(_) => None,
+    };
+
+    Ok(Some(KycPiiFields {
+        full_name: decrypt_pii(crypto.as_ref(), full_name, "full_name")?,
+        date_of_birth: decrypt_pii(crypto.as_ref(), date_of_birth, "date_of_birth")?,
+        document_type: decrypt_pii(crypto.as_ref(), document_type, "document_type")?,
+        document_number: decrypt_optional_pii(crypto.as_ref(), document_number, "document_number")?,
+        address: decrypt_pii(crypto.as_ref(), address, "address")?,
+    }))
+}
+
 fn zk_kyc_service() -> &'static ZkKycService {
     ZK_KYC_SERVICE.get_or_init(|| {
         let key = std::env::var("ZK_KYC_VERIFICATION_KEY")
@@ -316,15 +516,28 @@ pub async fn submit_kyc(
     info!(
         user_id = %portal_user.user_id,
         tenant_id = %portal_user.tenant_id,
-        first_name = %req.first_name,
-        last_name = %req.last_name,
-        doc_type = %req.id_document_type,
+        status = "PENDING",
         "KYC submission received"
     );
 
     let now = Utc::now();
     let tenant_id = ramp_common::types::TenantId::new(portal_user.tenant_id.to_string());
     let user_id = ramp_common::types::UserId::new(portal_user.user_id.to_string());
+    let pii_fields = KycPiiFields {
+        full_name: format!("{} {}", req.first_name, req.last_name),
+        date_of_birth: req.date_of_birth.clone(),
+        document_type: req.id_document_type.clone(),
+        document_number: req.id_document_number.clone(),
+        address: req.address.clone(),
+    };
+
+    store_kyc_case(
+        app_state.db_pool.as_ref(),
+        tenant_id.0.as_str(),
+        user_id.0.as_str(),
+        &pii_fields,
+    )
+    .await?;
 
     // 1. Update user KYC status to PENDING
     app_state
@@ -340,14 +553,13 @@ pub async fn submit_kyc(
         .await
         .map_err(|e| ApiError::Internal(format!("Failed to update user KYC status: {}", e)))?;
 
-    // 2. Store submission metadata in risk_flags for audit trail
+    // 2. Store non-PII submission metadata in risk_flags for audit trail.
+    // PII lives in portal_kyc_cases with app-layer encryption when persistence is available.
     let submission_metadata = serde_json::json!({
         "kycSubmission": {
-            "firstName": req.first_name,
-            "lastName": req.last_name,
-            "dateOfBirth": req.date_of_birth,
-            "idDocumentType": req.id_document_type,
-            "submittedAt": now.to_rfc3339(),
+            "kyc_submitted": true,
+            "submitted_at": now.to_rfc3339(),
+            "pii_storage": "portal_kyc_cases_enc_v1",
             "status": "PENDING"
         }
     });
@@ -482,9 +694,7 @@ pub async fn upload_document(
     info!(
         user_id = %portal_user.user_id,
         tenant_id = %portal_user.tenant_id,
-        doc_type = %req.document_type,
-        file_name = %req.file_name,
-        file_size = file_bytes.len(),
+        status = "PENDING",
         "Document upload processing"
     );
 
@@ -744,6 +954,104 @@ fn is_valid_date(date_str: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_key() -> [u8; 32] {
+        let mut key = [0u8; 32];
+        for (i, byte) in key.iter_mut().enumerate() {
+            *byte = i as u8;
+        }
+        key
+    }
+
+    #[test]
+    fn test_kyc_pii_round_trip_encrypt_decrypt() {
+        let crypto = CryptoService::from_key(&test_key());
+        let pii = KycPiiFields {
+            full_name: "John Doe".to_string(),
+            date_of_birth: "1990-01-15".to_string(),
+            document_type: "PASSPORT".to_string(),
+            document_number: Some("AB123456".to_string()),
+            address: "123 Main St".to_string(),
+        };
+
+        let encrypted_full_name = encrypt_pii(Some(&crypto), &pii.full_name, "full_name").unwrap();
+        let encrypted_dob =
+            encrypt_pii(Some(&crypto), &pii.date_of_birth, "date_of_birth").unwrap();
+        let encrypted_doc_type =
+            encrypt_pii(Some(&crypto), &pii.document_type, "document_type").unwrap();
+        let encrypted_doc_number = encrypt_optional_pii(
+            Some(&crypto),
+            pii.document_number.as_deref(),
+            "document_number",
+        )
+        .unwrap();
+        let encrypted_address = encrypt_pii(Some(&crypto), &pii.address, "address").unwrap();
+
+        assert!(encrypted_full_name.starts_with(ENCRYPTED_TEXT_PREFIX));
+        assert_ne!(encrypted_full_name, pii.full_name);
+
+        let decrypted = KycPiiFields {
+            full_name: decrypt_pii(Some(&crypto), encrypted_full_name, "full_name").unwrap(),
+            date_of_birth: decrypt_pii(Some(&crypto), encrypted_dob, "date_of_birth").unwrap(),
+            document_type: decrypt_pii(Some(&crypto), encrypted_doc_type, "document_type").unwrap(),
+            document_number: decrypt_optional_pii(
+                Some(&crypto),
+                encrypted_doc_number,
+                "document_number",
+            )
+            .unwrap(),
+            address: decrypt_pii(Some(&crypto), encrypted_address, "address").unwrap(),
+        };
+
+        assert_eq!(decrypted, pii);
+    }
+
+    #[test]
+    fn test_kyc_pii_legacy_plaintext_readable() {
+        let value = decrypt_pii(None, "legacy plaintext".to_string(), "full_name").unwrap();
+        assert_eq!(value, "legacy plaintext");
+    }
+
+    #[test]
+    fn test_kyc_pii_production_without_key_fails_closed() {
+        let _guard = ramp_common::onchain_gate::test_env_lock();
+        std::env::set_var("RUST_ENV", "production");
+        std::env::remove_var("RAMPOS_ENV");
+        std::env::remove_var("ENCRYPTION_MASTER_KEY");
+
+        let err = match kyc_pii_crypto() {
+            Ok(_) => panic!("expected KYC PII encryption to fail without a production key"),
+            Err(err) => err,
+        };
+        assert!(format!("{err:?}").contains("KYC PII encryption key is required"));
+
+        std::env::remove_var("RUST_ENV");
+    }
+
+    #[tokio::test]
+    async fn test_store_kyc_case_production_without_db_fails_closed() {
+        let _guard = ramp_common::onchain_gate::test_env_lock();
+        std::env::set_var("RUST_ENV", "production");
+        std::env::remove_var("RAMPOS_ENV");
+        std::env::set_var("ENCRYPTION_MASTER_KEY", hex::encode(test_key()));
+
+        let pii = KycPiiFields {
+            full_name: "John Doe".to_string(),
+            date_of_birth: "1990-01-15".to_string(),
+            document_type: "PASSPORT".to_string(),
+            document_number: Some("AB123456".to_string()),
+            address: "123 Main St".to_string(),
+        };
+
+        let err = match store_kyc_case(None, "tenant_1", "user_1", &pii).await {
+            Ok(_) => panic!("expected KYC case storage to fail without a production database"),
+            Err(err) => err,
+        };
+        assert!(format!("{err:?}").contains("KYC case database is required in production"));
+
+        std::env::remove_var("RUST_ENV");
+        std::env::remove_var("ENCRYPTION_MASTER_KEY");
+    }
 
     #[test]
     fn test_is_valid_date() {

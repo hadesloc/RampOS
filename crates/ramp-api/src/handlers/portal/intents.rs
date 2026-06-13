@@ -8,18 +8,21 @@
 
 use axum::{
     extract::{Path, State},
+    http::HeaderMap,
     routing::{get, post},
     Json, Router,
 };
 use chrono::Utc;
-use ramp_common::types::{IntentId, RailsProvider, ReferenceCode, TenantId, UserId, VndAmount};
+use ramp_common::types::{
+    IdempotencyKey, IntentId, RailsProvider, ReferenceCode, TenantId, UserId, VndAmount,
+};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 use validator::Validate;
 
 use crate::error::ApiError;
-use crate::middleware::PortalUser;
+use crate::middleware::{extract_idempotency_key_from_headers, PortalUser};
 use crate::router::AppState;
 
 // ============================================================================
@@ -109,6 +112,7 @@ pub fn router() -> Router<AppState> {
 pub async fn create_deposit(
     State(app_state): State<AppState>,
     portal_user: PortalUser,
+    headers: HeaderMap,
     Json(req): Json<DepositRequest>,
 ) -> Result<Json<Intent>, ApiError> {
     // Validate request
@@ -159,13 +163,15 @@ pub async fn create_deposit(
         RailsProvider::new("OnChain")
     };
 
+    let idempotency_key = extract_idempotency_key_from_headers(&headers).map(IdempotencyKey::new);
+
     // Create payin request for the service
     let payin_request = ramp_core::service::payin::CreatePayinRequest {
         tenant_id: tenant_id.clone(),
         user_id: user_id.clone(),
         amount_vnd: VndAmount(amount),
         rails_provider,
-        idempotency_key: None, // TODO: Accept idempotency key from request
+        idempotency_key,
         metadata: serde_json::json!({
             "method": method,
             "currency": req.currency.to_uppercase(),
@@ -179,7 +185,7 @@ pub async fn create_deposit(
         .await
         .map_err(|e| {
             warn!(error = %e, "Failed to create deposit intent");
-            ApiError::Internal(format!("Failed to create deposit: {}", e))
+            ApiError::from(e)
         })?;
 
     let intent = Intent {
@@ -202,6 +208,7 @@ pub async fn create_deposit(
 pub async fn create_withdraw(
     State(app_state): State<AppState>,
     portal_user: PortalUser,
+    headers: HeaderMap,
     Json(req): Json<WithdrawRequest>,
 ) -> Result<Json<Intent>, ApiError> {
     // Validate request
@@ -308,6 +315,8 @@ pub async fn create_withdraw(
         account_name: req.account_name.clone().unwrap_or_default(),
     };
 
+    let idempotency_key = extract_idempotency_key_from_headers(&headers).map(IdempotencyKey::new);
+
     // Create payout request for the service
     let payout_request = ramp_core::service::payout::CreatePayoutRequest {
         tenant_id: tenant_id.clone(),
@@ -315,7 +324,7 @@ pub async fn create_withdraw(
         amount_vnd: VndAmount(amount),
         rails_provider,
         bank_account,
-        idempotency_key: None, // TODO: Accept idempotency key from request
+        idempotency_key,
         metadata: serde_json::json!({
             "method": method,
             "currency": req.currency.to_uppercase(),
@@ -330,7 +339,7 @@ pub async fn create_withdraw(
         .await
         .map_err(|e| {
             warn!(error = %e, "Failed to create withdrawal intent");
-            ApiError::Internal(format!("Failed to create withdrawal: {}", e))
+            ApiError::from(e)
         })?;
 
     let intent = Intent {

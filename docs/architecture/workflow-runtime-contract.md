@@ -27,7 +27,7 @@ The TemporalEngine has these **known transitional limitations**:
 
 | Area | Current behavior | Future production expectation |
 | --- | --- | --- |
-| Signal delivery | Falls back to in-process worker; logs warning if no fallback | Signals should be delivered via Temporal API |
+| Signal delivery | Falls back to in-process worker only when one is configured; without fallback, signals are not delivered and are lost after a warning log | Signals should be delivered durably via Temporal API |
 | Activity execution | Delegates to fallback in-process worker | Workers should poll Temporal for activity tasks |
 | Status queries | Falls back to local tracking map on Temporal unavailability | Should return authoritative status from Temporal |
 | Workflow cancellation | Updates local tracking; cancels via fallback worker | Should use Temporal API cancellation |
@@ -41,11 +41,11 @@ The TemporalEngine has these **known transitional limitations**:
 When the Temporal server is unreachable:
 
 1. `submit_workflow()` logs a warning and uses the in-process `TemporalWorker` as fallback.
-2. `signal()` uses the fallback worker if configured; otherwise logs a warning (signal may be lost).
+2. `signal()` uses the fallback worker if configured; otherwise only logs a warning and returns `Ok(())`; the signal is not delivered and must be treated as lost.
 3. `get_status()` returns the last-known status from the local tracking map.
 4. `cancel()` updates local tracking and cancels via fallback worker.
 
-**Risk**: Fallback execution is non-durable — workflow state is lost on restart unless the `WorkflowStateRepository` is explicitly wired.
+**Risk**: Fallback execution is non-durable — workflow state is lost on restart unless the `WorkflowStateRepository` is explicitly wired. Temporal signal handling is also transitional: signals without a configured fallback worker are warn-only and lost, not queued for later delivery.
 
 ## In-Process Mode (`InProcessEngine`)
 
@@ -84,11 +84,19 @@ The repo contains `create_workflow_engine()` in `ramp-core`, but the main `ramp-
 
 Existing tests in `workflow_engine.rs` cover:
 
-- InProcess engine: payin, payout, trade start; signal delivery
+- InProcess engine: payin, payout, trade start; signal delivery; cancel
 - Factory: engine type selection based on `TEMPORAL_URL`
-- Temporal fallback: unreachable Temporal falls back to in-process
+- Temporal fallback: unreachable Temporal falls back to in-process for payin, payout, and trade
+- Temporal signal degradation: signal with fallback worker (delegates); signal without fallback (graceful degradation, no panic)
+- Temporal cancel: cancel with fallback delegation; cancel local tracking update
+- Temporal no-fallback error: returns error when Temporal unreachable and no fallback configured
+- Runtime contract: engine type strings stable; factory defaults to in-process; workflow ID format preserved across engines; unknown workflow status defaults to Completed
+
+Tests in `temporal_worker.rs` cover:
+- Workflow start (payin, payout)
+- Config from environment variables
 
 ---
 
-Last updated: 2026-03-18
-Version: 1.1.0
+Last updated: 2026-06-02
+Version: 1.2.0

@@ -7,6 +7,7 @@ pub mod intent;
 pub mod intent_test;
 pub mod ledger;
 pub mod licensing;
+pub mod onchain_gate;
 pub mod resilience;
 pub mod secrets;
 pub mod telemetry;

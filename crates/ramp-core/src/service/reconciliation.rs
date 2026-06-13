@@ -1247,7 +1247,11 @@ mod tests {
         let base_time = Utc::now() - Duration::minutes(5);
         let linked_settlement = crate::service::settlement::Settlement {
             id: "stl_evidence_001".to_string(),
+            tenant_id: None,
             offramp_intent_id: "ofr_evidence_001".to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: crate::service::settlement::SettlementStatus::Failed,
             bank_reference: Some("RAMP-EVIDENCE".to_string()),
             error_message: Some("bank partner timeout".to_string()),
@@ -1314,7 +1318,11 @@ mod tests {
         let base_time = Utc::now() - Duration::minutes(6);
         let candidate = crate::service::settlement::Settlement {
             id: "stl_candidate_live_001".to_string(),
+            tenant_id: None,
             offramp_intent_id: "ofr_candidate_live_001".to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: crate::service::settlement::SettlementStatus::Processing,
             bank_reference: Some("RAMP-LIVE-CANDIDATE".to_string()),
             error_message: None,

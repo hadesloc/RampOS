@@ -76,38 +76,10 @@ class WebhookVerifier:
     @staticmethod
     def verify_timestamped_v1(
         payload: str,
-        signature_header: str,
+        signature: str,
         secret: str,
         tolerance_seconds: int = 300,
     ) -> bool:
-        """Verify a timestamped HMAC v1 webhook header.
-
-        Expected header format: ``t=<unix timestamp>,v1=<hex digest>``.
-        The signature is computed over ``{timestamp}.{raw_body}``.
-        """
-        if not payload:
-            raise ValueError("Payload is required")
-        if not signature_header:
-            raise ValueError("Signature is required")
-        if not secret:
-            raise ValueError("Secret is required")
-
-        timestamp, signature = WebhookVerifier._parse_timestamped_v1_header(
-            signature_header
-        )
-        now = int(time.time())
-        if abs(now - int(timestamp)) > tolerance_seconds:
-            return False
-
-        digest = hmac.new(
-            secret.encode("utf-8"),
-            f"{timestamp}.{payload}".encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
-        return hmac.compare_digest(signature, digest)
-
-    @staticmethod
-    def verify_timestamped_v1(payload: str, signature: str, secret: str) -> bool:
         """Verify the current RampOS timestamped HMAC v1 header.
 
         Expected format:
@@ -122,22 +94,15 @@ class WebhookVerifier:
         if not secret:
             raise ValueError("Secret is required")
 
-        timestamp = ""
-        digest = ""
+        timestamp, digest = WebhookVerifier._parse_timestamped_v1_header(signature)
+        now = int(time.time())
+        try:
+            timestamp_int = int(timestamp)
+        except ValueError as exc:
+            raise ValueError("Timestamp must be a unix timestamp") from exc
 
-        for part in signature.split(","):
-            key, _, value = part.partition("=")
-            key = key.strip()
-            value = value.strip()
-            if key == "t":
-                timestamp = value
-            elif key == "v1":
-                digest = value
-
-        if not timestamp:
-            raise ValueError("Timestamp is required")
-        if not digest:
-            raise ValueError("v1 signature is required")
+        if abs(now - timestamp_int) > tolerance_seconds:
+            return False
 
         signed_payload = f"{timestamp}.{payload}"
         expected_digest = hmac.new(

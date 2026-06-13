@@ -3,6 +3,7 @@
 //! Provides traits and mock implementations for cross-chain bridge operations.
 
 use async_trait::async_trait;
+use ramp_common::onchain_gate;
 use serde::{Deserialize, Serialize};
 
 use super::{ChainError, ChainId, Result};
@@ -84,7 +85,9 @@ pub trait BridgeAdapter: Send + Sync {
 
 /// Mock bridge adapter simulating a Stargate-like cross-chain bridge.
 ///
-/// Uses 0.1% fee + fixed gas cost for testing.
+/// Uses 0.1% fee + fixed gas cost for tests and local simulation only. It is
+/// not registered anywhere in production; constructors also fail closed when
+/// `RUST_ENV`/`RAMPOS_ENV` is `production`.
 pub struct MockBridgeAdapter {
     /// Fee in basis points (10 = 0.1%)
     fee_bps: u32,
@@ -93,7 +96,15 @@ pub struct MockBridgeAdapter {
 }
 
 impl MockBridgeAdapter {
+    fn ensure_not_production() {
+        assert!(
+            !onchain_gate::is_production(),
+            "MockBridgeAdapter is test/local simulation only and must not be constructed in production"
+        );
+    }
+
     pub fn new() -> Self {
+        Self::ensure_not_production();
         Self {
             fee_bps: 10,
             fixed_gas_cost: 50_000_000_000_000, // ~0.00005 ETH in wei
@@ -101,6 +112,7 @@ impl MockBridgeAdapter {
     }
 
     pub fn with_params(fee_bps: u32, fixed_gas_cost: u128) -> Self {
+        Self::ensure_not_production();
         Self {
             fee_bps,
             fixed_gas_cost,
@@ -213,6 +225,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_bridge_quote_basic() {
+        let _guard = onchain_gate::test_env_lock();
+        std::env::remove_var("RUST_ENV");
+        std::env::remove_var("RAMPOS_ENV");
         let adapter = MockBridgeAdapter::new();
         let quote = adapter
             .get_bridge_quote(
@@ -232,8 +247,22 @@ mod tests {
         assert_eq!(quote.estimated_time_secs, 900); // L1 involved
     }
 
+    #[test]
+    fn test_mock_bridge_constructor_rejected_in_production() {
+        let _guard = onchain_gate::test_env_lock();
+        std::env::set_var("RAMPOS_ENV", "production");
+
+        let result = std::panic::catch_unwind(MockBridgeAdapter::new);
+        assert!(result.is_err());
+
+        std::env::remove_var("RAMPOS_ENV");
+    }
+
     #[tokio::test]
     async fn test_mock_bridge_l2_to_l2_faster() {
+        let _guard = onchain_gate::test_env_lock();
+        std::env::remove_var("RUST_ENV");
+        std::env::remove_var("RAMPOS_ENV");
         let adapter = MockBridgeAdapter::new();
 
         let l1_quote = adapter

@@ -1,8 +1,8 @@
 # RampOS Database Migrations
 
 **Database**: PostgreSQL 16+
-**Last Updated**: 2026-03-11
-**Total Migrations**: 42 up + 32 down
+**Last Updated**: 2026-06-02
+**Total Migrations**: 64 up + 48 down
 
 ---
 
@@ -66,8 +66,29 @@ migrations/
   039_rescreening_runs.sql        # Continuous rescreening (W12)
   040_kyc_passport.sql            # KYC passport portability (W13)
   041_kyb_graph.sql               # KYB corporate graph (W14)
+  042_config_bundle_governance.sql # Config bundle export/import governance
+  043_partner_registry.sql        # Third-party partner registry
+  044_corridor_packs.sql          # Corridor packaging
+  045_payment_method_capabilities.sql # Payment method capability matrix
+  046_provider_routing.sql        # Provider routing rules
+  047_kyb_evidence_packages.sql   # KYB evidence package bundles
+  048_treasury_evidence_imports.sql # Treasury evidence imports
+  049_admin_users.sql             # Admin user accounts
+  050_passkey_credentials.sql     # Passkey/WebAuthn credentials for admin
+  051_wallet_attestations.sql     # Wallet trust attestations
+  # 052-054: intentional gap (see migration history section)
+  055_onchain_observations.sql    # On-chain transfer observation store
+  056_offramp_chain_assignment.sql # Off-ramp chain assignment
+  057_extension_governance_metadata.sql # Extension approval and provenance
+  058_commercialization_packs.sql # Commercialization pack lifecycle
+  059_venue_connections.sql       # Venue connection registry
+  060_venue_accounts.sql          # Venue account identity
+  061_beneficiary_profiles.sql    # Beneficiary payout/funding profiles
+  062_venue_transfers.sql         # Wallet-to-venue transfer lifecycle
+  063_source_of_funds_packages.sql # Source-of-funds evidence packages
+  064_offramp_rfq_settlement_linkage.sql # Off-ramp RFQ to settlement linkage
   999_seed_data.sql               # Extended test data
-  down/                           # 32 rollback scripts
+  down/                           # 48 rollback scripts
 ```
 
 ### Naming Convention
@@ -207,6 +228,39 @@ These migrations implement the W1-W16 World-Class Roadmap features:
 | 041_kyb_graph | W14 | Corporate ownership graph | `kyb_entities`, `kyb_ownership_edges` (ownership_pct, jurisdiction) |
 
 All W1-W16 migrations include RLS policies and tenant isolation.
+
+---
+
+### 042-048: Governance, Partners, and Evidence
+
+| Migration | Purpose | Key Tables |
+|-----------|---------|------------|
+| 042_config_bundle_governance | Config bundle export/import governance | `config_bundle_exports` |
+| 043_partner_registry | Third-party partner registry | `partners`, `partner_capabilities`, `partner_approval_references` |
+| 044_corridor_packs | Corridor packaging | `corridor_packs` |
+| 045_payment_method_capabilities | Payment method capability matrix | `payment_method_capabilities` |
+| 046_provider_routing | Provider routing rules | `provider_routing_rules` |
+| 047_kyb_evidence_packages | KYB evidence package bundles | `kyb_evidence_packages` |
+| 048_treasury_evidence_imports | Treasury evidence imports | `treasury_evidence_imports` |
+
+### 049-064: Off-ramp, Venues, and RFQ Settlement
+
+| Migration | Purpose | Key Tables/Columns |
+|-----------|---------|-------------------|
+| 049_admin_users | Admin user accounts | `admin_users` |
+| 050_passkey_credentials | Passkey/WebAuthn credentials for admin | `passkey_credentials` |
+| 051_wallet_attestations | Wallet trust attestations for venue funding | `wallet_attestations` |
+| **052-054: Intentional gap** | Numbers 052-054 were planned in design docs for venue connections/accounts/beneficiary tables. When implementation landed (commit d0f8d894b), intervening migrations 055-058 were added first and the venue tables were placed at 059-062 instead. The gap is safe; sqlx processes migration files by filename sort order and does not require contiguous numbering. | N/A |
+| 055_onchain_observations | Authoritative on-chain transfer observation store | `onchain_observations` |
+| 056_offramp_chain_assignment | Persist optional chain assignment for off-ramp deposit targets | `chain_id` column on `offramp_intents` |
+| 057_extension_governance_metadata | Extension action approval and provenance tracking | columns on `whitelisted_extension_actions` |
+| 058_commercialization_packs | Commercialization pack lifecycle | `commercialization_packs` |
+| 059_venue_connections | Venue connection registry | `venue_connections` |
+| 060_venue_accounts | Venue account identity | `venue_accounts` |
+| 061_beneficiary_profiles | Beneficiary payout/funding destination profiles | `beneficiary_profiles` |
+| 062_venue_transfers | Wallet-to-venue transfer lifecycle | `venue_transfers` |
+| 063_source_of_funds_packages | Source-of-funds evidence packages | `source_of_funds_packages` |
+| 064_offramp_rfq_settlement_linkage | Link off-ramp RFQ matches to settlement execution | columns on `offramp_intents` (linked_rfq_id, winning_lp_id, matched_rate, settlement_id) and `settlements` (tenant_id, rfq_id, lp_id, final_rate) |
 
 ---
 

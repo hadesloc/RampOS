@@ -236,6 +236,34 @@ impl TradeService {
             .map_err(|e: LedgerError| Error::LedgerError(e.to_string()))?;
 
             for entry in &ledger_tx.entries {
+                // Compute the running balance for this specific account before
+                // inserting. Replicates PgLedgerRepository::record_transaction
+                // (ledger.rs lines 130-155): lock with FOR UPDATE, apply signed
+                // delta (Debit adds, Credit subtracts) to get new_balance.
+                let current_balance: rust_decimal::Decimal = sqlx::query_scalar(
+                    r#"SELECT COALESCE(balance, 0)
+                       FROM account_balances
+                       WHERE tenant_id = $1
+                         AND COALESCE(user_id, '') = COALESCE($2, '')
+                         AND account_type = $3
+                         AND currency = $4
+                       FOR UPDATE"#,
+                )
+                .bind(&req.tenant_id.0)
+                .bind(entry.user_id.as_ref().map(|u| &u.0))
+                .bind(entry.account_type.to_string())
+                .bind(entry.currency.to_string())
+                .fetch_optional(&mut *db_tx)
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?
+                .unwrap_or(rust_decimal::Decimal::ZERO);
+
+                let balance_change = match entry.direction {
+                    ramp_common::ledger::EntryDirection::Debit => entry.amount,
+                    ramp_common::ledger::EntryDirection::Credit => -entry.amount,
+                };
+                let balance_after = current_balance + balance_change;
+
                 sqlx::query(
                     r#"INSERT INTO ledger_entries
                        (id, tenant_id, user_id, intent_id, transaction_id,
@@ -252,10 +280,29 @@ impl TradeService {
                 .bind(&entry.direction.to_string())
                 .bind(entry.amount)
                 .bind(&entry.currency.to_string())
-                .bind(entry.amount)
-                .bind(0i64)
+                .bind(balance_after)
+                .bind(0i64) // sequence: legacy field, no monotonic assignment in this path
                 .bind(&entry.description)
                 .bind(&serde_json::json!({}))
+                .execute(&mut *db_tx)
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+
+                // Upsert account_balances so subsequent entries in this same db_tx
+                // see the updated balance (mirrors repository pattern, ledger.rs lines 188-207).
+                sqlx::query(
+                    r#"INSERT INTO account_balances
+                           (tenant_id, user_id, account_type, currency, balance, last_entry_id, updated_at)
+                       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                       ON CONFLICT (tenant_id, COALESCE(user_id, ''), account_type, currency)
+                       DO UPDATE SET balance = $5, last_entry_id = $6, updated_at = NOW()"#,
+                )
+                .bind(&req.tenant_id.0)
+                .bind(entry.user_id.as_ref().map(|u| &u.0))
+                .bind(entry.account_type.to_string())
+                .bind(entry.currency.to_string())
+                .bind(balance_after)
+                .bind(&entry.id.0)
                 .execute(&mut *db_tx)
                 .await
                 .map_err(|e| Error::Database(e.to_string()))?;

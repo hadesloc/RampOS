@@ -3,6 +3,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use chrono::Utc;
+use hmac::{Hmac, Mac};
 use ramp_api::middleware::{
     IdempotencyConfig, IdempotencyHandler, PortalAuthConfig, RateLimitConfig, RateLimiter,
 };
@@ -30,6 +31,8 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use tower::ServiceExt; // for oneshot
 
+type HmacSha256 = Hmac<Sha256>;
+
 // --- Helper Functions ---
 
 struct TestApp {
@@ -40,6 +43,7 @@ struct TestApp {
     _tenant_repo: Arc<MockTenantRepository>,
     event_publisher: Arc<InMemoryEventPublisher>,
     api_key: String,
+    api_secret: String,
     payout_service: Arc<PayoutService>,
     tenant_id: String,
     user_id: String,
@@ -55,6 +59,7 @@ async fn setup_app() -> TestApp {
 
     // Setup tenant
     let api_key = "test_api_key";
+    let api_secret = "test_api_secret";
     let tenant_id = "tenant1";
     let user_id = "user1";
 
@@ -67,7 +72,7 @@ async fn setup_app() -> TestApp {
         name: "Test Tenant".to_string(),
         status: "ACTIVE".to_string(),
         api_key_hash: api_key_hash.clone(),
-        api_secret_encrypted: None,
+        api_secret_encrypted: Some(api_secret.as_bytes().to_vec()),
         webhook_secret_hash: "secret".to_string(),
         webhook_secret_encrypted: None,
         webhook_url: Some("http://localhost:3000/webhook".to_string()),
@@ -208,10 +213,25 @@ async fn setup_app() -> TestApp {
         _tenant_repo: tenant_repo,
         event_publisher,
         api_key: api_key.to_string(),
+        api_secret: api_secret.to_string(),
         payout_service,
         tenant_id: tenant_id.to_string(),
         user_id: user_id.to_string(),
     }
+}
+
+fn compute_hmac_signature(
+    method: &str,
+    path: &str,
+    timestamp: &str,
+    body: &str,
+    secret: &str,
+) -> String {
+    let message = format!("{}\n{}\n{}\n{}", method, path, timestamp, body);
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take any size key");
+    mac.update(message.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
 }
 
 // --- Tests ---
@@ -246,20 +266,31 @@ async fn test_payout_success_flow() {
         }
     });
 
+    let path = "/v1/intents/payout";
+    let body = serde_json::to_string(&payload).unwrap();
+    let timestamp = Utc::now().timestamp().to_string();
+    let signature = compute_hmac_signature("POST", path, &timestamp, &body, &app.api_secret);
     let request = Request::builder()
-        .uri("/v1/intents/payout")
+        .uri(path)
         .method("POST")
         .header("Authorization", format!("Bearer {}", app.api_key))
+        .header("X-Timestamp", timestamp)
+        .header("X-Signature", signature)
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+        .body(Body::from(body))
         .unwrap();
 
     let response = app.router.clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-
+    let status = response.status();
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "create payout failed: {}",
+        String::from_utf8_lossy(&body_bytes)
+    );
     let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     let intent_id_str = intent_resp["intentId"].as_str().unwrap();
     let status = intent_resp["status"].as_str().unwrap();
@@ -389,12 +420,18 @@ async fn test_payout_insufficient_balance() {
         "metadata": {}
     });
 
+    let path = "/v1/intents/payout";
+    let body = serde_json::to_string(&payload).unwrap();
+    let timestamp = Utc::now().timestamp().to_string();
+    let signature = compute_hmac_signature("POST", path, &timestamp, &body, &app.api_secret);
     let request = Request::builder()
-        .uri("/v1/intents/payout")
+        .uri(path)
         .method("POST")
         .header("Authorization", format!("Bearer {}", app.api_key))
+        .header("X-Timestamp", timestamp)
+        .header("X-Signature", signature)
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+        .body(Body::from(body))
         .unwrap();
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -431,12 +468,18 @@ async fn test_payout_aml_block() {
         "metadata": {}
     });
 
+    let path = "/v1/intents/payout";
+    let body = serde_json::to_string(&payload).unwrap();
+    let timestamp = Utc::now().timestamp().to_string();
+    let signature = compute_hmac_signature("POST", path, &timestamp, &body, &app.api_secret);
     let request = Request::builder()
-        .uri("/v1/intents/payout")
+        .uri(path)
         .method("POST")
         .header("Authorization", format!("Bearer {}", app.api_key))
+        .header("X-Timestamp", timestamp)
+        .header("X-Signature", signature)
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+        .body(Body::from(body))
         .unwrap();
 
     let response = app.router.oneshot(request).await.unwrap();
@@ -478,20 +521,31 @@ async fn test_payout_bank_rejection() {
         "metadata": {}
     });
 
+    let path = "/v1/intents/payout";
+    let body = serde_json::to_string(&payload).unwrap();
+    let timestamp = Utc::now().timestamp().to_string();
+    let signature = compute_hmac_signature("POST", path, &timestamp, &body, &app.api_secret);
     let request = Request::builder()
-        .uri("/v1/intents/payout")
+        .uri(path)
         .method("POST")
         .header("Authorization", format!("Bearer {}", app.api_key))
+        .header("X-Timestamp", timestamp)
+        .header("X-Signature", signature)
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&payload).unwrap()))
+        .body(Body::from(body))
         .unwrap();
 
     let response = app.router.clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-
+    let status = response.status();
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "create payout failed: {}",
+        String::from_utf8_lossy(&body_bytes)
+    );
     let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     let intent_id_str = intent_resp["intentId"].as_str().unwrap();
     let intent_id = IntentId::new(intent_id_str);
@@ -512,13 +566,13 @@ async fn test_payout_bank_rejection() {
     // Verify state
     let intents = app.intent_repo.intents.lock().unwrap();
     let intent = intents.iter().find(|i| i.id == intent_id_str).unwrap();
-    assert_eq!(intent.state, "BANK_REJECTED");
+    assert_eq!(intent.state, "REVERSED");
 
     // Check event
     let events = app.event_publisher.get_events().await;
     let reject_event = events.iter().find(|e| {
         e.get("type").and_then(|v| v.as_str()) == Some("intent.status_changed")
-            && e.get("new_status").and_then(|v| v.as_str()) == Some("BANK_REJECTED")
+            && e.get("new_status").and_then(|v| v.as_str()) == Some("REVERSED")
     });
     assert!(reject_event.is_some());
 

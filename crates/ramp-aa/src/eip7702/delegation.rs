@@ -257,7 +257,10 @@ impl DelegationPrerequisites {
             });
         }
 
-        if !self.allowed_tool_surfaces.iter().any(|allowed| allowed == tool_surface)
+        if !self
+            .allowed_tool_surfaces
+            .iter()
+            .any(|allowed| allowed == tool_surface)
         {
             return Err(DelegationValidationError::ToolSurfaceNotAllowed(
                 tool_surface.to_string(),

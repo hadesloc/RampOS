@@ -200,7 +200,9 @@ contract AccountFuzz is Test {
         bytes[] memory datas = new bytes[](batchSize);
 
         for (uint256 i = 0; i < batchSize; i++) {
-            dests[i] = address(uint160(i + 1000)); // Simple deterministic addresses
+            // casting to uint160 is safe because i is bounded to batchSize (<= 32)
+            // forge-lint: disable-next-line(unsafe-typecast)
+            dests[i] = address(uint160(i + 1000));
             values[i] = perRecipient;
             datas[i] = "";
         }
@@ -262,6 +264,8 @@ contract AccountFuzz is Test {
         bytes[] memory datas = new bytes[](batchSize);
 
         for (uint256 i = 0; i < batchSize; i++) {
+            // casting to uint160 is safe because i is bounded to MAX_BATCH (<= 32)
+            // forge-lint: disable-next-line(unsafe-typecast)
             dests[i] = address(uint160(i + 1000));
             values[i] = 0;
             datas[i] = "";

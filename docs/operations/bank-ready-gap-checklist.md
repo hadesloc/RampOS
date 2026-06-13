@@ -1,7 +1,7 @@
 # Bank-Ready Gap Checklist
 
 ## Purpose
-- Convert the current feature-complete control plane into a bank-grade release candidate by tracking missing operational proof.
+- Convert the current implementation-complete-for-selected-scope control plane into a bank-grade release candidate by tracking missing operational proof.
 
 ## Gap Areas
 - `Release hardening`

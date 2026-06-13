@@ -27,22 +27,14 @@ use crate::handlers::portal::venue_funding::{
     list_venue_funding_venues, prepare_venue_funding, submit_venue_funding,
     VenueFundingAccountSummaryResponse, VenueFundingChecklistItemResponse,
     VenueFundingConnectionRequest, VenueFundingConnectionResponse,
-    VenueFundingConnectionSummaryResponse, VenueFundingEligibilityResponse,
-    VenueFundingEligibilityReasonResponse, VenueFundingPrepareRequest,
-    VenueFundingPrepareResponse, VenueFundingSourceOfFundsResponse, VenueFundingStatusResponse,
-    VenueFundingSubmitRequest, VenueFundingSubmitResponse, VenueListResponse,
-    VenueSummaryResponse,
+    VenueFundingConnectionSummaryResponse, VenueFundingEligibilityReasonResponse,
+    VenueFundingEligibilityResponse, VenueFundingPrepareRequest, VenueFundingPrepareResponse,
+    VenueFundingSourceOfFundsResponse, VenueFundingStatusResponse, VenueFundingSubmitRequest,
+    VenueFundingSubmitResponse, VenueListResponse, VenueSummaryResponse,
 };
 use crate::handlers::stablecoin::*;
 use crate::handlers::trade::*;
 // Import admin and bank_webhook handlers + utoipa __path_xxx generated types via re-export
-#[allow(unused_imports)]
-use crate::handlers::{
-    __path_get_case, __path_get_case_stats, __path_get_dashboard, __path_get_user,
-    __path_handle_bank_webhook, __path_list_cases, __path_list_users, __path_update_case, get_case,
-    get_case_stats, get_dashboard, get_user, handle_bank_webhook, list_cases, list_users,
-    update_case,
-};
 #[allow(unused_imports)]
 use crate::handlers::portal::venue_cashout::{
     __path_confirm_hyperliquid_wallet_receipt, __path_prepare_hyperliquid_cashout,
@@ -52,6 +44,13 @@ use crate::handlers::portal::venue_funding::{
     __path_connect_venue_funding, __path_get_venue_funding_eligibility,
     __path_get_venue_funding_status, __path_list_venue_funding_venues,
     __path_prepare_venue_funding, __path_submit_venue_funding,
+};
+#[allow(unused_imports)]
+use crate::handlers::{
+    __path_get_case, __path_get_case_stats, __path_get_dashboard, __path_get_user,
+    __path_handle_bank_webhook, __path_list_cases, __path_list_users, __path_update_case, get_case,
+    get_case_stats, get_dashboard, get_user, handle_bank_webhook, list_cases, list_users,
+    update_case,
 };
 // Admin types with aliases to avoid name conflicts
 use crate::handlers::admin::{

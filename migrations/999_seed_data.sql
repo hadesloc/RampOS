@@ -79,7 +79,7 @@ BEGIN
     VALUES
         (t_id, '', 'ASSET_BANK_VCB', 'VND', 50000000),
         (t_id, u_id, 'LIABILITY_USER_MAIN', 'VND', 50000000)
-    ON CONFLICT (tenant_id, user_id, account_type, currency)
+    ON CONFLICT (tenant_id, COALESCE(user_id, ''), account_type, currency)
     DO UPDATE SET balance = account_balances.balance + EXCLUDED.balance;
 
 
@@ -117,7 +117,7 @@ BEGIN
     -- USDT: Increase (Insert if not exists)
     INSERT INTO account_balances (tenant_id, user_id, account_type, currency, balance)
     VALUES (t_id, u_id, 'LIABILITY_USER_MAIN', 'USDT', 1000)
-    ON CONFLICT (tenant_id, user_id, account_type, currency)
+    ON CONFLICT (tenant_id, COALESCE(user_id, ''), account_type, currency)
     DO UPDATE SET balance = account_balances.balance + 1000;
 
 END $$;

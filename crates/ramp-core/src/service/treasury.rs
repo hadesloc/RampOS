@@ -602,7 +602,11 @@ fn sample_settlements(scenario: Option<&str>) -> Vec<Settlement> {
     if matches!(scenario, Some("stable")) {
         return vec![Settlement {
             id: "stl_treasury_stable_001".to_string(),
+            tenant_id: None,
             offramp_intent_id: "ofr_treasury_stable_001".to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: SettlementStatus::Completed,
             bank_reference: Some("RAMP-STABLE".to_string()),
             error_message: None,
@@ -614,7 +618,11 @@ fn sample_settlements(scenario: Option<&str>) -> Vec<Settlement> {
     vec![
         Settlement {
             id: "stl_treasury_pending_001".to_string(),
+            tenant_id: None,
             offramp_intent_id: "ofr_treasury_pending_001".to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: SettlementStatus::Pending,
             bank_reference: Some("RAMP-BACKLOG".to_string()),
             error_message: None,
@@ -623,7 +631,11 @@ fn sample_settlements(scenario: Option<&str>) -> Vec<Settlement> {
         },
         Settlement {
             id: "stl_treasury_processing_001".to_string(),
+            tenant_id: None,
             offramp_intent_id: "ofr_treasury_processing_001".to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: SettlementStatus::Processing,
             bank_reference: Some("RAMP-PIPELINE".to_string()),
             error_message: None,

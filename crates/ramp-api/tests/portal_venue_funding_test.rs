@@ -125,8 +125,7 @@ async fn setup_app() -> axum::Router {
     ));
     let user_service = Arc::new(UserService::new(user_repo.clone(), event_publisher.clone()));
     let report_generator = Arc::new(ReportGenerator::new(
-        PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres")
-            .expect("lazy pool"),
+        PgPool::connect_lazy("postgres://postgres:postgres@localhost/postgres").expect("lazy pool"),
         Arc::new(MockDocumentStorage::new()),
     ));
     let case_manager = Arc::new(CaseManager::new(Arc::new(InMemoryCaseStore::new())));
@@ -234,17 +233,13 @@ async fn portal_venue_funding_venues_path_returns_curated_registry_entries() {
         "curated venues should include hyperliquid"
     );
     assert!(
-        venues.iter().any(
-            |venue| venue["venueKey"] == "hyperliquid"
-                && venue["supportsWalletFunding"] == serde_json::Value::Bool(true)
-        ),
+        venues.iter().any(|venue| venue["venueKey"] == "hyperliquid"
+            && venue["supportsWalletFunding"] == serde_json::Value::Bool(true)),
         "hyperliquid should be advertised as the active wallet-funding pilot"
     );
     assert!(
-        venues.iter().any(
-            |venue| venue["venueKey"] == "kraken"
-                && venue["supportsWalletFunding"] == serde_json::Value::Bool(false)
-        ),
+        venues.iter().any(|venue| venue["venueKey"] == "kraken"
+            && venue["supportsWalletFunding"] == serde_json::Value::Bool(false)),
         "non-pilot venues should not be advertised as wallet-funding ready"
     );
     assert!(

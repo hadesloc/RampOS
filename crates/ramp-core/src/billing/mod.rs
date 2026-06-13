@@ -4,15 +4,17 @@
 //! Tracks API calls, transaction volume, storage, and active users.
 
 mod metering;
+mod pg;
 mod stripe;
 
 pub use metering::{
     MeterEvent, MeterType, MetricAggregation, MetricValue, UsageMeter, UsageMetrics, UsagePeriod,
     UsageRecord, UsageSummary,
 };
+pub use pg::PgBillingDataProvider;
 pub use stripe::{
-    BillingPlan, BillingPlanTier, Invoice, InvoiceItem, InvoiceStatus, PlanFeature, PricingModel,
-    StripeClient, StripeConfig, StripeError, Subscription, SubscriptionStatus,
+    BillingPlan, BillingPlanTier, Invoice, InvoiceItem, InvoiceStatus, PlanFeature, PlanLimits,
+    PricingModel, StripeClient, StripeConfig, StripeError, Subscription, SubscriptionStatus,
 };
 
 use async_trait::async_trait;

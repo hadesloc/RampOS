@@ -227,5 +227,8 @@ async fn delegation_prerequisites_snapshot_returns_structured_read_only_admin_vi
     assert!(payload["prerequisites"].is_object());
     assert!(payload["evaluation"].is_object());
     assert_eq!(payload["evaluation"]["allowed"], true);
-    assert_eq!(payload["evaluation"]["denialReasons"], serde_json::json!([]));
+    assert_eq!(
+        payload["evaluation"]["denialReasons"],
+        serde_json::json!([])
+    );
 }

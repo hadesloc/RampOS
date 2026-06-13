@@ -1248,8 +1248,7 @@ fn openapi_documents_reconciliation_provenance_contract() {
     let json = doc
         .to_json()
         .expect("OpenAPI spec should serialize to JSON");
-    let spec: serde_json::Value =
-        serde_json::from_str(&json).expect("OpenAPI JSON should parse");
+    let spec: serde_json::Value = serde_json::from_str(&json).expect("OpenAPI JSON should parse");
 
     let workbench_path = &spec["paths"]["/v1/admin/reconciliation/workbench"]["get"];
     assert!(
@@ -1277,8 +1276,8 @@ fn openapi_documents_reconciliation_provenance_contract() {
         "reconciliation snapshot must require provenance"
     );
 
-    let provenance_required = workbench_schema["properties"]["snapshot"]["properties"]["provenance"]
-        ["required"]
+    let provenance_required = workbench_schema["properties"]["snapshot"]["properties"]
+        ["provenance"]["required"]
         .as_array()
         .expect("provenance schema must define required fields")
         .iter()

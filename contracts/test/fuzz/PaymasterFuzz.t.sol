@@ -231,12 +231,12 @@ contract PaymasterFuzz is Test {
 
         // Use all allowed ops
         for (uint256 i = 0; i < maxOps; i++) {
-            PackedUserOperation memory userOp = _createUserOp(sender);
-            bytes32 userOpHash = keccak256(abi.encode("userOp", i, block.timestamp));
-            userOp.paymasterAndData = _createPaymasterData(userOpHash, tenantId, validUntil, validAfter);
+            PackedUserOperation memory op = _createUserOp(sender);
+            bytes32 opHash = keccak256(abi.encode("userOp", i, block.timestamp));
+            op.paymasterAndData = _createPaymasterData(opHash, tenantId, validUntil, validAfter);
 
             vm.prank(address(entryPoint));
-            paymaster.validatePaymasterUserOp(userOp, userOpHash, 0.01 ether);
+            paymaster.validatePaymasterUserOp(op, opHash, 0.01 ether);
         }
 
         // Next op should fail

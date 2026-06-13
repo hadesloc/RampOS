@@ -7,7 +7,7 @@ use super::{
     IntentStatus, IntentType, StepStatus, StepType,
 };
 use crate::bridge::{BridgeRegistry, ChainId, TxHash};
-use alloy::primitives::{B256, U256};
+use alloy::primitives::U256;
 use async_trait::async_trait;
 use chrono::Utc;
 use ramp_common::{Error, Result};
@@ -201,125 +201,29 @@ impl IntentExecutor {
         }
     }
 
-    /// Execute a single step
+    /// Execute a single step.
+    ///
+    /// EXPERIMENTAL — not launch scope (D-03). Fail-closed until real chain
+    /// transaction submission and confirmation are implemented.
     async fn execute_step(
         &self,
         step: &mut ExecutionStep,
         intent: &CrossChainIntent,
     ) -> Result<()> {
-        step.status = StepStatus::Submitted;
         step.started_at = Some(Utc::now());
 
-        // In production, this would:
-        // 1. Build transaction based on step type
-        // 2. Sign and submit transaction
-        // 3. Wait for confirmation
-        // 4. Update step with tx hash and gas used
+        info!(
+            intent_id = %intent.id,
+            step = step.index,
+            step_type = ?step.step_type,
+            chain_id = step.chain_id,
+            "Rejecting intent execution because chain submission is not implemented"
+        );
 
-        match step.step_type {
-            StepType::Approve => {
-                info!(
-                    intent_id = %intent.id,
-                    step = step.index,
-                    "Executing approve step"
-                );
-                // Mock approval
-                step.tx_hash = Some(B256::from(rand::random::<[u8; 32]>()));
-                step.gas_used = Some(U256::from(50000u64));
-            }
-            StepType::Bridge => {
-                info!(
-                    intent_id = %intent.id,
-                    step = step.index,
-                    "Executing bridge step"
-                );
-                // Get quote and execute bridge
-                let token_address = self
-                    .bridge_registry
-                    .get_token_address(intent.source_chain, intent.token)
-                    .ok_or_else(|| Error::Validation("Token not supported".to_string()))?;
-
-                let quote = self
-                    .bridge_registry
-                    .get_best_quote(
-                        intent.source_chain,
-                        intent.dest_chain,
-                        token_address,
-                        intent.amount,
-                        intent.recipient,
-                    )
-                    .await?;
-
-                // Execute bridge
-                let bridge = self
-                    .bridge_registry
-                    .get_bridge(&quote.bridge_name)
-                    .ok_or_else(|| Error::Validation("Bridge not found".to_string()))?;
-
-                let tx_hash = bridge.bridge(quote).await?;
-                step.tx_hash = Some(tx_hash);
-                step.gas_used = Some(U256::from(200000u64));
-            }
-            StepType::Release => {
-                info!(
-                    intent_id = %intent.id,
-                    step = step.index,
-                    "Waiting for release on destination"
-                );
-                // This is handled by the bridge automatically
-                step.tx_hash = Some(B256::from(rand::random::<[u8; 32]>()));
-                step.gas_used = Some(U256::from(100000u64));
-            }
-            StepType::Lock => {
-                info!(
-                    intent_id = %intent.id,
-                    step = step.index,
-                    "Executing lock step for atomic swap"
-                );
-                step.tx_hash = Some(B256::from(rand::random::<[u8; 32]>()));
-                step.gas_used = Some(U256::from(80000u64));
-            }
-            StepType::Swap => {
-                info!(
-                    intent_id = %intent.id,
-                    step = step.index,
-                    "Executing swap on destination chain"
-                );
-                step.tx_hash = Some(B256::from(rand::random::<[u8; 32]>()));
-                step.gas_used = Some(U256::from(150000u64));
-            }
-            StepType::Deposit => {
-                info!(
-                    intent_id = %intent.id,
-                    step = step.index,
-                    "Executing deposit into yield protocol"
-                );
-                step.tx_hash = Some(B256::from(rand::random::<[u8; 32]>()));
-                step.gas_used = Some(U256::from(120000u64));
-            }
-            StepType::ContractCall => {
-                info!(
-                    intent_id = %intent.id,
-                    step = step.index,
-                    "Executing custom contract call"
-                );
-                step.tx_hash = Some(B256::from(rand::random::<[u8; 32]>()));
-                step.gas_used = Some(U256::from(100000u64));
-            }
-            StepType::Refund => {
-                info!(
-                    intent_id = %intent.id,
-                    step = step.index,
-                    "Executing refund/rollback"
-                );
-                step.tx_hash = Some(B256::from(rand::random::<[u8; 32]>()));
-                step.gas_used = Some(U256::from(60000u64));
-            }
-        }
-
-        step.status = StepStatus::Confirmed;
-        step.completed_at = Some(Utc::now());
-        Ok(())
+        Err(Error::NotImplemented(
+            "cross-chain intent execution is experimental and disabled until destination-chain submission and confirmation are implemented"
+                .to_string(),
+        ))
     }
 
     /// Execute rollback for failed intent
@@ -447,16 +351,14 @@ impl CrossChainExecutor for IntentExecutor {
                     execution.steps[i].error = Some(e.to_string());
                     execution.mark_failed(e.to_string());
 
-                    // Auto rollback if enabled
-                    if self.config.auto_rollback {
-                        self.execute_rollback(&mut execution).await?;
-                    }
+                    // Auto rollback is disabled for fail-closed experimental execution because
+                    // rollback would require the same unimplemented chain submission path.
 
                     // Update stored execution
                     let mut executions = self.executions.write().await;
                     executions.insert(intent.id.clone(), execution.clone());
 
-                    return Ok(execution);
+                    return Err(e);
                 }
             }
 
@@ -870,6 +772,137 @@ mod tests {
         // AtomicSwap: Lock(80k) on source, Release(100k) on dest
         assert_eq!(estimate.source_gas, U256::from(80_000u64));
         assert_eq!(estimate.dest_gas, U256::from(100_000u64));
+    }
+
+    // ---- Fail-closed execution ----
+
+    const INTENT_EXECUTION_DISABLED: &str = "cross-chain intent execution is experimental and disabled until destination-chain submission and confirmation are implemented";
+
+    #[tokio::test]
+    async fn test_execute_step_fails_closed_without_fake_confirmation() {
+        let registry = Arc::new(BridgeRegistry::new(BridgeConfig::default()));
+        let executor = IntentExecutor::with_default_config(registry);
+
+        let intent = CrossChainIntent::new(
+            IntentType::Bridge,
+            1,
+            42161,
+            BridgeToken::USDC,
+            U256::from(1_000_000u64),
+            Address::ZERO,
+            Address::ZERO,
+        );
+        let mut execution = IntentExecution::new(intent.clone());
+        execution.add_step(
+            StepType::Approve,
+            intent.source_chain,
+            serde_json::json!({}),
+        );
+
+        let err = executor
+            .execute_step(&mut execution.steps[0], &intent)
+            .await
+            .expect_err("step execution must fail closed");
+
+        assert!(matches!(err, Error::NotImplemented(_)));
+        assert!(err.to_string().contains(INTENT_EXECUTION_DISABLED));
+        assert_ne!(execution.steps[0].status, StepStatus::Confirmed);
+        assert_eq!(execution.steps[0].status, StepStatus::Pending);
+        assert!(execution.steps[0].tx_hash.is_none());
+        assert!(execution.steps[0].gas_used.is_none());
+        assert!(execution.steps[0].completed_at.is_none());
+        assert!(execution.steps[0].started_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_intent_execution_propagates_fail_closed_error() {
+        let registry = Arc::new(BridgeRegistry::new(BridgeConfig::default()));
+        let config = ExecutionConfig {
+            auto_rollback: false,
+            ..ExecutionConfig::default()
+        };
+        let executor = IntentExecutor::new(registry, config);
+
+        let intent = CrossChainIntent::new(
+            IntentType::Bridge,
+            1,
+            42161,
+            BridgeToken::USDC,
+            U256::from(1_000_000u64),
+            Address::ZERO,
+            Address::ZERO,
+        );
+        let intent_id = intent.id.clone();
+
+        let err = executor
+            .execute(intent)
+            .await
+            .expect_err("intent execution must propagate fail-closed error");
+
+        assert!(matches!(err, Error::NotImplemented(_)));
+        assert!(err.to_string().contains(INTENT_EXECUTION_DISABLED));
+
+        let stored = executor
+            .get_status(&intent_id)
+            .await
+            .unwrap()
+            .expect("failed execution should be stored for status inspection");
+
+        assert!(matches!(stored.status, IntentStatus::Failed(_)));
+        assert_ne!(stored.status, IntentStatus::Completed);
+        assert!(stored.completed_at.is_some());
+        assert_eq!(stored.total_gas_used, U256::ZERO);
+        assert!(stored
+            .steps
+            .iter()
+            .all(|step| step.status != StepStatus::Confirmed));
+        assert!(stored.steps.iter().all(|step| step.tx_hash.is_none()));
+        assert!(stored.steps.iter().all(|step| step.gas_used.is_none()));
+        assert_eq!(stored.steps[0].status, StepStatus::Failed);
+        assert!(stored.steps[0]
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains(INTENT_EXECUTION_DISABLED));
+    }
+
+    #[tokio::test]
+    async fn test_intent_execution_fails_closed_without_rollback_completion() {
+        let registry = Arc::new(BridgeRegistry::new(BridgeConfig::default()));
+        let executor = IntentExecutor::with_default_config(registry);
+
+        let intent = CrossChainIntent::new(
+            IntentType::Bridge,
+            1,
+            42161,
+            BridgeToken::USDC,
+            U256::from(1_000_000u64),
+            Address::ZERO,
+            Address::ZERO,
+        );
+        let intent_id = intent.id.clone();
+
+        let err = executor
+            .execute(intent)
+            .await
+            .expect_err("auto rollback must not convert fail-closed execution into success");
+
+        assert!(matches!(err, Error::NotImplemented(_)));
+        assert!(err.to_string().contains(INTENT_EXECUTION_DISABLED));
+
+        let stored = executor
+            .get_status(&intent_id)
+            .await
+            .unwrap()
+            .expect("failed execution should remain inspectable");
+
+        assert!(matches!(stored.status, IntentStatus::Failed(_)));
+        assert_ne!(stored.status, IntentStatus::Completed);
+        assert!(stored
+            .steps
+            .iter()
+            .all(|step| step.status != StepStatus::Confirmed));
+        assert!(stored.steps.iter().all(|step| step.tx_hash.is_none()));
     }
 
     // ---- Executor get_status ----

@@ -47,7 +47,8 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting RampOS Server v{}", env!("CARGO_PKG_VERSION"));
 
     // Load configuration
-    let config = Config::from_env().unwrap_or_default();
+    let config = Config::from_env()
+        .map_err(|e| anyhow::anyhow!("Failed to load RampOS configuration: {}", e))?;
 
     // Create database pool
     let pool = sqlx::PgPool::connect(&config.database.url)
@@ -247,7 +248,7 @@ async fn main() -> anyhow::Result<()> {
         // Build billing service via config-driven provider selection.
         // Respects BILLING_PROVIDER env var (accepted: "postgres", "mock").
         // Rejects mock provider when running in production mode.
-        billing_service: Arc::new(providers::build_billing_service()?),
+        billing_service: Arc::new(providers::build_billing_service(Some(pool.clone()))?),
         // Build VNST protocol service via config-driven provider selection.
         // Respects VNST_PROVIDER env var (accepted: "live", "mock").
         // Rejects mock provider when running in production mode.

@@ -133,3 +133,7 @@ tests/staging_dry_run_test.md
 
 admin-dashboard.png
 replacements.txt
+scripts/__pycache__/
+scripts/.pytest_cache/
+.workflow/
+.remember/

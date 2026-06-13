@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- base
+- monitoring
+- jobs/migration-job.yaml
+- jobs/backup-postgres.yaml
+- jobs/backup-redis.yaml
+- jobs/backup-nats.yaml
+
+# NOTE: jobs/backup-s3-credentials.example.yaml is a TEMPLATE - configure separately.

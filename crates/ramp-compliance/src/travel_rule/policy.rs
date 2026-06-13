@@ -226,7 +226,7 @@ impl TravelRulePolicyEngine {
             action: TravelRuleAction::ReviewRequired,
             disclosure_required: false,
             selected_transport_profile: None,
-            unmet_requirements: vec![TravelRuleRequirement::Counterparty],
+            unmet_requirements: Vec::new(),
         }
     }
 }

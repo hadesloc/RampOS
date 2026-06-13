@@ -530,6 +530,10 @@ pub fn create_router(state: AppState) -> Router {
             "/settlement/export",
             get(handlers::admin::export_settlement_workbench),
         )
+        .route(
+            "/settlement/:id/outcome",
+            post(handlers::admin::apply_settlement_outcome),
+        )
         // Risk lab
         .route(
             "/risk-lab/catalog",
@@ -800,11 +804,19 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/venue-cashout", handlers::portal::venue_cashout::router())
         .nest("/venue-funding", handlers::portal::venue_funding::router())
         .merge(handlers::portal::rfq::router())
-        .layer(middleware::from_fn_with_state(
-            state.portal_auth_config.clone(),
-            portal_auth_middleware,
-        ))
         .with_state(state.clone());
+
+    if let Some(ref handler) = state.idempotency_handler {
+        portal_protected_routes = portal_protected_routes.layer(middleware::from_fn_with_state(
+            handler.clone(),
+            idempotency_middleware,
+        ));
+    }
+
+    portal_protected_routes = portal_protected_routes.layer(middleware::from_fn_with_state(
+        state.portal_auth_config.clone(),
+        portal_auth_middleware,
+    ));
 
     if let Some(ref limiter) = state.rate_limiter {
         portal_protected_routes = portal_protected_routes.layer(middleware::from_fn_with_state(

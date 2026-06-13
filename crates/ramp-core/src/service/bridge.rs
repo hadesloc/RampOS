@@ -128,14 +128,12 @@ mod tests {
         assert_eq!(quote.token, BridgeToken::USDC);
         assert!(quote.amount_out > U256::ZERO);
 
-        // 3. Execute bridge
+        // 3. Execute bridge fails closed until real transaction submission exists.
         let tx_result = service.execute_bridge(quote.clone()).await;
-        assert!(tx_result.is_ok());
-        let tx_hash = tx_result.unwrap();
-
-        // 4. Check status
-        let status_result = service.get_status(&quote.bridge_name, tx_hash).await;
-        assert!(status_result.is_ok());
-        assert_eq!(status_result.unwrap(), BridgeStatus::InProgress);
+        let err = tx_result.unwrap_err();
+        assert!(
+            matches!(err, Error::NotImplemented(message) if message.contains(&quote.bridge_name)
+                && message.contains("real transaction submission and confirmation"))
+        );
     }
 }

@@ -1,0 +1,11 @@
+-- Down migration for 066_kyc_pii_encryption.sql
+--
+-- Migration 066 is intentionally comment/documentation-only for schema state: it
+-- records that portal_kyc_cases PII columns now store application-layer
+-- encrypted values using the enc:v1 format. There is no safe automatic rollback
+-- to plaintext because that would require the application encryption key and
+-- would reintroduce plaintext KYC PII at rest.
+--
+-- To restore legacy behavior, deploy application code that can intentionally
+-- decrypt enc:v1 values under controlled break-glass procedures; do not perform
+-- bulk plaintext restoration in a generic down migration.

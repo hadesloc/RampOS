@@ -2,7 +2,7 @@
 
 ## Introduction
 
-RampOS is a production-grade fiat-on-ramp platform designed specifically for the Vietnamese market. It provides cryptocurrency exchanges and fintech platforms with a complete infrastructure for handling VND (Vietnamese Dong) deposits, withdrawals, crypto trading, and on-chain operations.
+RampOS is a fiat-on-ramp platform designed specifically for the Vietnamese market and designed for production operation; verification status is bounded by `docs/current-status.md`. It provides cryptocurrency exchanges and fintech platforms with infrastructure for handling VND (Vietnamese Dong) deposits, withdrawals, crypto trading, and on-chain operations.
 
 The system is built with Rust for maximum performance and safety, implementing a multi-tenant architecture that allows multiple exchanges to operate on a single deployment while maintaining strict data isolation.
 

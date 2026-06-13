@@ -27,7 +27,7 @@ contract FactoryFuzz is Test {
      * @notice Fuzz test: getAddress returns correct predicted address
      * @dev Ensures CREATE2 address prediction is deterministic
      */
-    function testFuzz_GetAddressDeterministic(address owner, uint256 salt) public {
+    function testFuzz_GetAddressDeterministic(address owner, uint256 salt) public view {
         vm.assume(owner != address(0));
 
         address predicted1 = factory.getAddress(owner, salt);
@@ -40,7 +40,7 @@ contract FactoryFuzz is Test {
      * @notice Fuzz test: Different salts produce different addresses
      * @dev Ensures salt affects address generation
      */
-    function testFuzz_DifferentSaltsDifferentAddresses(address owner, uint256 salt1, uint256 salt2) public {
+    function testFuzz_DifferentSaltsDifferentAddresses(address owner, uint256 salt1, uint256 salt2) public view {
         vm.assume(owner != address(0));
         vm.assume(salt1 != salt2);
 
@@ -58,7 +58,7 @@ contract FactoryFuzz is Test {
         address owner1,
         address owner2,
         uint256 salt
-    ) public {
+    ) public view {
         vm.assume(owner1 != address(0) && owner2 != address(0));
         vm.assume(owner1 != owner2);
 
@@ -159,7 +159,7 @@ contract FactoryFuzz is Test {
      * @notice Fuzz test: Sequential salt values
      * @dev Tests that sequential salts produce unique addresses
      */
-    function testFuzz_SequentialSalts(address owner, uint256 baseSalt) public {
+    function testFuzz_SequentialSalts(address owner, uint256 baseSalt) public view {
         vm.assume(owner != address(0));
         vm.assume(baseSalt < type(uint256).max - 10);
 
@@ -221,7 +221,7 @@ contract FactoryFuzz is Test {
      * @notice Fuzz test: Factory immutables are consistent
      * @dev Ensures immutable values don't change
      */
-    function testFuzz_ImmutablesConsistent(uint256 iterations) public {
+    function testFuzz_ImmutablesConsistent(uint256 iterations) public view {
         iterations = iterations % 100 + 1;
 
         address storedImplementation = address(factory.ACCOUNT_IMPLEMENTATION());

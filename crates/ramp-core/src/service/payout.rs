@@ -105,6 +105,12 @@ impl PayoutService {
                 .get_by_idempotency_key(&req.tenant_id, key)
                 .await?
             {
+                if existing.user_id != req.user_id.0 {
+                    return Err(Error::Validation(
+                        "idempotency key already used by another user".to_string(),
+                    ));
+                }
+
                 let user = self
                     .user_repo
                     .get_by_id(&req.tenant_id, &req.user_id)
@@ -311,6 +317,34 @@ impl PayoutService {
                 )?;
 
                 for entry in &ledger_tx.entries {
+                    // Compute the running balance for this specific account before
+                    // inserting. Replicates PgLedgerRepository::record_transaction
+                    // (ledger.rs lines 130-155): lock with FOR UPDATE, apply signed
+                    // delta (Debit adds, Credit subtracts) to get new_balance.
+                    let current_balance: rust_decimal::Decimal = sqlx::query_scalar(
+                        r#"SELECT COALESCE(balance, 0)
+                           FROM account_balances
+                           WHERE tenant_id = $1
+                             AND COALESCE(user_id, '') = COALESCE($2, '')
+                             AND account_type = $3
+                             AND currency = $4
+                           FOR UPDATE"#,
+                    )
+                    .bind(&req.tenant_id.0)
+                    .bind(entry.user_id.as_ref().map(|u| &u.0))
+                    .bind(entry.account_type.to_string())
+                    .bind(entry.currency.to_string())
+                    .fetch_optional(&mut *db_tx)
+                    .await
+                    .map_err(|e| Error::Database(e.to_string()))?
+                    .unwrap_or(rust_decimal::Decimal::ZERO);
+
+                    let balance_change = match entry.direction {
+                        ramp_common::ledger::EntryDirection::Debit => entry.amount,
+                        ramp_common::ledger::EntryDirection::Credit => -entry.amount,
+                    };
+                    let balance_after = current_balance + balance_change;
+
                     sqlx::query(
                         r#"INSERT INTO ledger_entries
                            (id, tenant_id, user_id, intent_id, transaction_id,
@@ -327,10 +361,29 @@ impl PayoutService {
                     .bind(&entry.direction.to_string())
                     .bind(entry.amount)
                     .bind(&entry.currency.to_string())
-                    .bind(entry.amount)
-                    .bind(0i64)
+                    .bind(balance_after)
+                    .bind(0i64) // sequence: legacy field, no monotonic assignment in this path
                     .bind(&entry.description)
                     .bind(&serde_json::json!({}))
+                    .execute(&mut *db_tx)
+                    .await
+                    .map_err(|e| Error::Database(e.to_string()))?;
+
+                    // Upsert account_balances so subsequent entries in this same db_tx
+                    // see the updated balance (mirrors repository pattern, ledger.rs lines 188-207).
+                    sqlx::query(
+                        r#"INSERT INTO account_balances
+                               (tenant_id, user_id, account_type, currency, balance, last_entry_id, updated_at)
+                           VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                           ON CONFLICT (tenant_id, COALESCE(user_id, ''), account_type, currency)
+                           DO UPDATE SET balance = $5, last_entry_id = $6, updated_at = NOW()"#,
+                    )
+                    .bind(&req.tenant_id.0)
+                    .bind(entry.user_id.as_ref().map(|u| &u.0))
+                    .bind(entry.account_type.to_string())
+                    .bind(entry.currency.to_string())
+                    .bind(balance_after)
+                    .bind(&entry.id.0)
                     .execute(&mut *db_tx)
                     .await
                     .map_err(|e| Error::Database(e.to_string()))?;
@@ -664,6 +717,137 @@ mod tests {
 
         let txs = ledger_repo.transactions.lock().unwrap();
         assert_eq!(txs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_create_payout_idempotency_same_user_returns_existing_intent() {
+        let intent_repo = Arc::new(MockIntentRepository::new());
+        let ledger_repo = Arc::new(MockLedgerRepository::new());
+        let user_repo = Arc::new(MockUserRepository::new());
+        let event_publisher = Arc::new(InMemoryEventPublisher::new());
+
+        user_repo.add_user(UserRow {
+            id: "user1".to_string(),
+            tenant_id: "tenant1".to_string(),
+            status: "ACTIVE".to_string(),
+            kyc_tier: 1,
+            kyc_status: "VERIFIED".to_string(),
+            kyc_verified_at: Some(Utc::now()),
+            risk_score: None,
+            risk_flags: serde_json::json!({}),
+            daily_payin_limit_vnd: None,
+            daily_payout_limit_vnd: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        });
+        ledger_repo.set_balance(
+            &TenantId::new("tenant1"),
+            Some(&UserId::new("user1")),
+            &AccountType::LiabilityUserVnd,
+            &LedgerCurrency::VND,
+            dec!(500000),
+        );
+
+        let service = PayoutService::new(
+            intent_repo.clone(),
+            ledger_repo.clone(),
+            user_repo.clone(),
+            event_publisher.clone(),
+        );
+
+        let req = CreatePayoutRequest {
+            tenant_id: TenantId::new("tenant1"),
+            user_id: UserId::new("user1"),
+            amount_vnd: VndAmount::from_i64(100_000),
+            rails_provider: RailsProvider::new("VIETCOMBANK"),
+            bank_account: BankAccount {
+                bank_code: "VCB".to_string(),
+                account_number: "123456789".to_string(),
+                account_name: "NGUYEN VAN A".to_string(),
+            },
+            idempotency_key: Some(IdempotencyKey::new("payout-key-1")),
+            metadata: serde_json::json!({}),
+        };
+
+        let first = service.create_payout(req.clone()).await.unwrap();
+        let second = service.create_payout(req).await.unwrap();
+
+        assert_eq!(second.intent_id, first.intent_id);
+        assert_eq!(intent_repo.intents.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_create_payout_idempotency_different_user_is_rejected() {
+        let intent_repo = Arc::new(MockIntentRepository::new());
+        let ledger_repo = Arc::new(MockLedgerRepository::new());
+        let user_repo = Arc::new(MockUserRepository::new());
+        let event_publisher = Arc::new(InMemoryEventPublisher::new());
+
+        for user_id in ["user1", "user2"] {
+            user_repo.add_user(UserRow {
+                id: user_id.to_string(),
+                tenant_id: "tenant1".to_string(),
+                status: "ACTIVE".to_string(),
+                kyc_tier: 1,
+                kyc_status: "VERIFIED".to_string(),
+                kyc_verified_at: Some(Utc::now()),
+                risk_score: None,
+                risk_flags: serde_json::json!({}),
+                daily_payin_limit_vnd: None,
+                daily_payout_limit_vnd: None,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            });
+            ledger_repo.set_balance(
+                &TenantId::new("tenant1"),
+                Some(&UserId::new(user_id)),
+                &AccountType::LiabilityUserVnd,
+                &LedgerCurrency::VND,
+                dec!(500000),
+            );
+        }
+
+        let service = PayoutService::new(
+            intent_repo.clone(),
+            ledger_repo.clone(),
+            user_repo.clone(),
+            event_publisher.clone(),
+        );
+
+        let first_req = CreatePayoutRequest {
+            tenant_id: TenantId::new("tenant1"),
+            user_id: UserId::new("user1"),
+            amount_vnd: VndAmount::from_i64(100_000),
+            rails_provider: RailsProvider::new("VIETCOMBANK"),
+            bank_account: BankAccount {
+                bank_code: "VCB".to_string(),
+                account_number: "123456789".to_string(),
+                account_name: "NGUYEN VAN A".to_string(),
+            },
+            idempotency_key: Some(IdempotencyKey::new("shared-key")),
+            metadata: serde_json::json!({}),
+        };
+        service.create_payout(first_req).await.unwrap();
+
+        let second_req = CreatePayoutRequest {
+            tenant_id: TenantId::new("tenant1"),
+            user_id: UserId::new("user2"),
+            amount_vnd: VndAmount::from_i64(100_000),
+            rails_provider: RailsProvider::new("VIETCOMBANK"),
+            bank_account: BankAccount {
+                bank_code: "VCB".to_string(),
+                account_number: "123456789".to_string(),
+                account_name: "NGUYEN VAN A".to_string(),
+            },
+            idempotency_key: Some(IdempotencyKey::new("shared-key")),
+            metadata: serde_json::json!({}),
+        };
+
+        let err = service.create_payout(second_req).await.unwrap_err();
+        assert!(
+            matches!(err, Error::Validation(message) if message == "idempotency key already used by another user")
+        );
+        assert_eq!(intent_repo.intents.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]

@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use ramp_core::service::{
     CommercialReadinessService, CorridorPackService, PaymentMethodCapabilityService,
-    ProductEligibilityDecision, ProductEligibilityDecisionState, ProductEligibilityRequest,
-    ProductEligibilityService, PrepareVenueFundingTransferRequest,
+    PrepareVenueFundingTransferRequest, ProductEligibilityDecision,
+    ProductEligibilityDecisionState, ProductEligibilityRequest, ProductEligibilityService,
     SourceOfFundsPackageAction, SubmitVenueFundingTransferRequest, VenueFundingService,
     VenueTrustService,
 };
@@ -330,7 +330,10 @@ pub async fn get_venue_funding_eligibility(
                 .clone()
                 .unwrap_or_else(|| "verified".to_string()),
             venue_key: query.venue_key.clone(),
-            action: query.action.clone().unwrap_or_else(|| "deposit".to_string()),
+            action: query
+                .action
+                .clone()
+                .unwrap_or_else(|| "deposit".to_string()),
             asset: query.asset.clone(),
             network: query.network.clone(),
             payment_method_family: query.payment_method_family.clone(),
@@ -341,7 +344,12 @@ pub async fn get_venue_funding_eligibility(
         .map_err(|error| ApiError::Internal(error.to_string()))?;
 
     if let Some(connection_id) = query.connection_id.as_deref() {
-        decision = apply_connection_context(decision, portal_user.clone(), connection_id, &query.venue_key)?;
+        decision = apply_connection_context(
+            decision,
+            portal_user.clone(),
+            connection_id,
+            &query.venue_key,
+        )?;
     }
 
     Ok(Json(map_response(portal_user, decision)))
@@ -529,10 +537,7 @@ fn validate_query(query: &VenueFundingEligibilityQuery) -> Result<(), ApiError> 
     ])
 }
 
-fn validate_hyperliquid_funding_guardrails(
-    venue_key: &str,
-    asset: &str,
-) -> Result<(), ApiError> {
+fn validate_hyperliquid_funding_guardrails(venue_key: &str, asset: &str) -> Result<(), ApiError> {
     if venue_key != "hyperliquid" {
         return Err(ApiError::Business(
             "venue funding currently supports only hyperliquid".to_string(),
@@ -580,7 +585,10 @@ async fn evaluate_request(
                 .clone()
                 .unwrap_or_else(|| "verified".to_string()),
             venue_key: request.venue_key.clone(),
-            action: request.action.clone().unwrap_or_else(|| "deposit".to_string()),
+            action: request
+                .action
+                .clone()
+                .unwrap_or_else(|| "deposit".to_string()),
             asset: request.asset.clone(),
             network: request.network.clone(),
             payment_method_family: request.payment_method_family.clone(),
@@ -685,12 +693,18 @@ fn build_checklist(
         })
         .collect();
 
-    if !matches!(decision.source_of_funds.action, SourceOfFundsPackageAction::None) {
+    if !matches!(
+        decision.source_of_funds.action,
+        SourceOfFundsPackageAction::None
+    ) {
         let action = decision.source_of_funds.action.clone();
         checklist.push(VenueFundingChecklistItemResponse {
             code: "source_of_funds".to_string(),
             status: "action_required".to_string(),
-            message: format!("Source of funds action: {}", map_source_of_funds_action(action)),
+            message: format!(
+                "Source of funds action: {}",
+                map_source_of_funds_action(action)
+            ),
         });
     }
 
@@ -764,7 +778,9 @@ fn apply_connection_context(
     }
 
     let original_reason_count = decision.reasons.len();
-    decision.reasons.retain(|reason| reason.code != "venue_not_ready");
+    decision
+        .reasons
+        .retain(|reason| reason.code != "venue_not_ready");
     if matches!(decision.decision, ProductEligibilityDecisionState::Deny)
         && original_reason_count != decision.reasons.len()
         && decision.reasons.is_empty()
@@ -782,20 +798,25 @@ fn build_venue_funding_service(state: &AppState) -> Result<VenueFundingService, 
         )
     })?;
 
-    Ok(VenueFundingService::new(Arc::new(PgVenueTrustRepository::new(
-        pool,
-    ))))
+    Ok(VenueFundingService::new(Arc::new(
+        PgVenueTrustRepository::new(pool),
+    )))
 }
 
 fn encode_connection_id(context: &VenueFundingConnectionContext) -> Result<String, ApiError> {
-    let encoded = serde_json::to_vec(context).map_err(|error| ApiError::Internal(error.to_string()))?;
+    let encoded =
+        serde_json::to_vec(context).map_err(|error| ApiError::Internal(error.to_string()))?;
     let checksum = {
         let mut hasher = Sha256::new();
         hasher.update(&encoded);
         hex::encode(hasher.finalize())
     };
 
-    Ok(format!("vfconn_{}{}", &checksum[..12], hex::encode(encoded)))
+    Ok(format!(
+        "vfconn_{}{}",
+        &checksum[..12],
+        hex::encode(encoded)
+    ))
 }
 
 fn decode_connection_id(id: &str) -> Result<VenueFundingConnectionContext, ApiError> {
@@ -805,11 +826,9 @@ fn decode_connection_id(id: &str) -> Result<VenueFundingConnectionContext, ApiEr
         ));
     };
 
-    let bytes = hex::decode(encoded).map_err(|_| {
-        ApiError::NotFound("Prepared venue funding lane not found".to_string())
-    })?;
+    let bytes = hex::decode(encoded)
+        .map_err(|_| ApiError::NotFound("Prepared venue funding lane not found".to_string()))?;
 
-    serde_json::from_slice(&bytes).map_err(|_| {
-        ApiError::NotFound("Prepared venue funding lane not found".to_string())
-    })
+    serde_json::from_slice(&bytes)
+        .map_err(|_| ApiError::NotFound("Prepared venue funding lane not found".to_string()))
 }

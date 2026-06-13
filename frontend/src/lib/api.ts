@@ -10,10 +10,29 @@
  */
 
 // API Configuration
-const API_BASE_URL = typeof window === 'undefined'
-  ? (process.env.API_URL || 'http://localhost:8080')
-  : '/api/proxy';
-const API_KEY = typeof window === 'undefined' ? (process.env.API_KEY || '') : '';
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV?.trim().toLowerCase() === 'production';
+}
+
+function requiredServerEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (value) {
+    return value;
+  }
+  if (isProductionRuntime()) {
+    throw new Error(`Missing required production environment variable: ${name}`);
+  }
+  return '';
+}
+
+function getApiBaseUrl(): string {
+  return typeof window === 'undefined'
+    ? (requiredServerEnv('API_URL') || 'http://localhost:8080')
+    : '/api/proxy';
+}
+function getApiKey(): string {
+  return typeof window === 'undefined' ? requiredServerEnv('API_KEY') : '';
+}
 const CSRF_COOKIE_NAME = 'rampos_csrf';
 
 function getCookie(name: string): string | null {
@@ -685,7 +704,7 @@ async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = `${getApiBaseUrl()}${endpoint}`;
   let csrfToken = getCookie(CSRF_COOKIE_NAME);
   if (!csrfToken && typeof window !== 'undefined') {
     try {
@@ -705,9 +724,10 @@ async function apiRequest<T>(
     }
   }
 
+  const apiKey = getApiKey();
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` }),
+    ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
     ...(csrfToken && { 'x-csrf-token': csrfToken }),
     ...options.headers,
   };
@@ -972,7 +992,7 @@ export const auditApi = {
     if (params?.fromDate) searchParams.set('fromDate', params.fromDate);
     if (params?.toDate) searchParams.set('toDate', params.toDate);
 
-    const url = `${API_BASE_URL}/v1/admin/audit/export?${searchParams.toString()}`;
+    const url = `${getApiBaseUrl()}/v1/admin/audit/export?${searchParams.toString()}`;
     let csrfToken = getCookie(CSRF_COOKIE_NAME);
     if (!csrfToken && typeof window !== 'undefined') {
       try {
@@ -988,8 +1008,9 @@ export const auditApi = {
       }
     }
 
+    const exportApiKey = getApiKey();
     const headers: HeadersInit = {
-      ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` }),
+      ...(exportApiKey && { 'Authorization': `Bearer ${exportApiKey}` }),
       ...(csrfToken && { 'x-csrf-token': csrfToken }),
     };
 

@@ -65,16 +65,26 @@ patches:
       value: staging-api.rampos.io
 
 # Staging-specific config
-configMapGenerator:
-- name: rampos-config
-  behavior: merge
-  literals:
-  - RUST_LOG=info
-  - ENVIRONMENT=staging
-  - ENABLE_DEBUG_ENDPOINTS=false
-  - CORS_ALLOWED_ORIGINS=https://staging.rampos.io
+- target:
+    kind: ConfigMap
+    name: rampos-config
+  patch: |-
+    - op: replace
+      path: /data/RUST_LOG
+      value: info
+    - op: add
+      path: /data/ENVIRONMENT
+      value: staging
+    - op: add
+      path: /data/ENABLE_DEBUG_ENDPOINTS
+      value: "false"
+    - op: add
+      path: /data/CORS_ALLOWED_ORIGINS
+      value: "https://staging.rampos.io"
 
 # Labels for all resources
-commonLabels:
-  app.kubernetes.io/environment: staging
-  app.kubernetes.io/managed-by: kustomize
+labels:
+- includeSelectors: true
+  pairs:
+    app.kubernetes.io/environment: staging
+    app.kubernetes.io/managed-by: kustomize

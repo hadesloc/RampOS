@@ -482,20 +482,19 @@ impl CrossChainBridge for StargateBridge {
         // 2. Call router.sendTokens() with the provided parameters
         // 3. Return the resulting transaction hash
         //
-        // Since on-chain submission requires a wallet/signer (handled at
-        // a higher layer), we return a placeholder hash here.
-        let mock_tx_hash = format!("0x{:064x}", Uuid::new_v4().as_u128());
-
+        // EXPERIMENTAL — fail closed until the higher layer performs real
+        // transaction submission and confirmation.
         tracing::info!(
-            "Stargate bridge execution prepared for {} -> {} (amount: {})",
+            "Rejecting Stargate bridge execution for {} -> {} (amount: {}) because transaction submission is not implemented",
             quote.from_chain,
             quote.to_chain,
             quote.amount,
         );
 
-        Ok(mock_tx_hash
-            .parse()
-            .map_err(|_| Error::Internal("Failed to create tx hash".to_string()))?)
+        Err(Error::NotImplemented(
+            "Stargate bridge execution is experimental and disabled until real transaction submission and confirmation are implemented"
+                .to_string(),
+        ))
     }
 
     async fn status(&self, tx_hash: TxHash) -> Result<BridgeStatus> {
@@ -652,5 +651,37 @@ mod tests {
         let resp: LayerZeroMessageResponse = serde_json::from_str(json).unwrap();
         assert_eq!(resp.messages.len(), 1);
         assert_eq!(resp.messages[0].status, "DELIVERED");
+    }
+
+    #[tokio::test]
+    async fn test_bridge_execution_fails_closed_without_tx_hash() {
+        let config = BridgeConfig::default();
+        let bridge = StargateBridge::new(config);
+        let quote = BridgeQuote {
+            id: Uuid::new_v4().to_string(),
+            bridge_name: bridge.name().to_string(),
+            from_chain: 1,
+            to_chain: 42161,
+            token: BridgeToken::USDC,
+            token_address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+                .parse()
+                .unwrap(),
+            amount: U256::from(1_000_000u64),
+            amount_out: U256::from(999_000u64),
+            bridge_fee: U256::from(1_000u64),
+            gas_fee: U256::from(100u64),
+            estimated_time_seconds: bridge.estimated_time(1, 42161),
+            expires_at: Utc::now() + Duration::seconds(300),
+            recipient: Address::ZERO,
+            execution_data: serde_json::json!({
+                "sendParams": {},
+                "minAmountOut": "999000"
+            }),
+        };
+
+        let err = bridge.bridge(quote).await.unwrap_err();
+        assert!(
+            matches!(err, Error::NotImplemented(message) if message == "Stargate bridge execution is experimental and disabled until real transaction submission and confirmation are implemented")
+        );
     }
 }

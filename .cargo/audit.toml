@@ -1,0 +1,5 @@
+[advisories]
+# RUSTSEC-2023-0071 is a medium-severity timing side-channel advisory in `rsa`.
+# RustSec currently reports "No fixed upgrade is available". Keep this exception
+# explicit so high/critical advisories still fail the audit gate.
+ignore = ["RUSTSEC-2023-0071"]

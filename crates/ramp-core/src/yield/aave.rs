@@ -11,7 +11,7 @@
 use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::providers::Provider;
 use async_trait::async_trait;
-use ramp_common::{Error, Result};
+use ramp_common::{onchain_gate, Error, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
@@ -669,17 +669,16 @@ impl AaveV3Protocol {
         self.supported_tokens.values().map(|t| t.a_token).collect()
     }
 
-    /// Simulate transaction (used when no provider, or as tx-building step).
-    /// In production with a provider, this would submit the real transaction
-    /// via the bundler / direct sendTransaction.
-    async fn simulate_tx(&self, _calldata: Bytes) -> Result<B256> {
-        // In production, this would:
-        // 1. Build UserOperation with the calldata
-        // 2. Estimate gas
-        // 3. Submit to bundler
-        // 4. Wait for confirmation
-        let hash_bytes: [u8; 32] = rand::random();
-        Ok(B256::from_slice(&hash_bytes))
+    /// Submit transaction.
+    ///
+    /// EXPERIMENTAL — yield execution is not launch scope (D-03). Fail-closed
+    /// until real bundler/direct transaction submission and confirmation exist.
+    async fn submit_tx(&self, _calldata: Bytes) -> Result<B256> {
+        Err(Error::NotImplemented(
+            onchain_gate::experimental_onchain_execution_disabled_message(
+                "Aave V3 yield transaction execution",
+            ),
+        ))
     }
 
     /// Returns `true` when the protocol is connected to a live RPC node.
@@ -734,7 +733,7 @@ impl YieldProtocol for AaveV3Protocol {
         );
 
         let calldata = self.build_supply_calldata(token, amount);
-        let tx_hash = self.simulate_tx(calldata).await?;
+        let tx_hash = self.submit_tx(calldata).await?;
 
         // Update simulated balance (always kept in sync for tracking)
         {
@@ -774,7 +773,7 @@ impl YieldProtocol for AaveV3Protocol {
         );
 
         let calldata = self.build_withdraw_calldata(token, amount);
-        let tx_hash = self.simulate_tx(calldata).await?;
+        let tx_hash = self.submit_tx(calldata).await?;
 
         // Update simulated balance
         {
@@ -834,7 +833,7 @@ impl YieldProtocol for AaveV3Protocol {
         );
 
         let calldata = self.build_claim_rewards_calldata(a_tokens);
-        let tx_hash = self.simulate_tx(calldata).await?;
+        let tx_hash = self.submit_tx(calldata).await?;
 
         Ok(Some(tx_hash))
     }
@@ -920,7 +919,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_deposit_withdraw_simulated() {
+    async fn test_deposit_fails_closed_without_fake_tx_hash() {
+        let _guard = onchain_gate::test_env_lock();
+        std::env::remove_var(onchain_gate::EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
+
         let addresses = AaveV3Addresses::ethereum_mainnet().unwrap();
         let protocol = AaveV3Protocol::new(1, addresses, test_account());
 
@@ -929,21 +931,15 @@ mod tests {
             .unwrap();
         let amount = U256::from(1000) * U256::from(1_000_000u64); // 1000 USDC
 
-        // Deposit
         let tx = protocol.deposit(usdc, amount).await;
-        assert!(tx.is_ok());
-
-        // Check balance (simulated)
-        let balance = protocol.balance(usdc).await.unwrap();
-        assert_eq!(balance, amount);
-
-        // Withdraw half
-        let withdraw_amount = amount / U256::from(2);
-        let tx = protocol.withdraw(usdc, withdraw_amount).await;
-        assert!(tx.is_ok());
+        assert!(tx.is_err());
+        assert!(tx
+            .unwrap_err()
+            .to_string()
+            .contains("Aave V3 yield transaction execution is experimental and disabled"));
 
         let balance = protocol.balance(usdc).await.unwrap();
-        assert_eq!(balance, amount - withdraw_amount);
+        assert_eq!(balance, U256::ZERO);
     }
 
     #[test]

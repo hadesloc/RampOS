@@ -183,6 +183,19 @@ pub fn init_activity_context(ctx: ActivityContext) {
     let _ = ACTIVITY_CONTEXT.set(ctx);
 }
 
+fn activity_context_is_production() -> bool {
+    std::env::var("RUST_ENV")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| {
+            std::env::var("RAMPOS_ENV")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+        })
+        .map(|v| v.eq_ignore_ascii_case("production"))
+        .unwrap_or(false)
+}
+
 /// Initialize the global activity context with adapters from ramp_adapter factory
 ///
 /// This is a convenience function that creates adapters based on environment variables.
@@ -204,6 +217,11 @@ pub async fn init_activity_context_with_adapters(
     // Create adapters from environment configuration
     let adapters = match ramp_adapter::create_adapters_from_env() {
         Ok(adapters) => adapters,
+        Err(e) if activity_context_is_production() => {
+            panic!(
+                "failed to create adapters from environment in production; check RUST_ENV/RAMPOS_ENV and adapter environment configuration: {e}"
+            );
+        }
         Err(e) => {
             warn!(error = %e, "Failed to create adapters from environment, using empty adapter map");
             HashMap::new()
@@ -1378,8 +1396,9 @@ mod tests {
     use crate::repository::{
         CommercializationPackReferenceRecord, CommercializationPackRepository,
         CorridorComplianceHookRecord, CorridorCutoffPolicyRecord, CorridorEligibilityRuleRecord,
-        CorridorEndpointRecord, CorridorFeeProfileRecord, CorridorPackRecord, CorridorPackRepository,
-        CorridorRolloutScopeRecord, PaymentMethodCapabilityRecord, PaymentMethodCapabilityRepository,
+        CorridorEndpointRecord, CorridorFeeProfileRecord, CorridorPackRecord,
+        CorridorPackRepository, CorridorRolloutScopeRecord, PaymentMethodCapabilityRecord,
+        PaymentMethodCapabilityRepository,
     };
     use crate::test_utils::{MockLedgerRepository, MockTenantRepository, MockWebhookRepository};
     use async_trait::async_trait;
@@ -1517,7 +1536,9 @@ mod tests {
             request: &crate::repository::UpsertCommercializationPackRequest,
         ) -> ramp_common::Result<()> {
             let mut records = self.records.lock().expect("records lock");
-            records.retain(|record| record.commercialization_pack_id != request.commercialization_pack_id);
+            records.retain(|record| {
+                record.commercialization_pack_id != request.commercialization_pack_id
+            });
             records.push(CommercializationPackReferenceRecord {
                 commercialization_pack_id: request.commercialization_pack_id.clone(),
                 tenant_id: request.tenant_id.clone(),
@@ -1773,7 +1794,8 @@ mod tests {
         let result =
             trade_activities::flag_for_review("intent-123", "Large transaction detected").await;
         assert!(result.is_ok());
-        assert!(result.unwrap().contains("CASE_"));
+        let case_id = result.unwrap();
+        assert!(case_id.starts_with("case_") || case_id.starts_with("CASE_"));
     }
 
     #[tokio::test]

@@ -39,7 +39,9 @@ pub async fn upsert_commercialization_pack(
     let _auth = super::tier::check_admin_key_operator(&headers)?;
 
     let pool = state.db_pool.clone().ok_or_else(|| {
-        ApiError::Internal("Commercialization pack write path requires a configured database".to_string())
+        ApiError::Internal(
+            "Commercialization pack write path requires a configured database".to_string(),
+        )
     })?;
 
     let service =

@@ -16,10 +16,10 @@ pub use vnst::VnstToken;
 pub use vnst_protocol::{
     PegHealthStatus, ReserveAsset, VnstBurnRequest, VnstBurnResponse, VnstMintRequest,
     VnstMintResponse, VnstOperationStatus, VnstPegStatus, VnstProtocolConfig,
-    VnstProtocolDataProvider, VnstProtocolService, VnstReserveInfo,
+    VnstProtocolDataProvider, VnstProtocolService, VnstProviderCapability, VnstReserveInfo,
 };
 
-pub use vnst_protocol::MockVnstProtocolDataProvider;
+pub use vnst_protocol::{LiveVnstProtocolDataProvider, MockVnstProtocolDataProvider};
 
 use alloy::primitives::{Address, U256};
 use async_trait::async_trait;

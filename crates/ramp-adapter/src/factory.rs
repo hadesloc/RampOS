@@ -11,7 +11,7 @@ use crate::types::{AdapterConfig, NapasConfig, VietQRConfig};
 use ramp_common::{Error, Result};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Constructor function type
 type AdapterConstructor = Box<dyn Fn(AdapterConfig) -> Result<Box<dyn RailsAdapter>> + Send + Sync>;
@@ -41,13 +41,17 @@ impl AdapterFactory {
     }
 
     fn register_builtin(&self) -> Result<()> {
-        // Register mock adapter
-        self.register("mock", |config| {
-            Ok(Box::new(MockAdapter::new(
-                config.provider_code,
-                config.webhook_secret,
-            )))
-        })?;
+        if is_production() {
+            warn!("Production mode detected; mock rails adapter is not registered");
+        } else {
+            // Register mock adapter
+            self.register("mock", |config| {
+                Ok(Box::new(MockAdapter::new(
+                    config.provider_code,
+                    config.webhook_secret,
+                )))
+            })?;
+        }
 
         // Register vietqr adapter (basic config)
         self.register("vietqr", |config| {
@@ -207,7 +211,7 @@ impl Default for AdapterFactory {
     }
 }
 
-/// Helper to create a default set of adapters for testing
+/// Helper to create a default set of adapters for test-only use.
 pub fn create_test_adapters() -> HashMap<String, Arc<dyn RailsAdapter>> {
     let mut adapters: HashMap<String, Arc<dyn RailsAdapter>> = HashMap::new();
 
@@ -235,20 +239,71 @@ pub fn create_test_adapters() -> HashMap<String, Arc<dyn RailsAdapter>> {
     adapters
 }
 
+/// Returns true when the process is running in production mode.
+///
+/// Keep this in sync with `ramp-api::providers::is_production`: both check
+/// non-empty `RUST_ENV` first, then non-empty `RAMPOS_ENV`, for the
+/// case-insensitive value `"production"`. This crate cannot depend on
+/// `ramp-api`, so the adapter factory duplicates the startup-safety
+/// environment check locally.
+fn is_production() -> bool {
+    std::env::var("RUST_ENV")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| {
+            std::env::var("RAMPOS_ENV")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+        })
+        .map(|v| v.eq_ignore_ascii_case("production"))
+        .unwrap_or(false)
+}
+
+fn env_flag_enabled(name: &str) -> bool {
+    std::env::var(name)
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false)
+}
+
+fn required_secret(name: &str, provider: &str) -> Result<String> {
+    std::env::var(name)
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .ok_or_else(|| {
+            Error::Validation(format!(
+                "{} is required when {}_ENABLE_REAL_API=true",
+                name, provider
+            ))
+        })
+}
+
 /// Helper to create production adapters from environment variables
 pub fn create_adapters_from_env() -> Result<HashMap<String, Arc<dyn RailsAdapter>>> {
     let mut adapters: HashMap<String, Arc<dyn RailsAdapter>> = HashMap::new();
 
     // VietQR adapter
     if let Ok(api_key) = std::env::var("VIETQR_API_KEY") {
+        let enable_real_api = env_flag_enabled("VIETQR_ENABLE_REAL_API");
+        let (api_secret, webhook_secret) = if enable_real_api {
+            (
+                required_secret("VIETQR_API_SECRET", "VIETQR")?,
+                required_secret("VIETQR_WEBHOOK_SECRET", "VIETQR")?,
+            )
+        } else {
+            (
+                std::env::var("VIETQR_API_SECRET").unwrap_or_default(),
+                std::env::var("VIETQR_WEBHOOK_SECRET").unwrap_or_default(),
+            )
+        };
+
         let config = VietQRConfig {
             base: AdapterConfig {
                 provider_code: "vietqr".to_string(),
                 api_base_url: std::env::var("VIETQR_API_URL")
                     .unwrap_or_else(|_| "https://api.vietqr.io".to_string()),
                 api_key,
-                api_secret: std::env::var("VIETQR_API_SECRET").unwrap_or_default(),
-                webhook_secret: std::env::var("VIETQR_WEBHOOK_SECRET").unwrap_or_default(),
+                api_secret,
+                webhook_secret,
                 timeout_secs: 30,
                 extra: serde_json::json!({}),
             },
@@ -257,9 +312,7 @@ pub fn create_adapters_from_env() -> Result<HashMap<String, Arc<dyn RailsAdapter
             merchant_bank_bin: std::env::var("VIETQR_MERCHANT_BANK_BIN").unwrap_or_default(),
             merchant_name: std::env::var("VIETQR_MERCHANT_NAME")
                 .unwrap_or_else(|_| "RampOS".to_string()),
-            enable_real_api: std::env::var("VIETQR_ENABLE_REAL_API")
-                .map(|v| v == "true" || v == "1")
-                .unwrap_or(false),
+            enable_real_api,
         };
 
         adapters.insert(
@@ -271,23 +324,34 @@ pub fn create_adapters_from_env() -> Result<HashMap<String, Arc<dyn RailsAdapter
 
     // Napas adapter
     if let Ok(api_key) = std::env::var("NAPAS_API_KEY") {
+        let enable_real_api = env_flag_enabled("NAPAS_ENABLE_REAL_API");
+        let (api_secret, webhook_secret) = if enable_real_api {
+            (
+                required_secret("NAPAS_API_SECRET", "NAPAS")?,
+                required_secret("NAPAS_WEBHOOK_SECRET", "NAPAS")?,
+            )
+        } else {
+            (
+                std::env::var("NAPAS_API_SECRET").unwrap_or_default(),
+                std::env::var("NAPAS_WEBHOOK_SECRET").unwrap_or_default(),
+            )
+        };
+
         let config = NapasConfig {
             base: AdapterConfig {
                 provider_code: "napas".to_string(),
                 api_base_url: std::env::var("NAPAS_API_URL")
                     .unwrap_or_else(|_| "https://api.napas.com.vn".to_string()),
                 api_key,
-                api_secret: std::env::var("NAPAS_API_SECRET").unwrap_or_default(),
-                webhook_secret: std::env::var("NAPAS_WEBHOOK_SECRET").unwrap_or_default(),
+                api_secret,
+                webhook_secret,
                 timeout_secs: 30,
                 extra: serde_json::json!({}),
             },
             merchant_id: std::env::var("NAPAS_MERCHANT_ID").unwrap_or_default(),
             terminal_id: std::env::var("NAPAS_TERMINAL_ID").unwrap_or_default(),
             partner_code: std::env::var("NAPAS_PARTNER_CODE").unwrap_or_default(),
-            enable_real_api: std::env::var("NAPAS_ENABLE_REAL_API")
-                .map(|v| v == "true" || v == "1")
-                .unwrap_or(false),
+            enable_real_api,
             private_key_pem: std::env::var("NAPAS_PRIVATE_KEY").ok(),
             napas_public_key_pem: std::env::var("NAPAS_PUBLIC_KEY").ok(),
         };
@@ -299,11 +363,14 @@ pub fn create_adapters_from_env() -> Result<HashMap<String, Arc<dyn RailsAdapter
         info!("Napas adapter configured from environment");
     }
 
-    // Always include mock adapter for testing
-    adapters.insert(
-        "mock".to_string(),
-        Arc::new(MockAdapter::new("mock", "mock_webhook_secret")),
-    );
+    if is_production() {
+        warn!("Production mode detected; mock rails adapter is not registered");
+    } else {
+        adapters.insert(
+            "mock".to_string(),
+            Arc::new(MockAdapter::new("mock", "mock_webhook_secret")),
+        );
+    }
 
     Ok(adapters)
 }
@@ -312,6 +379,36 @@ pub fn create_adapters_from_env() -> Result<HashMap<String, Arc<dyn RailsAdapter
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::sync::Mutex;
+
+    /// All tests below that touch env vars must hold this process-wide lock.
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    fn clear_env() {
+        for name in [
+            "RUST_ENV",
+            "RAMPOS_ENV",
+            "VIETQR_API_KEY",
+            "VIETQR_API_SECRET",
+            "VIETQR_WEBHOOK_SECRET",
+            "VIETQR_ENABLE_REAL_API",
+            "VIETQR_CLIENT_ID",
+            "VIETQR_MERCHANT_ACCOUNT",
+            "VIETQR_MERCHANT_BANK_BIN",
+            "VIETQR_MERCHANT_NAME",
+            "NAPAS_API_KEY",
+            "NAPAS_API_SECRET",
+            "NAPAS_WEBHOOK_SECRET",
+            "NAPAS_ENABLE_REAL_API",
+            "NAPAS_MERCHANT_ID",
+            "NAPAS_TERMINAL_ID",
+            "NAPAS_PARTNER_CODE",
+            "NAPAS_PRIVATE_KEY",
+            "NAPAS_PUBLIC_KEY",
+        ] {
+            std::env::remove_var(name);
+        }
+    }
 
     #[test]
     fn test_factory_registration() {
@@ -394,5 +491,116 @@ mod tests {
         assert!(factory.is_registered("mock"));
         assert!(factory.is_registered("VIETQR")); // Case insensitive
         assert!(!factory.is_registered("unknown"));
+    }
+
+    #[test]
+    fn test_create_adapters_from_env_includes_mock_outside_production() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+
+        let adapters = create_adapters_from_env().unwrap();
+        assert!(adapters.contains_key("mock"));
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_adapter_factory_new_excludes_mock_in_production() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("RUST_ENV", "production");
+
+        let factory = AdapterFactory::new().unwrap();
+        assert!(!factory.is_registered("mock"));
+        assert!(factory.is_registered("vietqr"));
+        assert!(factory.is_registered("napas"));
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_create_adapters_from_env_excludes_mock_in_production() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("RUST_ENV", "production");
+
+        let adapters = create_adapters_from_env().unwrap();
+        assert!(!adapters.contains_key("mock"));
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_create_adapters_from_env_allows_empty_secrets_in_simulation() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("NAPAS_API_KEY", "napas_key");
+        std::env::set_var("NAPAS_ENABLE_REAL_API", "false");
+
+        let adapters = create_adapters_from_env().unwrap();
+        assert!(adapters.contains_key("napas"));
+        assert!(adapters.get("napas").unwrap().is_simulation_mode());
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_create_adapters_from_env_requires_napas_secrets_when_real_api_enabled() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("NAPAS_API_KEY", "napas_key");
+        std::env::set_var("NAPAS_ENABLE_REAL_API", "true");
+
+        let result = create_adapters_from_env();
+        assert!(result.is_err());
+        let err = result.err().unwrap().to_string();
+        assert!(err.contains("NAPAS_API_SECRET"));
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_create_adapters_from_env_rejects_empty_secret_when_real_api_enabled() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("NAPAS_API_KEY", "napas_key");
+        std::env::set_var("NAPAS_ENABLE_REAL_API", "true");
+        std::env::set_var("NAPAS_API_SECRET", "   ");
+        std::env::set_var("NAPAS_WEBHOOK_SECRET", "webhook_secret");
+
+        let result = create_adapters_from_env();
+        assert!(result.is_err());
+        let err = result.err().unwrap().to_string();
+        assert!(err.contains("NAPAS_API_SECRET"));
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_is_production_ignores_empty_rust_env_and_falls_through_to_rampos_env() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("RUST_ENV", "   ");
+        std::env::set_var("RAMPOS_ENV", "production");
+
+        assert!(is_production());
+
+        clear_env();
+    }
+
+    #[test]
+    fn test_create_adapters_from_env_requires_vietqr_secrets_when_real_api_enabled() {
+        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        clear_env();
+        std::env::set_var("VIETQR_API_KEY", "vietqr_key");
+        std::env::set_var("VIETQR_ENABLE_REAL_API", "1");
+        std::env::set_var("VIETQR_API_SECRET", "vietqr_secret");
+
+        let result = create_adapters_from_env();
+        assert!(result.is_err());
+        let err = result.err().unwrap().to_string();
+        assert!(err.contains("VIETQR_WEBHOOK_SECRET"));
+
+        clear_env();
     }
 }

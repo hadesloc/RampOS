@@ -7,9 +7,24 @@ import {
   createAdminSessionToken,
 } from "@/lib/admin-auth";
 
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV?.trim().toLowerCase() === "production";
+}
+
+function requiredServerEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (value) {
+    return value;
+  }
+  if (isProductionRuntime()) {
+    throw new Error(`Missing required production environment variable: ${name}`);
+  }
+  return "";
+}
+
 export async function POST(req: Request) {
-  const sessionSecret = process.env.RAMPOS_ADMIN_JWT_SECRET;
-  const apiUrl = (process.env.API_URL || "http://localhost:8080").replace(/\/$/, "");
+  const sessionSecret = requiredServerEnv("RAMPOS_ADMIN_JWT_SECRET");
+  const apiUrl = (requiredServerEnv("API_URL") || "http://localhost:8080").replace(/\/$/, "");
   if (!sessionSecret) {
     return NextResponse.json(
       { message: "Admin auth not configured" },

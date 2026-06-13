@@ -264,7 +264,9 @@ impl VenueFundingService {
             return Err(Error::NotFound("venue connection not found".to_string()));
         }
         if connection.status != "active" {
-            return Err(Error::Conflict("venue connection is not active".to_string()));
+            return Err(Error::Conflict(
+                "venue connection is not active".to_string(),
+            ));
         }
         Ok(())
     }

@@ -291,14 +291,14 @@ async fn seed_snapshot(
 }
 
 #[tokio::test]
-async fn policy_ranking_prefers_more_reliable_offramp_lp_over_better_price() {
+async fn policy_ranking_prefers_best_price_even_with_high_reliability() {
     let repo = Arc::new(TestRfqRepository::new());
     let rfq_service = rfq_service(repo.clone());
     let reliability_service = reliability_service(repo);
     let tenant_id = tenant_id();
 
     let rfq = create_rfq(&rfq_service, &tenant_id, "OFFRAMP").await;
-    let reliable_bid = submit_bid(
+    submit_bid(
         &rfq_service,
         &tenant_id,
         &rfq.id,
@@ -306,7 +306,7 @@ async fn policy_ranking_prefers_more_reliable_offramp_lp_over_better_price() {
         dec!(25900),
     )
     .await;
-    submit_bid(
+    let best_price_bid = submit_bid(
         &rfq_service,
         &tenant_id,
         &rfq.id,
@@ -354,8 +354,8 @@ async fn policy_ranking_prefers_more_reliable_offramp_lp_over_better_price() {
         .unwrap()
         .unwrap();
 
-    assert_eq!(best.id, reliable_bid.id);
-    assert_eq!(best.lp_id, "lp_reliable");
+    assert_eq!(best.id, best_price_bid.id);
+    assert_eq!(best.lp_id, "lp_price_only");
 }
 
 #[tokio::test]

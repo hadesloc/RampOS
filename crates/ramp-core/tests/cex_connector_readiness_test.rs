@@ -201,24 +201,27 @@ fn build_service(repo: Arc<MockVenueTrustRepository>) -> VenueTrustService {
 #[tokio::test]
 async fn cex_connector_readiness_reports_ready_when_operator_evidence_is_present() {
     let repo = Arc::new(MockVenueTrustRepository::default());
-    repo.connections.lock().unwrap().push(VenueConnectionRecord {
-        connection_id: "cex-conn-1".to_string(),
-        tenant_id: "tenant-a".to_string(),
-        subject_type: "user".to_string(),
-        subject_id: "user-a".to_string(),
-        user_id: Some("user-a".to_string()),
-        venue_key: "binance".to_string(),
-        connection_mode: "api_key_linked".to_string(),
-        status: "active".to_string(),
-        metadata: serde_json::json!({
-            "api_key_mode": "scoped_read_write",
-            "withdrawal_allowlist_status": "verified",
-            "custody_boundary_mode": "exchange_custody"
-        }),
-        last_verified_at: Some(Utc::now()),
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-    });
+    repo.connections
+        .lock()
+        .unwrap()
+        .push(VenueConnectionRecord {
+            connection_id: "cex-conn-1".to_string(),
+            tenant_id: "tenant-a".to_string(),
+            subject_type: "user".to_string(),
+            subject_id: "user-a".to_string(),
+            user_id: Some("user-a".to_string()),
+            venue_key: "binance".to_string(),
+            connection_mode: "api_key_linked".to_string(),
+            status: "active".to_string(),
+            metadata: serde_json::json!({
+                "api_key_mode": "scoped_read_write",
+                "withdrawal_allowlist_status": "verified",
+                "custody_boundary_mode": "exchange_custody"
+            }),
+            last_verified_at: Some(Utc::now()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        });
     repo.accounts.lock().unwrap().push(VenueAccountRecord {
         account_id: "cex-acct-1".to_string(),
         tenant_id: "tenant-a".to_string(),
@@ -245,10 +248,7 @@ async fn cex_connector_readiness_reports_ready_when_operator_evidence_is_present
 
     assert_eq!(readiness.connector_key, "binance");
     assert_eq!(readiness.status, "ready");
-    assert_eq!(
-        readiness.api_key_mode.as_deref(),
-        Some("scoped_read_write")
-    );
+    assert_eq!(readiness.api_key_mode.as_deref(), Some("scoped_read_write"));
     assert_eq!(readiness.subaccount_mode.as_deref(), Some("segregated"));
     assert_eq!(
         readiness.withdrawal_allowlist_status.as_deref(),
@@ -267,20 +267,23 @@ async fn cex_connector_readiness_reports_ready_when_operator_evidence_is_present
 #[tokio::test]
 async fn cex_connector_readiness_reports_attention_when_operator_evidence_is_missing() {
     let repo = Arc::new(MockVenueTrustRepository::default());
-    repo.connections.lock().unwrap().push(VenueConnectionRecord {
-        connection_id: "cex-conn-2".to_string(),
-        tenant_id: "tenant-a".to_string(),
-        subject_type: "user".to_string(),
-        subject_id: "user-a".to_string(),
-        user_id: Some("user-a".to_string()),
-        venue_key: "bybit".to_string(),
-        connection_mode: "wallet_linked".to_string(),
-        status: "pending_review".to_string(),
-        metadata: serde_json::json!({}),
-        last_verified_at: None,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-    });
+    repo.connections
+        .lock()
+        .unwrap()
+        .push(VenueConnectionRecord {
+            connection_id: "cex-conn-2".to_string(),
+            tenant_id: "tenant-a".to_string(),
+            subject_type: "user".to_string(),
+            subject_id: "user-a".to_string(),
+            user_id: Some("user-a".to_string()),
+            venue_key: "bybit".to_string(),
+            connection_mode: "wallet_linked".to_string(),
+            status: "pending_review".to_string(),
+            metadata: serde_json::json!({}),
+            last_verified_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        });
 
     let readiness = build_service(repo)
         .get_cex_connector_readiness("tenant-a", "user", "user-a", "bybit")

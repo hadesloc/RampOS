@@ -1,9 +1,9 @@
-# Trivy Blocker
+# Trivy Refresh Closure and Remaining Disposition
 
 - Release candidate: `268670d74`
-- Date: `2026-03-13`
+- Date: `2026-04-09`
 - Scope: filesystem, secrets, and config scan evidence for bank-grade signoff
-- Result: `historical blocker superseded by later successful scan`
+- Result: `refresh completed from a clean local worktree; freshness blocker closed, reviewer triage/disposition remains open`
 
 ## What Was Verified
 
@@ -15,41 +15,60 @@
 - `docker.exe` is present at:
   - `C:\Program Files\Docker\Docker\resources\bin\docker.exe`
 
-## Historical Limitation
+## Current Execution Result
 
-- This worker context could not run shell commands because the shell backend failed with:
-  - `windows sandbox backend cannot enforce file_system=Restricted, network=Restricted, legacy_policy=DangerFullAccess; refusing to run unsandboxed`
-- Because of that limitation, I could not safely verify:
-  - whether Docker Desktop engine is actually running
-  - whether a containerized Trivy scan could execute successfully
-  - whether any alternate host-level Trivy installation is available on `PATH`
+- Native `trivy` is still unavailable on `PATH` in this local environment.
+- Docker CLI and daemon are available locally and reported server version `29.1.3`.
+- A clean local git worktree was created under `C:\Users\hades\OneDrive\Desktop\p2p\.claude\worktrees\trivy-rc-268670d74` and pinned to the exact RC revision `268670d74` so the scan would not traverse the dirty main workspace.
+- The first containerized Trivy attempt in that clean worktree failed only because the historical RC report folder did not exist at commit `268670d74`, so Trivy could not open the JSON output path.
+- After creating that output folder inside the isolated worktree, both containerized Trivy runs completed successfully with the full requested scanner scope `vuln,secret,config`.
 
-## Safe Alternative Evidence Available
+## Refreshed Evidence Now Attached
 
-- Fresh Semgrep evidence already exists for the same RC:
-  - `docs/security/reports/2026-03-13-rc-268670d74/semgrep-current.json`
-  - `docs/security/reports/2026-03-13-rc-268670d74/semgrep-summary.md`
+- Refreshed JSON artifact:
+  - `docs/security/reports/2026-03-13-rc-268670d74/trivy-current.json`
+- Refreshed human-readable table artifact:
+  - `docs/security/reports/2026-03-13-rc-268670d74/trivy-fs-current.txt`
 
-This is not a substitute for Trivy, but it does reduce the unexplained scan gap by keeping SAST evidence current while the filesystem/config scan remains blocked.
+Execution attribution for the refreshed run:
 
-## Current Follow-Up
+- runner: `local Docker on hades workstation`
+- execution date: `2026-04-09`
+- execution mode: `containerized Trivy in isolated clean git worktree`
+- scanned git revision: `268670d74612a20680e0af2fcf86e9aff26f2602`
+- scanner scope: `vuln,secret,config`
 
-This file is retained as historical evidence only. A later successful filesystem scan now exists at:
+Observed result summary from the refreshed JSON artifact:
 
-- `docs/security/reports/2026-03-13-rc-268670d74/trivy-current.json`
+- vulnerabilities: `26` total (`12 high`, `13 medium`, `1 low`)
+- misconfigurations: `262` total (`33 high`, `125 medium`, `104 low`)
+- secrets: `0`
 
-The remaining gap is no longer tool availability. The remaining gap is that `trivy-current.json` predates the latest dependency-remediation batch and must be rerun against the updated RC state.
+## Reviewer Triage Buckets From Refreshed Artifacts
 
-## Required Follow-Up
+This is a reviewer grouping only. It is not a final disposition.
 
-Run one of the following from a host or session that can execute shell commands normally:
+- Dependency vulnerabilities in lockfiles: `26` total
+  - `Cargo.lock`: `14` (`7 high`, `6 medium`, `1 low`)
+  - `frontend/package-lock.json`: `9` (`4 high`, `5 medium`)
+  - `frontend-landing/package-lock.json`: `2` (`2 medium`)
+  - `sdk/package-lock.json`: `1` (`1 high`)
+- Configuration findings in deployment manifests: `262` total
+  - Kubernetes manifests: `261` (`33 high`, `124 medium`, `104 low`)
+  - Dockerfiles: `1` (`1 medium` in root `Dockerfile`)
+- Highest-count Kubernetes files for reviewer attention are the larger stateful and observability manifests rather than a single isolated file:
+  - `k8s/base/postgres-ha.yaml`: `27` findings (`4 high`, `13 medium`, `10 low`)
+  - `k8s/base/redis-statefulset.yaml`: `26` findings (`2 high`, `12 medium`, `12 low`)
+  - `k8s/base/promtail.yaml`: `24` findings (`4 high`, `9 medium`, `11 low`)
+  - `k8s/base/pgbouncer.yaml`: `24` findings (`1 high`, `13 medium`, `10 low`)
+  - `k8s/base/otel-collector.yaml` and `k8s/base/jaeger.yaml`: `21` findings each
+- Secrets scanner output: `0` findings
 
-1. Native Trivy
-   - install `trivy`
-   - run `trivy fs --scanners vuln,secret,config --format table --output docs/security/reports/2026-03-13-rc-268670d74/trivy-fs-current.txt .`
+## Remaining Follow-Up
 
-2. Containerized Trivy
-   - verify Docker engine is running
-   - run a pinned Trivy image against the repo root and capture output under the same RC report folder
+The Trivy freshness blocker itself is now closed. The refreshed Trivy findings still require reviewer triage before Trivy-related signoff work is fully dispositioned. Final bank-grade signoff remains blocked by the other already-recorded items:
 
-Until a refreshed Trivy run completes against the updated RC state, the Trivy-style evidence gap for final bank-grade signoff remains open.
+- residual `rsa` advisory disposition
+- missing independent external security review output
+- missing attributable staging validation evidence
+- expired RC ledger and missing attributable approval decisions / timestamps

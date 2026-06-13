@@ -6,7 +6,7 @@ pub use ramp_common::ledger::*;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ramp_common::types::{IntentId, TenantId};
+    use ramp_common::types::{IntentId, TenantId, UserId};
     use rust_decimal_macros::dec;
 
     #[test]
@@ -40,5 +40,31 @@ mod tests {
 
         let account = AccountType::LiabilityUserVnd;
         assert_eq!(account.to_string(), "Liability:UserVND");
+    }
+
+    #[test]
+    fn test_builder_balance_after_is_pre_repository_placeholder_only() {
+        let tenant_id = TenantId::new("tenant1");
+        let user_id = UserId::new("user1");
+        let intent_id = IntentId::new_payin();
+
+        let tx = LedgerTransactionBuilder::new(tenant_id, intent_id, "Repository invariant")
+            .debit(AccountType::AssetBank, dec!(100), LedgerCurrency::VND)
+            .credit_user(
+                user_id,
+                AccountType::LiabilityUserVnd,
+                dec!(100),
+                LedgerCurrency::VND,
+            )
+            .build()
+            .expect("balanced transaction should build");
+
+        assert!(tx.entries.iter().all(|entry| entry.balance_after.is_zero()));
+
+        // GAP-021 remains unresolved in this crate: ramp-ledger only re-exports
+        // ledger types and cannot exercise PgLedgerRepository. A non-vacuous
+        // invariant test must live with the repository and assert persisted
+        // ledger_entries.balance_after plus account_balances.balance both equal
+        // the computed post-entry balance rather than this builder placeholder.
     }
 }

@@ -13,8 +13,7 @@ use ramp_core::repository::{
     WalletAttestationFilter, WalletAttestationRecord,
 };
 use ramp_core::service::venue_funding::{
-    PrepareVenueFundingTransferRequest, SubmitVenueFundingTransferRequest,
-    VenueFundingService,
+    PrepareVenueFundingTransferRequest, SubmitVenueFundingTransferRequest, VenueFundingService,
 };
 use rust_decimal_macros::dec;
 use uuid::Uuid;
@@ -171,7 +170,10 @@ impl VenueTrustRepository for MockVenueTrustRepository {
             .cloned())
     }
 
-    async fn list_transfers(&self, _filter: &VenueTransferFilter) -> Result<Vec<VenueTransferRecord>> {
+    async fn list_transfers(
+        &self,
+        _filter: &VenueTransferFilter,
+    ) -> Result<Vec<VenueTransferRecord>> {
         panic!("list_transfers should not be called in venue funding tests")
     }
 

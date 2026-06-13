@@ -95,13 +95,13 @@ describe('Card', () => {
 
   it('renders with elevation', () => {
     render(<Card elevation="lg" data-testid="card-lg">Content</Card>)
-    expect(screen.getByTestId('card-lg')).toHaveClass('shadow-lg')
+    expect(screen.getByTestId('card-lg')).toHaveClass('shadow-none')
   })
 
   it('renders with hover state', () => {
     render(<Card isHoverable data-testid="card-hover">Content</Card>)
     const card = screen.getByTestId('card-hover')
-    expect(card).toHaveClass('hover:shadow-md')
+    expect(card).toHaveClass('hover:border-white/[0.12]')
     expect(card).toHaveClass('cursor-pointer')
   })
 

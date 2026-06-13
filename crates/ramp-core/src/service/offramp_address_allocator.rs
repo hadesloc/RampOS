@@ -2,9 +2,10 @@ use crate::chain::{Chain, SolanaChain, SolanaChainConfig};
 use crate::repository::{PartnerCapabilityRecord, PartnerRegistryRecord};
 use crate::service::partner_registry::PartnerRegistrySnapshot;
 use crate::service::{extract_offramp_bundle_config, ConfigBundleArtifact};
-use ramp_common::{Error, Result};
+use ramp_common::{onchain_gate, Error, Result};
 use std::collections::BTreeSet;
 use std::sync::Arc;
+use tracing::warn;
 
 const SOLANA_CHAIN_ID: i64 = 101;
 const SOLANA_CUSTODY_CREDENTIAL_KIND: &str = "offramp_deposit_address_solana";
@@ -76,7 +77,23 @@ impl OfframpDepositAddressProvider for EvmPlaceholderDepositAddressProvider {
         )
     }
 
-    fn issue(&self, _request: &OfframpDepositAddressRequest) -> Result<String> {
+    fn issue(&self, request: &OfframpDepositAddressRequest) -> Result<String> {
+        if is_governed_deposit_address_chain(request.chain_id) {
+            if onchain_gate::is_production() {
+                return Err(Error::Conflict(format!(
+                    "Governed off-ramp deposit address issuance for chain_id={} requires an approved registry or bundle custody configuration in production; refusing placeholder address issuance",
+                    display_chain_id(request.chain_id)
+                )));
+            }
+
+            warn!(
+                tenant_id = %request.tenant_id,
+                user_id = %request.user_id,
+                chain_id = %display_chain_id(request.chain_id),
+                "Issuing placeholder off-ramp deposit address without approved governed custody configuration; this is forbidden in production"
+            );
+        }
+
         Ok(format!(
             "0x{:040x}",
             uuid::Uuid::now_v7().as_u128() & u128::MAX
@@ -183,7 +200,9 @@ impl OfframpDepositAddressAllocator {
             Some(ETHEREUM_CHAIN_ID) => configured_ethereum_address_from_registry(request, snapshot),
             Some(BNB_CHAIN_ID) => configured_bnb_address_from_registry(request, snapshot),
             Some(POLYGON_CHAIN_ID) => configured_polygon_address_from_registry(request, snapshot),
-            Some(AVALANCHE_CHAIN_ID) => configured_avalanche_address_from_registry(request, snapshot),
+            Some(AVALANCHE_CHAIN_ID) => {
+                configured_avalanche_address_from_registry(request, snapshot)
+            }
             _ => Ok(None),
         }
     }
@@ -246,10 +265,7 @@ fn configured_governed_evm_address_from_registry(
             .iter()
             .filter(|credential| credential.environment.eq_ignore_ascii_case("production"))
             .filter(|credential| {
-                is_eligible_governed_evm_custody_credential_kind(
-                    &credential.credential_kind,
-                    lane,
-                )
+                is_eligible_governed_evm_custody_credential_kind(&credential.credential_kind, lane)
             })
             .filter_map(|credential| {
                 let locator = credential.locator.trim();
@@ -273,10 +289,9 @@ fn configured_governed_evm_address_from_registry(
             )));
         }
 
-        let locator = partner_locators
-            .into_iter()
-            .next()
-            .ok_or_else(|| Error::Internal(format!("Missing {} custody env locator", lane.display_name)))?;
+        let locator = partner_locators.into_iter().next().ok_or_else(|| {
+            Error::Internal(format!("Missing {} custody env locator", lane.display_name))
+        })?;
         let env_key = parse_env_locator(&locator).ok_or_else(|| {
             Error::Conflict(format!(
                 "Approved healthy custody registry partner '{}' has invalid {} env locator '{}' for chain_id={}",
@@ -428,8 +443,7 @@ fn validate_bundle_address(chain_id: i64, address: &str) -> Result<()> {
             if !is_valid_evm_address(address) {
                 return Err(Error::Validation(format!(
                     "Invalid {} address '{}'",
-                    governed_evm_display_name(chain_id)
-                        .unwrap_or("EVM"),
+                    governed_evm_display_name(chain_id).unwrap_or("EVM"),
                     address,
                 )));
             }
@@ -551,10 +565,7 @@ fn is_solana_offramp_corridor(corridor_code: &str) -> bool {
     normalized.contains("solana") && normalized.contains("offramp")
 }
 
-fn is_governed_evm_offramp_corridor(
-    corridor_code: &str,
-    lane: &GovernedEvmLane,
-) -> bool {
+fn is_governed_evm_offramp_corridor(corridor_code: &str, lane: &GovernedEvmLane) -> bool {
     let normalized = normalize_lane_value(corridor_code);
     normalized.contains("offramp")
         && lane
@@ -592,6 +603,18 @@ fn is_supported_governed_evm_chain(chain_id: i64) -> bool {
 
 fn is_supported_governed_bundle_chain(chain_id: i64) -> bool {
     chain_id == SOLANA_CHAIN_ID || is_supported_governed_evm_chain(chain_id)
+}
+
+fn is_governed_deposit_address_chain(chain_id: Option<i64>) -> bool {
+    chain_id
+        .map(|chain_id| chain_id == SOLANA_CHAIN_ID || is_supported_governed_evm_chain(chain_id))
+        .unwrap_or(false)
+}
+
+fn display_chain_id(chain_id: Option<i64>) -> String {
+    chain_id
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "none".to_string())
 }
 
 fn governed_evm_lane(chain_id: i64) -> Option<&'static GovernedEvmLane> {
@@ -657,6 +680,11 @@ mod tests {
             user_id: "user_allocator".to_string(),
             chain_id,
         }
+    }
+
+    fn clear_production_env() {
+        std::env::remove_var("RUST_ENV");
+        std::env::remove_var("RAMPOS_ENV");
     }
 
     fn env_credential_reference(credential_id: &str, locator: &str) -> CredentialReferenceRecord {
@@ -771,7 +799,9 @@ mod tests {
     }
 
     #[test]
-    fn issues_evm_placeholder_for_supported_evm_chains() {
+    fn issues_evm_placeholder_for_supported_evm_chains_outside_production() {
+        let _guard = onchain_gate::test_env_lock();
+        clear_production_env();
         let allocator = OfframpDepositAddressAllocator::new();
 
         for chain_id in [
@@ -788,6 +818,46 @@ mod tests {
             assert!(address.starts_with("0x"));
             assert_eq!(address.len(), 42);
         }
+    }
+
+    #[test]
+    fn production_fails_closed_for_governed_evm_placeholder_without_config() {
+        let _guard = onchain_gate::test_env_lock();
+        std::env::set_var("RUST_ENV", "production");
+        std::env::remove_var("RAMPOS_ENV");
+        let allocator = OfframpDepositAddressAllocator::new();
+
+        for chain_id in [Some(1), Some(56), Some(137), Some(43114)] {
+            let error = allocator.issue(&test_request(chain_id)).unwrap_err();
+            match error {
+                Error::Conflict(message) => {
+                    assert!(message
+                        .contains("requires an approved registry or bundle custody configuration"));
+                    assert!(message.contains("refusing placeholder address issuance"));
+                }
+                other => panic!("unexpected error for chain_id={chain_id:?}: {other:?}"),
+            }
+        }
+
+        clear_production_env();
+    }
+
+    #[test]
+    fn production_detection_for_placeholder_uses_rampos_env_when_rust_env_unset_or_empty() {
+        let _guard = onchain_gate::test_env_lock();
+        let allocator = OfframpDepositAddressAllocator::new();
+
+        std::env::remove_var("RUST_ENV");
+        std::env::set_var("RAMPOS_ENV", "production");
+        let missing_rust_env_error = allocator.issue(&test_request(Some(1))).unwrap_err();
+        assert!(matches!(missing_rust_env_error, Error::Conflict(_)));
+
+        std::env::set_var("RUST_ENV", "   ");
+        std::env::set_var("RAMPOS_ENV", "PrOdUcTiOn");
+        let empty_rust_env_error = allocator.issue(&test_request(Some(56))).unwrap_err();
+        assert!(matches!(empty_rust_env_error, Error::Conflict(_)));
+
+        clear_production_env();
     }
 
     #[test]

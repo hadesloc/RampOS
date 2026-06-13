@@ -1,20 +1,17 @@
 # RampOS Project Completion Status
 
-_Last updated: 2026-03-18_
+_Last updated: 2026-05-13_
 
 ---
 
-## Release-Truth Note
+## Status Model
 
-Implementation progress and signoff status are not the same thing.
-
-- The latest implementation milestone is still the hardening wave completed on `2026-03-17`.
-- The repo is still in `review / signoff closure` for release-truth purposes.
-- Use `docs/current-status.md` and `docs/operations/bank-grade-signoff-ledger.md` before treating completed implementation work as promotion-ready.
+This file tracks shipped implementation state first.
+Historical RC signoff artifacts were cleaned out of the active workflow on `2026-04-18` to keep the repo focused on code and runnable evidence.
 
 ---
 
-## ✅ Phase 1: Bank-Grade Core Hardening — COMPLETED (2026-03-17)
+## Phase 1: Core Hardening — implemented in the working tree (uncommitted as of 2026-06-12)
 
 Shipped JWT admin authentication, secrets abstraction, passkey PostgreSQL migration, production readiness gate, and 16 E2E tests.
 
@@ -70,6 +67,44 @@ Bidirectional LP auction market (USDT↔VND) with competitive price discovery.
 
 ---
 
+## ✅ OFFRAMP RFQ Match -> Settlement Linkage — IMPLEMENTED (2026-05-13)
+
+Linked OFFRAMP RFQ finalization now creates or reuses a settlement row, persists RFQ/LP/rate/settlement linkage, exposes that linkage in portal/admin off-ramp status responses, and applies settlement outcomes idempotently without reopening terminal off-ramp state.
+
+### New Files
+
+| File | Description |
+|------|-------------|
+| `migrations/064_offramp_rfq_settlement_linkage.sql` | Adds off-ramp and settlement linkage columns plus idempotency indexes |
+| `crates/ramp-core/src/service/linked_offramp_execution.rs` | Coordinates RFQ finalize -> settlement kickoff and settlement outcome -> linked off-ramp terminal state |
+| `.cargo/audit.toml` | Documents the `RUSTSEC-2023-0071` no-fixed-upgrade exception while keeping high/critical advisories failing |
+
+### Live Verification Snapshot
+
+| Gate | Result |
+|------|--------|
+| `cargo fmt --check` | pass |
+| `cargo test --workspace --lib -- --test-threads=1` | pass, 1081 lib tests passed |
+| `cargo audit` | pass with allowed `RUSTSEC-2023-0071` medium/no-fixed-upgrade exception and warnings |
+| OFFRAMP targeted E2E commands | pass with Docker-backed Postgres/testcontainers migrations |
+| Task 6 payout rejection gate | pass |
+| Frontend lint/build/test/audit | pass |
+| TypeScript SDK prod audit/test/build/lint | pass |
+| Widget audit/test/build | pass |
+| Python SDK pytest | pass |
+| Go SDK tests | pass |
+| Docker Compose config smoke | pass when required env is supplied |
+| Kubernetes render smoke | pass for root, dev, staging, and prod without deprecation warnings |
+| Foundry contracts | `forge build --sizes` pass; `forge test -vvv` pass, 301 tests including fuzz/invariants |
+
+### Remaining Follow-ups
+
+| Follow-up | Current evidence |
+|-----------|------------------|
+| Foundry warning cleanup | Contract build/test pass, but output includes dependency revision mismatch warnings and Solidity lint warnings |
+
+---
+
 ## Previously Completed
 
 - **Core Services**: Pay-in/out, Trade, Ledger, Compliance, Webhooks, AA
@@ -78,23 +113,34 @@ Bidirectional LP auction market (USDT↔VND) with competitive price discovery.
 
 ---
 
-## Pending / Next Steps
+## Current Completion Summary
+
+| Area | State | Notes |
+|------|-------|-------|
+| March hardening implementation | `implemented` | Implemented in the working tree (uncommitted as of 2026-06-12) and preserved above |
+| Historical RC security evidence | `preserved` | Kept under `docs/security/reports/2026-03-13-rc-268670d74/` as reference only |
+| OFFRAMP RFQ-settlement linkage | `implemented` | Verified locally on `2026-05-13` with Docker-backed E2E evidence |
+| Host Rust/cargo execution readiness | `ready` | Verified with `rustc 1.95.0`, `cargo 1.95.0`, `cargo fmt --check`, workspace lib tests, and `cargo audit` |
+| Foundry contract gate | `ready` | Verified with `C:\Users\hades\.foundry\bin\forge.exe`, `forge build --sizes`, and `forge test -vvv` |
+| `BL-T-UW-008-01` status | `historical / backlog only` | Keep for historical tracking only |
+
+## Current Practical Blockers
 
 | Priority | Task | Est. |
 |----------|------|------|
-| High | Refresh staging validation evidence for the current RC | Blocker |
-| High | Refresh Trivy and security signoff evidence after dependency remediation | Blocker |
-| High | Resolve or risk-accept the residual `rsa` advisory | Blocker |
-| High | Assign named approvers in the signoff ledger | Blocker |
-| Medium | After signoff closure, resume the next approved mainline roadmap unit | TBD |
+| Medium | Triage non-failing Foundry warnings from dependency revision mismatch and Solidity lints | Follow-up |
 
-## Estimated Completion
+## OFFRAMP Plan Completion Control
 
-_Historical roadmap framing below. Do not treat these labels as the active UW execution tracker._
+The corrected OFFRAMP kickoff plan is the forward implementation pointer for future code work:
 
-| Phase | Status |
-|-------|--------|
-| Phase 1 (Core Hardening) | ✅ Complete |
-| Phase 2 (Multi-tenant) | 🔲 Planned |
-| Phase 3 (Scale) | 🔲 Planned |
-| Phase 4 (Compliance) | 🔲 Planned |
+- `docs/superpowers/plans/2026-04-10-offramp-rfq-settlement-kickoff.md`
+
+Task 6 control truth:
+
+- Blocking acceptance is isolated to:
+  - `cargo test -p ramp-api --test e2e_payout_test test_payout_bank_rejection -- --nocapture`
+- Linked OFFRAMP reruns are optional / non-blocking for Task 6.
+- Full-slice regression remains a broader verification layer and must not be conflated with Task 6 acceptance.
+
+2026-05-13 result: Task 6 blocking acceptance passed.

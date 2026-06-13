@@ -35,11 +35,12 @@ Use these templates:
 1. Record the target image tag and currently deployed image tag.
 2. Confirm staging evidence is complete for:
    - KYB evidence
-   - treasury export
-   - reconciliation evidence and gated actions
+   - treasury export, including whether the snapshot used imported evidence or the default `TreasuryDataSource::Sample` synthetic fixtures
+   - reconciliation evidence and gated actions, including `snapshot.provenance.sourceKind`; reconciliation is caller-supplied comparison only, not independent settlement discovery
    - liquidity explainability
    - CLI certification
    - break-glass audit export
+   - workflow runtime mode; Temporal submit currently falls back in-process when unreachable, while signals without fallback are warn-only and lost
 3. Confirm health and observability access using [monitoring.md](/C:/Users/hades/OneDrive/Desktop/p2p/docs/operations/monitoring.md).
 4. Apply the release through the standard deployment path.
 5. Wait for rollout completion.
@@ -87,8 +88,8 @@ Start rollback immediately when any of these occur after deployment:
 
 ### Data Consistency Checks
 
-- Verify treasury export still succeeds.
-- Verify reconciliation evidence detail remains readable.
+- Verify treasury export still succeeds and does not present `TreasuryDataSource::Sample` synthetic fixtures as live balance truth.
+- Verify reconciliation evidence detail remains readable and clearly shows caller-supplied comparison provenance.
 - Verify audit export still returns immutable history.
 - Verify no partial release artifact points to the wrong image tag or environment.
 
@@ -129,6 +130,7 @@ Use:
 - switch to read-only evidence capture when mutable actions are unsafe
 - defer activation or approval actions
 - capture reconciliation discrepancies before retrying imports
+- do not rely on bankReference/settlement incident correlation for this release; it is a known non-goal until tenant-scoped correlation is implemented
 - preserve audit and break-glass lineage before restarting services
 
 ### Break-Glass Criteria

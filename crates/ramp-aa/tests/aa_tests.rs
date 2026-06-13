@@ -12,7 +12,10 @@
 
 use ramp_aa::primitives::{Address, Bytes, U256};
 use ramp_aa::*;
-use ramp_common::types::{TenantId, UserId};
+use ramp_common::{
+    onchain_gate::{test_env_lock, EXPERIMENTAL_ONCHAIN_EXECUTION_ENV},
+    types::{TenantId, UserId},
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -162,7 +165,30 @@ mod smart_account_tests {
     }
 
     #[test]
-    fn test_build_transfer_op() {
+    fn test_build_transfer_op_fails_closed_when_gate_off() {
+        let _guard = test_env_lock();
+        std::env::remove_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
+
+        let service = SmartAccountService::new(1, test_factory_address(), test_entry_point());
+        let account = make_smart_account();
+        let to = Address::from([0x33u8; 20]);
+        let value = U256::from(1000);
+
+        let err = service
+            .build_transfer_op(&account, to, value, None)
+            .expect_err("transfer op should fail closed by default");
+
+        assert!(err
+            .to_string()
+            .contains("AA transfer UserOperation execution"));
+        assert!(err.to_string().contains("experimental and disabled"));
+    }
+
+    #[test]
+    fn test_build_transfer_op_with_gate_enabled() {
+        let _guard = test_env_lock();
+        std::env::set_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV, "true");
+
         let service = SmartAccountService::new(1, test_factory_address(), test_entry_point());
         let account = make_smart_account();
         let to = Address::from([0x33u8; 20]);
@@ -170,17 +196,38 @@ mod smart_account_tests {
 
         let op = service
             .build_transfer_op(&account, to, value, None)
-            .expect("should build transfer op");
+            .expect("should build transfer op when explicitly enabled");
 
         assert!(!op.is_account_creation());
         assert_eq!(op.sender, account.address);
-        // call_data should contain execute() selector
         assert!(op.call_data.len() > 4);
         assert_eq!(&op.call_data[0..4], &[0xb6, 0x1d, 0x27, 0xf6]);
+
+        std::env::remove_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
+    }
+
+    #[test]
+    fn test_build_transfer_op_strict_gate_parsing() {
+        let _guard = test_env_lock();
+        std::env::set_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV, "TRUE ");
+
+        let service = SmartAccountService::new(1, test_factory_address(), test_entry_point());
+        let account = make_smart_account();
+        let to = Address::from([0x33u8; 20]);
+
+        let err = service
+            .build_transfer_op(&account, to, U256::ZERO, None)
+            .expect_err("non-exact true should not enable experimental execution");
+        assert!(err.to_string().contains("experimental and disabled"));
+
+        std::env::remove_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
     }
 
     #[test]
     fn test_build_transfer_op_with_data() {
+        let _guard = test_env_lock();
+        std::env::set_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV, "1");
+
         let service = SmartAccountService::new(1, test_factory_address(), test_entry_point());
         let account = make_smart_account();
         let to = Address::from([0x33u8; 20]);
@@ -188,13 +235,18 @@ mod smart_account_tests {
 
         let op = service
             .build_transfer_op(&account, to, U256::ZERO, Some(extra_data))
-            .expect("should build transfer op with data");
+            .expect("should build transfer op with data when explicitly enabled");
 
         assert!(op.call_data.len() > 4);
+
+        std::env::remove_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
     }
 
     #[test]
     fn test_build_batch_op() {
+        let _guard = test_env_lock();
+        std::env::set_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV, "true");
+
         let service = SmartAccountService::new(1, test_factory_address(), test_entry_point());
         let account = make_smart_account();
 
@@ -217,18 +269,41 @@ mod smart_account_tests {
 
         // Should contain executeBatch selector
         assert_eq!(&op.call_data[0..4], &[0x34, 0xfc, 0xd5, 0xbe]);
+
+        std::env::remove_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
+    }
+
+    #[test]
+    fn test_build_batch_op_fails_closed_when_gate_off() {
+        let _guard = test_env_lock();
+        std::env::remove_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
+
+        let service = SmartAccountService::new(1, test_factory_address(), test_entry_point());
+        let account = make_smart_account();
+
+        let err = service
+            .build_batch_op(&account, vec![])
+            .expect_err("batch execution should fail closed by default");
+
+        assert!(err.to_string().contains("AA batch UserOperation execution"));
+        assert!(err.to_string().contains("experimental and disabled"));
     }
 
     #[test]
     fn test_build_batch_op_empty_calls() {
+        let _guard = test_env_lock();
+        std::env::set_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV, "true");
+
         let service = SmartAccountService::new(1, test_factory_address(), test_entry_point());
         let account = make_smart_account();
 
         let op = service
             .build_batch_op(&account, vec![])
-            .expect("should handle empty batch");
+            .expect("should handle empty batch when explicitly enabled");
 
         assert_eq!(&op.call_data[0..4], &[0x34, 0xfc, 0xd5, 0xbe]);
+
+        std::env::remove_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
     }
 }
 

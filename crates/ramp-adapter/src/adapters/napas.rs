@@ -12,13 +12,15 @@ use async_trait::async_trait;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use chrono::{Duration, Utc};
-use pem::parse;
 use ramp_common::{Error, Result};
 use reqwest::Client;
-use ring::rand::SystemRandom;
-use ring::signature;
+use rsa::pkcs1v15::{Signature as RsaPkcs1v15Signature, SigningKey, VerifyingKey};
+use rsa::pkcs8::{DecodePrivateKey, DecodePublicKey};
+use rsa::signature::{RandomizedSigner, SignatureEncoding, Verifier};
+use rsa::{RsaPrivateKey, RsaPublicKey};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use std::time::Duration as StdDuration;
 use tracing::{debug, error, info, instrument, warn};
 
@@ -119,12 +121,6 @@ pub struct NapasAdapter {
 }
 
 impl NapasAdapter {
-    fn decode_pem_contents(pem_value: &str, label: &str) -> std::result::Result<Vec<u8>, Error> {
-        parse(pem_value)
-            .map(|pem| pem.into_contents())
-            .map_err(|e| Error::Internal(format!("Invalid {} PEM: {}", label, e)))
-    }
-
     /// Create a new Napas adapter with minimal config (backwards compatible)
     ///
     /// # Errors
@@ -243,20 +239,12 @@ impl NapasAdapter {
     /// is configured. In development/test mode, falls back to HMAC signing.
     fn sign_request(&self, payload: &str) -> std::result::Result<String, Error> {
         if let Some(pem) = &self.config.private_key_pem {
-            let private_key_der = Self::decode_pem_contents(pem, "RSA private key")?;
-            let private_key = signature::RsaKeyPair::from_pkcs8(&private_key_der)
+            let private_key = RsaPrivateKey::from_pkcs8_pem(pem)
                 .map_err(|e| Error::Internal(format!("Invalid RSA private key: {}", e)))?;
-            let rng = SystemRandom::new();
-            let mut signature_bytes = vec![0; private_key.public().modulus_len()];
-            private_key
-                .sign(
-                    &signature::RSA_PKCS1_SHA256,
-                    &rng,
-                    payload.as_bytes(),
-                    &mut signature_bytes,
-                )
-                .map_err(|e| Error::Internal(format!("RSA signing failed: {}", e)))?;
-            Ok(BASE64.encode(signature_bytes))
+            let signing_key = SigningKey::<Sha256>::new(private_key);
+            let mut rng = rand::rngs::OsRng;
+            let signature = signing_key.sign_with_rng(&mut rng, payload.as_bytes());
+            Ok(BASE64.encode(signature.to_bytes()))
         } else if self.config.enable_real_api {
             Err(Error::Internal(
                 "RSA private key is required for production Napas API requests".to_string(),
@@ -277,8 +265,8 @@ impl NapasAdapter {
     /// Verify RSA-SHA256 response signature from Napas.
     ///
     /// When Napas public key is configured, verifies the signature using RSA PKCS#1
-    /// v1.5 SHA-256. Without a public key in test mode, verification is skipped.
-    /// In production mode without a public key, verification fails.
+    /// v1.5 SHA-256. Without a public key in simulation mode, verification is skipped.
+    /// In real-API mode without a public key, verification fails closed.
     fn verify_response_signature(&self, payload: &str, signature_b64: &str) -> bool {
         let Some(pem) = &self.config.napas_public_key_pem else {
             if self.config.enable_real_api {
@@ -289,8 +277,8 @@ impl NapasAdapter {
             return true;
         };
 
-        let public_key_der = match Self::decode_pem_contents(pem, "Napas public key") {
-            Ok(der) => der,
+        let public_key = match RsaPublicKey::from_public_key_pem(pem) {
+            Ok(key) => key,
             Err(e) => {
                 error!(error = %e, "Invalid Napas public key PEM");
                 return false;
@@ -305,9 +293,16 @@ impl NapasAdapter {
             }
         };
 
-        signature::UnparsedPublicKey::new(&signature::RSA_PKCS1_2048_8192_SHA256, public_key_der)
-            .verify(payload.as_bytes(), &sig_bytes)
-            .is_ok()
+        let signature = match RsaPkcs1v15Signature::try_from(sig_bytes.as_slice()) {
+            Ok(signature) => signature,
+            Err(e) => {
+                error!(error = %e, "Invalid RSA signature length");
+                return false;
+            }
+        };
+
+        let verifying_key = VerifyingKey::<Sha256>::new(public_key);
+        verifying_key.verify(payload.as_bytes(), &signature).is_ok()
     }
 
     /// Convert Napas status string to PayoutStatus
@@ -554,9 +549,17 @@ impl RailsAdapter for NapasAdapter {
             "Napas transfer initiated successfully"
         );
 
+        let provider_tx_id = response
+            .napas_transaction_id
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| Error::ExternalService {
+                service: "Napas".to_string(),
+                message: "Successful transfer response missing napasTransactionId".to_string(),
+            })?;
+
         Ok(PayoutResult {
             reference_code: request.reference_code,
-            provider_tx_id: response.napas_transaction_id.unwrap_or_default(),
+            provider_tx_id,
             status,
             estimated_completion,
         })
@@ -638,18 +641,13 @@ impl RailsAdapter for NapasAdapter {
     }
 
     fn verify_webhook_signature(&self, payload: &[u8], signature: &str) -> bool {
-        // In production mode with RSA public key, use RSA verification
+        // In real-API mode, use RSA verification and fail closed if the public key is missing.
         if self.config.enable_real_api {
-            if self.config.napas_public_key_pem.is_some() {
-                let payload_str = String::from_utf8_lossy(payload);
-                return self.verify_response_signature(&payload_str, signature);
-            }
-            // Production mode without public key: try to parse as base64 RSA sig
-            // but warn and fall back to HMAC if no public key
-            warn!("Production mode without Napas public key; falling back to HMAC webhook verification");
+            let payload_str = String::from_utf8_lossy(payload);
+            return self.verify_response_signature(&payload_str, signature);
         }
 
-        // Development/test mode: use HMAC
+        // Simulation mode: use HMAC
         ramp_common::crypto::verify_webhook_signature(
             self.config.base.webhook_secret.as_bytes(),
             signature,
@@ -746,6 +744,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_real_api_success_without_napas_transaction_id_returns_error() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let (private_pem, public_pem) = generate_test_keypair();
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/transfers/initiate"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "responseCode": "00",
+                "responseMessage": "Success",
+                "status": "PROCESSING"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = NapasConfig {
+            base: AdapterConfig {
+                provider_code: "napas".to_string(),
+                api_base_url: mock_server.uri(),
+                api_key: "api-key".to_string(),
+                api_secret: "api-secret".to_string(),
+                webhook_secret: "secret".to_string(),
+                timeout_secs: 30,
+                extra: serde_json::json!({}),
+            },
+            merchant_id: "merchant".to_string(),
+            terminal_id: "terminal".to_string(),
+            partner_code: "partner".to_string(),
+            enable_real_api: true,
+            private_key_pem: Some(private_pem),
+            napas_public_key_pem: Some(public_pem),
+        };
+        let adapter = NapasAdapter::with_config(config).unwrap();
+
+        let request = InitiatePayoutRequest {
+            reference_code: "PAYOUT123".to_string(),
+            amount_vnd: Decimal::from(500000),
+            recipient_bank_code: "970436".to_string(),
+            recipient_account_number: "1234567890".to_string(),
+            recipient_account_name: "NGUYEN VAN A".to_string(),
+            description: "Test payout".to_string(),
+            metadata: serde_json::json!({}),
+        };
+
+        let result = adapter.initiate_payout(request).await;
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("missing napasTransactionId"));
+    }
+
+    #[tokio::test]
     async fn test_check_payout_status_simulation() {
         let adapter = NapasAdapter::new("napas", "test_secret").unwrap();
 
@@ -827,7 +877,7 @@ mod tests {
     #[test]
     fn test_rsa_verify_wrong_key_fails() {
         let (private_pem, _) = generate_test_keypair();
-        let (_, other_public_pem) = generate_test_keypair();
+        let other_public_pem = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1G8DdpPtPOcjIdW3Ms48\nCfVQxK4PkOFVEXLy3HSALXoy/scBgIknSA72UpngvTDOKHN5V4QV0eWjQfQuibnf\n7IvoaS4KoHRkqXbiyKZJ5HaTsEecO3rDAN3XPBO9MN9m924wTmJVdXe0y2aMHEVN\nWtt/HA+zbQI1Uq0E+tKVAn/GzX/Ov5aJq9wi3I2iWrKxxb3rL09WtM1puucK/cnA\nUxbyYMTrDF4SBrefh21hNqeI3B619DkooS9YVQ6b20gjiuACUqAihGD9i9CIK3cT\nokb/sK/ONr7XfvEAU2ZvxnDhLN6PRhCgm5JZd3sI1aVpIrRScfG7AFbCOFsva4wX\n0QIDAQAB\n-----END PUBLIC KEY-----\n".to_string();
 
         let config = NapasConfig {
             base: AdapterConfig {
@@ -958,7 +1008,7 @@ mod tests {
     }
 
     #[test]
-    fn test_production_verify_without_public_key_fails() {
+    fn test_real_api_response_verify_without_public_key_fails_closed() {
         let config = NapasConfig {
             base: AdapterConfig {
                 provider_code: "napas".to_string(),
@@ -979,8 +1029,53 @@ mod tests {
 
         let adapter = NapasAdapter::with_config(config).unwrap();
 
-        // In production mode without public key, verification should fail
         assert!(!adapter.verify_response_signature("payload", "c2lnbmF0dXJl"));
+    }
+
+    #[test]
+    fn test_real_api_webhook_without_public_key_rejects_hmac_signature() {
+        let config = NapasConfig {
+            base: AdapterConfig {
+                provider_code: "napas".to_string(),
+                api_base_url: "https://api.napas.com.vn".to_string(),
+                api_key: String::new(),
+                api_secret: String::new(),
+                webhook_secret: "secret".to_string(),
+                timeout_secs: 30,
+                extra: serde_json::json!({}),
+            },
+            merchant_id: String::new(),
+            terminal_id: String::new(),
+            partner_code: String::new(),
+            enable_real_api: true,
+            private_key_pem: None,
+            napas_public_key_pem: None,
+        };
+
+        let adapter = NapasAdapter::with_config(config).unwrap();
+        let payload = br#"{"merchantTxnRef":"TX001","amount":100000}"#;
+        let signature = ramp_common::crypto::generate_webhook_signature(
+            adapter.config.base.webhook_secret.as_bytes(),
+            Utc::now().timestamp(),
+            payload,
+        )
+        .expect("HMAC signature should be generated");
+
+        assert!(!adapter.verify_webhook_signature(payload, &signature));
+    }
+
+    #[test]
+    fn test_simulation_webhook_uses_hmac_signature() {
+        let adapter = NapasAdapter::new("napas", "test_secret").unwrap();
+        let payload = br#"{"merchantTxnRef":"TX001","amount":100000}"#;
+        let signature = ramp_common::crypto::generate_webhook_signature(
+            adapter.config.base.webhook_secret.as_bytes(),
+            Utc::now().timestamp(),
+            payload,
+        )
+        .expect("HMAC signature should be generated");
+
+        assert!(adapter.verify_webhook_signature(payload, &signature));
     }
 
     #[test]

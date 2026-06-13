@@ -2,13 +2,13 @@
 
 - Release candidate: `268670d74`
 - Attempt date: `2026-03-13`
-- Validation host: `current local controller host`
+- Validation host: `host used for the recorded attempt`
 - Result: `blocked before preflight`
 
 ## Observed blockers
 
 1. `https://staging-api.rampos.io/health` was not reachable from this host because DNS resolution failed with `ENOTFOUND`.
-2. `C:\Users\hades\.kube\config` was not present on this host, so no local Kubernetes staging access was configured.
+2. The expected local kubeconfig path was not present on this host, so no local Kubernetes staging access was configured.
 
 ## Impact
 

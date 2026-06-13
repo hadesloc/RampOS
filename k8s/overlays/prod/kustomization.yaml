@@ -73,19 +73,29 @@ patches:
       value: api.rampos.io
 
 # Production-specific config
-configMapGenerator:
-- name: rampos-config
-  behavior: merge
-  literals:
-  - RUST_LOG=warn
-  - ENVIRONMENT=production
-  - ENABLE_DEBUG_ENDPOINTS=false
-  - CORS_ALLOWED_ORIGINS=https://rampos.io,https://app.rampos.io
+- target:
+    kind: ConfigMap
+    name: rampos-config
+  patch: |-
+    - op: replace
+      path: /data/RUST_LOG
+      value: warn
+    - op: add
+      path: /data/ENVIRONMENT
+      value: production
+    - op: add
+      path: /data/ENABLE_DEBUG_ENDPOINTS
+      value: "false"
+    - op: add
+      path: /data/CORS_ALLOWED_ORIGINS
+      value: "https://rampos.io,https://app.rampos.io"
 
 # Labels for all resources
-commonLabels:
-  app.kubernetes.io/environment: production
-  app.kubernetes.io/managed-by: kustomize
+labels:
+- includeSelectors: true
+  pairs:
+    app.kubernetes.io/environment: production
+    app.kubernetes.io/managed-by: kustomize
 
 # Production requires PodDisruptionBudget
 # This will be added as a separate resource

@@ -68,7 +68,7 @@ Blocking rules:
 ## 5. Link To Staging, Ops, And Security Proof
 
 - Attach the staging validation evidence package for the same candidate SHA.
-- Confirm release, rollback, incident, and on-call runbooks are current for the candidate scope.
+- Confirm release, rollback, incident, and on-call runbooks are current for the candidate scope, including the known non-goal that admin incident bankReference/settlement correlation is disabled until tenant-scoped correlation is implemented.
 - Confirm backup/restore and disaster recovery rehearsal evidence is current.
 - Confirm the independent security review ledger is linked and has no unresolved `high` or `critical` findings without explicit risk acceptance.
 

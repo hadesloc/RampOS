@@ -1,4 +1,7 @@
-//! Execution Engine with Rollback Support
+//! Test-only simulated execution engine with rollback support.
+//!
+//! This module intentionally fabricates transaction hashes for route simulation tests.
+//! It is compiled only for tests and is never exported in production builds.
 //!
 //! Executes multi-step cross-chain intents with:
 //! - Step-by-step execution tracking

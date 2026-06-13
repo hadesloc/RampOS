@@ -55,7 +55,7 @@ alloy-rpc-types-eth = "0.1.4"
 alloy-transport-http = "0.1.4"
 
 # NATS (without TLS for development, production uses external TLS termination)
-async-nats = { version = "0.33", default-features = false }
+async-nats = { version = "0.48", default-features = false }
 
 # Observability
 tracing = "0.1"
@@ -75,9 +75,9 @@ async-trait = "0.1"
 config = "0.14"
 dotenvy = "0.15"
 validator = { version = "0.20", features = ["derive"] }
-aws-sdk-s3 = "1.13"
+aws-sdk-s3 = { version = "1.13", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio", "sigv4a"] }
 aws-config = "1.1"
-hickory-resolver = { version = "0.24", features = ["tokio-runtime", "dns-over-https-rustls"] }
+hickory-resolver = { version = "0.26", features = ["tokio", "https-ring", "webpki-roots"] }
 
 [profile.release]
 lto = true

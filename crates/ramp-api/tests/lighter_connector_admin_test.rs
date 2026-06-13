@@ -277,9 +277,7 @@ async fn lighter_connector_readiness_snapshot_returns_operator_first_readiness_v
         Err(_) => return,
     };
 
-    let pool = PgPool::connect(&database_url)
-        .await
-        .expect("db pool");
+    let pool = PgPool::connect(&database_url).await.expect("db pool");
 
     let mut hasher = Sha256::new();
     hasher.update(TEST_API_KEY.as_bytes());
@@ -316,7 +314,10 @@ async fn lighter_connector_readiness_snapshot_returns_operator_first_readiness_v
     assert_eq!(payload["operatorLinkageStatus"], "institutional_linked");
     assert_eq!(payload["institutionalEvidenceStatus"], "approved");
     assert_eq!(
-        payload["requirements"].as_array().expect("requirements array").len(),
+        payload["requirements"]
+            .as_array()
+            .expect("requirements array")
+            .len(),
         4
     );
 }
@@ -357,12 +358,10 @@ fn openapi_documents_lighter_connector_readiness_snapshot_contract() {
     let json = doc
         .to_json()
         .expect("OpenAPI spec should serialize to JSON");
-    let spec: serde_json::Value =
-        serde_json::from_str(&json).expect("OpenAPI JSON should parse");
+    let spec: serde_json::Value = serde_json::from_str(&json).expect("OpenAPI JSON should parse");
 
-    let path =
-        &spec["paths"]["/v1/admin/venue-trust/connectors/lighter/readiness/{subject_type}/{subject_id}"]
-            ["get"];
+    let path = &spec["paths"]
+        ["/v1/admin/venue-trust/connectors/lighter/readiness/{subject_type}/{subject_id}"]["get"];
     assert!(
         path.is_object(),
         "spec must document GET /v1/admin/venue-trust/connectors/lighter/readiness/{{subject_type}}/{{subject_id}}"

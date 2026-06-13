@@ -28,7 +28,11 @@ fn reconciliation_export_service_builds_snapshot_and_evidence_exports() {
     }];
     let settlements = vec![Settlement {
         id: "stl_status_001".to_string(),
+        tenant_id: None,
         offramp_intent_id: "ofr_status_001".to_string(),
+        rfq_id: None,
+        lp_id: None,
+        final_rate: None,
         status: SettlementStatus::Completed,
         bank_reference: Some("RAMP-STATUS".to_string()),
         error_message: None,
@@ -89,7 +93,11 @@ fn reconciliation_snapshot_export_makes_provenance_classification_explicit() {
     }];
     let settlements = vec![Settlement {
         id: "stl_runtime_001".to_string(),
+        tenant_id: None,
         offramp_intent_id: "ofr_runtime_001".to_string(),
+        rfq_id: None,
+        lp_id: None,
+        final_rate: None,
         status: SettlementStatus::Completed,
         bank_reference: Some("RAMP-RUNTIME".to_string()),
         error_message: None,
@@ -123,7 +131,10 @@ fn reconciliation_snapshot_export_makes_provenance_classification_explicit() {
         .expect("workbench export should build");
     let workbench_json: serde_json::Value =
         serde_json::from_slice(&workbench_artifact.contents).expect("workbench JSON should decode");
-    assert_eq!(workbench_json["provenance"]["sourceClass"], "evidence_backed");
+    assert_eq!(
+        workbench_json["provenance"]["sourceClass"],
+        "evidence_backed"
+    );
     assert!(workbench_json["provenance"]["freshnessWarning"]
         .as_str()
         .expect("workbench warning")

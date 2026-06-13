@@ -411,13 +411,11 @@ async fn venue_trust_report_snapshot_returns_cash_in_and_cash_out_summary() {
     assert_eq!(payload["subjectId"], "user-report-1");
     assert_eq!(payload["cashIn"]["transferCount"], 1);
     assert_eq!(payload["cashOut"]["transferCount"], 1);
-    assert!(
-        payload["evidenceReferences"]
-            .as_array()
-            .expect("evidenceReferences array")
-            .iter()
-            .any(|entry| entry["kind"] == "connection")
-    );
+    assert!(payload["evidenceReferences"]
+        .as_array()
+        .expect("evidenceReferences array")
+        .iter()
+        .any(|entry| entry["kind"] == "connection"));
 }
 
 #[tokio::test]
@@ -456,10 +454,10 @@ fn openapi_documents_venue_trust_reporting_contract() {
     let json = doc
         .to_json()
         .expect("OpenAPI spec should serialize to JSON");
-    let spec: serde_json::Value =
-        serde_json::from_str(&json).expect("OpenAPI JSON should parse");
+    let spec: serde_json::Value = serde_json::from_str(&json).expect("OpenAPI JSON should parse");
 
-    let report_path = &spec["paths"]["/v1/admin/venue-trust/reports/{subject_type}/{subject_id}"]["get"];
+    let report_path =
+        &spec["paths"]["/v1/admin/venue-trust/reports/{subject_type}/{subject_id}"]["get"];
     assert!(
         report_path.is_object(),
         "spec must document GET /v1/admin/venue-trust/reports/{{subject_type}}/{{subject_id}}"

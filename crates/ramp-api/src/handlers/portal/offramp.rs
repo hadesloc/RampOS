@@ -119,6 +119,14 @@ pub struct OfframpIntentResponse {
     pub tx_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bank_reference: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub linked_rfq_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub winning_lp_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_rate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settlement_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -173,6 +181,10 @@ fn map_intent_response(intent: &OfframpIntentRow) -> OfframpIntentResponse {
         chain_id: intent.chain_id,
         tx_hash: intent.tx_hash.clone(),
         bank_reference: intent.bank_reference.clone(),
+        linked_rfq_id: intent.linked_rfq_id.clone(),
+        winning_lp_id: intent.winning_lp_id.clone(),
+        matched_rate: intent.matched_rate.map(|rate| rate.to_string()),
+        settlement_id: intent.settlement_id.clone(),
         created_at: intent.created_at.to_rfc3339(),
         updated_at: intent.updated_at.to_rfc3339(),
     }
@@ -380,6 +392,10 @@ pub async fn create_quote(
         deposit_address: None,
         tx_hash: None,
         bank_reference: None,
+        linked_rfq_id: None,
+        winning_lp_id: None,
+        matched_rate: None,
+        settlement_id: None,
         state: "QUOTE_CREATED".to_string(),
         state_history: json!([
             {
@@ -885,6 +901,10 @@ mod tests {
             chain_id: None,
             tx_hash: None,
             bank_reference: None,
+            linked_rfq_id: None,
+            winning_lp_id: None,
+            matched_rate: None,
+            settlement_id: None,
             created_at: "2024-01-01T00:00:00Z".to_string(),
             updated_at: "2024-01-01T00:00:00Z".to_string(),
         };

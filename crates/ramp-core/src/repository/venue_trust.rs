@@ -459,9 +459,7 @@ impl VenueTrustRepository for PgVenueTrustRepository {
             builder.push(" AND chain_id = ").push_bind(chain_id);
         }
         if let Some(status) = &filter.attestation_status {
-            builder
-                .push(" AND attestation_status = ")
-                .push_bind(status);
+            builder.push(" AND attestation_status = ").push_bind(status);
         }
         builder.push(" ORDER BY created_at DESC, id ASC");
         builder
@@ -841,7 +839,9 @@ impl VenueTrustRepository for PgVenueTrustRepository {
                 .push_bind(connection_id);
         }
         if let Some(account_id) = &filter.venue_account_id {
-            builder.push(" AND venue_account_id = ").push_bind(account_id);
+            builder
+                .push(" AND venue_account_id = ")
+                .push_bind(account_id);
         }
         if let Some(status) = &filter.status {
             builder.push(" AND status = ").push_bind(status);
@@ -935,7 +935,9 @@ impl VenueTrustRepository for PgVenueTrustRepository {
                 .push_bind(transfer_id);
         }
         if let Some(account_id) = &filter.venue_account_id {
-            builder.push(" AND venue_account_id = ").push_bind(account_id);
+            builder
+                .push(" AND venue_account_id = ")
+                .push_bind(account_id);
         }
         if let Some(status) = &filter.review_status {
             builder.push(" AND review_status = ").push_bind(status);

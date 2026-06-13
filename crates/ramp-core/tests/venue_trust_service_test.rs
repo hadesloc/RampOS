@@ -8,11 +8,11 @@ use uuid::Uuid;
 use ramp_common::Result;
 use ramp_core::repository::{
     BeneficiaryProfileFilter, BeneficiaryProfileRecord, EnsureWalletAttestationRequest,
-    WalletAttestationFilter, WalletAttestationRecord,
     SourceOfFundsPackageFilter, SourceOfFundsPackageRecord, UpsertBeneficiaryProfileRequest,
     UpsertSourceOfFundsPackageRequest, UpsertVenueAccountRequest, UpsertVenueConnectionRequest,
     UpsertVenueTransferRequest, VenueAccountFilter, VenueAccountRecord, VenueConnectionFilter,
     VenueConnectionRecord, VenueTransferFilter, VenueTransferRecord, VenueTrustRepository,
+    WalletAttestationFilter, WalletAttestationRecord,
 };
 use ramp_core::service::VenueTrustService;
 
@@ -177,7 +177,11 @@ impl VenueTrustRepository for MockVenueTrustRepository {
         Ok(())
     }
 
-    async fn get_account(&self, tenant_id: &str, account_id: &str) -> Result<Option<VenueAccountRecord>> {
+    async fn get_account(
+        &self,
+        tenant_id: &str,
+        account_id: &str,
+    ) -> Result<Option<VenueAccountRecord>> {
         let items = self.accounts.lock().expect("accounts lock");
         Ok(items
             .iter()
@@ -248,8 +252,7 @@ impl VenueTrustRepository for MockVenueTrustRepository {
         Ok(items
             .iter()
             .find(|item| {
-                item.tenant_id == tenant_id
-                    && item.beneficiary_profile_id == beneficiary_profile_id
+                item.tenant_id == tenant_id && item.beneficiary_profile_id == beneficiary_profile_id
             })
             .cloned())
     }
@@ -314,7 +317,11 @@ impl VenueTrustRepository for MockVenueTrustRepository {
         Ok(())
     }
 
-    async fn get_transfer(&self, tenant_id: &str, transfer_id: &str) -> Result<Option<VenueTransferRecord>> {
+    async fn get_transfer(
+        &self,
+        tenant_id: &str,
+        transfer_id: &str,
+    ) -> Result<Option<VenueTransferRecord>> {
         let items = self.transfers.lock().expect("transfers lock");
         Ok(items
             .iter()
@@ -322,7 +329,10 @@ impl VenueTrustRepository for MockVenueTrustRepository {
             .cloned())
     }
 
-    async fn list_transfers(&self, filter: &VenueTransferFilter) -> Result<Vec<VenueTransferRecord>> {
+    async fn list_transfers(
+        &self,
+        filter: &VenueTransferFilter,
+    ) -> Result<Vec<VenueTransferRecord>> {
         let items = self.transfers.lock().expect("transfers lock");
         Ok(items
             .iter()
@@ -441,8 +451,8 @@ async fn service_returns_fallback_subject_snapshot_without_repository() {
 async fn service_builds_subject_and_transfer_views_from_repository() {
     let repository = Arc::new(MockVenueTrustRepository::default());
     let service = VenueTrustService::with_repository(repository);
-    let attestation_id = Uuid::parse_str("20000000-0000-0000-0000-000000000023")
-        .expect("attestation uuid");
+    let attestation_id =
+        Uuid::parse_str("20000000-0000-0000-0000-000000000023").expect("attestation uuid");
 
     service
         .ensure_wallet_attestation(&EnsureWalletAttestationRequest {
@@ -567,7 +577,9 @@ async fn service_builds_subject_and_transfer_views_from_repository() {
     assert_eq!(subject_snapshot.beneficiary_profiles.len(), 1);
     assert_eq!(subject_snapshot.wallet_attestations.len(), 1);
     assert_eq!(
-        subject_snapshot.wallet_attestations[0].proof_artifact_uri.as_deref(),
+        subject_snapshot.wallet_attestations[0]
+            .proof_artifact_uri
+            .as_deref(),
         Some("s3://proofs/subject-view.json")
     );
     assert_eq!(subject_snapshot.source_of_funds_packages.len(), 1);
@@ -599,8 +611,8 @@ async fn service_builds_subject_and_transfer_views_from_repository() {
 async fn service_exposes_explicit_venue_transitions_and_attestation_setup() {
     let repository = Arc::new(MockVenueTrustRepository::default());
     let service = VenueTrustService::with_repository(repository.clone());
-    let attestation_id = Uuid::parse_str("30000000-0000-0000-0000-000000000023")
-        .expect("attestation uuid");
+    let attestation_id =
+        Uuid::parse_str("30000000-0000-0000-0000-000000000023").expect("attestation uuid");
 
     service
         .ensure_wallet_attestation(&EnsureWalletAttestationRequest {
@@ -634,8 +646,14 @@ async fn service_exposes_explicit_venue_transitions_and_attestation_setup() {
         .expect("attestation lookup should succeed")
         .expect("attestation should exist");
     assert_eq!(flagged_attestation.attestation_status, "flagged");
-    assert_eq!(flagged_attestation.metadata["failureReason"], "chain_mismatch");
-    assert_eq!(flagged_attestation.metadata["reviewReason"], "manual_review");
+    assert_eq!(
+        flagged_attestation.metadata["failureReason"],
+        "chain_mismatch"
+    );
+    assert_eq!(
+        flagged_attestation.metadata["reviewReason"],
+        "manual_review"
+    );
 
     let err = service
         .transition_wallet_attestation_status(
@@ -646,7 +664,10 @@ async fn service_exposes_explicit_venue_transitions_and_attestation_setup() {
         )
         .await
         .expect_err("flagged attestation should reject reopening");
-    assert!(matches!(err, ramp_common::Error::InvalidStateTransition { .. }));
+    assert!(matches!(
+        err,
+        ramp_common::Error::InvalidStateTransition { .. }
+    ));
 
     service
         .upsert_connection(&UpsertVenueConnectionRequest {
@@ -823,7 +844,10 @@ async fn service_exposes_explicit_venue_transitions_and_attestation_setup() {
         )
         .await
         .expect_err("connection should reject backward transition");
-    assert!(matches!(err, ramp_common::Error::InvalidStateTransition { .. }));
+    assert!(matches!(
+        err,
+        ramp_common::Error::InvalidStateTransition { .. }
+    ));
 
     let err = service
         .transition_beneficiary_verification_status(
@@ -834,7 +858,10 @@ async fn service_exposes_explicit_venue_transitions_and_attestation_setup() {
         )
         .await
         .expect_err("beneficiary should reject backward transition");
-    assert!(matches!(err, ramp_common::Error::InvalidStateTransition { .. }));
+    assert!(matches!(
+        err,
+        ramp_common::Error::InvalidStateTransition { .. }
+    ));
 
     service
         .transition_transfer_status(
@@ -862,7 +889,10 @@ async fn service_exposes_explicit_venue_transitions_and_attestation_setup() {
         )
         .await
         .expect_err("completed transfer should reject reopening");
-    assert!(matches!(err, ramp_common::Error::InvalidStateTransition { .. }));
+    assert!(matches!(
+        err,
+        ramp_common::Error::InvalidStateTransition { .. }
+    ));
 
     service
         .transition_source_of_funds_review_status(
@@ -890,5 +920,8 @@ async fn service_exposes_explicit_venue_transitions_and_attestation_setup() {
         )
         .await
         .expect_err("approved package should reject reopening");
-    assert!(matches!(err, ramp_common::Error::InvalidStateTransition { .. }));
+    assert!(matches!(
+        err,
+        ramp_common::Error::InvalidStateTransition { .. }
+    ));
 }

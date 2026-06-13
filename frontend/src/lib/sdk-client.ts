@@ -31,13 +31,41 @@ export interface ApiClientConfig {
 // Admin API Client
 // ---------------------------------------------------------------------------
 
-const API_BASE_URL =
-  typeof window === 'undefined'
-    ? process.env.API_URL || 'http://localhost:8080'
-    : '/api/proxy';
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV?.trim().toLowerCase() === 'production';
+}
 
-const API_KEY =
-  typeof window === 'undefined' ? process.env.API_KEY || '' : '';
+function requiredServerEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (value) {
+    return value;
+  }
+  if (isProductionRuntime()) {
+    throw new Error(`Missing required production environment variable: ${name}`);
+  }
+  return '';
+}
+
+function requiredPublicEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (value) {
+    return value;
+  }
+  if (isProductionRuntime()) {
+    throw new Error(`Missing required production environment variable: ${name}`);
+  }
+  return '';
+}
+
+function getApiBaseUrl(): string {
+  return typeof window === 'undefined'
+    ? requiredServerEnv('API_URL') || 'http://localhost:8080'
+    : '/api/proxy';
+}
+
+function getApiKey(): string {
+  return typeof window === 'undefined' ? requiredServerEnv('API_KEY') : '';
+}
 
 const CSRF_COOKIE_NAME = 'rampos_csrf';
 
@@ -77,7 +105,7 @@ export async function adminApiRequest<T>(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const url = `${getApiBaseUrl()}${endpoint}`;
 
   // CSRF token: try cookie first, then fetch from /api/csrf
   let csrfToken = getCookie(CSRF_COOKIE_NAME);
@@ -97,9 +125,10 @@ export async function adminApiRequest<T>(
     }
   }
 
+  const apiKey = getApiKey();
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    ...(API_KEY && { Authorization: `Bearer ${API_KEY}` }),
+    ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
     ...(csrfToken && { 'x-csrf-token': csrfToken }),
     ...options.headers,
   };
@@ -141,12 +170,14 @@ let _widgetClient: RampOSApiClient | null = null;
  */
 export function getWidgetClient(): RampOSApiClient {
   if (!_widgetClient) {
+    const environment =
+      (process.env.NEXT_PUBLIC_RAMPOS_ENV?.trim() as 'sandbox' | 'production' | undefined) ??
+      (isProductionRuntime() ? 'production' : 'sandbox');
+
     _widgetClient = new RampOSApiClient({
-      apiKey: process.env.NEXT_PUBLIC_RAMPOS_API_KEY || '',
-      baseUrl: process.env.NEXT_PUBLIC_API_URL || undefined,
-      environment:
-        (process.env.NEXT_PUBLIC_RAMPOS_ENV as 'sandbox' | 'production') ||
-        'sandbox',
+      apiKey: requiredPublicEnv('NEXT_PUBLIC_RAMPOS_API_KEY'),
+      baseUrl: requiredPublicEnv('NEXT_PUBLIC_API_URL') || undefined,
+      environment,
     });
   }
   return _widgetClient;

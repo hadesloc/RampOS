@@ -92,7 +92,11 @@ impl std::fmt::Display for SettlementStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settlement {
     pub id: String,
+    pub tenant_id: Option<String>,
     pub offramp_intent_id: String,
+    pub rfq_id: Option<String>,
+    pub lp_id: Option<String>,
+    pub final_rate: Option<Decimal>,
     pub status: SettlementStatus,
     pub bank_reference: Option<String>,
     pub error_message: Option<String>,
@@ -105,7 +109,11 @@ impl Settlement {
     pub fn from_row(row: SettlementRow) -> Result<Self> {
         Ok(Settlement {
             id: row.id,
+            tenant_id: row.tenant_id,
             offramp_intent_id: row.offramp_intent_id,
+            rfq_id: row.rfq_id,
+            lp_id: row.lp_id,
+            final_rate: row.final_rate,
             status: SettlementStatus::from_db_str(&row.status)?,
             bank_reference: row.bank_reference,
             error_message: row.error_message,
@@ -118,7 +126,11 @@ impl Settlement {
     pub fn to_row(&self) -> SettlementRow {
         SettlementRow {
             id: self.id.clone(),
+            tenant_id: self.tenant_id.clone(),
             offramp_intent_id: self.offramp_intent_id.clone(),
+            rfq_id: self.rfq_id.clone(),
+            lp_id: self.lp_id.clone(),
+            final_rate: self.final_rate,
             status: self.status.as_db_str().to_string(),
             bank_reference: self.bank_reference.clone(),
             error_message: self.error_message.clone(),
@@ -146,6 +158,29 @@ pub struct SettlementLiquiditySummary {
     pub pending_count: usize,
     pub failed_count: usize,
     pub completed_count: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct TriggerSettlementRequest {
+    pub tenant_id: Option<TenantId>,
+    pub offramp_intent_id: String,
+    pub rfq_id: Option<String>,
+    pub lp_id: Option<String>,
+    pub final_rate: Option<Decimal>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SettlementOutcome {
+    Completed,
+    Failed,
+}
+
+#[derive(Debug, Clone)]
+pub struct ApplySettlementOutcomeRequest {
+    pub tenant_id: TenantId,
+    pub settlement_id: String,
+    pub outcome: SettlementOutcome,
+    pub error_message: Option<String>,
 }
 
 impl SettlementService {
@@ -180,7 +215,11 @@ impl SettlementService {
 
         let settlement = Settlement {
             id: settlement_id,
+            tenant_id: None,
             offramp_intent_id: offramp_intent_id.to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: SettlementStatus::Processing,
             bank_reference: Some(bank_ref),
             error_message: None,
@@ -199,11 +238,46 @@ impl SettlementService {
 
     /// Async version: trigger settlement and persist to repository.
     pub async fn trigger_settlement_async(&self, offramp_intent_id: &str) -> Result<Settlement> {
-        let settlement = self.trigger_settlement(offramp_intent_id)?;
+        self.trigger_settlement_with_request_async(TriggerSettlementRequest {
+            tenant_id: None,
+            offramp_intent_id: offramp_intent_id.to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
+        })
+        .await
+    }
+
+    pub async fn trigger_settlement_with_request_async(
+        &self,
+        request: TriggerSettlementRequest,
+    ) -> Result<Settlement> {
+        if let (Some(repo), Some(tenant_id), Some(rfq_id)) = (
+            &self.repo,
+            request.tenant_id.as_ref(),
+            request.rfq_id.as_deref(),
+        ) {
+            if let Some(row) = repo.get_by_rfq_id(tenant_id, rfq_id).await? {
+                return Settlement::from_row(row);
+            }
+        }
+
+        let mut settlement = self.trigger_settlement(&request.offramp_intent_id)?;
+        settlement.tenant_id = request.tenant_id.as_ref().map(|tenant| tenant.0.clone());
+        settlement.rfq_id = request.rfq_id;
+        settlement.lp_id = request.lp_id;
+        settlement.final_rate = request.final_rate;
 
         if let Some(repo) = &self.repo {
             let row = settlement.to_row();
             repo.create(&row).await?;
+            if let (Some(tenant_id), Some(rfq_id)) =
+                (request.tenant_id.as_ref(), settlement.rfq_id.as_deref())
+            {
+                if let Some(row) = repo.get_by_rfq_id(tenant_id, rfq_id).await? {
+                    return Settlement::from_row(row);
+                }
+            }
         }
 
         Ok(settlement)
@@ -326,6 +400,65 @@ impl SettlementService {
             Settlement::from_row(updated_row)
         } else {
             self.update_settlement_status(id, status)
+        }
+    }
+
+    pub async fn apply_outcome_async(
+        &self,
+        request: ApplySettlementOutcomeRequest,
+    ) -> Result<Settlement> {
+        let status = match request.outcome {
+            SettlementOutcome::Completed => SettlementStatus::Completed,
+            SettlementOutcome::Failed => SettlementStatus::Failed,
+        };
+
+        if let Some(repo) = &self.repo {
+            let row = repo
+                .get_by_id(&request.settlement_id)
+                .await?
+                .ok_or_else(|| {
+                    Error::NotFound(format!("Settlement {} not found", request.settlement_id))
+                })?;
+
+            if row.tenant_id.as_deref() != Some(request.tenant_id.0.as_str()) {
+                return Err(Error::NotFound(format!(
+                    "Settlement {} not found",
+                    request.settlement_id
+                )));
+            }
+
+            let current_status = SettlementStatus::from_db_str(&row.status)?;
+            if current_status == status {
+                return Settlement::from_row(row);
+            }
+            if matches!(
+                current_status,
+                SettlementStatus::Completed | SettlementStatus::Failed
+            ) {
+                return Err(Error::Conflict(format!(
+                    "Settlement {} is already terminal ({})",
+                    request.settlement_id, row.status
+                )));
+            }
+
+            repo.update_status(
+                &request.settlement_id,
+                status.as_db_str(),
+                request.error_message.as_deref(),
+            )
+            .await?;
+            let updated = repo
+                .get_by_id(&request.settlement_id)
+                .await?
+                .ok_or_else(|| {
+                    Error::NotFound(format!(
+                        "Settlement {} not found after outcome",
+                        request.settlement_id
+                    ))
+                })?;
+            Settlement::from_row(updated)
+        } else {
+            self.update_settlement_status(&request.settlement_id, status)
         }
     }
 
@@ -567,7 +700,7 @@ impl SettlementService {
             .get_latest_reliability_snapshot(tenant_id, lp_id, direction, "ROLLING_30D")
             .await?;
 
-        let mut snapshot = existing.unwrap_or(LpReliabilitySnapshotRow {
+        let mut snapshot = existing.unwrap_or_else(|| LpReliabilitySnapshotRow {
             id: format!("lprs_{}", uuid::Uuid::now_v7()),
             tenant_id: tenant_id.0.clone(),
             lp_id: lp_id.to_string(),
@@ -591,8 +724,6 @@ impl SettlementService {
             created_at: now,
             updated_at: now,
         });
-
-        snapshot.window_ended_at = now;
         snapshot.updated_at = now;
         let latency_seconds = (settlement.updated_at - settlement.created_at)
             .num_seconds()
@@ -603,9 +734,17 @@ impl SettlementService {
 
         match settlement.status {
             SettlementStatus::Completed => snapshot.settlement_count += 1,
-            SettlementStatus::Failed => snapshot.dispute_count += 1,
+            SettlementStatus::Failed => {
+                snapshot.settlement_count += 1;
+                snapshot.dispute_count += 1;
+            }
             SettlementStatus::Pending | SettlementStatus::Processing => {}
         }
+        snapshot.fill_count = snapshot
+            .fill_count
+            .max(snapshot.settlement_count)
+            .max(snapshot.dispute_count);
+        snapshot.quote_count = snapshot.quote_count.max(snapshot.fill_count);
 
         let dispute_denominator = snapshot
             .fill_count
@@ -1010,6 +1149,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_apply_outcome_async_is_idempotent_for_replayed_completed() {
+        use crate::repository::settlement::InMemorySettlementRepository;
+
+        let tenant_id = TenantId::new("tenant_settlement_idempotent");
+        let repo = Arc::new(InMemorySettlementRepository::new());
+        let svc = SettlementService::with_repository(repo);
+        let settlement = svc
+            .trigger_settlement_with_request_async(TriggerSettlementRequest {
+                tenant_id: Some(tenant_id.clone()),
+                offramp_intent_id: "ofr_settlement_idempotent".to_string(),
+                rfq_id: Some("rfq_settlement_idempotent".to_string()),
+                lp_id: Some("lp_settlement_idempotent".to_string()),
+                final_rate: Some(dec!(26000)),
+            })
+            .await
+            .unwrap();
+
+        let first = svc
+            .apply_outcome_async(ApplySettlementOutcomeRequest {
+                tenant_id: tenant_id.clone(),
+                settlement_id: settlement.id.clone(),
+                outcome: SettlementOutcome::Completed,
+                error_message: None,
+            })
+            .await
+            .unwrap();
+        let replay = svc
+            .apply_outcome_async(ApplySettlementOutcomeRequest {
+                tenant_id,
+                settlement_id: settlement.id,
+                outcome: SettlementOutcome::Completed,
+                error_message: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(first.id, replay.id);
+        assert_eq!(replay.status, SettlementStatus::Completed);
+    }
+
+    #[tokio::test]
     async fn test_ingest_reliability_outcome_records_failed_settlement_as_dispute_signal() {
         use crate::repository::rfq::{InMemoryRfqRepository, RfqRepository};
         use crate::repository::settlement::InMemorySettlementRepository;
@@ -1044,7 +1224,9 @@ mod tests {
             .unwrap()
             .expect("snapshot should exist");
 
-        assert_eq!(snapshot.settlement_count, 0);
+        assert_eq!(snapshot.settlement_count, 1);
+        assert_eq!(snapshot.fill_count, 1);
+        assert_eq!(snapshot.quote_count, 1);
         assert_eq!(snapshot.dispute_count, 1);
         assert_eq!(snapshot.dispute_rate, dec!(1));
         assert_eq!(snapshot.metadata["lastOutcome"], "settlement_failed");
@@ -1177,7 +1359,11 @@ mod tests {
         let shared_reference = "RAMP-SHARED-TENANT".to_string();
         let settlement_a = SettlementRow {
             id: "stl_bank_scope_a".to_string(),
+            tenant_id: Some(tenant_a.0.clone()),
             offramp_intent_id: "ofr_bank_scope_a".to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: SettlementStatus::Processing.as_db_str().to_string(),
             bank_reference: Some(shared_reference.clone()),
             error_message: None,
@@ -1186,7 +1372,11 @@ mod tests {
         };
         let settlement_b = SettlementRow {
             id: "stl_bank_scope_b".to_string(),
+            tenant_id: Some(tenant_b.0.clone()),
             offramp_intent_id: "ofr_bank_scope_b".to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: SettlementStatus::Failed.as_db_str().to_string(),
             bank_reference: Some(shared_reference.clone()),
             error_message: None,

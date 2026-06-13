@@ -175,7 +175,7 @@ contract PasskeySignerTest is Test {
         assertEq(address(account1), address(account2));
     }
 
-    function test_PasskeyFactory_DifferentKeysGetDifferentAddresses() public {
+    function test_PasskeyFactory_DifferentKeysGetDifferentAddresses() public view {
         uint256 salt = 42;
 
         address addr1 = passkeyFactory.getAddress(TEST_PUB_KEY_X, TEST_PUB_KEY_Y, salt);
@@ -184,7 +184,7 @@ contract PasskeySignerTest is Test {
         assertTrue(addr1 != addr2, "Different keys should produce different addresses");
     }
 
-    function test_PasskeyFactory_DifferentSaltsGetDifferentAddresses() public {
+    function test_PasskeyFactory_DifferentSaltsGetDifferentAddresses() public view {
         address addr1 = passkeyFactory.getAddress(TEST_PUB_KEY_X, TEST_PUB_KEY_Y, 1);
         address addr2 = passkeyFactory.getAddress(TEST_PUB_KEY_X, TEST_PUB_KEY_Y, 2);
 

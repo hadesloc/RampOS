@@ -568,7 +568,7 @@ mod tests {
         },
     };
     use sqlx::PgPool;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex, OnceLock};
 
     #[test]
     fn compare_query_deserializes_camel_case_filters() {
@@ -627,6 +627,11 @@ mod tests {
 
     const TEST_ADMIN_JWT_SECRET: &str = "risk-lab-tests-admin-jwt-secret";
 
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
     fn make_admin_jwt(role: &str) -> String {
         let claims = crate::handlers::admin::admin_auth::AdminClaims {
             sub: "risk_lab_test_admin".to_string(),
@@ -647,8 +652,7 @@ mod tests {
 
     #[tokio::test]
     async fn replay_risk_lab_rejects_viewer_role() {
-        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
-
+        let _guard = env_lock().lock().unwrap();
         let intent_repo = Arc::new(MockIntentRepository::new());
         let ledger_repo = Arc::new(MockLedgerRepository::new());
         let user_repo = Arc::new(MockUserRepository::new());
@@ -755,6 +759,7 @@ mod tests {
             challenger: None,
         };
 
+        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
         let err = replay_risk_lab(
             headers,
             Extension(tenant_ctx),

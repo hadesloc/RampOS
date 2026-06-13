@@ -13,9 +13,12 @@ use alloy::primitives::{keccak256, Address, Bytes, B256, U256};
 use alloy::providers::Provider;
 use alloy::rpc::types::Filter;
 use async_trait::async_trait;
+use ramp_common::onchain_gate::{
+    experimental_onchain_execution_disabled_message, experimental_onchain_execution_enabled,
+};
 use std::collections::HashMap;
 use std::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use super::{
     Balance, Chain, ChainError, ChainId, ChainType, FeeEstimate, FeeOption, InboundTransferQuery,
@@ -449,22 +452,19 @@ impl Chain for EvmChain {
             tx_request.gas_price = Some(gas_price_u128);
         }
 
-        // Note: In production, this would require a wallet/signer
-        // For now, we send the raw transaction request via the provider
-        let pending = self
-            .provider
-            .send_raw_transaction(&[]) // Placeholder - requires signed tx in production
-            .await
-            .map_err(|e| ChainError::TransactionFailed(e.to_string()))?;
+        // EXPERIMENTAL — not launch scope (D-03). Fail-closed: raw EVM transaction
+        // submission is not implemented and never submits an empty placeholder payload.
+        if !experimental_onchain_execution_enabled() {
+            return Err(ChainError::NotSupported(
+                experimental_onchain_execution_disabled_message(
+                    "EVM on-chain transaction submission",
+                ),
+            ));
+        }
 
-        let hash = *pending.tx_hash();
-        info!(
-            chain = %self.name(),
-            hash = %hash,
-            "Transaction submitted"
-        );
-
-        Ok(TxHash(format!("{:?}", hash)))
+        Err(ChainError::NotSupported(
+            "EVM on-chain transaction submission is experimental and not implemented — signed raw transaction submission required (D-03)".to_string(),
+        ))
     }
 
     async fn get_transaction(&self, hash: &str) -> Result<TxStatus> {
@@ -714,6 +714,7 @@ impl Chain for EvmChain {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ramp_common::onchain_gate::{test_env_lock, EXPERIMENTAL_ONCHAIN_EXECUTION_ENV};
 
     #[test]
     fn test_evm_chain_config() {
@@ -756,6 +757,64 @@ mod tests {
         let topic = B256::from(EvmChain::abi_encode_address(address));
         let parsed = EvmChain::topic_to_address(&topic).unwrap();
         assert_eq!(parsed, address);
+    }
+
+    #[tokio::test]
+    async fn test_send_transaction_fails_closed_when_gate_off() {
+        let _guard = test_env_lock();
+        std::env::remove_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
+
+        let chain = EvmChain::new(EvmChainConfig::ethereum("https://eth.example.com")).unwrap();
+        let tx = Transaction {
+            from: "0x1111111111111111111111111111111111111111".to_string(),
+            to: "0x2222222222222222222222222222222222222222".to_string(),
+            value: "1".to_string(),
+            data: None,
+            gas_limit: None,
+            gas_price: None,
+            max_fee_per_gas: None,
+            max_priority_fee_per_gas: None,
+            nonce: None,
+        };
+
+        let err = chain
+            .send_transaction(tx)
+            .await
+            .expect_err("EVM send_transaction should fail closed by default");
+        assert!(err
+            .to_string()
+            .contains("EVM on-chain transaction submission"));
+        assert!(err.to_string().contains("experimental and disabled"));
+    }
+
+    #[tokio::test]
+    async fn test_send_transaction_errors_even_with_gate_enabled() {
+        let _guard = test_env_lock();
+        std::env::set_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV, "true");
+
+        let chain = EvmChain::new(EvmChainConfig::ethereum("https://eth.example.com")).unwrap();
+        let tx = Transaction {
+            from: "0x1111111111111111111111111111111111111111".to_string(),
+            to: "0x2222222222222222222222222222222222222222".to_string(),
+            value: "1".to_string(),
+            data: None,
+            gas_limit: None,
+            gas_price: None,
+            max_fee_per_gas: None,
+            max_priority_fee_per_gas: None,
+            nonce: None,
+        };
+
+        let err = chain
+            .send_transaction(tx)
+            .await
+            .expect_err("EVM send_transaction must not submit placeholder payloads");
+        assert!(err.to_string().contains("not implemented"));
+        assert!(err
+            .to_string()
+            .contains("signed raw transaction submission required"));
+
+        std::env::remove_var(EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
     }
 
     #[test]

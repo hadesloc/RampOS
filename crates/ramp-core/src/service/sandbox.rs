@@ -337,7 +337,11 @@ impl SandboxService {
         });
         let settlement_entry = ReplayTimelineEntry::from_settlement_row(SettlementRow {
             id: format!("stl_{journey_id}"),
+            tenant_id: None,
             offramp_intent_id: journey_id.to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: "PROCESSING".to_string(),
             bank_reference: Some(format!("SBX-{journey_id}")),
             error_message: None,

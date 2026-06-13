@@ -2,6 +2,8 @@
 
 Release candidate: `268670d74`
 
+This index only tracks preserved technical artifacts that remain useful after the legacy process-only cleanup.
+
 ## Current operational evidence
 
 - `docs/operations/evidence/rc-m6-full-local-3/summary.md`
@@ -15,7 +17,7 @@ Release candidate: `268670d74`
 - `docs/operations/evidence/rc-m6-staging-attempt-268670d74/kubeconfig-present.txt`
 - `docs/operations/evidence/rc-m6-staging-attempt-268670d74/staging-health.txt`
 
-## Fresh RC security reports
+## Preserved RC security reports
 
 - `docs/security/reports/2026-03-13-rc-268670d74/cargo-audit.json`
 - `docs/security/reports/2026-03-13-rc-268670d74/cargo-audit.txt`
@@ -23,6 +25,12 @@ Release candidate: `268670d74`
 - `docs/security/reports/2026-03-13-rc-268670d74/semgrep-current.json`
 - `docs/security/reports/2026-03-13-rc-268670d74/semgrep-summary.md`
 - `docs/security/reports/2026-03-13-rc-268670d74/trivy-blocker.md`
+- `docs/security/reports/2026-03-13-rc-268670d74/trivy-current.json`
+- `docs/security/reports/2026-03-13-rc-268670d74/trivy-fs-current.txt`
+- `docs/security/reports/2026-03-13-rc-268670d74/trivy-rerun-debug.log`
+- `docs/security/reports/2026-03-13-rc-268670d74/review-summary.md`
+- `docs/security/reports/2026-03-13-rc-268670d74/finding-ledger.md`
+- `docs/security/reports/2026-03-13-rc-268670d74/exception-register.md`
 
 ## Fresh targeted verification outputs
 

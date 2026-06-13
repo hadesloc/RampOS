@@ -313,7 +313,10 @@ async fn cex_connector_readiness_snapshot_returns_generic_operator_readiness_vie
     assert_eq!(payload["withdrawalAllowlistStatus"], "verified");
     assert_eq!(payload["custodyBoundaryMode"], "exchange_custody");
     assert_eq!(
-        payload["requirements"].as_array().expect("requirements array").len(),
+        payload["requirements"]
+            .as_array()
+            .expect("requirements array")
+            .len(),
         4
     );
 }
@@ -354,8 +357,7 @@ fn openapi_documents_cex_connector_readiness_snapshot_contract() {
     let json = doc
         .to_json()
         .expect("OpenAPI spec should serialize to JSON");
-    let spec: serde_json::Value =
-        serde_json::from_str(&json).expect("OpenAPI JSON should parse");
+    let spec: serde_json::Value = serde_json::from_str(&json).expect("OpenAPI JSON should parse");
 
     let path =
         &spec["paths"]["/v1/admin/venue-trust/connectors/cex/{connector_key}/readiness/{subject_type}/{subject_id}"]

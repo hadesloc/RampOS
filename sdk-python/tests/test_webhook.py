@@ -174,6 +174,41 @@ def test_verify_timestamped_v1_header_for_current_envelope() -> None:
     assert verifier.verify_timestamped_v1(payload, signature, secret) is True
 
 
+def test_verify_timestamped_v1_rejects_stale_timestamp() -> None:
+    secret = "whsec_test123"
+    payload = '{"id":"evt_stale","type":"intent.status.changed","data":{}}'
+    timestamp = str(int(time.time()) - 301)
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        f"{timestamp}.{payload}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    signature = f"t={timestamp},v1={digest}"
+
+    verifier = WebhookVerifier()
+    assert verifier.verify_timestamped_v1(payload, signature, secret) is False
+
+
+def test_verify_timestamped_v1_accepts_custom_tolerance() -> None:
+    secret = "whsec_test123"
+    payload = '{"id":"evt_custom_tolerance","type":"intent.status.changed","data":{}}'
+    timestamp = str(int(time.time()) - 301)
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        f"{timestamp}.{payload}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    signature = f"t={timestamp},v1={digest}"
+
+    verifier = WebhookVerifier()
+    assert verifier.verify_timestamped_v1(
+        payload,
+        signature,
+        secret,
+        tolerance_seconds=600,
+    ) is True
+
+
 def test_verify_auto_dispatches_timestamped_v1_header() -> None:
     secret = "whsec_test123"
     payload = (

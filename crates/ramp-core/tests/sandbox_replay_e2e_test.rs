@@ -22,7 +22,11 @@ fn sandbox_replay_bundle_stays_ordered_and_redacted() {
         vec![
             ReplayTimelineEntry::from_settlement(Settlement {
                 id: "stl_sandbox_001".to_string(),
+                tenant_id: None,
                 offramp_intent_id: offramp.intent.id.clone(),
+                rfq_id: None,
+                lp_id: None,
+                final_rate: None,
                 status: SettlementStatus::Completed,
                 bank_reference: Some("SBX-STL-001".to_string()),
                 error_message: None,
@@ -31,7 +35,11 @@ fn sandbox_replay_bundle_stays_ordered_and_redacted() {
             }),
             ReplayTimelineEntry::from_settlement_row(SettlementRow {
                 id: "stl_sandbox_row_001".to_string(),
+                tenant_id: None,
                 offramp_intent_id: offramp.intent.id.clone(),
+                rfq_id: None,
+                lp_id: None,
+                final_rate: None,
                 status: "SETTLED".to_string(),
                 bank_reference: Some("SBX-STL-ROW-001".to_string()),
                 error_message: None,

@@ -10,18 +10,18 @@ use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::middleware::tenant::TenantContext;
+use crate::router::AppState;
 use ramp_aa::eip7702::{
     DelegationApprovalBoundary, DelegationExecutionEnvelope, DelegationPrerequisites,
     DelegationValidationError,
 };
-use crate::router::AppState;
 use ramp_core::repository::{
     PgVenueTrustRepository, SourceOfFundsPackageRecord, VenueConnectionRecord, VenueTransferRecord,
     WalletAttestationRecord,
 };
 use ramp_core::service::{
     CexConnectorReadiness, LighterConnectorReadiness, VenueSubjectSnapshot, VenueTransferDetail,
-    VenueTrustReportingService, VenueTrustReport, VenueTrustService,
+    VenueTrustReport, VenueTrustReportingService, VenueTrustService,
 };
 
 #[derive(Debug, Deserialize)]
@@ -245,7 +245,10 @@ pub async fn export_venue_trust_report(
 
     Ok((
         [
-            (axum::http::header::CONTENT_TYPE, artifact.media_type.as_str()),
+            (
+                axum::http::header::CONTENT_TYPE,
+                artifact.media_type.as_str(),
+            ),
             (
                 axum::http::header::CONTENT_DISPOSITION,
                 &format!("attachment; filename=\"{}\"", artifact.file_name),
@@ -423,9 +426,7 @@ fn map_review_transition_error(error: ramp_common::Error) -> ApiError {
     }
 }
 
-fn parse_approval_boundary(
-    value: &str,
-) -> Result<DelegationApprovalBoundary, ApiError> {
+fn parse_approval_boundary(value: &str) -> Result<DelegationApprovalBoundary, ApiError> {
     match value {
         "explicit_approval" | "explicit_approval_required" => {
             Ok(DelegationApprovalBoundary::ExplicitApprovalRequired)

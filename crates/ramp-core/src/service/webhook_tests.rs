@@ -140,6 +140,7 @@ mod tests {
         let result = service.process_pending_events(10).await;
 
         assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
     }
 
     #[tokio::test]
@@ -329,9 +330,12 @@ mod tests {
         let result = service.process_pending_events(10).await;
         assert!(result.is_ok(), "process_pending_events should succeed");
 
-        // Without http-client feature, all 3 events are "delivered" (logged only)
+        // Without http-client feature, delivery fails closed and no events are counted delivered.
         let delivered = result.unwrap();
-        assert_eq!(delivered, 3, "Should process all 3 pending events");
+        assert_eq!(
+            delivered, 0,
+            "No events should be delivered without http-client"
+        );
     }
 
     #[tokio::test]
@@ -569,10 +573,14 @@ mod tests {
             "queue_event should succeed with crypto service"
         );
 
-        // Process pending events (without http-client, this logs and returns success)
+        // Process pending events (without http-client, delivery fails closed)
         let processed = service.process_pending_events(10).await;
         assert!(processed.is_ok(), "process_pending_events should succeed");
-        assert_eq!(processed.unwrap(), 1, "Should process 1 pending event");
+        assert_eq!(
+            processed.unwrap(),
+            0,
+            "No events should be delivered without http-client"
+        );
     }
 
     #[tokio::test]
@@ -1226,13 +1234,13 @@ mod tests {
         let service =
             WebhookService::new(Arc::new(mock_webhook_repo), Arc::new(mock_tenant_repo)).unwrap();
 
-        // Without http-client feature, all events should be "delivered" successfully
+        // Without http-client feature, delivery fails closed and no events are counted delivered.
         let result = service.process_pending_events(10).await;
         assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
-            5,
-            "All 5 ordered events should be processed"
+            0,
+            "No events should be delivered without http-client"
         );
 
         // Verify ordering is maintained by checking event IDs are sequential

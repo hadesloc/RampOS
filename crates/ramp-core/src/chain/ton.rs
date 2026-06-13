@@ -512,9 +512,12 @@ impl Chain for TonChain {
 
         match self.api_post::<SendBocResult>("sendBoc", &body).await {
             Ok(result) => {
-                let hash = result
-                    .hash
-                    .unwrap_or_else(|| format!("ton_tx_{}", chrono::Utc::now().timestamp()));
+                let hash = result.hash.ok_or_else(|| {
+                    ChainError::TransactionFailed(
+                        "TON RPC accepted the request but returned no transaction hash; transaction state unknown"
+                            .to_string(),
+                    )
+                })?;
                 Ok(TxHash(hash))
             }
             Err(e) => {

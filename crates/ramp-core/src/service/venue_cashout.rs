@@ -8,8 +8,8 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::repository::{
-    BeneficiaryProfileRecord, UpsertVenueTransferRequest, VenueAccountRecord, VenueConnectionRecord,
-    VenueTrustRepository, WalletAttestationRecord,
+    BeneficiaryProfileRecord, UpsertVenueTransferRequest, VenueAccountRecord,
+    VenueConnectionRecord, VenueTrustRepository, WalletAttestationRecord,
 };
 use crate::service::rfq::{CreateRfqRequest, RfqService};
 
@@ -63,10 +63,7 @@ pub struct VenueCashoutService {
 }
 
 impl VenueCashoutService {
-    pub fn new(
-        venue_repository: Arc<dyn VenueTrustRepository>,
-        rfq_service: RfqService,
-    ) -> Self {
+    pub fn new(venue_repository: Arc<dyn VenueTrustRepository>, rfq_service: RfqService) -> Self {
         Self {
             venue_repository,
             rfq_service,
@@ -244,7 +241,9 @@ impl VenueCashoutService {
             ));
         }
         if connection.status != "active" {
-            return Err(Error::Conflict("venue connection is not active".to_string()));
+            return Err(Error::Conflict(
+                "venue connection is not active".to_string(),
+            ));
         }
         Ok(())
     }
@@ -291,7 +290,9 @@ impl VenueCashoutService {
             return Err(Error::NotFound("wallet attestation not found".to_string()));
         }
         if attestation.attestation_status != "verified" {
-            return Err(Error::Conflict("wallet attestation is not verified".to_string()));
+            return Err(Error::Conflict(
+                "wallet attestation is not verified".to_string(),
+            ));
         }
         if attestation.chain_id != network {
             return Err(Error::Validation(

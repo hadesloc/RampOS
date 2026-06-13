@@ -310,7 +310,11 @@ fn sample_settlements_for_counterparty(counterparty_id: &str) -> Vec<Settlement>
     vec![
         Settlement {
             id: format!("stl_{}_001", counterparty_id),
+            tenant_id: None,
             offramp_intent_id: format!("tenant_demo_{}_ofr_001", counterparty_id),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: SettlementStatus::Processing,
             bank_reference: Some("RAMP-BILATERAL-001".to_string()),
             error_message: None,
@@ -319,7 +323,11 @@ fn sample_settlements_for_counterparty(counterparty_id: &str) -> Vec<Settlement>
         },
         Settlement {
             id: format!("stl_{}_002", counterparty_id),
+            tenant_id: None,
             offramp_intent_id: format!("tenant_demo_{}_ofr_002", counterparty_id),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: SettlementStatus::Completed,
             bank_reference: Some("RAMP-BILATERAL-002".to_string()),
             error_message: None,

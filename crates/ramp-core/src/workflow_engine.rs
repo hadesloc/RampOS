@@ -950,4 +950,177 @@ mod tests {
         let result = engine.start_payout(input).await;
         assert!(result.is_ok(), "Fallback should succeed");
     }
+
+    // === Degraded fallback path tests ===
+
+    #[tokio::test]
+    async fn test_temporal_engine_payout_fallback() {
+        // TemporalEngine must fall back to in-process for payout workflows
+        let worker = create_test_worker();
+        let config = TemporalWorkerConfig::default();
+        let engine = TemporalEngine::new(
+            "http://localhost:99999".to_string(), // unreachable
+            config,
+        )
+        .with_fallback(worker);
+
+        let input = PayoutWorkflowInput {
+            tenant_id: "tenant1".to_string(),
+            user_id: "user1".to_string(),
+            intent_id: "intent-payout-fallback".to_string(),
+            amount_vnd: 500000,
+            rails_provider: "VCB".to_string(),
+            bank_account: BankAccountInfo {
+                bank_code: "VCB".to_string(),
+                account_number: "987654321".to_string(),
+                account_name: "NGUYEN VAN B".to_string(),
+            },
+        };
+
+        let result = engine.start_payout(input).await;
+        assert!(result.is_ok(), "Payout fallback should succeed");
+        let workflow_id = result.unwrap();
+        assert!(workflow_id.starts_with("payout-"), "ID must follow pattern");
+    }
+
+    #[tokio::test]
+    async fn test_temporal_engine_trade_fallback() {
+        // TemporalEngine must fall back to in-process for trade workflows
+        let worker = create_test_worker();
+        let config = TemporalWorkerConfig::default();
+        let engine = TemporalEngine::new(
+            "http://localhost:99999".to_string(), // unreachable
+            config,
+        )
+        .with_fallback(worker);
+
+        let input = TradeWorkflowInput {
+            tenant_id: "tenant1".to_string(),
+            user_id: "user1".to_string(),
+            intent_id: "intent-trade-fallback".to_string(),
+            trade_id: "trade-fb-1".to_string(),
+            symbol: "BTC/VND".to_string(),
+            price: "1500000000".to_string(),
+            vnd_delta: -200_000_000,
+            crypto_delta: "0.13".to_string(),
+            timestamp: "2026-01-01T00:00:00Z".to_string(),
+        };
+
+        let result = engine.start_trade(input).await;
+        assert!(result.is_ok(), "Trade fallback should succeed");
+        let workflow_id = result.unwrap();
+        assert!(workflow_id.starts_with("trade-"), "ID must follow pattern");
+    }
+
+    #[tokio::test]
+    async fn test_temporal_engine_signal_with_fallback() {
+        // TemporalEngine.signal() must delegate to fallback worker when configured
+        let worker = create_test_worker();
+        let config = TemporalWorkerConfig::default();
+        let engine = TemporalEngine::new(
+            "http://localhost:99999".to_string(), // unreachable
+            config,
+        )
+        .with_fallback(worker);
+
+        let signal = WorkflowSignal::BankConfirmation {
+            intent_id: "intent-signal-fb".to_string(),
+            confirmation: BankConfirmation {
+                bank_tx_id: "BANK-FB-123".to_string(),
+                amount: 500000,
+                settled_at: "2026-01-24T00:00:00Z".to_string(),
+            },
+        };
+
+        // Should succeed (delegates to in-process fallback)
+        let result = engine.signal(signal).await;
+        assert!(result.is_ok(), "Signal with fallback should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_temporal_engine_signal_without_fallback() {
+        // TemporalEngine.signal() without fallback must not panic; it logs a warning
+        // and returns Ok (degraded: signal may be lost)
+        let config = TemporalWorkerConfig::default();
+        let engine = TemporalEngine::new(
+            "http://localhost:99999".to_string(), // unreachable
+            config,
+        );
+        // No .with_fallback() — no fallback worker
+
+        let signal = WorkflowSignal::BankConfirmation {
+            intent_id: "intent-signal-nofb".to_string(),
+            confirmation: BankConfirmation {
+                bank_tx_id: "BANK-NOFB-456".to_string(),
+                amount: 300000,
+                settled_at: "2026-01-24T00:00:00Z".to_string(),
+            },
+        };
+
+        // Should return Ok (degraded behavior — signal is lost but no crash)
+        let result = engine.signal(signal).await;
+        assert!(
+            result.is_ok(),
+            "Signal without fallback should degrade gracefully"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_temporal_engine_cancel_with_fallback() {
+        // TemporalEngine.cancel() must delegate to fallback worker
+        let worker = create_test_worker();
+        let config = TemporalWorkerConfig::default();
+        let engine =
+            TemporalEngine::new("http://localhost:99999".to_string(), config).with_fallback(worker);
+
+        let result = engine
+            .cancel("payin-intent-cancel-fb", "Test cancel with fallback")
+            .await;
+        assert!(result.is_ok(), "Cancel with fallback should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_temporal_engine_cancel_updates_local_tracking() {
+        // TemporalEngine.cancel() must update local submitted tracking
+        let config = TemporalWorkerConfig::default();
+        let engine = TemporalEngine::new("http://localhost:99999".to_string(), config);
+
+        let wf_id = "payin-intent-cancel-track";
+        let result = engine.cancel(wf_id, "Operator cancel").await;
+        assert!(result.is_ok());
+
+        // Verify local tracking was updated
+        let status = engine.get_status(wf_id).await.unwrap();
+        assert!(
+            matches!(status, WorkflowStatus::Cancelled),
+            "Local tracking must reflect cancellation"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_temporal_engine_no_fallback_returns_error() {
+        // TemporalEngine.start_payin without fallback must return error when unreachable
+        let config = TemporalWorkerConfig::default();
+        let engine = TemporalEngine::new(
+            "http://localhost:99999".to_string(), // unreachable
+            config,
+        );
+        // No .with_fallback()
+
+        let input = PayinWorkflowInput {
+            tenant_id: "tenant1".to_string(),
+            user_id: "user1".to_string(),
+            intent_id: "intent-nofb-err".to_string(),
+            amount_vnd: 1000000,
+            rails_provider: "VCB".to_string(),
+            reference_code: "REF-NOFB".to_string(),
+            expires_at: "2026-01-24T00:00:00Z".to_string(),
+        };
+
+        let result = engine.start_payin(input).await;
+        assert!(
+            result.is_err(),
+            "Should fail when Temporal unreachable and no fallback"
+        );
+    }
 }

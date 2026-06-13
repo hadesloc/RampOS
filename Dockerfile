@@ -18,12 +18,12 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 # Cook dependencies (this layer is cached unless deps change)
-RUN cargo chef cook --release --recipe-path recipe.json --package ramp-api --features nats
+RUN cargo chef cook --release --recipe-path recipe.json --package ramp-api --features nats,http-client
 # Copy source and build
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY migrations ./migrations
-RUN cargo build --release --package ramp-api --features nats
+RUN cargo build --release --package ramp-api --features nats,http-client
 
 # Stage 4: Runtime
 FROM debian:trixie-slim AS runtime

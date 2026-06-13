@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::repository::{
-    BeneficiaryProfileFilter, SourceOfFundsPackageFilter, VenueAccountFilter, VenueConnectionFilter,
-    VenueTransferFilter, VenueTransferRecord, VenueTrustRepository, WalletAttestationFilter,
+    BeneficiaryProfileFilter, SourceOfFundsPackageFilter, VenueAccountFilter,
+    VenueConnectionFilter, VenueTransferFilter, VenueTransferRecord, VenueTrustRepository,
+    WalletAttestationFilter,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,7 +159,10 @@ impl VenueTrustReportingService {
             source: "venue_trust_repository".to_string(),
             subject_type: subject_type.to_string(),
             subject_id: subject_id.to_string(),
-            connection_ids: connections.iter().map(|record| record.connection_id.clone()).collect(),
+            connection_ids: connections
+                .iter()
+                .map(|record| record.connection_id.clone())
+                .collect(),
             account_ids,
             wallet_attestation_ids: attestations
                 .iter()
@@ -189,10 +193,12 @@ impl VenueTrustReportingService {
             "cashOut": report.cash_out,
             "evidenceReferences": report.evidence_references,
         }))
-        .map_err(|error| ramp_common::Error::Internal(format!(
-            "failed to serialize venue trust evidence export: {}",
-            error
-        )))?;
+        .map_err(|error| {
+            ramp_common::Error::Internal(format!(
+                "failed to serialize venue trust evidence export: {}",
+                error
+            ))
+        })?;
 
         Ok(VenueTrustEvidenceExportArtifact {
             file_name: format!(

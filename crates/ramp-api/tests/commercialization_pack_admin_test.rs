@@ -9,7 +9,9 @@ use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{
     case::CaseManager,
-    provider_routing::{ProviderFamily, ProviderRoutingPolicyStore, UpsertProviderRoutingPolicyRequest},
+    provider_routing::{
+        ProviderFamily, ProviderRoutingPolicyStore, UpsertProviderRoutingPolicyRequest,
+    },
     reports::ReportGenerator,
     storage::MockDocumentStorage,
     InMemoryCaseStore,
@@ -596,9 +598,15 @@ async fn commercialization_pack_supports_db_backed_upsert_and_runtime_reference(
     let payload: serde_json::Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(payload["source"], "registry");
-    assert_eq!(payload["packs"][0]["commercializationPackId"], "pack_vn_hk_pilot");
+    assert_eq!(
+        payload["packs"][0]["commercializationPackId"],
+        "pack_vn_hk_pilot"
+    );
     assert_eq!(payload["packs"][0]["packCode"], "pilot_vn_hk");
-    assert_eq!(payload["packs"][0]["partner"]["partnerId"], "partner_card_hk");
+    assert_eq!(
+        payload["packs"][0]["partner"]["partnerId"],
+        "partner_card_hk"
+    );
     assert_eq!(
         payload["packs"][0]["capability"]["capabilityFamily"],
         "card_issuing"
@@ -631,7 +639,10 @@ async fn commercialization_pack_supports_db_backed_upsert_and_runtime_reference(
         payload["packs"][0]["lanes"][0]["laneReference"],
         "lane:pilot_vn_hk:payout:push_transfer"
     );
-    assert_eq!(payload["packs"][0]["lanes"][0]["methodFamily"], "push_transfer");
+    assert_eq!(
+        payload["packs"][0]["lanes"][0]["methodFamily"],
+        "push_transfer"
+    );
     assert_eq!(payload["packs"][0]["lanes"][0]["runtimeTarget"], "mock");
     assert_eq!(
         payload["packs"][0]["lanes"][0]["complianceBindings"][0]["selectedProviderKey"],

@@ -34,9 +34,9 @@ Thin MCP v1 limits default automation to the surfaces that are already machine-r
 | Surface | Rationale |
 | --- | --- |
 | `watch` | Stable JSONL WebSocket streaming with filters, diffusion-aware reconnect/backoff, and explicit dependency messaging. Use it as the portal event telemetry source of truth. |
-| `reconciliation workbench` | Snapshot exports include `snapshot.provenance.sourceKind` and `snapshot.provenance.freshnessWarning`, allowing automation to detect whether data is runtime-backed or fallback. |
+| `reconciliation workbench` | Snapshot exports include `snapshot.provenance.sourceKind` and `snapshot.provenance.freshnessWarning`, allowing automation to detect whether data is runtime-backed or fallback. This is a caller/backend-supplied comparison surface, not independent settlement discovery. |
 | `reconciliation evidence` | Evidence-pack exports stay bounded to a single discrepancy and generate JSON/CSV safe payloads. |
-| `treasury workbench/export` | Read-only treasury snapshots expose `dataSource` metadata and are safe for recommendation-only tooling. |
+| `treasury workbench/export` | Read-only treasury snapshots expose `dataSource` metadata and are safe for recommendation-only tooling. The default fallback is `TreasuryDataSource::Sample` synthetic fixtures, not live treasury balance evidence. |
 | `webhook catalog/history` | Admin history, catalog, and lineage paths are read-only operator records that surface tenant-scoped delivery truth without triggering retries or mutations. |
 | Certification artifact (optional) | Expose certification metadata only if it remains read-only and machine-friendly (e.g., immutable JSON exports). |
 

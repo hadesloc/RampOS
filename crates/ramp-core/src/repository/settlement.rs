@@ -4,6 +4,7 @@ use crate::repository::set_rls_context;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ramp_common::{types::TenantId, Error, Result};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
 use tracing::instrument;
@@ -12,7 +13,11 @@ use tracing::instrument;
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct SettlementRow {
     pub id: String,
+    pub tenant_id: Option<String>,
     pub offramp_intent_id: String,
+    pub rfq_id: Option<String>,
+    pub lp_id: Option<String>,
+    pub final_rate: Option<Decimal>,
     pub status: String,
     pub bank_reference: Option<String>,
     pub error_message: Option<String>,
@@ -27,6 +32,12 @@ pub trait SettlementRepository: Send + Sync {
 
     /// Get a settlement by ID
     async fn get_by_id(&self, id: &str) -> Result<Option<SettlementRow>>;
+
+    async fn get_by_rfq_id(
+        &self,
+        tenant_id: &TenantId,
+        rfq_id: &str,
+    ) -> Result<Option<SettlementRow>>;
 
     /// Get settlements for the provided IDs.
     async fn list_by_ids(&self, ids: &[String]) -> Result<Vec<SettlementRow>>;
@@ -95,13 +106,19 @@ impl SettlementRepository for PgSettlementRepository {
         sqlx::query(
             r#"
             INSERT INTO settlements (
-                id, offramp_intent_id, status, bank_reference, error_message,
-                created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                id, tenant_id, offramp_intent_id, rfq_id, lp_id, final_rate, status,
+                bank_reference, error_message, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            ON CONFLICT (tenant_id, rfq_id) WHERE rfq_id IS NOT NULL
+            DO NOTHING
             "#,
         )
         .bind(&row.id)
+        .bind(&row.tenant_id)
         .bind(&row.offramp_intent_id)
+        .bind(&row.rfq_id)
+        .bind(&row.lp_id)
+        .bind(row.final_rate)
         .bind(&row.status)
         .bind(&row.bank_reference)
         .bind(&row.error_message)
@@ -122,6 +139,41 @@ impl SettlementRepository for PgSettlementRepository {
             .await
             .map_err(|e| Error::Database(e.to_string()))?;
 
+        Ok(row)
+    }
+
+    #[instrument(skip(self), fields(tenant_id = %tenant_id.0, rfq_id = %rfq_id))]
+    async fn get_by_rfq_id(
+        &self,
+        tenant_id: &TenantId,
+        rfq_id: &str,
+    ) -> Result<Option<SettlementRow>> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+        let row = sqlx::query_as::<_, SettlementRow>(
+            r#"
+            SELECT * FROM settlements
+            WHERE tenant_id = $1 AND rfq_id = $2
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(&tenant_id.0)
+        .bind(rfq_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| Error::Database(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
         Ok(row)
     }
 
@@ -396,6 +448,28 @@ impl SettlementRepository for InMemorySettlementRepository {
         Ok(store.get(id).cloned())
     }
 
+    async fn get_by_rfq_id(
+        &self,
+        tenant_id: &TenantId,
+        rfq_id: &str,
+    ) -> Result<Option<SettlementRow>> {
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| Error::Internal(format!("Settlement store lock poisoned: {}", e)))?;
+
+        Ok(store
+            .values()
+            .filter(|row| row.tenant_id.as_deref() == Some(tenant_id.0.as_str()))
+            .filter(|row| row.rfq_id.as_deref() == Some(rfq_id))
+            .max_by(|left, right| {
+                left.created_at
+                    .cmp(&right.created_at)
+                    .then_with(|| left.id.cmp(&right.id))
+            })
+            .cloned())
+    }
+
     async fn list_by_ids(&self, ids: &[String]) -> Result<Vec<SettlementRow>> {
         let store = self
             .store
@@ -561,7 +635,11 @@ mod tests {
         let now = Utc::now();
         SettlementRow {
             id: id.to_string(),
+            tenant_id: None,
             offramp_intent_id: offramp_id.to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: status.to_string(),
             bank_reference: Some(format!("RAMP-{}", &id[..8.min(id.len())])),
             error_message: None,
@@ -713,7 +791,11 @@ mod tests {
     ) -> SettlementRow {
         SettlementRow {
             id: id.to_string(),
+            tenant_id: None,
             offramp_intent_id: offramp_id.to_string(),
+            rfq_id: None,
+            lp_id: None,
+            final_rate: None,
             status: status.to_string(),
             bank_reference: Some(format!("RAMP-{}", &id[..8.min(id.len())])),
             error_message: None,

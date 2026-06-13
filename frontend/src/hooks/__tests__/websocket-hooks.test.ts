@@ -139,6 +139,15 @@ describe('useWebSocket', () => {
     expect(getLatestWs().url).toBe('ws://localhost/ws?v=2&token=abc');
   });
 
+  it('should encode auth token before appending it to URL', async () => {
+    const useWebSocket = await importHook();
+    renderHook(() =>
+      useWebSocket({ url: 'ws://localhost/ws', authToken: 'tok&role=admin#frag' }),
+    );
+
+    expect(getLatestWs().url).toBe('ws://localhost/ws?token=tok%26role%3Dadmin%23frag');
+  });
+
   it('should not connect if url is undefined', async () => {
     const useWebSocket = await importHook();
     const { result } = renderHook(() =>

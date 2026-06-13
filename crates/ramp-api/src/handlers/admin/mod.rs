@@ -59,8 +59,8 @@ pub mod sandbox;
 pub mod settlement;
 pub mod tier;
 pub mod travel_rule;
-pub mod venue_trust;
 pub mod treasury;
+pub mod venue_trust;
 pub mod webhooks;
 pub mod yield_strategy;
 
@@ -97,8 +97,8 @@ pub use sandbox::*;
 pub use settlement::*;
 pub use tier::*;
 pub use travel_rule::*;
-pub use venue_trust::*;
 pub use treasury::*;
+pub use venue_trust::*;
 pub use webhooks::*;
 pub use yield_strategy::*;
 

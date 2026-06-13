@@ -77,7 +77,7 @@ contract DeployLayers is Script {
         return "Unknown Chain";
     }
 
-    function _printNextSteps(string memory chainName, address vnd, address factory, address paymaster) internal view {
+    function _printNextSteps(string memory chainName, address vnd, address factory, address paymaster) internal pure {
         console.log("");
         console.log("=== Deployment Complete ===");
         console.log("Network:  ", chainName);

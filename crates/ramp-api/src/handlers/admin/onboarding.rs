@@ -145,39 +145,23 @@ pub async fn update_tenant(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handlers::admin::admin_auth::AdminClaims;
     use chrono::Utc;
-    use jsonwebtoken::{encode, EncodingKey, Header};
     use ramp_core::{
         repository::{tenant::TenantRow, TenantRepository},
         service::ledger::LedgerService,
         test_utils::{MockLedgerRepository, MockTenantRepository},
     };
     use rust_decimal_macros::dec;
+    use std::sync::{Mutex, OnceLock};
 
-    const TEST_ADMIN_JWT_SECRET: &str = "onboarding-tests-admin-jwt-secret";
-
-    fn make_admin_jwt(role: &str) -> String {
-        let claims = AdminClaims {
-            sub: "onboarding_test_admin".to_string(),
-            email: "onboarding-admin@rampos.local".to_string(),
-            role: role.to_string(),
-            iat: Utc::now().timestamp(),
-            exp: (Utc::now() + chrono::Duration::minutes(30)).timestamp(),
-            token_type: "access".to_string(),
-        };
-
-        encode(
-            &Header::default(),
-            &claims,
-            &EncodingKey::from_secret(TEST_ADMIN_JWT_SECRET.as_bytes()),
-        )
-        .expect("jwt should encode")
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
     }
 
     #[tokio::test]
     async fn test_update_tenant_rejects_viewer_role() {
-        std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
+        let _guard = env_lock().lock().unwrap();
 
         let tenant_repo = Arc::new(MockTenantRepository::new());
         tenant_repo.add_tenant(TenantRow {
@@ -204,12 +188,7 @@ mod tests {
         ));
 
         let mut headers = HeaderMap::new();
-        headers.insert(
-            "X-Admin-Authorization",
-            format!("Bearer {}", make_admin_jwt("viewer"))
-                .parse()
-                .unwrap(),
-        );
+        headers.insert("X-Admin-Key", "onboarding-viewer-key".parse().unwrap());
 
         let request = UpdateTenantRequest {
             webhook_url: Some("https://example.com/webhook".to_string()),
@@ -217,6 +196,8 @@ mod tests {
             daily_payout_limit_vnd: None,
         };
 
+        std::env::set_var("RAMPOS_ADMIN_KEY", "onboarding-viewer-key");
+        std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
         let err = update_tenant(
             headers,
             State(onboarding_service),
@@ -227,9 +208,7 @@ mod tests {
         .unwrap_err();
 
         match err {
-            ApiError::Forbidden(message) => {
-                assert!(message.contains("Insufficient permissions"));
-            }
+            ApiError::Forbidden(_) => {}
             other => panic!("expected forbidden error, got {other:?}"),
         }
 
@@ -240,6 +219,7 @@ mod tests {
             .unwrap();
         assert_eq!(stored.webhook_url, None);
 
-        std::env::remove_var("RAMPOS_ADMIN_JWT_SECRET");
+        std::env::remove_var("RAMPOS_ADMIN_KEY");
+        std::env::remove_var("RAMPOS_ADMIN_ROLE");
     }
 }

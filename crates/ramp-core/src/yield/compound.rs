@@ -11,7 +11,7 @@
 use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::providers::Provider;
 use async_trait::async_trait;
-use ramp_common::{Error, Result};
+use ramp_common::{onchain_gate, Error, Result};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
@@ -659,10 +659,16 @@ impl CompoundV3Protocol {
         self.supported_tokens.values().map(|t| t.comet).collect()
     }
 
-    /// Simulate transaction
-    async fn simulate_tx(&self, _calldata: Bytes) -> Result<B256> {
-        let hash_bytes: [u8; 32] = rand::random();
-        Ok(B256::from_slice(&hash_bytes))
+    /// Submit transaction.
+    ///
+    /// EXPERIMENTAL — yield execution is not launch scope (D-03). Fail-closed
+    /// until real bundler/direct transaction submission and confirmation exist.
+    async fn submit_tx(&self, _calldata: Bytes) -> Result<B256> {
+        Err(Error::NotImplemented(
+            onchain_gate::experimental_onchain_execution_disabled_message(
+                "Compound V3 yield transaction execution",
+            ),
+        ))
     }
 
     /// Returns `true` when the protocol is connected to a live RPC node.
@@ -717,7 +723,7 @@ impl YieldProtocol for CompoundV3Protocol {
         );
 
         let calldata = self.build_supply_calldata(token, amount);
-        let tx_hash = self.simulate_tx(calldata).await?;
+        let tx_hash = self.submit_tx(calldata).await?;
 
         // Update simulated balance
         {
@@ -756,7 +762,7 @@ impl YieldProtocol for CompoundV3Protocol {
         );
 
         let calldata = self.build_withdraw_calldata(token, amount);
-        let tx_hash = self.simulate_tx(calldata).await?;
+        let tx_hash = self.submit_tx(calldata).await?;
 
         // Update simulated balance
         {
@@ -817,7 +823,7 @@ impl YieldProtocol for CompoundV3Protocol {
         // Claim from each comet market
         let comet = comets[0]; // Primary market
         let calldata = self.build_claim_rewards_calldata(comet);
-        let tx_hash = self.simulate_tx(calldata).await?;
+        let tx_hash = self.submit_tx(calldata).await?;
 
         Ok(Some(tx_hash))
     }
@@ -903,7 +909,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_deposit_withdraw() {
+    async fn test_deposit_fails_closed_without_fake_tx_hash() {
+        let _guard = onchain_gate::test_env_lock();
+        std::env::remove_var(onchain_gate::EXPERIMENTAL_ONCHAIN_EXECUTION_ENV);
+
         let addresses = CompoundV3Addresses::ethereum_mainnet().unwrap();
         let protocol = CompoundV3Protocol::new(1, addresses, test_account());
 
@@ -912,22 +921,15 @@ mod tests {
             .unwrap();
         let amount = U256::from(1000) * U256::from(1_000_000u64); // 1000 USDC
 
-        // Deposit
         let tx = protocol.deposit(usdc, amount).await;
-        assert!(tx.is_ok());
+        assert!(tx.is_err());
+        assert!(tx
+            .unwrap_err()
+            .to_string()
+            .contains("Compound V3 yield transaction execution is experimental and disabled"));
 
-        // Check balance
         let balance = protocol.balance(usdc).await.unwrap();
-        assert_eq!(balance, amount);
-
-        // Withdraw half
-        let withdraw_amount = amount / U256::from(2);
-        let tx = protocol.withdraw(usdc, withdraw_amount).await;
-        assert!(tx.is_ok());
-
-        // Check remaining balance
-        let balance = protocol.balance(usdc).await.unwrap();
-        assert_eq!(balance, amount - withdraw_amount);
+        assert_eq!(balance, U256::ZERO);
     }
 
     #[test]

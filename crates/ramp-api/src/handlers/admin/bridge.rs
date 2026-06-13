@@ -374,11 +374,9 @@ pub async fn initiate_transfer(
         .await
         .map_err(|e| ApiError::Internal(format!("Failed to get quote: {}", e)))?;
 
-    // Execute bridge transfer
-    let tx_hash = bridge
-        .bridge(quote.clone())
-        .await
-        .map_err(|e| ApiError::Internal(format!("Failed to execute bridge: {}", e)))?;
+    // Execute bridge transfer. Bridge execution is experimental and must fail closed
+    // until a provider submits and confirms a real on-chain transaction.
+    let tx_hash = bridge.bridge(quote.clone()).await.map_err(ApiError::from)?;
 
     Ok(Json(TransferResponse {
         tx_hash: format!("{:?}", tx_hash),

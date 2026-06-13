@@ -28,6 +28,10 @@ pub struct OfframpIntentRow {
     pub deposit_address: Option<String>,
     pub tx_hash: Option<String>,
     pub bank_reference: Option<String>,
+    pub linked_rfq_id: Option<String>,
+    pub winning_lp_id: Option<String>,
+    pub matched_rate: Option<Decimal>,
+    pub settlement_id: Option<String>,
     pub state: String,
     pub state_history: serde_json::Value,
     pub created_at: DateTime<Utc>,
@@ -54,6 +58,20 @@ pub trait OfframpIntentRepository: Send + Sync {
 
     /// Update intent fields (tx_hash, bank_reference, deposit_address, locked_rate_id, etc.)
     async fn update_intent(&self, intent: &OfframpIntentRow) -> Result<()>;
+
+    async fn update_execution_linkage(
+        &self,
+        _tenant_id: &TenantId,
+        _id: &str,
+        _linked_rfq_id: Option<&str>,
+        _winning_lp_id: Option<&str>,
+        _matched_rate: Option<Decimal>,
+        _settlement_id: Option<&str>,
+    ) -> Result<()> {
+        Err(Error::Internal(
+            "Offramp execution linkage update is not supported by this repository".to_string(),
+        ))
+    }
 
     /// List intents for a tenant
     async fn list_by_tenant(
@@ -111,11 +129,12 @@ impl OfframpIntentRepository for PgOfframpIntentRepository {
             INSERT INTO offramp_intents (
                 id, tenant_id, user_id, chain_id, crypto_asset, crypto_amount, exchange_rate,
                 locked_rate_id, fees, net_vnd_amount, gross_vnd_amount, bank_account,
-                deposit_address, tx_hash, bank_reference, state, state_history,
-                created_at, updated_at, quote_expires_at
+                deposit_address, tx_hash, bank_reference, linked_rfq_id, winning_lp_id,
+                matched_rate, settlement_id, state, state_history, created_at, updated_at,
+                quote_expires_at
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-                $13, $14, $15, $16, $17, $18, $19, $20
+                $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
             )
             "#,
         )
@@ -134,6 +153,10 @@ impl OfframpIntentRepository for PgOfframpIntentRepository {
         .bind(&intent.deposit_address)
         .bind(&intent.tx_hash)
         .bind(&intent.bank_reference)
+        .bind(&intent.linked_rfq_id)
+        .bind(&intent.winning_lp_id)
+        .bind(intent.matched_rate)
+        .bind(&intent.settlement_id)
         .bind(&intent.state)
         .bind(&intent.state_history)
         .bind(intent.created_at)
@@ -230,8 +253,9 @@ impl OfframpIntentRepository for PgOfframpIntentRepository {
             UPDATE offramp_intents
             SET locked_rate_id = $1, deposit_address = $2, tx_hash = $3,
                 bank_reference = $4, chain_id = $5, state = $6, state_history = $7,
+                linked_rfq_id = $8, winning_lp_id = $9, matched_rate = $10, settlement_id = $11,
                 updated_at = NOW()
-            WHERE id = $8 AND tenant_id = $9
+            WHERE id = $12 AND tenant_id = $13
             "#,
         )
         .bind(&intent.locked_rate_id)
@@ -241,8 +265,58 @@ impl OfframpIntentRepository for PgOfframpIntentRepository {
         .bind(intent.chain_id)
         .bind(&intent.state)
         .bind(&intent.state_history)
+        .bind(&intent.linked_rfq_id)
+        .bind(&intent.winning_lp_id)
+        .bind(intent.matched_rate)
+        .bind(&intent.settlement_id)
         .bind(&intent.id)
         .bind(&intent.tenant_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| Error::Database(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    #[instrument(skip(self), fields(tenant_id = %tenant_id.0, intent_id = %id))]
+    async fn update_execution_linkage(
+        &self,
+        tenant_id: &TenantId,
+        id: &str,
+        linked_rfq_id: Option<&str>,
+        winning_lp_id: Option<&str>,
+        matched_rate: Option<Decimal>,
+        settlement_id: Option<&str>,
+    ) -> Result<()> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+        sqlx::query(
+            r#"
+            UPDATE offramp_intents
+            SET linked_rfq_id = COALESCE($1, linked_rfq_id),
+                winning_lp_id = COALESCE($2, winning_lp_id),
+                matched_rate = COALESCE($3, matched_rate),
+                settlement_id = COALESCE($4, settlement_id),
+                updated_at = NOW()
+            WHERE id = $5 AND tenant_id = $6
+            "#,
+        )
+        .bind(linked_rfq_id)
+        .bind(winning_lp_id)
+        .bind(matched_rate)
+        .bind(settlement_id)
+        .bind(id)
+        .bind(&tenant_id.0)
         .execute(&mut *tx)
         .await
         .map_err(|e| Error::Database(e.to_string()))?;
@@ -410,6 +484,10 @@ mod tests {
             deposit_address: Some("0x1234567890abcdef".to_string()),
             tx_hash: None,
             bank_reference: None,
+            linked_rfq_id: None,
+            winning_lp_id: None,
+            matched_rate: None,
+            settlement_id: None,
             state: "QUOTE_CREATED".to_string(),
             state_history: json!([{"state": "QUOTE_CREATED", "timestamp": now.to_rfc3339()}]),
             created_at: now,
@@ -481,6 +559,10 @@ mod tests {
             deposit_address: None,
             tx_hash: None,
             bank_reference: None,
+            linked_rfq_id: None,
+            winning_lp_id: None,
+            matched_rate: None,
+            settlement_id: None,
             state: "QUOTE_CREATED".to_string(),
             state_history: json!([]),
             created_at: now,
@@ -583,6 +665,10 @@ mod tests {
             deposit_address: Some("0xdeadbeef1234567890abcdef".to_string()),
             tx_hash: Some("0xabcdef1234567890deadbeef".to_string()),
             bank_reference: Some("RAMP-20260210-001".to_string()),
+            linked_rfq_id: None,
+            winning_lp_id: None,
+            matched_rate: None,
+            settlement_id: None,
             state: "COMPLETED".to_string(),
             state_history: json!([
                 {"state": "QUOTE_CREATED", "at": "2026-02-10T10:00:00Z"},

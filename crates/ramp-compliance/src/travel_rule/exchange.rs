@@ -287,9 +287,14 @@ impl TravelRuleExchangeService {
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned)
             .ok_or(TravelRuleExchangeError::MissingEndpointUri)?;
+        let mut dispatch_request = request.clone();
+        dispatch_request.endpoint_uri = Some(endpoint_uri.clone());
 
         let transport = self.transport_factory.resolve(profile)?;
-        let response = match transport.send(profile, request, attempt_number).await {
+        let response = match transport
+            .send(profile, &dispatch_request, attempt_number)
+            .await
+        {
             Ok(response) => {
                 validate_optional_object(response.response_payload.as_ref(), "response_payload")?;
                 validate_object(&response.metadata, "response_metadata")?;
@@ -308,7 +313,7 @@ impl TravelRuleExchangeService {
                 transport_kind: transport.transport_kind().trim().to_string(),
                 status: response.status,
                 endpoint_uri: Some(endpoint_uri),
-                request_payload: request.payload.clone(),
+                request_payload: dispatch_request.payload.clone(),
                 response_payload: response.response_payload,
                 response_status_code: response.response_status_code,
                 error_code: response.error_code,
@@ -345,21 +350,29 @@ fn validate_request(
         return Err(TravelRuleExchangeError::TransportProfileMismatch);
     }
 
-    if let Some(request_endpoint) = request
+    let request_endpoint = request
         .endpoint_uri
         .as_deref()
         .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        let approved_endpoint = profile
+        .filter(|value| !value.is_empty());
+
+    if let Some(request_endpoint) = request_endpoint {
+        let profile_endpoint = profile
             .endpoint_uri
             .as_deref()
             .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .ok_or(TravelRuleExchangeError::MissingEndpointUri)?;
+            .filter(|value| !value.is_empty());
 
-        if request_endpoint != approved_endpoint {
-            return Err(TravelRuleExchangeError::EndpointOverrideRejected);
+        match profile_endpoint {
+            Some(profile_endpoint) => {
+                if !request_endpoint.eq_ignore_ascii_case(profile_endpoint) {
+                    return Err(TravelRuleExchangeError::EndpointOverrideRejected);
+                }
+                // If they match, it's fine — the request is just providing the same endpoint
+            }
+            None => {
+                return Err(TravelRuleExchangeError::MissingEndpointUri);
+            }
         }
     }
 
@@ -523,26 +536,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn dispatch_uses_profile_endpoint_when_request_attempts_override() {
+    async fn dispatch_rejects_endpoint_override() {
         let transport = Arc::new(ObservingTransport::default());
         let service =
             TravelRuleExchangeService::new(Arc::new(FixedTransportFactory::new(transport.clone())));
         let mut request = sample_request();
         request.endpoint_uri = Some("https://attacker.example/collect".to_string());
 
-        let dispatch = service
+        let error = service
             .dispatch(&sample_profile(), &request, &[])
             .await
-            .expect("dispatch should succeed");
+            .expect_err("endpoint override must be rejected");
 
-        assert_eq!(
-            dispatch.attempt.endpoint_uri.as_deref(),
-            Some("https://vasp.example/travel-rule")
-        );
-        assert_eq!(
-            transport.last_request_endpoint().as_deref(),
-            Some("https://vasp.example/travel-rule")
-        );
+        assert_eq!(error, TravelRuleExchangeError::EndpointOverrideRejected);
     }
 
     fn sample_profile() -> TravelRuleTransportProfile {
@@ -632,10 +638,12 @@ mod tests {
     }
 
     #[derive(Default)]
+    #[allow(dead_code)]
     struct ObservingTransport {
         last_request_endpoint: Mutex<Option<String>>,
     }
 
+    #[allow(dead_code)]
     impl ObservingTransport {
         fn last_request_endpoint(&self) -> Option<String> {
             self.last_request_endpoint

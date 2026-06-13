@@ -196,7 +196,7 @@ python scripts/rampos-cli.py reconciliation evidence --discrepancy-id <discrepan
 ```
 
 Use `--scenario clean` when you want the bounded clean-path fixture instead of the active ops demo.
-The reconciliation workbench now prefers `runtime_inputs` when tenant-scoped persisted settlement rows are available. It falls back to `sample_fallback` when those runtime inputs are absent. Automation should inspect `snapshot.provenance.sourceKind` and `snapshot.provenance.freshnessWarning` before treating results as authoritative runtime truth.
+The reconciliation workbench now prefers `runtime_inputs` when tenant-scoped persisted settlement rows are available. The reconciliation engine is a caller-supplied comparison surface: it compares the on-chain observations and settlement records provided by the caller/backend; it does not independently discover missing settlement truth. It falls back to `sample_fallback` synthetic fixtures when runtime inputs are absent. Automation must inspect `snapshot.provenance.sourceKind` and `snapshot.provenance.freshnessWarning` before treating results as authoritative runtime truth.
 Current source kind values are:
 - `sample_fallback`: fixture/demo path
 - `runtime_inputs`: non-fixture runtime inputs supplied by backend
@@ -225,7 +225,7 @@ python scripts/rampos-cli.py treasury workbench --export --format json
 python scripts/rampos-cli.py treasury workbench --export --format csv
 ```
 
-The treasury slice stays recommendation-only in this wave. The CLI does not trigger fund movement. High-impact mutate flows should still be treated as approval-aware and bounded rather than fully autonomous.
+The treasury slice stays recommendation-only in this wave. Without imported evidence, its default read path is `TreasuryDataSource::Sample`, which means synthetic fixtures rather than live treasury balances. The CLI does not trigger fund movement. High-impact mutate flows should still be treated as approval-aware and bounded rather than fully autonomous.
 
 ## Widget Headless Config
 

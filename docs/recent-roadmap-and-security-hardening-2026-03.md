@@ -1,6 +1,6 @@
 # Recent Roadmap and Security Hardening (March 2026)
 
-This document summarizes the major roadmap delivery and security hardening work landed in the repository during the recent W1-W16 buildout and the follow-up audit remediation pass. It is intended as a handoff for engineers, reviewers, and auditors working from the current workspace state.
+This document summarizes major roadmap delivery and security hardening work implemented in the working tree during the recent W1-W16 buildout and follow-up audit remediation pass, subject to the evidence boundaries in `docs/current-status.md`. It is intended as a handoff for engineers, reviewers, and auditors working from the current workspace state.
 
 ## Scope
 
@@ -77,7 +77,7 @@ Compliance delivery added multiple new bounded subsystems:
 - KYC Passport: [040_kyc_passport.sql](/C:/Users/hades/OneDrive/Desktop/p2p/migrations/040_kyc_passport.sql), [passport.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-compliance/src/passport.rs)
 - KYB graph: [041_kyb_graph.sql](/C:/Users/hades/OneDrive/Desktop/p2p/migrations/041_kyb_graph.sql), [graph.rs](/C:/Users/hades/OneDrive/Desktop/p2p/crates/ramp-compliance/src/kyb/graph.rs)
 
-These features landed across both admin and portal surfaces, with supporting OpenAPI and frontend pages where applicable.
+These features are implemented in the working tree across both admin and portal surfaces, with supporting OpenAPI and frontend pages where applicable.
 
 ### Config Bundles, Extensions, Widget, SDK, and CLI
 
@@ -90,7 +90,7 @@ The later waves added productization and integration surfaces:
 
 ## Major Security Issues Found and Fixed
 
-The build was followed by a broad audit pass over new and legacy logic. The highest-signal remediations already landed in the repo.
+The build was followed by a broad audit pass over new and legacy logic. The highest-signal remediations are implemented in the working tree, with readiness bounded by `docs/current-status.md`.
 
 ### Fixed: Admin Frontend Auth Bypass
 
