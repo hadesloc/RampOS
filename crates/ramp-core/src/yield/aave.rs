@@ -288,7 +288,7 @@ impl AaveV3Protocol {
     }
 
     // -----------------------------------------------------------------------
-    // APY fetching: REST API -> on-chain fallback -> hardcoded fallback
+    // APY fetching: REST API -> on-chain fallback -> fail closed when no live APY source is available
     // -----------------------------------------------------------------------
 
     /// Fetch the current supply APY for `token` using a tiered strategy:
@@ -333,20 +333,16 @@ impl AaveV3Protocol {
                     warn!(
                         protocol = "Aave V3",
                         error = %e,
-                        "On-chain APY fetch failed, using hardcoded fallback"
+                        "On-chain APY fetch failed; hardcoded fallback disabled"
                     );
                 }
             }
         }
 
-        // 4. Hardcoded fallback
-        let config = self.supported_tokens.get(&token);
-        let apy = match config.map(|c| c.decimals) {
-            Some(6) => 4.5,  // USDC/USDT typical range
-            Some(18) => 3.8, // DAI typical range
-            _ => 4.0,
-        };
-        Ok(apy)
+        Err(Error::ExternalService {
+            service: "Aave V3 APY".to_string(),
+            message: "live APY source unavailable; hardcoded fallback disabled".to_string(),
+        })
     }
 
     /// Fetch APY from the Aave REST API (v2-compatible endpoint that also
@@ -906,16 +902,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_simulated_apy_fallback() {
+    async fn test_apy_fails_closed_without_live_source() {
         let addresses = AaveV3Addresses::ethereum_mainnet().unwrap();
         let protocol = AaveV3Protocol::new(1, addresses, test_account());
 
         let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
             .parse()
             .unwrap();
-        // Without RPC/API, should return the hardcoded fallback
-        let apy = protocol.current_apy(usdc).await.unwrap();
-        assert!(apy > 0.0);
+        let err = protocol.current_apy(usdc).await.unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("live APY source unavailable; hardcoded fallback disabled"));
     }
 
     #[tokio::test]

@@ -249,7 +249,7 @@ impl CompoundV3Protocol {
     }
 
     // -----------------------------------------------------------------------
-    // APY fetching: REST API -> on-chain fallback -> hardcoded fallback
+    // APY fetching: REST API -> on-chain fallback -> fail closed when no live APY source is available
     // -----------------------------------------------------------------------
 
     /// Fetch the current supply APY for `token` using a tiered strategy:
@@ -294,14 +294,16 @@ impl CompoundV3Protocol {
                     warn!(
                         protocol = "Compound V3",
                         error = %e,
-                        "On-chain APY fetch failed, using hardcoded fallback"
+                        "On-chain APY fetch failed; hardcoded fallback disabled"
                     );
                 }
             }
         }
 
-        // 4. Hardcoded fallback
-        Ok(5.2)
+        Err(Error::ExternalService {
+            service: "Compound V3 APY".to_string(),
+            message: "live APY source unavailable; hardcoded fallback disabled".to_string(),
+        })
     }
 
     /// Fetch APY from the Compound V3 REST API.
@@ -896,16 +898,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_simulated_apy_fallback() {
+    async fn test_apy_fails_closed_without_live_source() {
         let addresses = CompoundV3Addresses::ethereum_mainnet().unwrap();
         let protocol = CompoundV3Protocol::new(1, addresses, test_account());
 
         let usdc: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
             .parse()
             .unwrap();
-        // Without RPC/API, should return the hardcoded fallback
-        let apy = protocol.current_apy(usdc).await.unwrap();
-        assert!(apy > 0.0);
+        let err = protocol.current_apy(usdc).await.unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("live APY source unavailable; hardcoded fallback disabled"));
     }
 
     #[tokio::test]

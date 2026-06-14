@@ -231,7 +231,7 @@ impl YieldStrategy for ConservativeStrategy {
         apys.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let best_apy = apys[0].1;
-        let current_apy = apys
+        let Some(current_apy) = apys
             .iter()
             .find(|(id, _)| {
                 current_allocations
@@ -240,7 +240,9 @@ impl YieldStrategy for ConservativeStrategy {
                     .unwrap_or(false)
             })
             .map(|(_, apy)| *apy)
-            .unwrap_or(0.0);
+        else {
+            return Ok(false);
+        };
 
         Ok(best_apy - current_apy > self.config.rebalance_apy_threshold)
     }
@@ -265,7 +267,8 @@ impl YieldStrategy for ConservativeStrategy {
             }
             if let Ok(apy) = protocol.current_apy(token).await {
                 if apy >= self.config.min_apy_threshold {
-                    if best.is_none() || apy > best.as_ref().map(|(_, a)| *a).unwrap_or(0.0) {
+                    if best.is_none() || apy > best.as_ref().map_or(f64::NEG_INFINITY, |(_, a)| *a)
+                    {
                         best = Some((pid, apy));
                     }
                 }
@@ -403,11 +406,21 @@ impl YieldStrategy for BalancedStrategy {
             if !protocol.supports_token(token) {
                 continue;
             }
-            let apy = protocol.current_apy(token).await.unwrap_or(0.0);
+            let apy = match protocol.current_apy(token).await {
+                Ok(apy) => apy,
+                Err(e) => {
+                    tracing::warn!(
+                        protocol = %protocol.protocol_id(),
+                        error = %e,
+                        "Failed to fetch APY for balanced rebalance check, skipping protocol"
+                    );
+                    continue;
+                }
+            };
             let allocation = current_allocations
                 .get(&protocol.protocol_id())
                 .copied()
-                .unwrap_or_default();
+                .unwrap_or(U256::ZERO);
             apys.push((protocol.protocol_id(), apy, allocation));
         }
 
@@ -432,7 +445,10 @@ impl YieldStrategy for BalancedStrategy {
         let best_alloc: u128 = best.2.try_into().unwrap_or(u128::MAX);
         let total_val: u128 = total.try_into().unwrap_or(u128::MAX);
         let best_allocation_pct = (best_alloc as f64 / total_val as f64) * 100.0;
-        let apy_diff = best.1 - apys.last().map(|(_, a, _)| *a).unwrap_or(0.0);
+        let Some(lowest_apy) = apys.last().map(|(_, a, _)| *a) else {
+            return Ok(false);
+        };
+        let apy_diff = best.1 - lowest_apy;
 
         Ok(best_allocation_pct < 60.0 && apy_diff > self.config.rebalance_apy_threshold)
     }
@@ -595,11 +611,21 @@ impl YieldStrategy for AggressiveStrategy {
                 continue;
             }
 
-            let apy = protocol.current_apy(token).await.unwrap_or(0.0);
+            let apy = match protocol.current_apy(token).await {
+                Ok(apy) => apy,
+                Err(e) => {
+                    tracing::warn!(
+                        protocol = %protocol.protocol_id(),
+                        error = %e,
+                        "Failed to fetch APY for aggressive rebalance check, skipping protocol"
+                    );
+                    continue;
+                }
+            };
             let allocation = current_allocations
                 .get(&protocol.protocol_id())
                 .copied()
-                .unwrap_or_default();
+                .unwrap_or(U256::ZERO);
 
             if apy > best_apy {
                 best_apy = apy;
@@ -637,7 +663,7 @@ impl YieldStrategy for AggressiveStrategy {
                 continue;
             }
             if let Ok(apy) = protocol.current_apy(token).await {
-                if best.is_none() || apy > best.as_ref().map(|(_, a)| *a).unwrap_or(0.0) {
+                if best.is_none() || apy > best.as_ref().map_or(f64::NEG_INFINITY, |(_, a)| *a) {
                     best = Some((pid, apy));
                 }
             } else {
