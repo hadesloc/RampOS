@@ -1,6 +1,6 @@
 # RampOS Project Completion Status
 
-_Last updated: 2026-05-13_
+_Last updated: 2026-06-14_
 
 ---
 
@@ -11,7 +11,7 @@ Historical RC signoff artifacts were cleaned out of the active workflow on `2026
 
 ---
 
-## Phase 1: Core Hardening — implemented in the working tree (uncommitted as of 2026-06-12)
+## Phase 1: Core Hardening — committed in git history
 
 Shipped JWT admin authentication, secrets abstraction, passkey PostgreSQL migration, production readiness gate, and 16 E2E tests.
 
@@ -67,9 +67,9 @@ Bidirectional LP auction market (USDT↔VND) with competitive price discovery.
 
 ---
 
-## ✅ OFFRAMP RFQ Match -> Settlement Linkage — IMPLEMENTED (2026-05-13)
+## ✅ OFFRAMP RFQ Match -> Settlement Linkage — IMPLEMENTED (2026-05-13, committed)
 
-Linked OFFRAMP RFQ finalization now creates or reuses a settlement row, persists RFQ/LP/rate/settlement linkage, exposes that linkage in portal/admin off-ramp status responses, and applies settlement outcomes idempotently without reopening terminal off-ramp state.
+Linked OFFRAMP RFQ finalization now creates or reuses a settlement row, persists RFQ/LP/rate/settlement linkage, exposes that linkage in portal/admin off-ramp status responses, and applies settlement outcomes idempotently without reopening terminal off-ramp state. RFQ/off-ramp/settlement W1-W5 contract-surface verification now covers the Rust API/core path, OpenAPI/API docs, TypeScript SDK services/types, frontend/admin/portal consumers, and docs/status truthfulness; it remains working-tree-local until committed.
 
 ### New Files
 
@@ -88,8 +88,8 @@ Linked OFFRAMP RFQ finalization now creates or reuses a settlement row, persists
 | `cargo audit` | pass with allowed `RUSTSEC-2023-0071` medium/no-fixed-upgrade exception and warnings |
 | OFFRAMP targeted E2E commands | pass with Docker-backed Postgres/testcontainers migrations |
 | Task 6 payout rejection gate | pass |
-| Frontend lint/build/test/audit | pass |
-| TypeScript SDK prod audit/test/build/lint | pass |
+| Frontend lint/build/test/audit | pass for the 2026-05-13 linkage verification scope; W1-W5 local verification also covers current linked-contract frontend/admin/portal type alignment |
+| TypeScript SDK prod audit/test/build/lint | pass for the 2026-05-13 SDK scope; W1-W5 local verification also covers current RFQ/off-ramp/settlement service/type alignment |
 | Widget audit/test/build | pass |
 | Python SDK pytest | pass |
 | Go SDK tests | pass |
@@ -117,9 +117,9 @@ Linked OFFRAMP RFQ finalization now creates or reuses a settlement row, persists
 
 | Area | State | Notes |
 |------|-------|-------|
-| March hardening implementation | `implemented` | Implemented in the working tree (uncommitted as of 2026-06-12) and preserved above |
+| March hardening implementation | `implemented` | Committed in current git history and preserved above |
 | Historical RC security evidence | `preserved` | Kept under `docs/security/reports/2026-03-13-rc-268670d74/` as reference only |
-| OFFRAMP RFQ-settlement linkage | `implemented` | Verified locally on `2026-05-13` with Docker-backed E2E evidence |
+| OFFRAMP RFQ-settlement linkage | `implemented` | Committed in current git history; verified locally on `2026-05-13` with Docker-backed E2E evidence |
 | Host Rust/cargo execution readiness | `ready` | Verified with `rustc 1.95.0`, `cargo 1.95.0`, `cargo fmt --check`, workspace lib tests, and `cargo audit` |
 | Foundry contract gate | `ready` | Verified with `C:\Users\hades\.foundry\bin\forge.exe`, `forge build --sizes`, and `forge test -vvv` |
 | `BL-T-UW-008-01` status | `historical / backlog only` | Keep for historical tracking only |
@@ -129,6 +129,7 @@ Linked OFFRAMP RFQ finalization now creates or reuses a settlement row, persists
 | Priority | Task | Est. |
 |----------|------|------|
 | Medium | Triage non-failing Foundry warnings from dependency revision mismatch and Solidity lints | Follow-up |
+| Local commit pending | Commit locally verified RFQ/off-ramp/settlement W1-W5 wave when the user requests it | Follow-up |
 
 ## OFFRAMP Plan Completion Control
 
