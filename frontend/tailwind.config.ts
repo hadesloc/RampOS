@@ -120,7 +120,11 @@ const config = {
         'fade-in': 'fade-in 0.3s ease-out',
         'slide-up': 'slide-up 0.3s ease-out',
         'pulse-subtle': 'pulse-subtle 2s ease-in-out infinite',
-      }
+      },
+      spacing: {
+        'section': '1.5rem',   // .pt-section / .mb-section etc.
+        'page':    '2rem',     // page-level padding
+      },
     }
   },
   plugins: [require("tailwindcss-animate")],

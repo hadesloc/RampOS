@@ -1,17 +1,36 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import {
+  ArrowRight,
+  ArrowLeftRight,
+  Clock,
+  ShieldCheck,
+  Zap,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, ArrowLeftRight, Clock, ShieldCheck, Zap, Loader2, AlertCircle, RefreshCw } from "lucide-react";
-import { toast } from "@/components/ui/use-toast";
-import { api, BridgeQuoteResponse } from "@/lib/api";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { api, type BridgeQuoteResponse } from "@/lib/api";
+import {
+  PageHeader,
+  StatGrid,
+  StatCard,
+  Panel,
+  DataTable,
+  EmptyState,
+  StatusBadge,
+} from "@/components/shared";
 
 const CHAINS = ["Ethereum", "Arbitrum", "Optimism", "Polygon", "Base"];
 const CHAIN_IDS: Record<string, number> = {
@@ -21,7 +40,6 @@ const CHAIN_IDS: Record<string, number> = {
   Polygon: 137,
   Base: 8453,
 };
-
 const TOKENS = ["ETH", "USDC", "USDT", "WBTC"];
 
 interface BridgeHistoryEntry {
@@ -50,17 +68,23 @@ export default function BridgePage() {
   const fetchHistory = useCallback(async () => {
     try {
       setHistoryLoading(true);
-      // Bridge history comes from treasury transactions
       const data = await api.treasury.getTransactions({ type: "BRIDGE", per_page: 10 });
-      setHistory(data.data.map(tx => ({
-        date: tx.created_at,
-        from: tx.from_chain || "N/A",
-        to: tx.to_chain || "N/A",
-        asset: tx.token,
-        amount: tx.amount,
-        status: tx.status === "CONFIRMED" ? "completed" as const : tx.status === "PENDING" ? "pending" as const : "failed" as const,
-        txHash: tx.tx_hash,
-      })));
+      setHistory(
+        data.data.map((tx) => ({
+          date: tx.created_at,
+          from: tx.from_chain || "N/A",
+          to: tx.to_chain || "N/A",
+          asset: tx.token,
+          amount: tx.amount,
+          status:
+            tx.status === "CONFIRMED"
+              ? ("completed" as const)
+              : tx.status === "PENDING"
+              ? ("pending" as const)
+              : ("failed" as const),
+          txHash: tx.tx_hash,
+        }))
+      );
     } catch (err: any) {
       setHistory([]);
       console.error("Failed to fetch bridge history:", err);
@@ -129,74 +153,146 @@ export default function BridgePage() {
       setSelectedQuote(null);
       fetchHistory();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Bridge transfer failed. Please try again.";
+      const message =
+        err instanceof Error ? err.message : "Bridge transfer failed. Please try again.";
       setError(message);
-      toast({
-        title: "Bridge Failed",
-        description: message,
-        variant: "destructive",
-      });
+      toast({ title: "Bridge Failed", description: message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
-  const formatDate = (ts: string) => {
-    const diff = Date.now() - new Date(ts).getTime();
-    if (diff < 86400000) return "Today";
-    if (diff < 172800000) return "Yesterday";
-    return new Date(ts).toLocaleDateString();
-  };
+  const completedCount = history.filter((e) => e.status === "completed").length;
+  const pendingCount = history.filter((e) => e.status === "pending").length;
+
+  const columns = useMemo<ColumnDef<BridgeHistoryEntry>[]>(
+    () => [
+      {
+        accessorKey: "date",
+        header: "Date",
+        cell: ({ row }) => (
+          <span className="text-muted-foreground whitespace-nowrap text-sm">
+            {new Date(row.original.date).toLocaleDateString()}
+          </span>
+        ),
+      },
+      {
+        id: "route",
+        header: "Route",
+        cell: ({ row }) => (
+          <div className="flex items-center gap-1 text-sm">
+            <span>{row.original.from}</span>
+            <ArrowRight className="h-3 w-3 text-muted-foreground" />
+            <span>{row.original.to}</span>
+          </div>
+        ),
+      },
+      {
+        accessorKey: "asset",
+        header: "Asset",
+        cell: ({ row }) => (
+          <span className="font-mono text-sm">{row.original.asset}</span>
+        ),
+      },
+      {
+        accessorKey: "amount",
+        header: () => <div className="text-right">Amount</div>,
+        cell: ({ row }) => (
+          <div className="text-right font-mono tabular-nums text-sm">{row.original.amount}</div>
+        ),
+      },
+      {
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ row }) => <StatusBadge status={row.original.status} />,
+      },
+      {
+        accessorKey: "txHash",
+        header: () => <div className="text-right">Tx Hash</div>,
+        cell: ({ row }) => (
+          <div className="text-right font-mono text-xs text-muted-foreground">
+            {row.original.txHash
+              ? `${row.original.txHash.slice(0, 8)}...${row.original.txHash.slice(-6)}`
+              : "-"}
+          </div>
+        ),
+      },
+    ],
+    []
+  );
 
   return (
-    <div className="space-y-6">
+    <main className="p-page flex flex-col gap-section">
       <PageHeader
         title="Bridge"
         description="Transfer assets securely between different blockchains"
+        actions={
+          <Button variant="outline" size="icon" onClick={fetchHistory} disabled={historyLoading}>
+            <RefreshCw className={`h-4 w-4 ${historyLoading ? "animate-spin" : ""}`} />
+          </Button>
+        }
       />
 
-      {error && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4" />
-          {error}
-        </div>
-      )}
+      <StatGrid cols={3}>
+        <StatCard
+          title="Completed Bridges"
+          value={historyLoading ? "-" : completedCount}
+          accentColor="green"
+          loading={historyLoading}
+        />
+        <StatCard
+          title="Pending Bridges"
+          value={historyLoading ? "-" : pendingCount}
+          accentColor="amber"
+          loading={historyLoading}
+        />
+        <StatCard
+          title="Total Tracked"
+          value={historyLoading ? "-" : history.length}
+          accentColor="cyan"
+          loading={historyLoading}
+        />
+      </StatGrid>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-section md:grid-cols-2">
         {/* Bridge Interface */}
-        <Card className="md:col-span-1">
-          <CardHeader>
-            <CardTitle>Cross-Chain Transfer</CardTitle>
-            <CardDescription>Move your assets instantly</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-[1fr,auto,1fr] gap-4 items-center">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">From</label>
+        <Panel header={{ title: "Cross-Chain Transfer", description: "Move your assets instantly" }}>
+          <div className="space-y-5">
+            {error && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                {error}
+              </div>
+            )}
+
+            <div className="grid grid-cols-[1fr,auto,1fr] gap-4 items-end">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  From
+                </label>
                 <Select value={sourceChain} onValueChange={setSourceChain}>
-                  <SelectTrigger>
+                  <SelectTrigger className="border-white/[0.08] bg-[#111113]">
                     <SelectValue placeholder="Chain" />
                   </SelectTrigger>
                   <SelectContent>
-                    {CHAINS.map(c => (
+                    {CHAINS.map((c) => (
                       <SelectItem key={c} value={c}>{c}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="flex justify-center">
-                <ArrowRight className="h-6 w-6 text-muted-foreground mt-6" />
+              <div className="flex justify-center pb-0.5">
+                <ArrowRight className="h-5 w-5 text-muted-foreground" />
               </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">To</label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  To
+                </label>
                 <Select value={destChain} onValueChange={setDestChain}>
-                  <SelectTrigger>
+                  <SelectTrigger className="border-white/[0.08] bg-[#111113]">
                     <SelectValue placeholder="Chain" />
                   </SelectTrigger>
                   <SelectContent>
-                    {CHAINS.map(c => (
+                    {CHAINS.map((c) => (
                       <SelectItem key={c} value={c}>{c}</SelectItem>
                     ))}
                   </SelectContent>
@@ -204,15 +300,17 @@ export default function BridgePage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Asset</label>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Asset & Amount
+              </label>
               <div className="flex gap-2">
                 <Select value={token} onValueChange={setToken}>
-                  <SelectTrigger className="w-[120px]">
+                  <SelectTrigger className="w-[120px] border-white/[0.08] bg-[#111113]">
                     <SelectValue placeholder="Token" />
                   </SelectTrigger>
                   <SelectContent>
-                    {TOKENS.map(t => (
+                    {TOKENS.map((t) => (
                       <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
                   </SelectContent>
@@ -222,31 +320,28 @@ export default function BridgePage() {
                   placeholder="0.0"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="flex-1"
+                  className="flex-1 border-white/[0.08] bg-[#111113] font-mono tabular-nums"
                 />
-              </div>
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Balance: 1,250.50 {token}</span>
-                <span className="cursor-pointer text-primary hover:underline" onClick={() => setAmount("1250.50")}>Max</span>
               </div>
             </div>
 
             {quoteLoading && amount && (
-              <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-4 w-1/2" />
-                <Skeleton className="h-4 w-2/3" />
+              <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-4 space-y-3">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-4 rounded bg-white/5 animate-pulse" style={{ width: `${100 - i * 12}%` }} />
+                ))}
               </div>
             )}
 
             {selectedQuote && !quoteLoading && (
-              <div className="rounded-lg border bg-muted/50 p-4 space-y-3 text-sm">
+              <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-4 space-y-3 text-sm">
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground flex items-center gap-1">
-                    <Zap className="h-3 w-3" /> Bridge Route
+                    <Zap className="h-3 w-3 text-[#FFB800]" /> Bridge Route
                   </span>
-                  <Badge variant="secondary">{selectedQuote.bridgeName}</Badge>
+                  <span className="inline-flex items-center rounded-full border border-white/[0.08] px-2 py-0.5 text-xs">
+                    {selectedQuote.bridgeName}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground flex items-center gap-1">
@@ -256,18 +351,21 @@ export default function BridgePage() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Bridge Fee</span>
-                  <span>{selectedQuote.bridgeFee} {token}</span>
+                  <span className="font-mono tabular-nums">
+                    {selectedQuote.bridgeFee} {token}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Est. Received</span>
-                  <span className="font-bold">{selectedQuote.amountOut} {token}</span>
+                  <span className="font-bold text-[#00FF87] font-mono tabular-nums">
+                    {selectedQuote.amountOut} {token}
+                  </span>
                 </div>
               </div>
             )}
-          </CardContent>
-          <CardFooter>
+
             <Button
-              className="w-full"
+              className="w-full bg-[#7B61FF] hover:bg-[#7B61FF]/90 font-semibold"
               size="lg"
               disabled={!amount || loading || sourceChain === destChain || !selectedQuote}
               onClick={handleBridge}
@@ -283,138 +381,87 @@ export default function BridgePage() {
                 "Confirm Bridge"
               )}
             </Button>
-          </CardFooter>
-        </Card>
+          </div>
+        </Panel>
 
-        {/* Info Cards */}
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Why use RampOS Bridge?</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <div className="flex items-start gap-4">
-                <div className="bg-blue-500/10 p-2 rounded-full">
-                  <ShieldCheck className="h-5 w-5 text-blue-500" />
+        {/* Info */}
+        <div className="space-y-section">
+          <Panel header={{ title: "Why RampOS Bridge?" }}>
+            <div className="space-y-4">
+              {[
+                {
+                  icon: <ShieldCheck className="h-5 w-5 text-[#00D4FF]" />,
+                  color: "bg-[#00D4FF]/10",
+                  title: "Secure & Audited",
+                  desc: "Aggregating only the most trusted and battle-tested bridge protocols.",
+                },
+                {
+                  icon: <Zap className="h-5 w-5 text-[#FFB800]" />,
+                  color: "bg-[#FFB800]/10",
+                  title: "Fast Finality",
+                  desc: "Optimized routing for the quickest cross-chain settlements.",
+                },
+                {
+                  icon: <ArrowLeftRight className="h-5 w-5 text-[#00FF87]" />,
+                  color: "bg-[#00FF87]/10",
+                  title: "Best Rates",
+                  desc: "Automatically finds the cheapest route for your transfer.",
+                },
+              ].map((item) => (
+                <div key={item.title} className="flex items-start gap-3">
+                  <div className={`${item.color} p-2 rounded-full flex-shrink-0`}>
+                    {item.icon}
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">{item.title}</p>
+                    <p className="text-sm text-muted-foreground">{item.desc}</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-medium">Secure & Audited</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Aggregating only the most trusted and battle-tested bridge protocols.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-4">
-                <div className="bg-orange-500/10 p-2 rounded-full">
-                  <Zap className="h-5 w-5 text-orange-500" />
-                </div>
-                <div>
-                  <h4 className="font-medium">Fast Finality</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Optimized routing for the quickest cross-chain settlements.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-4">
-                <div className="bg-green-500/10 p-2 rounded-full">
-                  <ArrowLeftRight className="h-5 w-5 text-green-500" />
-                </div>
-                <div>
-                  <h4 className="font-medium">Best Rates</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Automatically finds the cheapest route for your transfer.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              ))}
+            </div>
+          </Panel>
 
-          <Card>
-             <CardHeader>
-                <CardTitle>Supported Networks</CardTitle>
-             </CardHeader>
-             <CardContent>
-                <div className="flex flex-wrap gap-2">
-                   {[...CHAINS, "BSC", "Avalanche"].map(chain => (
-                     <Badge key={chain} variant="secondary">{chain}</Badge>
-                   ))}
-                </div>
-             </CardContent>
-          </Card>
+          <Panel header={{ title: "Supported Networks" }}>
+            <div className="flex flex-wrap gap-2">
+              {[...CHAINS, "BSC", "Avalanche"].map((chain) => (
+                <span
+                  key={chain}
+                  className="inline-flex items-center rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-0.5 text-xs font-medium"
+                >
+                  {chain}
+                </span>
+              ))}
+            </div>
+          </Panel>
         </div>
       </div>
 
       {/* Bridge History */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Bridge History</CardTitle>
-              <CardDescription>Your recent cross-chain transactions</CardDescription>
-            </div>
+      <Panel
+        header={{
+          title: "Bridge History",
+          description: "Recent cross-chain transactions",
+          actions: (
             <Button variant="ghost" size="sm" onClick={fetchHistory} disabled={historyLoading}>
               <RefreshCw className={`h-4 w-4 ${historyLoading ? "animate-spin" : ""}`} />
             </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {historyLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="flex gap-4">
-                  <Skeleton className="h-6 w-28" />
-                  <Skeleton className="h-6 w-24" />
-                  <Skeleton className="h-6 w-16" />
-                  <Skeleton className="h-6 w-16" />
-                  <Skeleton className="h-6 w-16" />
-                  <Skeleton className="h-6 w-24" />
-                </div>
-              ))}
-            </div>
-          ) : history.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No bridge history found.
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Route</TableHead>
-                  <TableHead>Asset</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Tx Hash</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {history.map((entry) => (
-                  <TableRow key={entry.txHash}>
-                    <TableCell className="font-medium">{formatDate(entry.date)}</TableCell>
-                    <TableCell className="flex items-center gap-1">
-                      {entry.from} <ArrowRight className="h-3 w-3" /> {entry.to}
-                    </TableCell>
-                    <TableCell>{entry.asset}</TableCell>
-                    <TableCell>{entry.amount}</TableCell>
-                    <TableCell>
-                      <Badge className={
-                        entry.status === "completed"
-                          ? "bg-green-500/10 text-green-500 hover:bg-green-500/20"
-                          : entry.status === "pending"
-                          ? "bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20"
-                          : "bg-red-500/10 text-red-500 hover:bg-red-500/20"
-                      }>
-                        {entry.status === "completed" ? "Completed" : entry.status === "pending" ? "Pending" : "Failed"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-xs">{entry.txHash}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+          ),
+        }}
+      >
+        <DataTable
+          columns={columns}
+          data={history}
+          loading={historyLoading}
+          pagination
+          pageSize={10}
+          emptyState={
+            <EmptyState
+              title="No bridge history"
+              description="No cross-chain transfers have been recorded yet."
+            />
+          }
+        />
+      </Panel>
+    </main>
   );
 }

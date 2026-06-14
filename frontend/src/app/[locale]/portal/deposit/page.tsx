@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { Copy, Check, QrCode, Loader2, AlertCircle, Wallet } from "lucide-react";
+import { Loader2, AlertCircle, Wallet, Building2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -13,11 +13,11 @@ import { useRouter } from "@/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { walletApi, transactionApi, DepositInfo } from "@/lib/portal-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent } from "@/components/ui/card";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHeader } from "@/components/layout/page-header";
+import { EmptyState, ErrorState, Panel, StatusBadge } from "@/components/shared";
 import { useTranslations } from "next-intl";
 import { Link } from "@/navigation";
 
@@ -28,7 +28,6 @@ const depositSchema = z.object({
 });
 
 export default function DepositPage() {
-  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"vnd" | "crypto">("vnd");
   const [vndDepositInfo, setVndDepositInfo] = useState<DepositInfo | null>(null);
   const [cryptoDepositInfo, setCryptoDepositInfo] = useState<DepositInfo | null>(null);
@@ -39,7 +38,7 @@ export default function DepositPage() {
   const tCommon = useTranslations('Common');
   const tWallet = useTranslations('Portal.wallet');
 
-  const { user, wallet, isAuthenticated, isLoading: authLoading, createWallet } = useAuth();
+  const { wallet, isAuthenticated, isLoading: authLoading, createWallet } = useAuth();
   const router = useRouter();
 
   const form = useForm<z.infer<typeof depositSchema>>({
@@ -49,14 +48,12 @@ export default function DepositPage() {
     },
   });
 
-  // Redirect if not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push("/portal/login");
     }
   }, [authLoading, isAuthenticated, router]);
 
-  // Fetch deposit info
   const fetchDepositInfo = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -93,7 +90,6 @@ export default function DepositPage() {
         currency: activeTab === "vnd" ? "VND" : "USDT",
       });
 
-      // Confirm the deposit (user says they made the transfer)
       await transactionApi.confirmDeposit(intent.id);
 
       toast.success(tCommon('success'));
@@ -107,13 +103,6 @@ export default function DepositPage() {
     }
   }
 
-  const copyToClipboard = (text: string, field: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    toast.success(tWallet('address_copied'));
-    setTimeout(() => setCopiedField(null), 2000);
-  };
-
   const handleCreateWallet = async () => {
     try {
       await createWallet();
@@ -124,38 +113,18 @@ export default function DepositPage() {
     }
   };
 
-  // Show loading state
-  // if (authLoading || isLoading) {
-  //   return (
-  //     <div className="container max-w-2xl py-8">
-  //       <div className="flex items-center justify-center py-20">
-  //         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
-  // Show wallet creation prompt if no wallet
   if (!wallet && !authLoading) {
     return (
       <PageContainer>
         <PageHeader title={t('title')} description={t('description')} />
-        <Card>
-          <CardContent className="flex flex-col items-center py-10 space-y-4">
-            <div className="rounded-full bg-muted p-4">
-              <Wallet className="h-12 w-12 text-muted-foreground" />
-            </div>
-            <div className="text-center space-y-2">
-              <h2 className="text-xl font-semibold">{tWallet('no_wallet')}</h2>
-              <p className="text-muted-foreground max-w-md">
-                {tWallet('create_text')}
-              </p>
-            </div>
-            <Button onClick={handleCreateWallet} size="lg">
-              {tWallet('create_btn')}
-            </Button>
-          </CardContent>
-        </Card>
+        <Panel>
+          <EmptyState
+            icon={<Wallet className="h-12 w-12" />}
+            title={tWallet('no_wallet')}
+            description={tWallet('create_text')}
+            action={<Button onClick={handleCreateWallet} size="lg">{tWallet('create_btn')}</Button>}
+          />
+        </Panel>
       </PageContainer>
     );
   }
@@ -164,76 +133,85 @@ export default function DepositPage() {
     <PageContainer>
       <PageHeader title={t('title')} description={t('description')} />
 
-      <div className="max-w-3xl mx-auto space-y-6">
-      <Card className="border-primary/10 bg-primary/5">
-        <CardContent className="space-y-3 py-5">
-          <p className="text-sm font-medium text-foreground">Wallet deposit and venue funding are separate actions.</p>
-          <p className="text-sm text-muted-foreground">
-            This page settles fiat or crypto into your governed wallet. Once the wallet leg is complete,
-            use the dedicated venue funding flow to move those funds into a connected venue.
-          </p>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/portal/venues">Open venue funding</Link>
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="mx-auto max-w-3xl space-y-6">
+        <Panel>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl border border-[#00D4FF]/20 bg-[#00D4FF]/10 p-3 text-[#00D4FF]">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold text-foreground">Wallet deposit and venue funding are separate actions.</p>
+                  <StatusBadge status="Wallet leg" severity="info" />
+                </div>
+                <p className="max-w-2xl text-sm text-muted-foreground">
+                  This page settles fiat or crypto into your governed wallet. Once the wallet leg is complete,
+                  use the dedicated venue funding flow to move those funds into a connected venue.
+                </p>
+              </div>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/portal/venues">Open venue funding</Link>
+            </Button>
+          </div>
+        </Panel>
 
-      {error && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+        {error && (
+          <Panel>
+            <ErrorState title={tCommon('error')} message={error} retry={fetchDepositInfo} />
+          </Panel>
+        )}
 
-      <DepositCard
-        type={activeTab === 'vnd' ? 'VND' : 'CRYPTO'}
-        onTypeChange={(val) => setActiveTab(val === 'VND' ? 'vnd' : 'crypto')}
-        loading={isLoading || authLoading}
-        bankDetails={vndDepositInfo ? {
-            bankName: vndDepositInfo.bankName || "",
-            accountName: vndDepositInfo.accountName || "",
-            accountNumber: vndDepositInfo.accountNumber || "",
-            content: vndDepositInfo.transferContent || ""
-        } : undefined}
-        walletAddress={cryptoDepositInfo?.depositAddress}
-        network={cryptoDepositInfo?.network}
-        qrCode={cryptoDepositInfo?.qrCodeUrl}
-        venueFundingHref="/portal/venues"
-        instructions={
-             activeTab === 'vnd' ? (
+        <Panel contentClassName="p-0">
+          <DepositCard
+            type={activeTab === 'vnd' ? 'VND' : 'CRYPTO'}
+            onTypeChange={(val) => setActiveTab(val === 'VND' ? 'vnd' : 'crypto')}
+            loading={isLoading || authLoading}
+            bankDetails={vndDepositInfo ? {
+              bankName: vndDepositInfo.bankName || "",
+              accountName: vndDepositInfo.accountName || "",
+              accountNumber: vndDepositInfo.accountNumber || "",
+              content: vndDepositInfo.transferContent || ""
+            } : undefined}
+            walletAddress={cryptoDepositInfo?.depositAddress}
+            network={cryptoDepositInfo?.network}
+            qrCode={cryptoDepositInfo?.qrCodeUrl}
+            venueFundingHref="/portal/venues"
+            instructions={
+              activeTab === 'vnd' ? (
                 <Form {...form}>
-                    <form
-                      onSubmit={form.handleSubmit(onSubmit)}
-                      className="space-y-4 mt-4 pt-4 border-t"
-                    >
-                      <FormField
-                        control={form.control}
-                        name="amount"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('amount')} (VND)</FormLabel>
-                            <FormControl>
-                              <Input placeholder="1,000,000" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <Button
-                        type="submit"
-                        className="w-full"
-                        disabled={isSubmitting}
-                      >
-                        {isSubmitting && (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        )}
-                        {t('made_transfer')}
-                      </Button>
-                    </form>
-                  </Form>
-             ) : undefined
-        }
-      />
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="mt-4 space-y-4 border-t border-white/[0.06] pt-4">
+                    <FormField
+                      control={form.control}
+                      name="amount"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('amount')} (VND)</FormLabel>
+                          <FormControl>
+                            <Input className="border-white/[0.08] bg-[#09090B]" placeholder="1,000,000" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button type="submit" className="w-full" disabled={isSubmitting}>
+                      {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      {t('made_transfer')}
+                    </Button>
+                  </form>
+                </Form>
+              ) : undefined
+            }
+          />
+        </Panel>
+
+        {error && (
+          <Alert variant="destructive" className="border-red-400/20 bg-red-400/10">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
       </div>
     </PageContainer>
   );

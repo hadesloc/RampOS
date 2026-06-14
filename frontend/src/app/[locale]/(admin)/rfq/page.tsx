@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Loader2,
   RefreshCw,
@@ -10,24 +10,19 @@ import {
   CheckCircle2,
   ArrowUpDown,
 } from "lucide-react";
-
+import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  PageHeader,
+  StatGrid,
+  StatCard,
+  Panel,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  StatusBadge,
+} from "@/components/shared";
+import { truncateMiddle } from "@/lib/format";
 
 type RfqRequest = {
   id: string;
@@ -77,33 +72,6 @@ function formatTimestamp(value?: string | null): string {
   });
 }
 
-function directionBadge(direction: RfqRequest["direction"]) {
-  return direction === "ONRAMP" ? (
-    <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
-      VND to USDT
-    </Badge>
-  ) : (
-    <Badge variant="outline" className="border-violet-500/40 text-violet-600 dark:text-violet-400">
-      USDT to VND
-    </Badge>
-  );
-}
-
-function statusBadge(status: RfqRequest["state"]) {
-  const colors: Record<RfqRequest["state"], string> = {
-    OPEN: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-    MATCHED: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-    EXPIRED: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
-    CANCELLED: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
-  };
-
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${colors[status]}`}>
-      {status}
-    </span>
-  );
-}
-
 function toNumber(value: string | null): number | null {
   if (!value) return null;
   const parsed = Number(value);
@@ -147,7 +115,7 @@ export default function RfqAdminPage() {
         state: string;
         winningLpId: string;
         finalRate: string;
-          }>(`/v1/admin/rfq/${rfqId}/finalize`, { method: "POST" });
+      }>(`/v1/admin/rfq/${rfqId}/finalize`, { method: "POST" });
       setFinalizeResult(result);
       await fetchData();
     } catch (err) {
@@ -157,175 +125,214 @@ export default function RfqAdminPage() {
     }
   };
 
-  const openCount = requests.filter((request) => request.state === "OPEN").length;
+  const openCount = requests.filter((r) => r.state === "OPEN").length;
   const avgBids =
     requests.length > 0
-      ? (requests.reduce((sum, request) => sum + request.bidCount, 0) / requests.length).toFixed(1)
+      ? (requests.reduce((sum, r) => sum + r.bidCount, 0) / requests.length).toFixed(1)
       : "0";
-  const bestRate = requests.reduce((highest, request) => {
-    const current = toNumber(request.bestRate);
+  const bestRate = requests.reduce((highest, r) => {
+    const current = toNumber(r.bestRate);
     return current !== null ? Math.max(highest, current) : highest;
   }, 0);
-  const expiringSoon = requests.filter((request) => {
-    const expiresAt = new Date(request.expiresAt).getTime();
+  const expiringSoon = requests.filter((r) => {
+    const expiresAt = new Date(r.expiresAt).getTime();
     return Number.isFinite(expiresAt) && expiresAt - Date.now() <= 5 * 60 * 1000;
   }).length;
 
+  const columns = useMemo<ColumnDef<RfqRequest>[]>(
+    () => [
+      {
+        accessorKey: "id",
+        header: "ID",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs text-muted-foreground" title={row.original.id}>
+            {truncateMiddle(row.original.id, 8, 6)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "userId",
+        header: "User",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs text-muted-foreground" title={row.original.userId}>
+            {truncateMiddle(row.original.userId, 8, 6)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "direction",
+        header: "Direction",
+        cell: ({ row }) => {
+          const dir = row.original.direction;
+          return (
+            <span
+              className={
+                dir === "ONRAMP"
+                  ? "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-[#00FF87]/10 text-[#00FF87]"
+                  : "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-[#7B61FF]/10 text-[#7B61FF]"
+              }
+            >
+              {dir === "ONRAMP" ? "VND → USDT" : "USDT → VND"}
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: "cryptoAsset",
+        header: "Asset",
+        cell: ({ row }) => <span className="font-mono text-sm">{row.original.cryptoAsset}</span>,
+      },
+      {
+        accessorKey: "cryptoAmount",
+        header: () => <div className="text-right">Crypto Amt</div>,
+        cell: ({ row }) => (
+          <div className="text-right font-mono tabular-nums text-sm">
+            {toNumber(row.original.cryptoAmount)?.toLocaleString("en-US") ?? row.original.cryptoAmount}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "vndAmount",
+        header: () => <div className="text-right">Budget VND</div>,
+        cell: ({ row }) => (
+          <div className="text-right font-mono tabular-nums text-sm">
+            {toNumber(row.original.vndAmount)?.toLocaleString("vi-VN") ?? "-"}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "bidCount",
+        header: () => <div className="text-center">Bids</div>,
+        cell: ({ row }) => (
+          <div className="text-center">
+            <span className="inline-flex items-center justify-center rounded-full bg-white/5 px-2 py-0.5 text-xs font-medium">
+              {row.original.bidCount}
+            </span>
+          </div>
+        ),
+      },
+      {
+        accessorKey: "bestRate",
+        header: () => <div className="text-right">Best Rate</div>,
+        cell: ({ row }) => (
+          <div className="text-right font-mono tabular-nums text-[#00FF87]">
+            {toNumber(row.original.bestRate)?.toLocaleString("vi-VN") ?? "-"}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "state",
+        header: "Status",
+        cell: ({ row }) => <StatusBadge status={row.original.state} />,
+      },
+      {
+        accessorKey: "expiresAt",
+        header: "Expires",
+        cell: ({ row }) => (
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {formatTimestamp(row.original.expiresAt)}
+          </span>
+        ),
+      },
+      {
+        id: "actions",
+        header: () => <div className="text-right">Actions</div>,
+        cell: ({ row }) => (
+          <div className="text-right">
+            {row.original.state === "OPEN" && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={finalizing === row.original.id}
+                onClick={() => handleFinalize(row.original.id)}
+                className="border-[#00FF87]/30 text-[#00FF87] hover:bg-[#00FF87]/10"
+              >
+                {finalizing === row.original.id ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                )}
+                Finalize
+              </Button>
+            )}
+          </div>
+        ),
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [finalizing]
+  );
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">RFQ Auctions</h1>
-          <p className="text-muted-foreground">
-            Monitor active RFQ auctions and manually finalize an open request when needed.
-          </p>
-        </div>
-        <Button variant="outline" size="icon" onClick={fetchData} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-        </Button>
-      </div>
+    <main className="p-page flex flex-col gap-section">
+      <PageHeader
+        title="RFQ Auctions"
+        description="Monitor active RFQ auctions and manually finalize an open request when needed."
+        actions={
+          <Button variant="outline" size="icon" onClick={fetchData} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        }
+      />
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardDescription>Open Auctions</CardDescription>
-            <Gavel className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{openCount}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardDescription>Avg Bids / Request</CardDescription>
-            <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{avgBids}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardDescription>Best Visible Rate</CardDescription>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {bestRate > 0 ? bestRate.toLocaleString("vi-VN") : "-"}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardDescription>Expiring in 5m</CardDescription>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{expiringSoon}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      <StatGrid cols={4}>
+        <StatCard
+          title="Open Auctions"
+          value={loading ? "-" : openCount}
+          icon={<Gavel className="h-4 w-4" />}
+          accentColor="cyan"
+          loading={loading}
+        />
+        <StatCard
+          title="Avg Bids / Request"
+          value={loading ? "-" : avgBids}
+          icon={<ArrowUpDown className="h-4 w-4" />}
+          accentColor="violet"
+          loading={loading}
+        />
+        <StatCard
+          title="Best Visible Rate"
+          value={loading ? "-" : bestRate > 0 ? bestRate.toLocaleString("vi-VN") : "-"}
+          icon={<TrendingUp className="h-4 w-4" />}
+          accentColor="green"
+          loading={loading}
+        />
+        <StatCard
+          title="Expiring in 5m"
+          value={loading ? "-" : expiringSoon}
+          icon={<Clock className="h-4 w-4" />}
+          accentColor="amber"
+          loading={loading}
+        />
+      </StatGrid>
 
       {finalizeResult && (
-        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm">
-          <span className="font-medium">RFQ matched:</span> {finalizeResult.rfqId} · LP {finalizeResult.winningLpId} · rate {Number(finalizeResult.finalRate).toLocaleString("vi-VN")}.
+        <div className="rounded-md border border-[#00FF87]/30 bg-[#00FF87]/10 px-4 py-3 text-sm text-[#00FF87]">
+          <span className="font-medium">RFQ matched:</span>{" "}
+          {finalizeResult.rfqId} · LP {finalizeResult.winningLpId} · rate{" "}
+          {Number(finalizeResult.finalRate).toLocaleString("vi-VN")}
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Auction Queue</CardTitle>
-          <CardDescription>
-            Active RFQ requests returned by the admin API.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              Loading auctions...
-            </div>
-          ) : requests.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground">
-              No open RFQ requests found.
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Direction</TableHead>
-                  <TableHead>Asset</TableHead>
-                  <TableHead className="text-right">Crypto Amount</TableHead>
-                  <TableHead className="text-right">Budget VND</TableHead>
-                  <TableHead className="text-center">Bids</TableHead>
-                  <TableHead className="text-right">Best Rate</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Expires</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {requests.map((request) => (
-                  <TableRow key={request.id}>
-                    <TableCell className="font-mono text-xs">
-                      {request.id.slice(0, 16)}...
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {request.userId.slice(0, 12)}...
-                    </TableCell>
-                    <TableCell>{directionBadge(request.direction)}</TableCell>
-                    <TableCell>{request.cryptoAsset}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      {toNumber(request.cryptoAmount)?.toLocaleString("en-US") ?? request.cryptoAmount}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {toNumber(request.vndAmount)?.toLocaleString("vi-VN") ?? "-"}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="secondary">{request.bidCount}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {toNumber(request.bestRate)?.toLocaleString("vi-VN") ?? "-"}
-                    </TableCell>
-                    <TableCell>{statusBadge(request.state)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {formatTimestamp(request.expiresAt)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {request.state === "OPEN" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={finalizing === request.id}
-                          onClick={() => handleFinalize(request.id)}
-                        >
-                          {finalizing === request.id ? (
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="mr-1 h-3 w-3" />
-                          )}
-                          Finalize
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+      {error ? (
+        <ErrorState message={error} retry={fetchData} />
+      ) : (
+        <Panel header={{ title: "Auction Queue", description: "Active RFQ requests returned by the admin API." }}>
+          <DataTable
+            columns={columns}
+            data={requests}
+            loading={loading}
+            pagination
+            pageSize={15}
+            emptyState={
+              <EmptyState
+                title="No open RFQ requests"
+                description="There are currently no open RFQ auction requests."
+              />
+            }
+          />
+        </Panel>
+      )}
+    </main>
   );
 }

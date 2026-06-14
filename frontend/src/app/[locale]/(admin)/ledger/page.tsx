@@ -1,11 +1,22 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { ledgerApi, type LedgerEntry as ApiLedgerEntry } from "@/lib/api";
-import { Loader2, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { useTranslations, useFormatter } from "next-intl";
+import {
+  PageHeader,
+  StatGrid,
+  StatCard,
+  Panel,
+  DataTable,
+  EmptyState,
+  ErrorState,
+} from "@/components/shared";
+import { truncateMiddle } from "@/lib/format";
 
 interface LedgerEntry {
   id: string;
@@ -34,10 +45,10 @@ function mapApiEntry(entry: ApiLedgerEntry): LedgerEntry {
 }
 
 function getAccountTypeColor(type: string): string {
-  if (type.startsWith("USER_")) return "bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-400";
-  if (type.startsWith("PLATFORM_")) return "bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-400";
-  if (type.startsWith("TENANT_")) return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400";
-  return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+  if (type.startsWith("USER_")) return "bg-blue-100 text-blue-800 dark:bg-[#00D4FF]/15 dark:text-[#00D4FF]";
+  if (type.startsWith("PLATFORM_")) return "bg-purple-100 text-purple-800 dark:bg-[#7B61FF]/15 dark:text-[#7B61FF]";
+  if (type.startsWith("TENANT_")) return "bg-green-100 text-green-800 dark:bg-[#00FF87]/15 dark:text-[#00FF87]";
+  return "bg-gray-100 text-gray-800 dark:bg-white/5 dark:text-gray-300";
 }
 
 export default function LedgerPage() {
@@ -113,6 +124,13 @@ export default function LedgerPage() {
     return `${num} ${currency}`;
   };
 
+  const formatVnd = (num: number) =>
+    format.number(num, {
+      style: "currency",
+      currency: "VND",
+      maximumFractionDigits: 0,
+    });
+
   const formatDate = (dateStr: string) => {
     return format.dateTime(new Date(dateStr), {
       day: "2-digit",
@@ -124,141 +142,160 @@ export default function LedgerPage() {
     });
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Ledger</h1>
-          <p className="text-muted-foreground">
-            Double-entry ledger entries and balances
-          </p>
-        </div>
-        <Button variant="outline" size="icon" onClick={fetchEntries} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-        </Button>
-      </div>
-
-      {/* Summary */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-lg border bg-card p-4">
-          <div className="text-sm text-muted-foreground">Total Entries</div>
-          <div className="text-2xl font-bold">{filteredEntries.length}</div>
-        </div>
-        <div className="rounded-lg border bg-card p-4">
-          <div className="text-sm text-muted-foreground">Total Debits (VND)</div>
-          <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-            {formatAmount(totals.totalDebitVnd.toString(), "VND")}
+  const columns = useMemo<ColumnDef<LedgerEntry>[]>(
+    () => [
+      {
+        accessorKey: "createdAt",
+        header: "Timestamp",
+        cell: ({ row }) => (
+          <span className="text-muted-foreground whitespace-nowrap">
+            {formatDate(row.original.createdAt)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "accountType",
+        header: "Account Type",
+        cell: ({ row }) => (
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getAccountTypeColor(
+              row.original.accountType
+            )}`}
+          >
+            {row.original.accountType}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "currency",
+        header: tCommon('currency'),
+        cell: ({ row }) => <span className="font-mono">{row.original.currency}</span>,
+      },
+      {
+        accessorKey: "debit",
+        header: () => <div className="text-right">Debit</div>,
+        cell: ({ row }) => (
+          <div className="text-right font-mono text-red-500 dark:text-red-400">
+            {formatAmount(row.original.debit, row.original.currency)}
           </div>
-        </div>
-        <div className="rounded-lg border bg-card p-4">
-          <div className="text-sm text-muted-foreground">Total Credits (VND)</div>
-          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-            {formatAmount(totals.totalCreditVnd.toString(), "VND")}
+        ),
+      },
+      {
+        accessorKey: "credit",
+        header: () => <div className="text-right">Credit</div>,
+        cell: ({ row }) => (
+          <div className="text-right font-mono text-[#00FF87]">
+            {formatAmount(row.original.credit, row.original.currency)}
           </div>
-        </div>
-      </div>
+        ),
+      },
+      {
+        accessorKey: "balanceAfter",
+        header: () => <div className="text-right">Balance After</div>,
+        cell: ({ row }) => (
+          <div className="text-right font-mono font-semibold">
+            {formatAmount(row.original.balanceAfter, row.original.currency)}
+          </div>
+        ),
+      },
+      {
+        id: "reference",
+        header: "Reference",
+        cell: ({ row }) => (
+          <div>
+            <span className="block text-xs text-muted-foreground">
+              {row.original.referenceType}
+            </span>
+            <span className="font-mono text-xs">
+              {truncateMiddle(row.original.referenceId, 10, 6)}
+            </span>
+          </div>
+        ),
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tCommon]
+  );
 
-      {/* Filters */}
-      <div className="flex gap-4">
-        <select
-          className="rounded-md border bg-background px-3 py-2 text-sm"
-          value={filter.accountType}
-          onChange={(e) => setFilter({ ...filter, accountType: e.target.value })}
-        >
-          <option value="">All Account Types</option>
-          <option value="USER_">User Accounts</option>
-          <option value="PLATFORM_">Platform Accounts</option>
-          <option value="TENANT_">Tenant Accounts</option>
-        </select>
+  const filterControls = (
+    <div className="flex flex-wrap gap-2">
+      <select
+        className="rounded-md border border-white/[0.08] bg-background px-3 py-1.5 text-sm"
+        value={filter.accountType}
+        onChange={(e) => setFilter({ ...filter, accountType: e.target.value })}
+      >
+        <option value="">All Account Types</option>
+        <option value="USER_">User Accounts</option>
+        <option value="PLATFORM_">Platform Accounts</option>
+        <option value="TENANT_">Tenant Accounts</option>
+      </select>
 
-        <select
-          className="rounded-md border bg-background px-3 py-2 text-sm"
-          value={filter.currency}
-          onChange={(e) => setFilter({ ...filter, currency: e.target.value })}
-        >
-          <option value="">All Currencies</option>
-          <option value="VND">VND</option>
-          <option value="BTC">BTC</option>
-          <option value="ETH">ETH</option>
-          <option value="USDT">USDT</option>
-        </select>
-      </div>
-
-      {/* Table */}
-      <div className="rounded-md border overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium">Timestamp</th>
-              <th className="px-4 py-3 text-left font-medium">Account Type</th>
-              <th className="px-4 py-3 text-left font-medium">{tCommon('currency')}</th>
-              <th className="px-4 py-3 text-right font-medium">Debit</th>
-              <th className="px-4 py-3 text-right font-medium">Credit</th>
-              <th className="px-4 py-3 text-right font-medium">Balance After</th>
-              <th className="px-4 py-3 text-left font-medium">Reference</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={7} className="h-24 text-center">
-                  <div className="flex justify-center items-center gap-2">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                    <span className="text-muted-foreground">{tCommon('loading')}</span>
-                  </div>
-                </td>
-              </tr>
-            ) : filteredEntries.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="h-24 text-center text-muted-foreground">
-                  No ledger entries found matching the filters.
-                </td>
-              </tr>
-            ) : (
-              filteredEntries.map((entry) => (
-              <tr key={entry.id} className="border-t hover:bg-muted/30">
-                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                  {formatDate(entry.createdAt)}
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getAccountTypeColor(
-                      entry.accountType
-                    )}`}
-                  >
-                    {entry.accountType}
-                  </span>
-                </td>
-                <td className="px-4 py-3 font-mono">{entry.currency}</td>
-                <td className="px-4 py-3 text-right font-mono text-red-600 dark:text-red-400">
-                  {formatAmount(entry.debit, entry.currency)}
-                </td>
-                <td className="px-4 py-3 text-right font-mono text-green-600 dark:text-green-400">
-                  {formatAmount(entry.credit, entry.currency)}
-                </td>
-                <td className="px-4 py-3 text-right font-mono font-semibold">
-                  {formatAmount(entry.balanceAfter, entry.currency)}
-                </td>
-                <td className="px-4 py-3">
-                  <span className="text-xs text-muted-foreground">
-                    {entry.referenceType}
-                  </span>
-                  <br />
-                  <span className="font-mono text-xs">
-                    {entry.referenceId.substring(0, 20)}...
-                  </span>
-                </td>
-              </tr>
-            )))}
-          </tbody>
-        </table>
-      </div>
-
-      {filteredEntries.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground">
-          No ledger entries found matching the filters.
-        </div>
-      )}
+      <select
+        className="rounded-md border border-white/[0.08] bg-background px-3 py-1.5 text-sm"
+        value={filter.currency}
+        onChange={(e) => setFilter({ ...filter, currency: e.target.value })}
+      >
+        <option value="">All Currencies</option>
+        <option value="VND">VND</option>
+        <option value="BTC">BTC</option>
+        <option value="ETH">ETH</option>
+        <option value="USDT">USDT</option>
+      </select>
     </div>
+  );
+
+  return (
+    <main className="p-page flex flex-col gap-section">
+      <PageHeader
+        title="Ledger"
+        description="Double-entry ledger entries and balances"
+        actions={
+          <Button variant="outline" size="icon" onClick={fetchEntries} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        }
+      />
+
+      <StatGrid cols={3}>
+        <StatCard
+          title="Total Entries"
+          value={filteredEntries.length}
+          accentColor="cyan"
+          loading={loading}
+        />
+        <StatCard
+          title="Total Debits (VND)"
+          value={formatVnd(totals.totalDebitVnd)}
+          accentColor="amber"
+          loading={loading}
+        />
+        <StatCard
+          title="Total Credits (VND)"
+          value={formatVnd(totals.totalCreditVnd)}
+          accentColor="green"
+          loading={loading}
+        />
+      </StatGrid>
+
+      {error ? (
+        <ErrorState message={error} retry={fetchEntries} />
+      ) : (
+        <Panel header={{ title: "Ledger entries", actions: filterControls }}>
+          <DataTable
+            columns={columns}
+            data={filteredEntries}
+            loading={loading}
+            pagination
+            pageSize={15}
+            emptyState={
+              <EmptyState
+                title="No ledger entries"
+                description="No entries match the current filters."
+              />
+            }
+          />
+        </Panel>
+      )}
+    </main>
   );
 }

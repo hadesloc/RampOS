@@ -1,39 +1,103 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertCircle, DollarSign, ShieldAlert, Activity, Loader2, RefreshCw } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatCard } from "@/components/dashboard/stat-card";
-import { StatusBadge } from "@/components/dashboard/status-badge";
-import { Button } from "@/components/ui/button";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  AlertCircle,
+  DollarSign,
+  ShieldAlert,
+  Activity,
+  RefreshCw,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { riskApi, type RiskDashboardStats, type RiskAlert, type ConcentrationRisk } from "@/lib/api";
+import {
+  riskApi,
+  type RiskDashboardStats,
+  type RiskAlert,
+  type ConcentrationRisk,
+} from "@/lib/api";
 import { useToast } from "@/components/ui/use-toast";
+import {
+  PageHeader,
+  StatGrid,
+  StatCard,
+  Panel,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  StatusBadge,
+  type StatusSeverity,
+} from "@/components/shared";
+import { formatDateTime, toLabel } from "@/lib/format";
+import type { ColumnDef } from "@tanstack/react-table";
 
-function getSeverityColor(severity: string) {
-  switch (severity) {
-    case "CRITICAL":
-      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
-    case "HIGH":
-      return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400";
-    case "MEDIUM":
-    case "WARNING":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
-    case "LOW":
-    case "INFO":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
-    default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
-  }
-}
+// ── Alert table columns ───────────────────────────────────────────────────────
+
+const alertColumns: ColumnDef<RiskAlert>[] = [
+  {
+    accessorKey: "id",
+    header: "Alert ID",
+    cell: ({ getValue }) => (
+      <span className="font-mono text-xs text-muted-foreground">
+        {getValue<string>().substring(0, 12)}…
+      </span>
+    ),
+  },
+  {
+    accessorKey: "title",
+    header: "Title / Message",
+    cell: ({ row }) => (
+      <div>
+        <div className="text-sm font-medium">{row.original.title}</div>
+        <div className="text-xs text-muted-foreground line-clamp-1">
+          {row.original.message}
+        </div>
+      </div>
+    ),
+  },
+  {
+    accessorKey: "severity",
+    header: "Severity",
+    cell: ({ getValue }) => {
+      const sev = getValue<string>();
+      const map: Record<string, StatusSeverity> = {
+        CRITICAL: "danger",
+        HIGH: "warning",
+        MEDIUM: "warning",
+        LOW: "info",
+        WARNING: "warning",
+        INFO: "info",
+      };
+      return (
+        <StatusBadge status={sev} severity={map[sev] ?? "neutral"} dot />
+      );
+    },
+  },
+  {
+    id: "status",
+    header: "Status",
+    cell: ({ row }) => {
+      const a = row.original;
+      const label = a.is_acknowledged
+        ? "ACKNOWLEDGED"
+        : a.resolved_at
+        ? "RESOLVED"
+        : "OPEN";
+      return <StatusBadge status={label} dot={false} />;
+    },
+  },
+  {
+    accessorKey: "created_at",
+    header: "Time",
+    cell: ({ getValue }) => (
+      <span className="text-xs text-muted-foreground tabular-nums">
+        {formatDateTime(getValue<string>())}
+      </span>
+    ),
+  },
+];
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function RiskPage() {
   const [stats, setStats] = useState<RiskDashboardStats | null>(null);
@@ -73,180 +137,205 @@ export default function RiskPage() {
     fetchData();
   }, [fetchData]);
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64 gap-2">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        <span className="text-muted-foreground">Loading risk data...</span>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 gap-4">
-        <div className="text-red-500">{error}</div>
-        <Button variant="outline" size="sm" onClick={fetchData}>Try Again</Button>
-      </div>
-    );
-  }
+  const riskScore = stats?.risk_score ?? 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Risk Management</h1>
-          <p className="text-muted-foreground">
-            Monitor system health, exposure, and risk alerts
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-           <Button variant="outline">Export Report</Button>
-           <Button variant="outline" size="icon" onClick={fetchData} disabled={loading}>
-             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-           </Button>
-        </div>
-      </div>
+    <main className="p-6 md:p-8 flex flex-col gap-6">
+      <PageHeader
+        title="Risk Management"
+        description="Monitor system health, exposure, and risk alerts"
+        breadcrumb={[{ label: "Admin", href: "/admin" }, { label: "Risk" }]}
+        actions={
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="border-white/[0.08] hover:border-white/[0.16] hover:bg-white/[0.03] text-xs h-9"
+            >
+              Export Report
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={fetchData}
+              disabled={loading}
+              aria-label="Refresh risk data"
+              className="border-white/[0.08] hover:border-white/[0.16] hover:bg-white/[0.03] h-9 w-9"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
+        }
+      />
 
-      {/* Health Score & Key Metrics */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="col-span-2">
-            <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Overall Risk Score
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="flex items-center justify-between">
-                    <div className="text-4xl font-bold">{stats?.risk_score ?? 0}/100</div>
-                    <Activity className={`h-8 w-8 ${(stats?.risk_score ?? 0) < 50 ? 'text-green-500' : 'text-yellow-500'}`} />
-                </div>
-                <Progress
-                    value={100 - (stats?.risk_score ?? 0)}
-                    className="mt-4 h-2"
-                />
-                <p className="text-xs text-muted-foreground mt-2">
-                    Risk level: {stats?.overall_risk_level ?? "UNKNOWN"}. {stats?.active_alerts ?? 0} active alerts.
-                </p>
-            </CardContent>
-        </Card>
+      {/* Error */}
+      {error && !loading && (
+        <ErrorState
+          title="Failed to load risk data"
+          message={error}
+          retry={fetchData}
+        />
+      )}
 
+      {/* KPI strip */}
+      <StatGrid cols={4}>
+        {/* Risk score card spans 2 cols via className workaround with StatCard */}
+        <StatCard
+          title="Overall Risk Score"
+          value={loading ? "—" : `${riskScore}/100`}
+          icon={<Activity className="h-4 w-4" />}
+          accentColor={riskScore < 50 ? "green" : riskScore < 75 ? "amber" : "green"}
+          subtitle={`Level: ${stats?.overall_risk_level ?? "—"}`}
+          loading={loading}
+        />
         <StatCard
           title="Active Alerts"
-          value={stats?.active_alerts ?? 0}
+          value={loading ? "—" : (stats?.active_alerts ?? 0).toLocaleString()}
           icon={<AlertCircle className="h-4 w-4" />}
+          accentColor="amber"
           subtitle={`${stats?.critical_alerts ?? 0} critical`}
-          className={(stats?.active_alerts ?? 0) > 10 ? "border-orange-200 dark:border-orange-800" : ""}
+          loading={loading}
         />
-
         <StatCard
-          title="Monitored"
-          value={`${stats?.tokens_monitored ?? 0} tokens / ${stats?.protocols_monitored ?? 0} protocols`}
+          title="Tokens Monitored"
+          value={loading ? "—" : (stats?.tokens_monitored ?? 0).toLocaleString()}
           icon={<DollarSign className="h-4 w-4" />}
-          subtitle="Assets tracked"
+          accentColor="cyan"
+          subtitle="On-chain assets"
+          loading={loading}
         />
+        <StatCard
+          title="Protocols Monitored"
+          value={loading ? "—" : (stats?.protocols_monitored ?? 0).toLocaleString()}
+          icon={<ShieldAlert className="h-4 w-4" />}
+          accentColor="violet"
+          subtitle="Tracked protocols"
+          loading={loading}
+        />
+      </StatGrid>
+
+      {/* Risk score bar */}
+      {!loading && stats && (
+        <Panel
+          header={{
+            title: "Risk Score Indicator",
+            description: `Last updated: ${stats.last_updated ? formatDateTime(stats.last_updated) : "N/A"}`,
+          }}
+        >
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Risk level: {stats.overall_risk_level}</span>
+              <span className="font-bold tabular-nums">{riskScore}/100</span>
+            </div>
+            <Progress
+              value={100 - riskScore}
+              className="h-2"
+            />
+            <p className="text-xs text-muted-foreground">
+              {stats.active_alerts} active alerts — higher bar = healthier.
+            </p>
+          </div>
+        </Panel>
+      )}
+
+      {/* Main content grid */}
+      <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
+        {/* Alerts table */}
+        <Panel
+          header={{
+            title: "Recent Risk Alerts",
+            description: "Suspicious activities and threshold violations",
+          }}
+        >
+          <DataTable
+            columns={alertColumns}
+            data={alerts}
+            loading={loading}
+            pagination
+            pageSize={10}
+            emptyState={
+              <EmptyState
+                icon={<AlertCircle className="h-8 w-8" />}
+                title="No risk alerts"
+                description="No risk alerts have been generated yet."
+              />
+            }
+          />
+        </Panel>
+
+        {/* Concentration risk panel */}
+        <Panel
+          header={{
+            title: "Concentration Risk",
+            description: "Asset and protocol concentration vs limits",
+          }}
+        >
+          {loading ? (
+            <div className="space-y-4 animate-pulse">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <div className="h-4 bg-white/5 rounded w-2/3" />
+                  <div className="h-2 bg-white/5 rounded" />
+                </div>
+              ))}
+            </div>
+          ) : concentrations.length === 0 ? (
+            <EmptyState
+              title="No concentration data"
+              description="No concentration risk data is currently available."
+            />
+          ) : (
+            <div className="space-y-5">
+              {concentrations.map((item) => {
+                const exceeded = item.status === "EXCEEDED";
+                const warning = item.status === "WARNING";
+                const severity = exceeded
+                  ? "danger"
+                  : warning
+                  ? "warning"
+                  : "success";
+                return (
+                  <div key={`${item.category}-${item.name}`} className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-medium truncate">{item.name}</span>
+                        <StatusBadge
+                          status={item.status}
+                          severity={severity}
+                          dot
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                        {item.percentage.toFixed(1)}% / {item.limit_percent}%
+                      </span>
+                    </div>
+                    <Progress
+                      value={item.percentage}
+                      className="h-1.5"
+                    />
+                  </div>
+                );
+              })}
+
+              <div className="pt-4 border-t border-white/[0.06]">
+                <div className="flex items-start gap-3 rounded-lg bg-[#00FF87]/5 border border-[#00FF87]/15 p-3">
+                  <ShieldAlert className="h-4 w-4 text-[#00FF87] mt-0.5 shrink-0" />
+                  <div className="text-xs">
+                    <span className="font-semibold text-[#00FF87]">
+                      Risk Monitoring Active
+                    </span>
+                    <p className="text-muted-foreground mt-1">
+                      Last updated:{" "}
+                      {stats?.last_updated
+                        ? formatDateTime(stats.last_updated)
+                        : "N/A"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </Panel>
       </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        {/* Alerts List */}
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>Recent Risk Alerts</CardTitle>
-            <CardDescription>
-              Suspicious activities and threshold violations
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Alert ID</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Severity</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Time</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {alerts.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                      No risk alerts found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  alerts.map((alert) => (
-                    <TableRow key={alert.id}>
-                      <TableCell className="font-mono text-xs">{alert.id.substring(0, 12)}...</TableCell>
-                      <TableCell>
-                          <div className="font-medium">{alert.title}</div>
-                          <div className="text-xs text-muted-foreground">{alert.message}</div>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getSeverityColor(alert.severity)}`}>
-                          {alert.severity}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                          <StatusBadge status={alert.is_acknowledged ? "ACKNOWLEDGED" : (alert.resolved_at ? "RESOLVED" : "OPEN")} />
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground text-xs">
-                          {new Date(alert.created_at).toLocaleTimeString()}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        {/* Concentration Breakdown */}
-        <Card className="col-span-3">
-          <CardHeader>
-            <CardTitle>Concentration Risk</CardTitle>
-            <CardDescription>
-              Asset and protocol concentration
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-             {concentrations.length === 0 ? (
-               <div className="text-center py-8 text-muted-foreground">No concentration data available.</div>
-             ) : (
-               concentrations.map((item) => (
-                 <div key={`${item.category}-${item.name}`} className="space-y-2">
-                     <div className="flex items-center justify-between">
-                         <div className="font-medium flex items-center gap-2">
-                             {item.name}
-                             <span className={`text-xs px-1.5 py-0.5 rounded ${
-                               item.status === 'EXCEEDED' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                               item.status === 'WARNING' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                               'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                             }`}>{item.status}</span>
-                         </div>
-                         <div className="text-sm text-muted-foreground">
-                             {item.percentage.toFixed(1)}% (limit: {item.limit_percent}%)
-                         </div>
-                     </div>
-                     <Progress value={item.percentage} className="h-2" />
-                 </div>
-               ))
-             )}
-
-             <div className="pt-4 border-t">
-                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg flex items-start gap-3">
-                     <ShieldAlert className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-                     <div className="text-sm">
-                         <span className="font-medium text-blue-900 dark:text-blue-300">Risk Monitoring Active</span>
-                         <p className="text-blue-700 dark:text-blue-400 mt-1">
-                             Last updated: {stats?.last_updated ? new Date(stats.last_updated).toLocaleString() : "N/A"}
-                         </p>
-                     </div>
-                 </div>
-             </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+    </main>
   );
 }

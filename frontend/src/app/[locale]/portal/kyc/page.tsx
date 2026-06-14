@@ -4,22 +4,13 @@ import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Clock, CheckCircle2, XCircle, AlertCircle, Loader2, Upload, Camera } from "lucide-react";
+import { Clock, CheckCircle2, XCircle, Loader2, Upload, Camera, ShieldCheck, FileCheck2, UserCheck, ScanFace } from "lucide-react";
 import { KYCStatus, kycApi } from "@/lib/portal-api";
 import { useAuth } from "@/contexts/auth-context";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -32,6 +23,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PageContainer } from "@/components/layout/page-container";
 import { useRouter } from "@/navigation";
 import { useTranslations } from "next-intl";
+import { StatGrid, StatCard, Panel, SectionCard, EmptyState, ErrorState, StatusBadge, CardGridSkeleton } from "@/components/shared";
 
 const kycSchema = z.object({
   firstName: z.string().min(2, "First name must be at least 2 characters"),
@@ -48,6 +40,10 @@ type UploadedDocs = {
   idBack: File | null;
   selfie: File | null;
 };
+
+const inputClassName = "border-white/[0.08] bg-[#09090B] text-foreground placeholder:text-muted-foreground/50 focus-visible:ring-[#00D4FF]/40";
+const uploadBoxClassName = "rounded-xl border border-dashed border-white/[0.12] bg-[#09090B]/80 p-6 text-center transition-colors hover:border-[#00D4FF]/40 hover:bg-[#00D4FF]/[0.03]";
+const reviewBoxClassName = "rounded-xl border border-white/[0.08] bg-[#09090B]/80 p-4";
 
 export default function KYCPage() {
   const [step, setStep] = useState(1);
@@ -177,91 +173,166 @@ export default function KYCPage() {
     }
   };
 
-  // Show loading state
-  // if (authLoading || isLoadingStatus) {
-  //   return (
-  //     <div className="container max-w-2xl py-10">
-  //       <div className="flex items-center justify-center py-20">
-  //         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-  //       </div>
-  //     </div>
-  //   );
-  // }
+  const statusSeverity =
+    kycStatus?.status === "VERIFIED"
+      ? "success"
+      : kycStatus?.status === "REJECTED"
+      ? "danger"
+      : kycStatus?.status === "PENDING"
+      ? "warning"
+      : "neutral";
+
+  const uploadedCount = [uploadedDocs.idFront, uploadedDocs.idBack, uploadedDocs.selfie].filter(Boolean).length;
+  const requiredDocsReady = Boolean(uploadedDocs.idFront && uploadedDocs.selfie);
+
+  const renderUploadState = (
+    type: "idFront" | "idBack" | "selfie",
+    icon: "upload" | "camera",
+    label: string,
+    helper?: string
+  ) => {
+    const uploadedFile = uploadedDocs[type];
+    const isUploading = uploadProgress[type];
+    const Icon = icon === "camera" ? Camera : Upload;
+
+    if (uploadedFile) {
+      return (
+        <div className="flex items-center justify-center gap-2 text-[#00FF87]">
+          <CheckCircle2 className="h-5 w-5" />
+          <span className="truncate font-medium">{uploadedFile.name}</span>
+        </div>
+      );
+    }
+
+    if (isUploading) {
+      return (
+        <div className="flex items-center justify-center gap-2 text-[#00D4FF]">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>{tCommon('loading')}</span>
+        </div>
+      );
+    }
+
+    return (
+      <label className="cursor-pointer text-muted-foreground transition-colors hover:text-[#00D4FF]">
+        <Icon className="mx-auto mb-3 h-9 w-9" />
+        <span className="block text-sm font-medium">{label}</span>
+        {helper && <span className="mt-1 block text-xs text-muted-foreground/70">{helper}</span>}
+        <input
+          id={type === "idFront" ? "idFrontUpload" : type === "idBack" ? "idBackUpload" : "selfieUpload"}
+          type="file"
+          className="hidden"
+          accept={type === "selfie" ? "image/*" : "image/*,.pdf"}
+          capture={type === "selfie" ? "user" : undefined}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleFileUpload(type, file);
+          }}
+        />
+      </label>
+    );
+  };
+
+  if (authLoading || (isAuthenticated && isLoadingStatus)) {
+    return (
+      <PageContainer>
+        <PageHeader title={t('title')} description={t('description')} />
+        <div className="mx-auto max-w-5xl space-y-6">
+          <CardGridSkeleton cards={3} />
+          <Panel>
+            <div className="flex items-center justify-center py-10 text-muted-foreground">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin text-[#00D4FF]" />
+              {tCommon('loading')}
+            </div>
+          </Panel>
+        </div>
+      </PageContainer>
+    );
+  }
 
   // Show KYC status if already submitted
   if (kycStatus && kycStatus.status !== "NONE") {
     return (
       <PageContainer>
         <PageHeader title={t('title')} description={t('description')} />
-        <Card>
-          <CardContent className="pt-6">
+        <div className="mx-auto max-w-5xl space-y-6">
+          <StatGrid cols={3}>
+            <StatCard title={tCommon('status')} value={kycStatus.status} icon={<ShieldCheck className="h-4 w-4" />} accentColor={statusSeverity === "danger" ? "amber" : statusSeverity === "success" ? "green" : "violet"} subtitle={user?.email || t('description')} />
+            <StatCard title={t('step_4')} value="4 / 4" icon={<FileCheck2 className="h-4 w-4" />} accentColor="cyan" subtitle={t('step_4_desc')} />
+            <StatCard title="KYC Tier" value={kycStatus.tier ? `Level ${kycStatus.tier}` : "—"} icon={<UserCheck className="h-4 w-4" />} accentColor="amber" subtitle={kycStatus.submittedAt ? `Submitted ${new Date(kycStatus.submittedAt).toLocaleDateString()}` : t('description')} />
+          </StatGrid>
+
+          <SectionCard
+            header={{
+              title: t('title'),
+              description: t('description'),
+              actions: <StatusBadge status={kycStatus.status} severity={statusSeverity} />,
+            }}
+          >
             <KYCProgress
-                currentStep={4}
-                steps={[
-                    { label: t('step_1'), completed: true },
-                    { label: t('step_2'), completed: true },
-                    { label: t('step_3'), completed: true },
-                    { label: t('step_4'), completed: true }
-                ]}
-                status={kycStatus.status}
+              currentStep={4}
+              steps={[
+                { label: t('step_1'), completed: true },
+                { label: t('step_2'), completed: true },
+                { label: t('step_3'), completed: true },
+                { label: t('step_4'), completed: true }
+              ]}
+              status={kycStatus.status}
             />
+
             {kycStatus.status === "PENDING" && (
-              <div className="flex flex-col items-center text-center space-y-4 py-8">
-                <div className="rounded-full bg-yellow-100 p-4 dark:bg-yellow-900/30">
-                  <Clock className="h-12 w-12 text-yellow-600 dark:text-yellow-400" />
+              <div className="flex flex-col items-center space-y-4 py-8 text-center">
+                <div className="rounded-full border border-[#FFB800]/20 bg-[#FFB800]/10 p-4 text-[#FFB800] shadow-[0_0_32px_rgba(255,184,0,0.12)]">
+                  <Clock className="h-12 w-12" />
                 </div>
                 <div className="space-y-2">
-                  <h2 className="text-xl font-semibold">{t('pending')}</h2>
-                  <p className="text-muted-foreground max-w-md">
+                  <h2 className="text-xl font-semibold text-foreground">{t('pending')}</h2>
+                  <p className="max-w-md text-muted-foreground">
                     {tPortal('kyc_pending')}
                   </p>
                 </div>
                 {kycStatus.submittedAt && (
                   <p className="text-sm text-muted-foreground">
-                    Submitted on{" "}
-                    {new Date(kycStatus.submittedAt).toLocaleDateString()}
+                    Submitted on {new Date(kycStatus.submittedAt).toLocaleDateString()}
                   </p>
                 )}
               </div>
             )}
 
             {kycStatus.status === "VERIFIED" && (
-              <div className="flex flex-col items-center text-center space-y-4 py-8">
-                <div className="rounded-full bg-green-100 p-4 dark:bg-green-900/30">
-                  <CheckCircle2 className="h-12 w-12 text-green-600 dark:text-green-400" />
+              <div className="flex flex-col items-center space-y-4 py-8 text-center">
+                <div className="rounded-full border border-[#00FF87]/20 bg-[#00FF87]/10 p-4 text-[#00FF87] shadow-[0_0_32px_rgba(0,255,135,0.12)]">
+                  <CheckCircle2 className="h-12 w-12" />
                 </div>
                 <div className="space-y-2">
-                  <h2 className="text-xl font-semibold">{t('verified')}</h2>
-                  <p className="text-muted-foreground max-w-md">
+                  <h2 className="text-xl font-semibold text-foreground">{t('verified')}</h2>
+                  <p className="max-w-md text-muted-foreground">
                     Your identity has been verified. You now have full access to
                     all platform features.
                   </p>
                 </div>
-                <div className="rounded-lg bg-muted p-4">
+                <div className="rounded-xl border border-[#00FF87]/20 bg-[#00FF87]/10 px-4 py-3">
                   <p className="text-sm">
                     <span className="text-muted-foreground">KYC Tier:</span>{" "}
-                    <span className="font-medium">Level {kycStatus.tier}</span>
+                    <span className="font-medium text-[#00FF87]">Level {kycStatus.tier}</span>
                   </p>
                 </div>
               </div>
             )}
 
             {kycStatus.status === "REJECTED" && (
-              <div className="flex flex-col items-center text-center space-y-4 py-8">
-                <div className="rounded-full bg-red-100 p-4 dark:bg-red-900/30">
-                  <XCircle className="h-12 w-12 text-red-600 dark:text-red-400" />
+              <div className="flex flex-col items-center space-y-4 py-8 text-center">
+                <div className="rounded-full border border-red-400/20 bg-red-400/10 p-4 text-red-400 shadow-[0_0_32px_rgba(248,113,113,0.12)]">
+                  <XCircle className="h-12 w-12" />
                 </div>
                 <div className="space-y-2">
-                  <h2 className="text-xl font-semibold">{t('failed')}</h2>
-                  <p className="text-muted-foreground max-w-md">
+                  <h2 className="text-xl font-semibold text-foreground">{t('failed')}</h2>
+                  <p className="max-w-md text-muted-foreground">
                     {tPortal('kyc_rejected')}
                   </p>
                 </div>
                 {kycStatus.rejectionReason && (
-                  <Alert variant="destructive" className="max-w-md">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{kycStatus.rejectionReason}</AlertDescription>
-                  </Alert>
+                  <ErrorState title={t('failed')} message={kycStatus.rejectionReason} className="py-6" />
                 )}
                 <Button
                   onClick={() => {
@@ -269,13 +340,14 @@ export default function KYCPage() {
                     setStep(1);
                     setProgress(25);
                   }}
+                  className="bg-[#00FF87] text-black hover:bg-[#00FF87]/90"
                 >
                   {tCommon('try_again')}
                 </Button>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </SectionCard>
+        </div>
       </PageContainer>
     );
   }
@@ -291,41 +363,95 @@ export default function KYCPage() {
     <PageContainer>
       <PageHeader title={t('title')} description={t('description')} />
 
-      <div className="max-w-3xl mx-auto space-y-6">
-      <KYCProgress
-        currentStep={step}
-        steps={steps}
-        status={kycStatus?.status || 'NONE'}
-      />
+      <div className="mx-auto max-w-5xl space-y-6">
+        <StatGrid cols={3}>
+          <StatCard title={tCommon('status')} value="Incomplete" icon={<ShieldCheck className="h-4 w-4" />} accentColor="violet" subtitle={user?.email || t('description')} />
+          <StatCard title="Current step" value={`${step} / 4`} icon={<ScanFace className="h-4 w-4" />} accentColor="cyan" subtitle={steps[step - 1]?.label} />
+          <StatCard title="Documents" value={`${uploadedCount} / 3`} icon={<FileCheck2 className="h-4 w-4" />} accentColor={requiredDocsReady ? "green" : "amber"} subtitle={requiredDocsReady ? tCommon('success') : t('step_2')} />
+        </StatGrid>
 
-      {error && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+        <Panel>
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">{t('title')}</p>
+                <p className="text-xs text-muted-foreground">{t('description')}</p>
+              </div>
+              <StatusBadge status="Not submitted" severity="neutral" />
+            </div>
+            <KYCProgress
+              currentStep={step}
+              steps={steps}
+              status={kycStatus?.status || 'NONE'}
+            />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{steps[step - 1]?.label}</span>
+                <span>{progress}%</span>
+              </div>
+              <Progress value={progress} className="h-2 bg-white/[0.06]" />
+            </div>
+          </div>
+        </Panel>
 
-      <Card>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          {step === 1 && (
-            <>
-              <CardHeader>
-                <CardTitle>{t('step_1')}</CardTitle>
-                <CardDescription>
-                  {t('step_1_desc')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+        {error && (
+          <Panel>
+            <ErrorState title={tCommon('error')} message={error} className="py-6" />
+          </Panel>
+        )}
+
+        <Panel
+          header={{
+            title: steps[step - 1]?.label,
+            description: step === 1 ? t('step_1_desc') : step === 2 ? `Upload clear pictures of your ${formData.idDocumentType?.toLowerCase().replace("_", " ") || "ID"}.` : step === 3 ? t('step_3_desc') : t('step_4_desc'),
+            actions: <StatusBadge status={`Step ${step}`} severity="info" />,
+          }}
+          footer={
+            <div className="flex w-full justify-between gap-3">
+              {step > 1 ? (
+                <Button type="button" variant="outline" onClick={prevStep} className="border-white/[0.1] bg-transparent hover:border-[#7B61FF]/50 hover:bg-[#7B61FF]/10">
+                  {tCommon('back')}
+                </Button>
+              ) : (
+                <div />
+              )}
+
+              {step < 4 ? (
+                <Button type="button" onClick={nextStep} className="bg-[#00FF87] text-black hover:bg-[#00FF87]/90">
+                  {tCommon('next')}
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  form="kyc-form"
+                  disabled={
+                    isSubmitting || !uploadedDocs.idFront || !uploadedDocs.selfie
+                  }
+                  className="bg-[#00FF87] text-black hover:bg-[#00FF87]/90 disabled:bg-white/10 disabled:text-muted-foreground"
+                >
+                  {isSubmitting && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {tCommon('submit')}
+                </Button>
+              )}
+            </div>
+          }
+        >
+          <form id="kyc-form" onSubmit={handleSubmit(onSubmit)}>
+            {step === 1 && (
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="firstName">{t('first_name')}</Label>
                     <Input
                       id="firstName"
+                      className={inputClassName}
                       {...register("firstName")}
                       placeholder="John"
                     />
                     {errors.firstName && (
-                      <p className="text-sm text-red-500">
+                      <p className="text-sm text-red-400">
                         {errors.firstName?.message as string}
                       </p>
                     )}
@@ -334,11 +460,12 @@ export default function KYCPage() {
                     <Label htmlFor="lastName">{t('last_name')}</Label>
                     <Input
                       id="lastName"
+                      className={inputClassName}
                       {...register("lastName")}
                       placeholder="Doe"
                     />
                     {errors.lastName && (
-                      <p className="text-sm text-red-500">
+                      <p className="text-sm text-red-400">
                         {errors.lastName?.message as string}
                       </p>
                     )}
@@ -346,9 +473,9 @@ export default function KYCPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="dob">{t('dob')}</Label>
-                  <Input id="dob" type="date" {...register("dob")} />
+                  <Input id="dob" type="date" className={inputClassName} {...register("dob")} />
                   {errors.dob && (
-                    <p className="text-sm text-red-500">
+                    <p className="text-sm text-red-400">
                       {errors.dob?.message as string}
                     </p>
                   )}
@@ -357,11 +484,12 @@ export default function KYCPage() {
                   <Label htmlFor="address">{t('address')}</Label>
                   <Input
                     id="address"
+                    className={inputClassName}
                     {...register("address")}
                     placeholder="123 Main St, City, Country"
                   />
                   {errors.address && (
-                    <p className="text-sm text-red-500">
+                    <p className="text-sm text-red-400">
                       {errors.address?.message as string}
                     </p>
                   )}
@@ -377,10 +505,10 @@ export default function KYCPage() {
                     }
                     defaultValue={formData.idDocumentType}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={inputClassName}>
                       <SelectValue placeholder="Select document type" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="border-white/[0.08] bg-[#111113]">
                       <SelectItem value="PASSPORT">Passport</SelectItem>
                       <SelectItem value="DRIVERS_LICENSE">
                         Driver&apos;s License
@@ -389,198 +517,89 @@ export default function KYCPage() {
                     </SelectContent>
                   </Select>
                   {errors.idDocumentType && (
-                    <p className="text-sm text-red-500">
+                    <p className="text-sm text-red-400">
                       {errors.idDocumentType?.message as string}
                     </p>
                   )}
                 </div>
-              </CardContent>
-            </>
-          )}
+              </div>
+            )}
 
-          {step === 2 && (
-            <>
-              <CardHeader>
-                <CardTitle>{t('step_2')}</CardTitle>
-                <CardDescription>
-                  Upload clear pictures of your {formData.idDocumentType?.toLowerCase().replace("_", " ") || "ID"}.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
+            {step === 2 && (
+              <div className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>{t('id_front')}</Label>
-                    <div className="border-2 border-dashed rounded-lg p-6 text-center">
-                      {uploadedDocs.idFront ? (
-                        <div className="flex items-center justify-center gap-2 text-green-600">
-                          <CheckCircle2 className="h-5 w-5" />
-                          <span>{uploadedDocs.idFront.name}</span>
-                        </div>
-                      ) : uploadProgress.idFront ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <Loader2 className="h-5 w-5 animate-spin" />
-                          <span>{tCommon('loading')}</span>
-                        </div>
-                      ) : (
-                        <label className="cursor-pointer">
-                          <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">
-                            {t('upload_front')}
-                          </span>
-                          <input
-                            id="idFrontUpload"
-                            type="file"
-                            className="hidden"
-                            accept="image/*,.pdf"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleFileUpload("idFront", file);
-                            }}
-                          />
-                        </label>
-                      )}
+                    <div className={uploadBoxClassName}>
+                      {renderUploadState("idFront", "upload", t('upload_front'))}
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <Label>{t('id_back')}</Label>
-                    <div className="border-2 border-dashed rounded-lg p-6 text-center">
-                      {uploadedDocs.idBack ? (
-                        <div className="flex items-center justify-center gap-2 text-green-600">
-                          <CheckCircle2 className="h-5 w-5" />
-                          <span>{uploadedDocs.idBack.name}</span>
-                        </div>
-                      ) : uploadProgress.idBack ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <Loader2 className="h-5 w-5 animate-spin" />
-                          <span>{tCommon('loading')}</span>
-                        </div>
-                      ) : (
-                        <label className="cursor-pointer">
-                          <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">
-                            {t('upload_back')}
-                          </span>
-                          <input
-                            id="idBackUpload"
-                            type="file"
-                            className="hidden"
-                            accept="image/*,.pdf"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleFileUpload("idBack", file);
-                            }}
-                          />
-                        </label>
-                      )}
+                    <div className={uploadBoxClassName}>
+                      {renderUploadState("idBack", "upload", t('upload_back'))}
                     </div>
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="rounded-lg border border-[#00D4FF]/20 bg-[#00D4FF]/10 px-3 py-2 text-sm text-[#00D4FF]">
                   Supported formats: JPG, PNG, PDF. Max file size: 10MB
                 </p>
-              </CardContent>
-            </>
-          )}
+              </div>
+            )}
 
-          {step === 3 && (
-            <>
-              <CardHeader>
-                <CardTitle>{t('step_3')}</CardTitle>
-                <CardDescription>
-                  {t('step_3_desc')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                  {uploadedDocs.selfie ? (
-                    <div className="flex items-center justify-center gap-2 text-green-600">
-                      <CheckCircle2 className="h-5 w-5" />
-                      <span>{uploadedDocs.selfie.name}</span>
-                    </div>
-                  ) : uploadProgress.selfie ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      <span>{tCommon('loading')}</span>
-                    </div>
-                  ) : (
-                    <label className="cursor-pointer">
-                      <Camera className="h-12 w-12 mx-auto mb-2 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground block">
-                        {t('upload_selfie')}
-                      </span>
-                      <span className="text-xs text-muted-foreground block mt-1">
-                        Make sure your face is clearly visible
-                      </span>
-                      <input
-                        id="selfieUpload"
-                        type="file"
-                        className="hidden"
-                        accept="image/*"
-                        capture="user"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFileUpload("selfie", file);
-                        }}
-                      />
-                    </label>
-                  )}
+            {step === 3 && (
+              <div className="space-y-4">
+                <div className={uploadBoxClassName}>
+                  {renderUploadState("selfie", "camera", t('upload_selfie'), "Make sure your face is clearly visible")}
                 </div>
-              </CardContent>
-            </>
-          )}
+              </div>
+            )}
 
-          {step === 4 && (
-            <>
-              <CardHeader>
-                <CardTitle>{t('step_4')}</CardTitle>
-                <CardDescription>
-                  {t('step_4_desc')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-lg border p-4 space-y-2">
-                  <div className="grid grid-cols-3 gap-2 text-sm">
+            {step === 4 && (
+              <div className="space-y-4">
+                <div className={reviewBoxClassName}>
+                  <div className="grid grid-cols-3 gap-3 text-sm">
                     <span className="font-medium text-muted-foreground">
                       {t('first_name')}:
                     </span>
-                    <span className="col-span-2">
+                    <span className="col-span-2 text-foreground">
                       {formData.firstName} {formData.lastName}
                     </span>
 
                     <span className="font-medium text-muted-foreground">
                       {t('dob')}:
                     </span>
-                    <span className="col-span-2">{formData.dob}</span>
+                    <span className="col-span-2 text-foreground">{formData.dob}</span>
 
                     <span className="font-medium text-muted-foreground">
                       {t('address')}:
                     </span>
-                    <span className="col-span-2">{formData.address}</span>
+                    <span className="col-span-2 text-foreground">{formData.address}</span>
 
                     <span className="font-medium text-muted-foreground">
                       {t('id_type')}:
                     </span>
-                    <span className="col-span-2">
+                    <span className="col-span-2 text-foreground">
                       {formData.idDocumentType?.replace("_", " ")}
                     </span>
                   </div>
                 </div>
 
-                <div className="rounded-lg border p-4 space-y-2">
-                  <p className="font-medium text-sm">Uploaded Documents</p>
-                  <div className="space-y-1 text-sm">
+                <div className={reviewBoxClassName}>
+                  <p className="mb-3 text-sm font-medium text-foreground">Uploaded Documents</p>
+                  <div className="space-y-2 text-sm">
                     <div className="flex items-center gap-2">
                       {uploadedDocs.idFront ? (
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        <CheckCircle2 className="h-4 w-4 text-[#00FF87]" />
                       ) : (
-                        <XCircle className="h-4 w-4 text-red-500" />
+                        <XCircle className="h-4 w-4 text-red-400" />
                       )}
                       <span>{t('id_front')}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       {uploadedDocs.idBack ? (
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        <CheckCircle2 className="h-4 w-4 text-[#00FF87]" />
                       ) : (
                         <span className="h-4 w-4" />
                       )}
@@ -590,52 +609,32 @@ export default function KYCPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       {uploadedDocs.selfie ? (
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        <CheckCircle2 className="h-4 w-4 text-[#00FF87]" />
                       ) : (
-                        <XCircle className="h-4 w-4 text-red-500" />
+                        <XCircle className="h-4 w-4 text-red-400" />
                       )}
                       <span>{t('step_3')}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="text-sm text-muted-foreground">
+                {!requiredDocsReady && (
+                  <EmptyState
+                    icon={<FileCheck2 className="h-10 w-10" />}
+                    title="Required documents are incomplete"
+                    description="Upload the front of your ID and a selfie before submitting."
+                    className="rounded-xl border border-[#FFB800]/20 bg-[#FFB800]/10 py-8"
+                  />
+                )}
+
+                <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-sm text-muted-foreground">
                   By submitting, you agree to our Terms of Service and Privacy
                   Policy.
                 </div>
-              </CardContent>
-            </>
-          )}
-
-          <CardFooter className="flex justify-between">
-            {step > 1 ? (
-              <Button type="button" variant="outline" onClick={prevStep}>
-                {tCommon('back')}
-              </Button>
-            ) : (
-              <div />
+              </div>
             )}
-
-            {step < 4 ? (
-              <Button type="button" onClick={nextStep}>
-                {tCommon('next')}
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                disabled={
-                  isSubmitting || !uploadedDocs.idFront || !uploadedDocs.selfie
-                }
-              >
-                {isSubmitting && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                {tCommon('submit')}
-              </Button>
-            )}
-          </CardFooter>
-        </form>
-      </Card>
+          </form>
+        </Panel>
       </div>
     </PageContainer>
   );

@@ -1,27 +1,34 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowLeftRight,
   BrainCircuit,
   GitCompareArrows,
   Loader2,
+  Network,
   RefreshCw,
+  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  CardGridSkeleton,
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  Panel,
+  SectionCard,
+  StatCard,
+  StatGrid,
+  StatusBadge,
+} from "@/components/shared";
+import { formatMoney, formatNumber, formatPercent, toLabel } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 type ScorerKind = "RULE_BASED" | "ONNX_HEURISTIC" | string;
 
@@ -249,16 +256,16 @@ async function apiRequest<T>(endpoint: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function decisionVariant(decision?: string | null) {
+function decisionSeverity(decision?: string | null) {
   switch ((decision ?? "").toUpperCase()) {
     case "ALLOW":
       return "success" as const;
     case "BLOCK":
-      return "destructive" as const;
+      return "danger" as const;
     case "REVIEW":
       return "warning" as const;
     default:
-      return "outline" as const;
+      return "neutral" as const;
   }
 }
 
@@ -269,11 +276,19 @@ function formatDecision(decision?: string | null): string {
 
 function formatDelta(value?: number | null): string {
   if (value === null || value === undefined) return "No challenger";
-  return value > 0 ? `+${value}` : `${value}`;
+  return value > 0 ? `+${formatNumber(value)}` : formatNumber(value);
 }
 
-function formatFeatureValue(value: number): string {
-  return Number.isInteger(value) ? `${value}` : value.toFixed(2);
+function formatFeatureValue(key: string, value: number): string {
+  if (key.toLowerCase().includes("usd")) return formatMoney(value, "USD");
+  if (key.toLowerCase().includes("rate") || key.toLowerCase().includes("risk") || key.toLowerCase().includes("percentile")) {
+    return formatPercent(value);
+  }
+  return Number.isInteger(value) ? formatNumber(value) : value.toFixed(2);
+}
+
+function neonInputClassName() {
+  return "border-white/[0.08] bg-[#09090B]/70 text-foreground shadow-inner shadow-black/20 focus-visible:ring-[#00D4FF]/30";
 }
 
 export default function RiskLabWorkbench() {
@@ -389,79 +404,88 @@ export default function RiskLabWorkbench() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Risk Lab</h1>
-          <p className="text-muted-foreground">
-            Compare primary scoring against a bounded shadow lane, replay feature snapshots, and
-            keep explainability visible for every operator decision.
+      <PageHeader
+        title="Risk Lab"
+        description="Compare primary scoring against a bounded shadow lane, replay feature snapshots, and keep explainability visible for every operator decision."
+        actions={
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => void loadCatalog()}
+            disabled={catalogLoading}
+            aria-label="Refresh risk lab catalog"
+            className="border-[#00D4FF]/25 bg-[#00D4FF]/10 text-[#00D4FF] hover:bg-[#00D4FF]/15"
+          >
+            {catalogLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+          </Button>
+        }
+      />
+
+      <StatGrid>
+        <StatCard
+          title="Catalog entries"
+          value={catalogLoading ? "Loading" : formatNumber(catalogEntries.length)}
+          icon={<ShieldCheck className="h-4 w-4" />}
+          loading={catalogLoading}
+          subtitle="Backend-published scorers"
+          accentColor="green"
+        />
+        <StatCard
+          title="Shadow compare"
+          value={catalogLoading ? "Loading" : selectedShadowEntry ? "Configured" : "Not configured"}
+          icon={<GitCompareArrows className="h-4 w-4" />}
+          loading={catalogLoading}
+          subtitle={selectedShadowEntry?.label ?? "Catalog controlled"}
+          accentColor="violet"
+        />
+        <StatCard
+          title="Primary outcome"
+          value={formatDecision(lastDecision)}
+          icon={<BrainCircuit className="h-4 w-4" />}
+          subtitle="Latest replay decision"
+          accentColor="cyan"
+        />
+        <StatCard
+          title="Scenario amount"
+          value={formatMoney(featureVector.amountUsd, "USD")}
+          icon={<Sparkles className="h-4 w-4" />}
+          subtitle={`${formatNumber(featureVector.velocity24h)} tx / 24h`}
+          accentColor="amber"
+        />
+      </StatGrid>
+
+      <Panel
+        variant="glass"
+        className="border-[#00D4FF]/15 bg-[#09090B]/70"
+        contentClassName="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#00D4FF]">
+            <Network className="h-4 w-4" />
+            Bounded replay surface
+          </div>
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            The workbench stays inside published admin routes and avoids broader risk operations until
+            the backend exposes them.
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => void loadCatalog()}
-          disabled={catalogLoading}
-          aria-label="Refresh risk lab catalog"
-        >
-          {catalogLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Catalog entries</CardDescription>
-            <CardTitle>{catalogLoading ? "Loading..." : `${catalogEntries.length}`}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Shadow compare</CardDescription>
-            <CardTitle className="text-lg">
-              {catalogLoading ? "Loading..." : selectedShadowEntry ? "Configured" : "Not configured"}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Latest primary outcome</CardDescription>
-            <CardTitle>{formatDecision(lastDecision)}</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
-
-      <Card className="border-dashed">
-        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-          <div className="space-y-1">
-            <CardTitle className="text-base">Bounded replay surface</CardTitle>
-            <CardDescription>
-              The workbench stays inside the published admin routes and avoids any broader risk
-              operations until the backend exposes them.
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <GitCompareArrows className="h-4 w-4" />
-            Compare, replay, explain
-          </div>
-        </CardHeader>
-      </Card>
+        <StatusBadge status="Compare, replay, explain" severity="info" />
+      </Panel>
 
       <div className="grid gap-6 xl:grid-cols-[1.05fr,0.95fr]">
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Replay scenarios</CardTitle>
-              <CardDescription>
-                Start from a bounded scenario and then tune a few high-signal inputs instead of
-                opening a full product shell.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
+          <SectionCard
+            header={{
+              title: "Replay scenarios",
+              description:
+                "Start from a bounded scenario and then tune high-signal inputs instead of opening a full product shell.",
+            }}
+          >
+            <div className="grid gap-3">
               {SCENARIOS.map((scenario) => {
                 const isActive = scenario.id === selectedScenarioId;
 
@@ -470,37 +494,33 @@ export default function RiskLabWorkbench() {
                     key={scenario.id}
                     type="button"
                     onClick={() => applyScenario(scenario.id)}
-                    className={`w-full rounded-xl border p-4 text-left transition ${
+                    className={cn(
+                      "w-full rounded-xl border p-4 text-left transition duration-300",
                       isActive
-                        ? "border-primary bg-primary/5 shadow-sm"
-                        : "border-border hover:border-primary/40 hover:bg-muted/30"
-                    }`}
+                        ? "border-[#00FF87]/40 bg-[#00FF87]/10 shadow-[0_0_28px_rgba(0,255,135,0.08)]"
+                        : "border-white/[0.06] bg-[#09090B]/50 hover:border-[#00D4FF]/35 hover:bg-[#00D4FF]/5",
+                    )}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="font-medium">{scenario.label}</div>
+                        <div className="font-medium text-foreground">{scenario.label}</div>
                         <p className="mt-1 text-sm text-muted-foreground">{scenario.description}</p>
                       </div>
-                      {isActive ? (
-                        <Badge variant="info" shape="pill">
-                          Active
-                        </Badge>
-                      ) : null}
+                      {isActive ? <StatusBadge status="Active" severity="success" /> : null}
                     </div>
                   </button>
                 );
               })}
-            </CardContent>
-          </Card>
+            </div>
+          </SectionCard>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Replay setup</CardTitle>
-              <CardDescription>
-                Tune only the inputs that change the operator readout most, then run a new replay.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <SectionCard
+            header={{
+              title: "Replay setup",
+              description: "Tune only inputs that change the operator readout most, then run a new replay.",
+            }}
+          >
+            <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="risk-lab-replay-id">Replay ID</Label>
@@ -508,6 +528,7 @@ export default function RiskLabWorkbench() {
                     id="risk-lab-replay-id"
                     value={replayId}
                     onChange={(event) => setReplayId(event.target.value)}
+                    className={neonInputClassName()}
                   />
                 </div>
                 <div className="space-y-2">
@@ -516,6 +537,7 @@ export default function RiskLabWorkbench() {
                     id="risk-lab-rule-version"
                     value={ruleVersionId}
                     onChange={(event) => setRuleVersionId(event.target.value)}
+                    className={neonInputClassName()}
                   />
                 </div>
               </div>
@@ -530,58 +552,25 @@ export default function RiskLabWorkbench() {
                       step={field.step}
                       value={featureVector[field.key]}
                       onChange={(event) => handleFeatureChange(field.key, event.target.value)}
+                      className={neonInputClassName()}
                     />
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Compare lane</CardTitle>
-              <CardDescription>
-                Primary scoring remains rule-based. Shadow compare stays opt-in and catalog-backed.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="text-sm text-muted-foreground">Primary lane</div>
-                  <div className="mt-2 font-medium">Rule-based scorer</div>
-                  <div className="mt-2 text-sm text-muted-foreground">
-                    Live operator baseline for replay and explanation output.
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="risk-lab-shadow-compare">Shadow compare lane</Label>
-                  <select
-                    id="risk-lab-shadow-compare"
-                    aria-label="Shadow compare lane"
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    value={selectedChallengerKind}
-                    onChange={(event) => setSelectedChallengerKind(event.target.value)}
-                    disabled={catalogLoading || shadowCompareOptions.length === 0}
-                  >
-                    {shadowCompareOptions.length === 0 ? (
-                      <option value="">No compare lanes published</option>
-                    ) : (
-                      shadowCompareOptions.map((entry) => (
-                        <option key={entry.scorerKind} value={entry.scorerKind}>
-                          {entry.label}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                  <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-                    Safe fallback: {selectedShadowEntry?.safeFallback ?? "Not available"}
-                  </div>
-                </div>
-              </div>
+            </div>
+          </SectionCard>
 
+          <SectionCard
+            header={{
+              title: "Compare lane",
+              description: "Primary scoring remains rule-based. Shadow compare stays opt-in and catalog-backed.",
+            }}
+            footer={
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   onClick={handleRunReplay}
                   disabled={catalogLoading || !!catalogError || replayLoading}
+                  className="bg-[#00FF87] text-black hover:bg-[#00FF87]/90"
                 >
                   {replayLoading ? (
                     <>
@@ -596,261 +585,239 @@ export default function RiskLabWorkbench() {
                   )}
                 </Button>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Sparkles className="h-4 w-4" />
+                  <Sparkles className="h-4 w-4 text-[#FFB800]" />
                   Explainability stays attached to the same replay request.
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            }
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-[#00FF87]/15 bg-[#00FF87]/5 p-4">
+                <div className="text-sm text-muted-foreground">Primary lane</div>
+                <div className="mt-2 font-medium text-[#00FF87]">Rule-based scorer</div>
+                <div className="mt-2 text-sm text-muted-foreground">
+                  Live operator baseline for replay and explanation output.
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="risk-lab-shadow-compare">Shadow compare lane</Label>
+                <select
+                  id="risk-lab-shadow-compare"
+                  aria-label="Shadow compare lane"
+                  className="w-full rounded-md border border-white/[0.08] bg-[#09090B]/70 px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7B61FF]/30"
+                  value={selectedChallengerKind}
+                  onChange={(event) => setSelectedChallengerKind(event.target.value)}
+                  disabled={catalogLoading || shadowCompareOptions.length === 0}
+                >
+                  {shadowCompareOptions.length === 0 ? (
+                    <option value="">No compare lanes published</option>
+                  ) : (
+                    shadowCompareOptions.map((entry) => (
+                      <option key={entry.scorerKind} value={entry.scorerKind}>
+                        {entry.label}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <div className="rounded-md border border-white/[0.06] bg-[#7B61FF]/10 px-3 py-2 text-sm text-muted-foreground">
+                  Safe fallback: {selectedShadowEntry?.safeFallback ?? "Not available"}
+                </div>
+              </div>
+            </div>
+          </SectionCard>
         </div>
 
         <div className="space-y-6">
           {catalogLoading ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Loading compare surface</CardTitle>
-                <CardDescription>Loading risk lab catalog...</CardDescription>
-              </CardHeader>
-              <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Waiting for the backend-published scorer catalog.
-              </CardContent>
-            </Card>
+            <Panel header={{ title: "Loading compare surface", description: "Loading risk lab catalog..." }}>
+              <CardGridSkeleton cards={2} className="lg:grid-cols-2" />
+            </Panel>
           ) : catalogError ? (
-            <Card className="border-destructive/40">
-              <CardHeader>
-                <CardTitle>Catalog unavailable</CardTitle>
-                <CardDescription>
-                  The workbench stays bounded until the catalog can be fetched again.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                  {catalogError}
-                </div>
-                <div className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
-                  Catalog data defines the bounded compare surface exposed by the backend.
-                </div>
-                <Button variant="outline" onClick={() => void loadCatalog()}>
-                  Retry catalog
-                </Button>
-              </CardContent>
-            </Card>
+            <Panel header={{ title: "Catalog unavailable", description: "The workbench stays bounded until the catalog can be fetched again." }}>
+              <ErrorState message={catalogError} retry={() => void loadCatalog()} />
+            </Panel>
           ) : replayLoading ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Replay in progress</CardTitle>
-                <CardDescription>
-                  Preparing compare and explanation surfaces for the selected replay.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Waiting for replay scoring, challenger comparison, and graph assembly.
-              </CardContent>
-            </Card>
+            <Panel header={{ title: "Replay in progress", description: "Preparing compare and explanation surfaces for the selected replay." }}>
+              <EmptyState
+                icon={<Loader2 className="h-8 w-8 animate-spin text-[#00D4FF]" />}
+                title="Running replay"
+                description="Waiting for replay scoring, challenger comparison, and graph assembly."
+              />
+            </Panel>
           ) : replayError ? (
-            <Card className="border-destructive/40">
-              <CardHeader>
-                <CardTitle>Replay request failed</CardTitle>
-                <CardDescription>
-                  The compare lane remains intact so the operator can adjust and rerun.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                  {replayError}
-                </div>
-                <div className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
-                  Adjust the feature snapshot or compare lane and rerun.
-                </div>
-              </CardContent>
-            </Card>
+            <Panel header={{ title: "Replay request failed", description: "The compare lane remains intact so the operator can adjust and rerun." }}>
+              <ErrorState message={replayError} />
+            </Panel>
           ) : replayResult ? (
             <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>{replayResult.replayId}</CardTitle>
-                  <CardDescription>
-                    Primary and challenger outcomes stay side-by-side for operator review.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
+              <SectionCard
+                header={{
+                  title: replayResult.replayId,
+                  description: "Primary and challenger outcomes stay side-by-side for operator review.",
+                }}
+              >
+                <div className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-3">
-                    <div className="rounded-xl border bg-muted/20 p-4">
+                    <div className="rounded-xl border border-white/[0.06] bg-[#09090B]/60 p-4">
                       <div className="text-sm text-muted-foreground">Primary decision</div>
                       <div className="mt-2 flex items-center gap-2">
                         <span className="text-2xl font-semibold">
                           {formatDecision(replayResult.primaryDecision.decision)}
                         </span>
-                        <Badge
-                          variant={decisionVariant(replayResult.primaryDecision.decision)}
-                          shape="pill"
-                        >
-                          {replayResult.primaryScore.riskScore.score}
-                        </Badge>
+                        <StatusBadge
+                          status={formatNumber(replayResult.primaryScore.riskScore.score)}
+                          severity={decisionSeverity(replayResult.primaryDecision.decision)}
+                        />
                       </div>
                     </div>
-                    <div className="rounded-xl border bg-muted/20 p-4">
+                    <div className="rounded-xl border border-white/[0.06] bg-[#09090B]/60 p-4">
                       <div className="text-sm text-muted-foreground">Challenger decision</div>
                       <div className="mt-2 flex items-center gap-2">
                         <span className="text-2xl font-semibold">
                           {formatDecision(replayResult.challengerDecision?.decision)}
                         </span>
                         {replayResult.challengerScore ? (
-                          <Badge
-                            variant={decisionVariant(replayResult.challengerDecision?.decision)}
-                            shape="pill"
-                          >
-                            {replayResult.challengerScore.riskScore.score}
-                          </Badge>
+                          <StatusBadge
+                            status={formatNumber(replayResult.challengerScore.riskScore.score)}
+                            severity={decisionSeverity(replayResult.challengerDecision?.decision)}
+                          />
                         ) : null}
                       </div>
                     </div>
-                    <div className="rounded-xl border bg-muted/20 p-4">
+                    <div className="rounded-xl border border-white/[0.06] bg-[#09090B]/60 p-4">
                       <div className="text-sm text-muted-foreground">Score delta</div>
-                      <div className="mt-2 text-2xl font-semibold">
+                      <div className="mt-2 text-2xl font-semibold text-[#00D4FF]">
                         {formatDelta(replayResult.scoreDelta)}
                       </div>
                     </div>
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <div className="rounded-xl border p-4">
-                      <div className="mb-3 flex items-center gap-2">
-                        <BrainCircuit className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">Primary factors</span>
+                    <RiskFactorsPanel
+                      title="Primary factors"
+                      icon={<BrainCircuit className="h-4 w-4 text-[#00FF87]" />}
+                      factors={replayResult.primaryScore.metadata.topRiskFactors}
+                    />
+                    <RiskFactorsPanel
+                      title="Challenger factors"
+                      icon={<AlertTriangle className="h-4 w-4 text-[#FFB800]" />}
+                      factors={replayResult.challengerScore?.metadata.topRiskFactors ?? []}
+                      emptyDescription="Challenger compare is disabled for this replay."
+                    />
+                  </div>
+                </div>
+              </SectionCard>
+
+              <StatGrid>
+                <StatCard
+                  title="Graph nodes"
+                  value={formatNumber(replayResult.graph.nodes.length)}
+                  icon={<Network className="h-4 w-4" />}
+                  accentColor="violet"
+                />
+                <StatCard
+                  title="Graph edges"
+                  value={formatNumber(replayResult.graph.edges.length)}
+                  icon={<GitCompareArrows className="h-4 w-4" />}
+                  accentColor="cyan"
+                />
+              </StatGrid>
+
+              <SectionCard
+                header={{
+                  title: "Explainability graph",
+                  description: "Replay, decision, and factor nodes remain inspectable without leaving the admin workbench.",
+                }}
+              >
+                <div className="grid gap-3">
+                  {replayResult.graph.nodes.map((node) => (
+                    <div
+                      key={node.id}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-[#09090B]/60 px-4 py-3"
+                    >
+                      <div>
+                        <div className="font-medium">
+                          {node.kind === "REPLAY"
+                            ? "Replay root"
+                            : node.kind === "RULE_FACTOR"
+                              ? `Factor: ${node.label}`
+                              : node.label}
+                        </div>
+                        <div className="text-sm text-muted-foreground">{toLabel(node.kind)}</div>
                       </div>
-                      <div className="space-y-3">
-                        {replayResult.primaryScore.metadata.topRiskFactors.map((factor) => (
-                          <div key={factor.ruleName} className="rounded-lg border bg-muted/20 p-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="font-medium">{factor.ruleName}</div>
-                              <Badge variant="outline" shape="pill">
-                                +{factor.contribution}
-                              </Badge>
-                            </div>
-                            <p className="mt-2 text-sm text-muted-foreground">
-                              {factor.description}
-                            </p>
-                          </div>
-                        ))}
+                      <div className="text-sm text-muted-foreground">
+                        {node.weight === null ? "No weight" : `Weight ${formatNumber(node.weight)}`}
                       </div>
                     </div>
+                  ))}
+                </div>
+              </SectionCard>
 
-                    <div className="rounded-xl border p-4">
-                      <div className="mb-3 flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">Challenger factors</span>
-                      </div>
-                      <div className="space-y-3">
-                        {(replayResult.challengerScore?.metadata.topRiskFactors ?? []).length > 0 ? (
-                          replayResult.challengerScore?.metadata.topRiskFactors.map((factor) => (
-                            <div key={factor.ruleName} className="rounded-lg border bg-muted/20 p-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="font-medium">{factor.ruleName}</div>
-                                <Badge variant="outline" shape="pill">
-                                  +{factor.contribution}
-                                </Badge>
-                              </div>
-                              <p className="mt-2 text-sm text-muted-foreground">
-                                {factor.description}
-                              </p>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
-                            Challenger compare is disabled for this replay.
-                          </div>
-                        )}
-                      </div>
+              <SectionCard
+                header={{
+                  title: "Feature snapshot",
+                  description: "The snapshot below mirrors the replay request that produced the visible outcome.",
+                }}
+              >
+                <div className="grid gap-3 md:grid-cols-2">
+                  {Object.entries(replayResult.primaryScore.metadata.featureSnapshot).map(([key, value]) => (
+                    <div
+                      key={key}
+                      className="rounded-lg border border-white/[0.06] bg-[#09090B]/60 px-4 py-3 text-sm"
+                    >
+                      <div className="text-muted-foreground">{toLabel(key)}</div>
+                      <div className="mt-1 font-medium">{formatFeatureValue(key, value)}</div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <div className="grid gap-4 md:grid-cols-2">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardDescription>Graph nodes</CardDescription>
-                    <CardTitle>{replayResult.graph.nodes.length}</CardTitle>
-                  </CardHeader>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardDescription>Graph edges</CardDescription>
-                    <CardTitle>{replayResult.graph.edges.length}</CardTitle>
-                  </CardHeader>
-                </Card>
-              </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Explainability graph</CardTitle>
-                  <CardDescription>
-                    Replay, decision, and factor nodes remain inspectable without leaving the admin
-                    workbench.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-3">
-                    {replayResult.graph.nodes.map((node) => (
-                      <div
-                        key={node.id}
-                        className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 px-4 py-3"
-                      >
-                        <div>
-                          <div className="font-medium">
-                            {node.kind === "REPLAY"
-                              ? "Replay root"
-                              : node.kind === "RULE_FACTOR"
-                                ? `Factor: ${node.label}`
-                                : node.label}
-                          </div>
-                          <div className="text-sm text-muted-foreground">{node.kind}</div>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {node.weight === null ? "No weight" : `Weight ${node.weight}`}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Feature snapshot</CardTitle>
-                  <CardDescription>
-                    The snapshot below mirrors the replay request that produced the visible outcome.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-3 md:grid-cols-2">
-                  {Object.entries(replayResult.primaryScore.metadata.featureSnapshot).map(
-                    ([key, value]) => (
-                      <div
-                        key={key}
-                        className="rounded-lg border bg-muted/20 px-4 py-3 text-sm"
-                      >
-                        <div className="text-muted-foreground">{key}</div>
-                        <div className="mt-1 font-medium">{formatFeatureValue(value)}</div>
-                      </div>
-                    ),
-                  )}
-                </CardContent>
-              </Card>
+                  ))}
+                </div>
+              </SectionCard>
             </div>
           ) : (
-            <Card className="border-dashed">
-              <CardHeader>
-                <CardTitle>Awaiting replay</CardTitle>
-                <CardDescription>
-                  Load a replay to compare the primary scorer against the shadow lane, inspect the
-                  decision delta, and keep explainability attached to the same payload.
-                </CardDescription>
-              </CardHeader>
-            </Card>
+            <Panel className="border-dashed" header={{ title: "Awaiting replay" }}>
+              <EmptyState
+                icon={<ArrowLeftRight className="h-8 w-8" />}
+                title="No replay loaded"
+                description="Run a replay to compare the primary scorer against the shadow lane, inspect the decision delta, and keep explainability attached to the same payload."
+              />
+            </Panel>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function RiskFactorsPanel({
+  title,
+  icon,
+  factors,
+  emptyDescription = "No top factors returned for this lane.",
+}: {
+  title: string;
+  icon: ReactNode;
+  factors: RiskFactor[];
+  emptyDescription?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-[#09090B]/50 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        {icon}
+        <span className="font-medium">{title}</span>
+      </div>
+      <div className="space-y-3">
+        {factors.length > 0 ? (
+          factors.map((factor) => (
+            <div key={factor.ruleName} className="rounded-lg border border-white/[0.06] bg-[#111113]/80 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-medium">{factor.ruleName}</div>
+                <StatusBadge status={`+${formatNumber(factor.contribution)}`} severity="info" />
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">{factor.description}</p>
+            </div>
+          ))
+        ) : (
+          <EmptyState title="No factors" description={emptyDescription} className="py-8" />
+        )}
       </div>
     </div>
   );

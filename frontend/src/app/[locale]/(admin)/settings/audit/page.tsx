@@ -1,19 +1,31 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/use-toast";
-import { ChevronLeft, ChevronRight, Loader2, RefreshCw, AlertCircle, ShieldCheck, Download } from "lucide-react";
+import { ShieldCheck, Download, RefreshCw, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { api, AuditEntry } from "@/lib/api";
+import {
+  PageHeader,
+  Panel,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  StatusBadge,
+} from "@/components/shared";
+import type { StatusSeverity } from "@/components/shared";
+import { formatDateTime } from "@/lib/format";
 
 const PAGE_SIZE = 20;
+
+function auditStatusSeverity(eventType: string): StatusSeverity {
+  return eventType.toLowerCase().includes("fail") || eventType.toLowerCase().includes("error")
+    ? "danger"
+    : "success";
+}
 
 export default function AuditLogsPage() {
   const [logs, setLogs] = useState<AuditEntry[]>([]);
@@ -30,38 +42,20 @@ export default function AuditLogsPage() {
     try {
       setLoading(true);
       setError(null);
-
-      const params: {
-        limit: number;
-        offset: number;
-        eventType?: string;
-        actorId?: string;
-        resourceType?: string;
-      } = {
+      const params: { limit: number; offset: number; eventType?: string; actorId?: string } = {
         limit: PAGE_SIZE,
         offset: (currentPage - 1) * PAGE_SIZE,
       };
-
-      if (eventTypeFilter !== "all") {
-        params.eventType = eventTypeFilter;
-      }
-
-      if (searchTerm) {
-        params.actorId = searchTerm;
-      }
+      if (eventTypeFilter !== "all") params.eventType = eventTypeFilter;
+      if (searchTerm) params.actorId = searchTerm;
 
       const response = await api.audit.list(params);
       setLogs(response.data);
       setTotal(response.total);
     } catch (err) {
-      console.error("Failed to fetch audit logs:", err);
       const message = err instanceof Error ? err.message : "Failed to load audit logs.";
       setError(message);
-      toast({
-        title: "Error",
-        description: message,
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -73,16 +67,6 @@ export default function AuditLogsPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const handleSearchChange = (value: string) => {
-    setSearchTerm(value);
-    setCurrentPage(1);
-  };
-
-  const handleEventTypeChange = (value: string) => {
-    setEventTypeFilter(value);
-    setCurrentPage(1);
-  };
-
   const handleExportCsv = async () => {
     try {
       setExporting(true);
@@ -93,13 +77,8 @@ export default function AuditLogsPage() {
       link.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
       link.click();
       URL.revokeObjectURL(url);
-
-      toast({
-        title: "Export Complete",
-        description: "Audit log exported to CSV.",
-      });
+      toast({ title: "Export Complete", description: "Audit log exported to CSV." });
     } catch (err) {
-      console.error("Failed to export audit logs:", err);
       toast({
         title: "Export Failed",
         description: err instanceof Error ? err.message : "Could not export audit log.",
@@ -122,7 +101,6 @@ export default function AuditLogsPage() {
         variant: result.isValid ? "default" : "destructive",
       });
     } catch (err) {
-      console.error("Failed to verify audit chain:", err);
       toast({
         title: "Verification Failed",
         description: err instanceof Error ? err.message : "Could not verify audit chain.",
@@ -140,202 +118,193 @@ export default function AuditLogsPage() {
     });
   };
 
-  const getStatusFromEventType = (eventType: string): "success" | "failed" => {
-    return eventType.toLowerCase().includes("fail") || eventType.toLowerCase().includes("error")
-      ? "failed"
-      : "success";
-  };
+  const columns = useMemo<ColumnDef<AuditEntry>[]>(
+    () => [
+      {
+        accessorKey: "createdAt",
+        header: "Timestamp",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+            {formatDateTime(row.original.createdAt)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "actorId",
+        header: "Actor",
+        cell: ({ row }) => (
+          <span className="text-sm">{row.original.actorId || "system"}</span>
+        ),
+      },
+      {
+        accessorKey: "eventType",
+        header: "Event Type",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs border border-white/[0.08] rounded px-1.5 py-0.5 text-muted-foreground">
+            {row.original.eventType}
+          </span>
+        ),
+      },
+      {
+        id: "resource",
+        header: "Resource",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs text-muted-foreground">
+            {row.original.resourceType
+              ? `${row.original.resourceType}/${row.original.resourceId || ""}`
+              : "N/A"}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "ipAddress",
+        header: "IP Address",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs text-muted-foreground">{row.original.ipAddress || "N/A"}</span>
+        ),
+      },
+      {
+        id: "status",
+        header: "Status",
+        cell: ({ row }) => {
+          const severity = auditStatusSeverity(row.original.eventType);
+          return (
+            <StatusBadge
+              status={severity === "success" ? "success" : "failed"}
+              severity={severity}
+            />
+          );
+        },
+      },
+      {
+        id: "details",
+        header: () => <div className="text-right">Details</div>,
+        cell: ({ row }) => (
+          <div className="text-right">
+            <Button variant="ghost" size="sm" onClick={() => handleViewDetails(row.original)}>
+              View
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    []
+  );
 
-  if (loading && logs.length === 0) {
-    return (
-      <div className="flex flex-col gap-6 p-6">
-        <PageHeader
-          title="Audit Logs"
-          description="Track all sensitive actions performed within your organization."
-        />
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-40" />
-            <Skeleton className="h-4 w-64 mt-2" />
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex gap-4 mb-6">
-              <Skeleton className="h-10 w-80" />
-              <Skeleton className="h-10 w-44" />
-            </div>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="flex gap-4">
-                <Skeleton className="h-6 w-40" />
-                <Skeleton className="h-6 w-32" />
-                <Skeleton className="h-6 w-28" />
-                <Skeleton className="h-6 w-36" />
-                <Skeleton className="h-6 w-24" />
-                <Skeleton className="h-6 w-16" />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+  const filterControls = (
+    <div className="flex flex-wrap gap-2">
+      <Input
+        placeholder="Search by actor ID..."
+        className="max-w-[14rem] border-white/[0.08] bg-[#09090B] h-8 text-sm"
+        value={searchTerm}
+        onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+      />
+      <Select value={eventTypeFilter} onValueChange={(v) => { setEventTypeFilter(v); setCurrentPage(1); }}>
+        <SelectTrigger className="w-[160px] border-white/[0.08] bg-[#09090B] h-8 text-sm">
+          <SelectValue placeholder="Event Type" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Events</SelectItem>
+          <SelectItem value="user.login">User Login</SelectItem>
+          <SelectItem value="user.create">User Create</SelectItem>
+          <SelectItem value="user.delete">User Delete</SelectItem>
+          <SelectItem value="settings.update">Settings Update</SelectItem>
+          <SelectItem value="payment.create">Payment Create</SelectItem>
+          <SelectItem value="api_key.regenerate">API Key Regenerate</SelectItem>
+          <SelectItem value="sso.configure">SSO Configure</SelectItem>
+          <SelectItem value="domain.add">Domain Add</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  const headerActions = (
+    <div className="flex gap-2">
+      <Button variant="outline" size="sm" onClick={handleVerifyChain} disabled={verifying}>
+        {verifying ? (
+          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</>
+        ) : (
+          <><ShieldCheck className="mr-2 h-4 w-4" />Verify Chain</>
+        )}
+      </Button>
+      <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={exporting}>
+        {exporting ? (
+          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Exporting...</>
+        ) : (
+          <><Download className="mr-2 h-4 w-4" />Export CSV</>
+        )}
+      </Button>
+      <Button variant="outline" size="icon" className="h-8 w-8" onClick={fetchLogs} disabled={loading}>
+        <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+      </Button>
+    </div>
+  );
+
+  const pagination = (
+    <div className="flex items-center justify-between w-full">
+      <p className="text-sm text-muted-foreground tabular-nums">
+        {total === 0
+          ? "No entries"
+          : `${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, total)} of ${total}`}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+          disabled={currentPage <= 1}
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Previous
+        </Button>
+        <span className="text-sm text-muted-foreground px-1 tabular-nums">
+          {currentPage} / {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+          disabled={currentPage >= totalPages}
+        >
+          Next
+          <ChevronRight className="h-4 w-4" />
+        </Button>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <main className="p-page flex flex-col gap-section">
       <PageHeader
         title="Audit Logs"
         description="Track all sensitive actions performed within your organization."
+        actions={headerActions}
       />
 
-      {error && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4" />
-          {error}
-          <Button variant="ghost" size="sm" className="ml-auto" onClick={fetchLogs}>
-            Retry
-          </Button>
-        </div>
+      {error ? (
+        <ErrorState message={error} retry={fetchLogs} />
+      ) : (
+        <Panel
+          header={{
+            title: "Activity History",
+            description: "Search and filter audit events.",
+            actions: filterControls,
+          }}
+          footer={pagination}
+        >
+          <DataTable
+            columns={columns}
+            data={logs}
+            loading={loading}
+            emptyState={
+              <EmptyState
+                title="No audit logs"
+                description="No entries match the current filters."
+              />
+            }
+          />
+        </Panel>
       )}
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Activity History</CardTitle>
-              <CardDescription>Search and filter audit events.</CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleVerifyChain} disabled={verifying}>
-                {verifying ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</>
-                ) : (
-                  <><ShieldCheck className="mr-2 h-4 w-4" />Verify Chain</>
-                )}
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={exporting}>
-                {exporting ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Exporting...</>
-                ) : (
-                  <><Download className="mr-2 h-4 w-4" />Export CSV</>
-                )}
-              </Button>
-              <Button variant="ghost" size="icon" onClick={fetchLogs} disabled={loading}>
-                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4 mb-6">
-            <Input
-              placeholder="Search by actor ID..."
-              className="max-w-sm"
-              value={searchTerm}
-              onChange={(e) => handleSearchChange(e.target.value)}
-            />
-            <Select value={eventTypeFilter} onValueChange={handleEventTypeChange}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Event Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Events</SelectItem>
-                <SelectItem value="user.login">User Login</SelectItem>
-                <SelectItem value="user.create">User Create</SelectItem>
-                <SelectItem value="user.delete">User Delete</SelectItem>
-                <SelectItem value="settings.update">Settings Update</SelectItem>
-                <SelectItem value="payment.create">Payment Create</SelectItem>
-                <SelectItem value="api_key.regenerate">API Key Regenerate</SelectItem>
-                <SelectItem value="sso.configure">SSO Configure</SelectItem>
-                <SelectItem value="domain.add">Domain Add</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Timestamp</TableHead>
-                <TableHead>Actor</TableHead>
-                <TableHead>Event Type</TableHead>
-                <TableHead>Resource</TableHead>
-                <TableHead>IP Address</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Details</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {logs.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    No audit logs match your filters.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                logs.map((log) => {
-                  const status = getStatusFromEventType(log.eventType);
-                  return (
-                    <TableRow key={log.id}>
-                      <TableCell className="font-mono text-sm">
-                        {new Date(log.createdAt).toLocaleString()}
-                      </TableCell>
-                      <TableCell>{log.actorId || "system"}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{log.eventType}</Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {log.resourceType ? `${log.resourceType}/${log.resourceId || ""}` : "N/A"}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {log.ipAddress || "N/A"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={status === "success" ? "default" : "destructive"}
-                          className={status === "success" ? "bg-green-600" : ""}
-                        >
-                          {status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" onClick={() => handleViewDetails(log)}>View</Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-
-          {/* Pagination */}
-          <div className="flex items-center justify-between mt-4 pt-4 border-t">
-            <p className="text-sm text-muted-foreground">
-              Showing {total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, total)} of {total} entries
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage <= 1}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground px-2">
-                Page {currentPage} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage >= totalPages}
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+    </main>
   );
 }

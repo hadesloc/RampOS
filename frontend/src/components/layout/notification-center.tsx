@@ -26,35 +26,8 @@ interface Notification {
   type: 'system' | 'alert' | 'info';
 }
 
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    title: 'System Maintenance',
-    description: 'Scheduled maintenance on Sunday at 2 AM UTC.',
-    date: '2 hours ago',
-    read: false,
-    type: 'system',
-  },
-  {
-    id: '2',
-    title: 'High Volume Alert',
-    description: 'Unusual spike in pay-in volume detected.',
-    date: '5 hours ago',
-    read: false,
-    type: 'alert',
-  },
-  {
-    id: '3',
-    title: 'New Feature Available',
-    description: 'Check out the new compliance reporting tools.',
-    date: '1 day ago',
-    read: true,
-    type: 'info',
-  },
-];
-
 export function NotificationCenter() {
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const markAllAsRead = () => {

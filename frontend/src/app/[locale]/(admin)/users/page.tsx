@@ -1,26 +1,31 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ColumnDef } from "@tanstack/react-table";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  MoreHorizontal,
+  Plus,
+  RefreshCw,
+  Users,
+  UserCheck,
+  Clock,
+  ShieldAlert,
+} from "lucide-react";
+import { useTranslations, useFormatter } from "next-intl";
+
+import {
+  PageHeader,
+  StatGrid,
+  StatCard,
+  Panel,
+  DataTable,
+  Toolbar,
+  StatusBadge,
+  EmptyState,
+  ErrorState,
+} from "@/components/shared";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -30,121 +35,64 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MoreHorizontal, Plus, Settings2, Loader2, RefreshCw } from "lucide-react";
 import { usersApi, type User } from "@/lib/api";
 import { useToast } from "@/components/ui/use-toast";
-import { PageHeader } from "@/components/layout/page-header";
-import { useTranslations, useFormatter } from "next-intl";
 
-function getKycStatusColor(status: string): string {
-  switch (status) {
-    case "APPROVED":
-      return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400 hover:bg-green-100/80 border-transparent";
-    case "PENDING":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-400 hover:bg-yellow-100/80 border-transparent";
-    case "REJECTED":
-      return "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-400 hover:bg-red-100/80 border-transparent";
-    case "NOT_STARTED":
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100/80 border-transparent";
-    default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100/80 border-transparent";
-  }
-}
-
-function getStatusColor(status: string): string {
-  switch (status) {
-    case "ACTIVE":
-      return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400 hover:bg-green-100/80 border-transparent";
-    case "SUSPENDED":
-      return "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-400 hover:bg-red-100/80 border-transparent";
-    case "INACTIVE":
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100/80 border-transparent";
-    default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100/80 border-transparent";
-  }
-}
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function getInitials(id: string): string {
-    return id.substring(0, 2).toUpperCase() || "US";
+  return id.substring(0, 2).toUpperCase() || "US";
 }
+
+function getTierLabel(tier: number): string {
+  switch (tier) {
+    case 0: return "Tier 0 — Basic";
+    case 1: return "Tier 1 — Phone";
+    case 2: return "Tier 2 — ID";
+    case 3: return "Tier 3 — Full";
+    default: return `Tier ${tier}`;
+  }
+}
+
+function kycSeverity(status: string): "success" | "warning" | "danger" | "neutral" {
+  if (status === "APPROVED") return "success";
+  if (status === "PENDING") return "warning";
+  if (status === "REJECTED") return "danger";
+  return "neutral";
+}
+
+function userStatusSeverity(status: string): "success" | "danger" | "neutral" {
+  if (status === "ACTIVE") return "success";
+  if (status === "SUSPENDED") return "danger";
+  return "neutral";
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
-  const t = useTranslations('Navigation');
-  const tCommon = useTranslations('Common');
-  const format = useFormatter();
-
-  const [filter, setFilter] = useState({
-    kycTier: "",
-    status: "",
-  });
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [tierFilter, setTierFilter] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
-    avatar: true,
-    id: true,
-    kycTier: true,
-    kycStatus: true,
-    status: true,
-    payinLimit: true,
-    payoutLimit: true,
-    created: true,
-    actions: true,
-  });
-  const [newUser, setNewUser] = useState({
-      externalId: "",
-      kycTier: "0",
-  });
+  const [newUser, setNewUser] = useState({ externalId: "", kycTier: "0" });
 
-  const fetchUsers = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await usersApi.list({
-        status: filter.status || undefined,
-        // kyc_status: filter.kycStatus || undefined, // Not in filter state yet but supported by API
-      });
-      setUsers(response.data);
-    } catch (err: any) {
-      console.error("Failed to fetch users:", err);
-      setError(err.message || tCommon('error'));
-      toast({
-        variant: "destructive",
-        title: tCommon('error'),
-        description: err.message || tCommon('error'),
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [filter.status, tCommon, toast]);
-
-  useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]); // Refetch when filter changes
-
-  // Client-side filtering for other fields
-  const filteredUsers = users.filter((user) => {
-    if (filter.kycTier && user.kyc_tier !== parseInt(filter.kycTier)) return false;
-    if (search && !user.id.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
-
-  const handleCreateUser = () => {
-    // API doesn't have create user yet, keeping as placeholder
-    toast({
-      title: "Coming Soon",
-      description: "User creation API is not yet available.",
-    });
-    setIsCreateOpen(false);
-  };
-
-  const handleRefresh = () => {
-    fetchUsers();
-  };
+  const { toast } = useToast();
+  const t = useTranslations("Navigation");
+  const tCommon = useTranslations("Common");
+  const format = useFormatter();
 
   const formatVnd = (value?: string) => {
     if (!value) return "0 ₫";
@@ -152,279 +100,378 @@ export default function UsersPage() {
     return format.number(num, {
       style: "currency",
       currency: "VND",
-      maximumFractionDigits: 0
+      maximumFractionDigits: 0,
     });
   };
 
-  const formatDate = (dateStr: string) => {
-    return format.dateTime(new Date(dateStr), {
+  const formatDateStr = (dateStr: string) =>
+    format.dateTime(new Date(dateStr), {
       day: "2-digit",
       month: "2-digit",
-      year: "numeric"
+      year: "numeric",
     });
+
+  const fetchUsers = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await usersApi.list({
+        status: statusFilter || undefined,
+      });
+      setUsers(response.data);
+    } catch (err: any) {
+      console.error("Failed to fetch users:", err);
+      setError(err.message || tCommon("error"));
+      toast({
+        variant: "destructive",
+        title: tCommon("error"),
+        description: err.message || tCommon("error"),
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, tCommon, toast]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  // Client-side filtering
+  const filteredUsers = users.filter((user) => {
+    if (tierFilter && user.kyc_tier !== parseInt(tierFilter)) return false;
+    if (
+      search &&
+      !user.id.toLowerCase().includes(search.toLowerCase())
+    )
+      return false;
+    return true;
+  });
+
+  const handleCreateUser = () => {
+    toast({
+      title: "Coming Soon",
+      description: "User creation API is not yet available.",
+    });
+    setIsCreateOpen(false);
   };
 
-  const getTierLabel = (tier: number) => {
-    switch (tier) {
-      case 0:
-        return "Tier 0 (Basic)";
-      case 1:
-        return "Tier 1 (Phone)";
-      case 2:
-        return "Tier 2 (ID)";
-      case 3:
-        return "Tier 3 (Full)";
-      default:
-        return `Tier ${tier}`;
-    }
-  };
+  // Derived stats
+  const activeCount = users.filter((u) => u.status === "ACTIVE").length;
+  const kycPendingCount = users.filter(
+    (u) => u.kyc_status === "PENDING"
+  ).length;
+  const suspendedCount = users.filter(
+    (u) => u.status === "SUSPENDED"
+  ).length;
+
+  // ── Columns ──────────────────────────────────────────────────────────────────
+
+  const columns: ColumnDef<User>[] = [
+    {
+      id: "avatar",
+      header: "",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <Avatar className="h-8 w-8">
+          <AvatarImage
+            src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${row.original.id}`}
+            alt={row.original.id}
+          />
+          <AvatarFallback className="text-xs bg-[#7B61FF]/20 text-[#7B61FF]">
+            {getInitials(row.original.id)}
+          </AvatarFallback>
+        </Avatar>
+      ),
+    },
+    {
+      accessorKey: "id",
+      header: "User ID",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.original.id}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "kyc_tier",
+      header: "KYC Tier",
+      cell: ({ row }) => (
+        <span className="text-sm">{getTierLabel(row.original.kyc_tier)}</span>
+      ),
+    },
+    {
+      accessorKey: "kyc_status",
+      header: "KYC Status",
+      cell: ({ row }) => (
+        <StatusBadge
+          status={row.original.kyc_status}
+          severity={kycSeverity(row.original.kyc_status)}
+        />
+      ),
+    },
+    {
+      accessorKey: "status",
+      header: tCommon("status"),
+      cell: ({ row }) => (
+        <StatusBadge
+          status={row.original.status}
+          severity={userStatusSeverity(row.original.status)}
+        />
+      ),
+    },
+    {
+      accessorKey: "daily_payin_limit_vnd",
+      header: "Daily Pay-in Limit",
+      cell: ({ row }) => (
+        <span className="text-sm tabular-nums text-right block">
+          {formatVnd(row.original.daily_payin_limit_vnd)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "daily_payout_limit_vnd",
+      header: "Daily Pay-out Limit",
+      cell: ({ row }) => (
+        <span className="text-sm tabular-nums text-right block">
+          {formatVnd(row.original.daily_payout_limit_vnd)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "created_at",
+      header: tCommon("date"),
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {formatDateStr(row.original.created_at)}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0">
+              <span className="sr-only">Open menu</span>
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="border-white/[0.08] bg-[#111113]"
+          >
+            <DropdownMenuLabel className="text-xs text-muted-foreground">
+              {tCommon("actions")}
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={() => alert(`View details for ${row.original.id}`)}
+            >
+              {tCommon("view")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => alert(`Edit ${row.original.id}`)}
+            >
+              {tCommon("edit")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-white/[0.06]" />
+            <DropdownMenuItem
+              className="text-red-400 focus:text-red-400"
+              onClick={() => alert(`Suspend ${row.original.id}`)}
+            >
+              Suspend User
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
+
+  // ── Toolbar filters ───────────────────────────────────────────────────────────
+
+  const filterSlot = (
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        className="h-9 rounded-md border border-white/[0.08] bg-white/[0.02] px-3 text-sm text-foreground focus:outline-none focus:border-white/[0.2] transition-colors"
+        value={tierFilter}
+        onChange={(e) => setTierFilter(e.target.value)}
+        aria-label="Filter by KYC tier"
+      >
+        <option value="">All Tiers</option>
+        <option value="0">Tier 0</option>
+        <option value="1">Tier 1</option>
+        <option value="2">Tier 2</option>
+        <option value="3">Tier 3</option>
+      </select>
+
+      <select
+        className="h-9 rounded-md border border-white/[0.08] bg-white/[0.02] px-3 text-sm text-foreground focus:outline-none focus:border-white/[0.2] transition-colors"
+        value={statusFilter}
+        onChange={(e) => setStatusFilter(e.target.value)}
+        aria-label="Filter by status"
+      >
+        <option value="">All Statuses</option>
+        <option value="ACTIVE">Active</option>
+        <option value="SUSPENDED">Suspended</option>
+        <option value="INACTIVE">Inactive</option>
+      </select>
+    </div>
+  );
 
   return (
-    <div className="space-y-6 p-6">
+    <main className="p-page flex flex-col gap-section">
       <PageHeader
-        title={t('users')}
+        title={t("users")}
         description="Manage users and their KYC status"
-        breadcrumbs={[
-            { label: t('dashboard'), href: "/" },
-            { label: t('users') }
+        breadcrumb={[
+          { label: t("dashboard"), href: "/" },
+          { label: t("users") },
         ]}
         actions={
-            <div className="flex gap-2">
-                <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading}>
-                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={fetchUsers}
+              disabled={loading}
+              className="border-white/[0.08] hover:border-white/[0.16] hover:bg-white/[0.03] h-9 w-9"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+              />
+            </Button>
+
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-[#00FF87] text-black font-semibold hover:bg-[#00FF87]/90 h-9">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create User
                 </Button>
-                <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                    <DialogTrigger asChild>
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" /> Create User
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Create New User</DialogTitle>
-                            <DialogDescription>
-                                Add a new user to the system. They will start with Tier 0.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="externalId" className="text-right">
-                                    External ID
-                                </Label>
-                                <Input
-                                    id="externalId"
-                                    value={newUser.externalId}
-                                    onChange={(e) => setNewUser({...newUser, externalId: e.target.value})}
-                                    className="col-span-3"
-                                />
-                            </div>
-                             <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="kycTier" className="text-right">
-                                    Initial Tier
-                                </Label>
-                                <select
-                                    id="kycTier"
-                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 col-span-3"
-                                    value={newUser.kycTier}
-                                    onChange={(e) => setNewUser({ ...newUser, kycTier: e.target.value })}
-                                >
-                                    <option value="0">Tier 0</option>
-                                    <option value="1">Tier 1</option>
-                                    <option value="2">Tier 2</option>
-                                    <option value="3">Tier 3</option>
-                                </select>
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button onClick={handleCreateUser}>Create User</Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-            </div>
+              </DialogTrigger>
+              <DialogContent className="border-white/[0.08] bg-[#111113]">
+                <DialogHeader>
+                  <DialogTitle>Create New User</DialogTitle>
+                  <DialogDescription>
+                    Add a new user to the system. They will start with Tier 0.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="externalId" className="text-right text-sm">
+                      External ID
+                    </Label>
+                    <Input
+                      id="externalId"
+                      value={newUser.externalId}
+                      onChange={(e) =>
+                        setNewUser({ ...newUser, externalId: e.target.value })
+                      }
+                      className="col-span-3 border-white/[0.08] bg-white/[0.02]"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="kycTier" className="text-right text-sm">
+                      Initial Tier
+                    </Label>
+                    <select
+                      id="kycTier"
+                      className="col-span-3 flex h-10 w-full rounded-md border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-sm focus:outline-none"
+                      value={newUser.kycTier}
+                      onChange={(e) =>
+                        setNewUser({ ...newUser, kycTier: e.target.value })
+                      }
+                    >
+                      <option value="0">Tier 0</option>
+                      <option value="1">Tier 1</option>
+                      <option value="2">Tier 2</option>
+                      <option value="3">Tier 3</option>
+                    </select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    onClick={handleCreateUser}
+                    className="bg-[#00FF87] text-black font-semibold hover:bg-[#00FF87]/90"
+                  >
+                    Create User
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         }
       />
 
-      {/* Filters */}
-      <div className="flex gap-4 items-center flex-wrap">
-        <Input
-          placeholder="Search by ID..."
-          className="max-w-xs"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+      {/* KPIs */}
+      <StatGrid cols={4}>
+        <StatCard
+          title="Total Users"
+          value={loading ? "—" : users.length.toLocaleString()}
+          icon={<Users className="h-4 w-4" />}
+          accentColor="cyan"
+          loading={loading}
+        />
+        <StatCard
+          title="Active"
+          value={loading ? "—" : activeCount.toLocaleString()}
+          icon={<UserCheck className="h-4 w-4" />}
+          accentColor="green"
+          loading={loading}
+        />
+        <StatCard
+          title="KYC Pending"
+          value={loading ? "—" : kycPendingCount.toLocaleString()}
+          icon={<Clock className="h-4 w-4" />}
+          accentColor="amber"
+          loading={loading}
+        />
+        <StatCard
+          title="Suspended"
+          value={loading ? "—" : suspendedCount.toLocaleString()}
+          icon={<ShieldAlert className="h-4 w-4" />}
+          accentColor="violet"
+          loading={loading}
+        />
+      </StatGrid>
+
+      {error && (
+        <ErrorState
+          title="Failed to load users"
+          message={error}
+          retry={fetchUsers}
+        />
+      )}
+
+      <Panel header={{ title: "User Registry" }}>
+        <Toolbar
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search by ID…"
+          filters={filterSlot}
+          className="mb-4"
         />
 
-        <select
-          className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          value={filter.kycTier}
-          onChange={(e) => setFilter({ ...filter, kycTier: e.target.value })}
-        >
-          <option value="">All Tiers</option>
-          <option value="0">Tier 0</option>
-          <option value="1">Tier 1</option>
-          <option value="2">Tier 2</option>
-          <option value="3">Tier 3</option>
-        </select>
-
-        <select
-          className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          value={filter.status}
-          onChange={(e) => setFilter({ ...filter, status: e.target.value })}
-        >
-          <option value="">All Statuses</option>
-          <option value="ACTIVE">Active</option>
-          <option value="SUSPENDED">Suspended</option>
-          <option value="INACTIVE">Inactive</option>
-        </select>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="ml-auto flex h-10">
-              <Settings2 className="mr-2 h-4 w-4" />
-              {tCommon('view')}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-[150px]">
-            <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {Object.keys(visibleColumns).map((column) => (
-              <DropdownMenuItem
-                key={column}
-                className="capitalize"
-                onSelect={(e) => {
-                    e.preventDefault();
-                    setVisibleColumns(prev => ({ ...prev, [column]: !prev[column] }));
-                }}
-              >
-                <input
-                  type="checkbox"
-                  className="mr-2"
-                  checked={visibleColumns[column]}
-                  readOnly
-                />
-                {column.replace(/([A-Z])/g, " $1")}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* Table */}
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {visibleColumns.avatar && <TableHead className="w-[80px]">Avatar</TableHead>}
-              {visibleColumns.id && <TableHead>ID</TableHead>}
-              {visibleColumns.kycTier && <TableHead>KYC Tier</TableHead>}
-              {visibleColumns.kycStatus && <TableHead>KYC Status</TableHead>}
-              {visibleColumns.status && <TableHead>{tCommon('status')}</TableHead>}
-              {visibleColumns.payinLimit && <TableHead className="text-right">Daily Payin Limit</TableHead>}
-              {visibleColumns.payoutLimit && <TableHead className="text-right">Daily Payout Limit</TableHead>}
-              {visibleColumns.created && <TableHead>{tCommon('date')}</TableHead>}
-              {visibleColumns.actions && <TableHead className="w-[50px]"></TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-                <TableRow>
-                    <TableCell colSpan={9} className="h-24 text-center">
-                        <div className="flex justify-center items-center gap-2">
-                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                            <span className="text-muted-foreground">{tCommon('loading')}</span>
-                        </div>
-                    </TableCell>
-                </TableRow>
-            ) : filteredUsers.length === 0 ? (
-                <TableRow>
-                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
-                        No users found matching the filters.
-                    </TableCell>
-                </TableRow>
-            ) : (
-                filteredUsers.map((user) => (
-              <TableRow key={user.id}>
-                {visibleColumns.avatar && (
-                  <TableCell>
-                    <Avatar>
-                      <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`} alt={user.id} />
-                      <AvatarFallback>{getInitials(user.id)}</AvatarFallback>
-                    </Avatar>
-                  </TableCell>
-                )}
-                {visibleColumns.id && (
-                  <TableCell className="font-mono text-xs">{user.id}</TableCell>
-                )}
-                {visibleColumns.kycTier && (
-                  <TableCell>{getTierLabel(user.kyc_tier)}</TableCell>
-                )}
-                {visibleColumns.kycStatus && (
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={getKycStatusColor(user.kyc_status)}
-                    >
-                      {user.kyc_status}
-                    </Badge>
-                  </TableCell>
-                )}
-                {visibleColumns.status && (
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={getStatusColor(user.status)}
-                    >
-                      {user.status}
-                    </Badge>
-                  </TableCell>
-                )}
-                {visibleColumns.payinLimit && (
-                  <TableCell className="text-right font-mono text-sm">
-                    {formatVnd(user.daily_payin_limit_vnd)}
-                  </TableCell>
-                )}
-                {visibleColumns.payoutLimit && (
-                  <TableCell className="text-right font-mono text-sm">
-                    {formatVnd(user.daily_payout_limit_vnd)}
-                  </TableCell>
-                )}
-                {visibleColumns.created && (
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(user.created_at)}
-                  </TableCell>
-                )}
-                {visibleColumns.actions && (
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Open menu</span>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>{tCommon('actions')}</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => alert(`View details for ${user.id}`)}>
-                          {tCommon('view')}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => alert(`Edit ${user.id}`)}>
-                          {tCommon('edit')}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-red-600 focus:text-red-600"
-                          onClick={() => alert(`Suspend ${user.id}`)}
-                        >
-                          Suspend User
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                )}
-              </TableRow>
-            )))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
+        <DataTable
+          columns={columns}
+          data={filteredUsers}
+          loading={loading}
+          skeletonRows={8}
+          pagination
+          pageSize={10}
+          emptyState={
+            <EmptyState
+              icon={<Users className="h-8 w-8" />}
+              title="No users found"
+              description={
+                search
+                  ? "No users match your search query."
+                  : "No users have been registered yet."
+              }
+            />
+          }
+        />
+      </Panel>
+    </main>
   );
 }

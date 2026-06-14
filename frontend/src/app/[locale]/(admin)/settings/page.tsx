@@ -2,10 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { tenantsApi, type Tenant } from "@/lib/api";
-import { Loader2, Save } from "lucide-react";
+import { Key, Save, RotateCcw, Zap, Webhook } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { useTranslations } from "next-intl";
+import {
+  PageHeader,
+  Panel,
+  EmptyState,
+  ErrorState,
+} from "@/components/shared";
 
 export default function SettingsPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
@@ -24,8 +30,8 @@ export default function SettingsPage() {
     "case.resolved": true,
   });
   const { toast } = useToast();
-  const t = useTranslations('Navigation');
-  const tCommon = useTranslations('Common');
+  const t = useTranslations("Navigation");
+  const tCommon = useTranslations("Common");
 
   const [settings, setSettings] = useState({
     webhookUrl: "",
@@ -37,8 +43,6 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
-    // In a real app we would know the current tenant ID from context/auth
-    // For now, let's assume we list tenants and pick the first one or a specific one
     const fetchTenant = async () => {
       setLoading(true);
       try {
@@ -48,8 +52,6 @@ export default function SettingsPage() {
           setTenantScopeError(null);
           setTenant(currentTenant);
           setApiKey(currentTenant.api_key_prefix + "*****************************");
-
-          // Populate settings from tenant config
           const config = currentTenant.config || {};
           setSettings({
             webhookUrl: (config.webhook_url as string) || "",
@@ -68,9 +70,9 @@ export default function SettingsPage() {
       } catch (err: any) {
         console.error("Failed to fetch tenant settings:", err);
         toast({
-            variant: "destructive",
-            title: tCommon('error'),
-            description: "Failed to load settings",
+          variant: "destructive",
+          title: tCommon("error"),
+          description: "Failed to load settings",
         });
       } finally {
         setLoading(false);
@@ -81,7 +83,6 @@ export default function SettingsPage() {
 
   const handleSave = async () => {
     if (!tenant) return;
-
     setSaving(true);
     try {
       await tenantsApi.updateConfig(tenant.id, {
@@ -93,15 +94,11 @@ export default function SettingsPage() {
         max_payout: settings.maxPayout,
         enabled_events: enabledEvents,
       });
-
-      toast({
-        title: tCommon('success'),
-        description: "Settings saved successfully!",
-      });
+      toast({ title: tCommon("success"), description: "Settings saved successfully!" });
     } catch (err: any) {
       toast({
         variant: "destructive",
-        title: tCommon('error'),
+        title: tCommon("error"),
         description: err.message || "Failed to save settings",
       });
     } finally {
@@ -112,21 +109,14 @@ export default function SettingsPage() {
   const handleRegenerateKey = async () => {
     if (!tenant) return;
     try {
-        const result = await tenantsApi.regenerateKeys(tenant.id);
-        setApiKey(result.api_key); // Show full key once
-        toast({
-            title: tCommon('success'),
-            description: "API Key regenerated. Copy it now, you won't see it again!",
-        });
-        setTimeout(() => {
-            setApiKey(result.api_key.substring(0, 8) + "*****************************");
-        }, 3000);
+      const result = await tenantsApi.regenerateKeys(tenant.id);
+      setApiKey(result.api_key);
+      toast({ title: tCommon("success"), description: "API Key regenerated. Copy it now, you won't see it again!" });
+      setTimeout(() => {
+        setApiKey(result.api_key.substring(0, 8) + "*****************************");
+      }, 3000);
     } catch (err: any) {
-        toast({
-            variant: "destructive",
-            title: tCommon('error'),
-            description: "Failed to regenerate API Key",
-        });
+      toast({ variant: "destructive", title: tCommon("error"), description: "Failed to regenerate API Key" });
     }
   };
 
@@ -135,222 +125,204 @@ export default function SettingsPage() {
     try {
       const result = await tenantsApi.regenerateWebhookSecret(tenant.id);
       setWebhookSecret(result.webhook_secret);
-      toast({
-        title: tCommon('success'),
-        description: "Webhook secret regenerated. Copy it now!",
-      });
+      toast({ title: tCommon("success"), description: "Webhook secret regenerated. Copy it now!" });
       setTimeout(() => {
         setWebhookSecret("whsec_*****************************");
       }, 3000);
     } catch (err: any) {
       toast({
         variant: "destructive",
-        title: tCommon('error'),
+        title: tCommon("error"),
         description: err.message || "Failed to regenerate webhook secret",
       });
     }
   };
 
-  if (loading) {
-      return (
-          <div className="flex justify-center items-center h-64">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-      );
+  const inputCls =
+    "w-full rounded-md border border-white/[0.08] bg-[#09090B] px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#00FF87]/40 transition-colors";
+
+  if (!loading && tenantScopeError) {
+    return (
+      <main className="p-page flex flex-col gap-section">
+        <PageHeader title={t("settings")} description="Configure your RampOS tenant settings" />
+        <ErrorState message={tenantScopeError} />
+      </main>
+    );
   }
 
-  if (!tenant) {
-      return (
-          <div className="text-center py-8 text-muted-foreground">
-              {tenantScopeError ?? "No tenant configuration found."}
-          </div>
-      );
+  if (!loading && !tenant) {
+    return (
+      <main className="p-page flex flex-col gap-section">
+        <PageHeader title={t("settings")} description="Configure your RampOS tenant settings" />
+        <EmptyState title="No tenant found" description="No tenant configuration could be resolved." />
+      </main>
+    );
   }
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">{t('settings')}</h1>
-        <p className="text-muted-foreground">
-          Configure your RampOS tenant settings
-        </p>
-      </div>
+    <main className="p-page flex flex-col gap-section max-w-2xl">
+      <PageHeader
+        title={t("settings")}
+        description="Configure your RampOS tenant settings"
+        actions={
+          <Button onClick={handleSave} disabled={saving || loading}>
+            {saving ? (
+              <>
+                <RotateCcw className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                {tCommon("save")}
+              </>
+            )}
+          </Button>
+        }
+      />
 
       {/* API Configuration */}
-      <div className="rounded-lg border bg-card p-6 space-y-4">
-        <h2 className="text-lg font-semibold">API Configuration</h2>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium">API Key</label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              className="flex-1 rounded-md border bg-background px-3 py-2 text-sm font-mono bg-muted"
-              value={apiKey}
-              readOnly
-            />
-            <button
-                onClick={handleRegenerateKey}
-                className="px-4 py-2 text-sm border rounded-md hover:bg-muted bg-background"
-            >
-              Regenerate
-            </button>
+      <Panel
+        header={{ title: "API Configuration", description: "Manage your tenant API key and webhook secret." }}
+        variant="glass"
+      >
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground flex items-center gap-2">
+              <Key className="h-3.5 w-3.5 text-[#00FF87]" />
+              API Key
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                className={`${inputCls} flex-1 font-mono`}
+                value={apiKey}
+                readOnly
+              />
+              <Button variant="outline" onClick={handleRegenerateKey} disabled={loading}>
+                Regenerate
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Use this key to authenticate API requests. Keep it secret.</p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Use this key to authenticate API requests. Keep it secret!
-          </p>
-        </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Webhook Secret</label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              className="flex-1 rounded-md border bg-background px-3 py-2 text-sm font-mono bg-muted"
-              value={webhookSecret}
-              readOnly
-            />
-            <button
-              onClick={handleRegenerateWebhookSecret}
-              className="px-4 py-2 text-sm border rounded-md hover:bg-muted bg-background"
-            >
-              Regenerate
-            </button>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground flex items-center gap-2">
+              <Key className="h-3.5 w-3.5 text-[#7B61FF]" />
+              Webhook Secret
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                className={`${inputCls} flex-1 font-mono`}
+                value={webhookSecret}
+                readOnly
+              />
+              <Button variant="outline" onClick={handleRegenerateWebhookSecret} disabled={loading}>
+                Regenerate
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Use this secret to verify webhook signatures.</p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Use this secret to verify webhook signatures.
-          </p>
         </div>
-      </div>
+      </Panel>
 
       {/* Webhook Configuration */}
-      <div className="rounded-lg border bg-card p-6 space-y-4">
-        <h2 className="text-lg font-semibold">Webhook Configuration</h2>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Webhook URL</label>
-          <input
-            type="url"
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-            value={settings.webhookUrl}
-            onChange={(e) => setSettings({ ...settings, webhookUrl: e.target.value })}
-            placeholder="https://your-server.com/webhooks"
-          />
-          <p className="text-xs text-muted-foreground">
-            We will send webhook events to this URL.
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Enabled Events</label>
+      <Panel
+        header={{ title: "Webhook Configuration", description: "Set your endpoint URL and choose which events to receive." }}
+        variant="glass"
+      >
+        <div className="space-y-5">
           <div className="space-y-2">
-            {[
-              "intent.payin.created",
-              "intent.payin.confirmed",
-              "intent.payout.created",
-              "intent.payout.completed",
-              "intent.trade.executed",
-              "case.created",
-              "case.resolved",
-            ].map((event) => (
-              <label key={event} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={enabledEvents[event] ?? false}
-                  onChange={(e) => setEnabledEvents(prev => ({ ...prev, [event]: e.target.checked }))}
-                  className="rounded"
-                />
-                <span className="text-sm font-mono">{event}</span>
-              </label>
-            ))}
+            <label className="text-sm font-medium text-foreground flex items-center gap-2">
+              <Webhook className="h-3.5 w-3.5 text-[#00D4FF]" />
+              Webhook URL
+            </label>
+            <input
+              type="url"
+              className={inputCls}
+              value={settings.webhookUrl}
+              onChange={(e) => setSettings({ ...settings, webhookUrl: e.target.value })}
+              placeholder="https://your-server.com/webhooks"
+            />
+            <p className="text-xs text-muted-foreground">Webhook events will be sent to this URL.</p>
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-sm font-medium text-foreground">Enabled Events</label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {[
+                "intent.payin.created",
+                "intent.payin.confirmed",
+                "intent.payout.created",
+                "intent.payout.completed",
+                "intent.trade.executed",
+                "case.created",
+                "case.resolved",
+              ].map((event) => (
+                <label key={event} className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enabledEvents[event] ?? false}
+                    onChange={(e) => setEnabledEvents((prev) => ({ ...prev, [event]: e.target.checked }))}
+                    className="rounded border-white/20 bg-[#09090B] accent-[#00FF87]"
+                  />
+                  <span className="text-sm font-mono text-muted-foreground">{event}</span>
+                </label>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      </Panel>
 
       {/* Rate Limiting */}
-      <div className="rounded-lg border bg-card p-6 space-y-4">
-        <h2 className="text-lg font-semibold">Rate Limiting</h2>
-
+      <Panel
+        header={{ title: "Rate Limiting", description: "Maximum API requests allowed per minute." }}
+        variant="glass"
+      >
         <div className="space-y-2">
-          <label className="text-sm font-medium">Requests per minute</label>
+          <label className="text-sm font-medium text-foreground flex items-center gap-2">
+            <Zap className="h-3.5 w-3.5 text-[#FFB800]" />
+            Requests per minute
+          </label>
           <input
             type="number"
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            className={inputCls}
             value={settings.rateLimit}
             onChange={(e) => setSettings({ ...settings, rateLimit: e.target.value })}
             min="10"
             max="1000"
           />
-          <p className="text-xs text-muted-foreground">
-            Maximum API requests allowed per minute (10-1000).
-          </p>
+          <p className="text-xs text-muted-foreground">Allowed range: 10–1000 requests per minute.</p>
         </div>
-      </div>
+      </Panel>
 
       {/* Transaction Limits */}
-      <div className="rounded-lg border bg-card p-6 space-y-4">
-        <h2 className="text-lg font-semibold">Default Transaction Limits</h2>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Min Payin (VND)</label>
-            <input
-              type="number"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              value={settings.minPayin}
-              onChange={(e) => setSettings({ ...settings, minPayin: e.target.value })}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Max Payin (VND)</label>
-            <input
-              type="number"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              value={settings.maxPayin}
-              onChange={(e) => setSettings({ ...settings, maxPayin: e.target.value })}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Min Payout (VND)</label>
-            <input
-              type="number"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              value={settings.minPayout}
-              onChange={(e) => setSettings({ ...settings, minPayout: e.target.value })}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Max Payout (VND)</label>
-            <input
-              type="number"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              value={settings.maxPayout}
-              onChange={(e) => setSettings({ ...settings, maxPayout: e.target.value })}
-            />
+      <Panel
+        header={{ title: "Default Transaction Limits", description: "Min/max payin and payout amounts in VND." }}
+        variant="glass"
+      >
+        <div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {[
+              { label: "Min Payin (VND)", key: "minPayin" as const },
+              { label: "Max Payin (VND)", key: "maxPayin" as const },
+              { label: "Min Payout (VND)", key: "minPayout" as const },
+              { label: "Max Payout (VND)", key: "maxPayout" as const },
+            ].map(({ label, key }) => (
+              <div key={key} className="space-y-2">
+                <label className="text-sm font-medium text-foreground">{label}</label>
+                <input
+                  type="number"
+                  className={inputCls}
+                  value={settings[key]}
+                  onChange={(e) => setSettings({ ...settings, [key]: e.target.value })}
+                />
+              </div>
+            ))}
           </div>
         </div>
-      </div>
-
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <Button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-6 py-2"
-        >
-          {saving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
-          ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                {tCommon('save')}
-              </>
-          )}
-        </Button>
-      </div>
-    </div>
+      </Panel>
+    </main>
   );
 }

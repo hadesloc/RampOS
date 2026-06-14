@@ -1,33 +1,18 @@
 "use client";
 
 import { Suspense, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/auth-context";
 import Link from "next/link";
 import { useRouter } from "@/navigation";
 import { useSearchParams } from "next/navigation";
-import {
-  Loader2,
-  AlertCircle,
-  Shield,
-} from "lucide-react";
+import { Loader2, AlertCircle, Shield, Lock } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 function LoginContent() {
-  const t = useTranslations('Portal.auth.login');
+  const t = useTranslations("Portal.auth.login");
 
-  const {
-    error,
-    isAuthenticated,
-  } = useAuth();
+  const { error, isAuthenticated } = useAuth();
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -44,67 +29,71 @@ function LoginContent() {
   }, [isAuthenticated, router]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <div className="flex justify-center mb-4">
-             <div className="h-12 w-12 rounded-lg bg-primary flex items-center justify-center">
-                <Shield className="h-8 w-8 text-primary-foreground" />
-             </div>
+    <div className="flex min-h-screen items-center justify-center bg-[#09090B] px-4">
+      <div className="w-full max-w-md">
+        {/* Logo mark */}
+        <div className="flex flex-col items-center mb-8">
+          <div className="h-14 w-14 rounded-2xl bg-[#111113] border border-[#00FF87]/20 flex items-center justify-center shadow-[0_0_24px_rgba(0,255,135,0.15)] mb-5">
+            <Shield className="h-7 w-7 text-[#00FF87]" />
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight text-center">
-            {t('title')}
-          </CardTitle>
-          <p className="text-center text-sm text-muted-foreground">{t('subtitle')}</p>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          <h1 className="text-2xl font-bold tracking-tight text-white">
+            {t("title")}
+          </h1>
+          <p className="mt-1.5 text-sm text-white/40">{t("subtitle")}</p>
+        </div>
+
+        {/* Card */}
+        <div className="rounded-2xl border border-white/[0.06] bg-[#111113] p-6 space-y-4 shadow-xl">
           {magicLinkToken && (
-            <Alert variant="destructive">
+            <Alert className="border-red-500/20 bg-red-500/10 text-red-400">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{tokenUnavailable}</AlertDescription>
+              <AlertDescription className="text-red-400">
+                {tokenUnavailable}
+              </AlertDescription>
             </Alert>
           )}
 
           {error && (
-            <Alert variant="destructive">
+            <Alert className="border-red-500/20 bg-red-500/10 text-red-400">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription className="text-red-400">{error}</AlertDescription>
             </Alert>
           )}
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{portalAuthUnavailable}</AlertDescription>
-          </Alert>
-        </CardContent>
-        <CardFooter className="flex flex-col space-y-2">
-          <div className="text-sm text-muted-foreground text-center">
-            {t('no_account')}{" "}
-            <Link
-              href="/portal/register"
-              className="text-primary hover:underline"
-            >
-              {t('create_account')}
-            </Link>
+
+          <div className="flex items-start gap-3 rounded-lg border border-[#FFB800]/20 bg-[#FFB800]/[0.06] p-4">
+            <Lock className="h-4 w-4 mt-0.5 shrink-0 text-[#FFB800]" />
+            <p className="text-sm text-[#FFB800]/80">{portalAuthUnavailable}</p>
           </div>
-          <p className="text-center text-xs text-muted-foreground">
-            Existing portal routes require a pre-issued Bearer JWT. Self-serve sign-in is currently disabled.
-          </p>
-        </CardFooter>
-      </Card>
+
+          {/* Footer links */}
+          <div className="pt-2 space-y-3 text-center">
+            <p className="text-sm text-white/40">
+              {t("no_account")}{" "}
+              <Link
+                href="/portal/register"
+                className="text-[#7B61FF] hover:text-[#7B61FF]/80 transition-colors"
+              >
+                {t("create_account")}
+              </Link>
+            </p>
+            <p className="text-xs text-white/20">
+              Existing portal routes require a pre-issued Bearer JWT. Self-serve sign-in is currently disabled.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
 function LoginFallback() {
-  const tCommon = useTranslations('Common');
+  const tCommon = useTranslations("Common");
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md">
-        <CardContent className="flex flex-col items-center py-10">
-          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-          <p className="text-muted-foreground">{tCommon('loading')}</p>
-        </CardContent>
-      </Card>
+    <div className="flex min-h-screen items-center justify-center bg-[#09090B] px-4">
+      <div className="rounded-2xl border border-white/[0.06] bg-[#111113] p-10 flex flex-col items-center gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-[#00FF87]" />
+        <p className="text-sm text-white/40">{tCommon("loading")}</p>
+      </div>
     </div>
   );
 }

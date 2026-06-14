@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/auth-context";
 import { useRouter, Link } from "@/navigation";
@@ -19,8 +18,8 @@ import {
   VenueSummary,
   venueFundingApi,
 } from "@/lib/portal-api";
-
 import { VenueFundingCard } from "@/components/portal/venue-funding-card";
+import { Wallet, Info } from "lucide-react";
 
 const DEFAULT_FUNDING_REQUEST = {
   jurisdiction: "VN",
@@ -78,7 +77,9 @@ export default function VenueFundingPage() {
         setSelectedVenueKey((current) => current ?? activePilotVenue);
       } catch {
         if (!cancelled) {
-          setError("Failed to load venue funding lanes. Try again after the portal session is refreshed.");
+          setError(
+            "Failed to load venue funding lanes. Try again after the portal session is refreshed."
+          );
         }
       } finally {
         if (!cancelled) {
@@ -230,17 +231,25 @@ export default function VenueFundingPage() {
           title="Venue Funding"
           description="Create your governed wallet first, then move settled wallet funds into a supported venue."
         />
-        <Card>
-          <CardContent className="flex flex-col items-start gap-4 py-8">
-            <p className="text-sm text-muted-foreground">
-              Venue funding only starts after your governed wallet is available. Use the deposit
-              flow to create or fund the wallet first.
-            </p>
-            <Button asChild>
+        <div className="rounded-xl border border-white/[0.06] bg-[#111113] p-8">
+          <div className="flex flex-col items-start gap-5">
+            <div className="h-12 w-12 rounded-xl bg-[#00FF87]/10 border border-[#00FF87]/20 flex items-center justify-center">
+              <Wallet className="h-6 w-6 text-[#00FF87]" />
+            </div>
+            <div>
+              <p className="text-sm text-white/60 leading-relaxed max-w-md">
+                Venue funding only starts after your governed wallet is available. Use the deposit
+                flow to create or fund the wallet first.
+              </p>
+            </div>
+            <Button
+              asChild
+              className="bg-[#00FF87] text-[#09090B] font-semibold hover:bg-[#00FF87]/90"
+            >
               <Link href="/portal/deposit">Go to wallet deposit</Link>
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </PageContainer>
     );
   }
@@ -253,14 +262,15 @@ export default function VenueFundingPage() {
       />
 
       <div className="mx-auto max-w-5xl space-y-6">
-        <Alert>
-          <AlertDescription>
+        <div className="flex items-start gap-3 rounded-lg border border-[#00D4FF]/20 bg-[#00D4FF]/[0.05] p-4">
+          <Info className="h-4 w-4 mt-0.5 shrink-0 text-[#00D4FF]" />
+          <p className="text-sm text-[#00D4FF]/80">
             This bounded slice uses the verified portal venue-funding API surface and currently
             funds only the Hyperliquid wallet-linked pilot on VN / USDT / Ethereum. Prepare now
             creates a durable transfer draft, so venue IDs, attestation ID, and amount must be
             explicit.
-          </AlertDescription>
-        </Alert>
+          </p>
+        </div>
 
         <VenueFundingCard
           venues={venues}
