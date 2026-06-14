@@ -1,5 +1,5 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OfframpStats } from '../OfframpStats';
 import { OfframpTable } from '../OfframpTable';
@@ -11,11 +11,7 @@ function createWrapper() {
     defaultOptions: { queries: { retry: false } },
   });
   return function Wrapper({ children }: { children: React.ReactNode }) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    );
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   };
 }
 
@@ -30,20 +26,19 @@ const mockStats: OfframpStatsType = {
 
 const mockIntent: OfframpIntent = {
   id: 'intent-001-abcdefgh',
-  tenant_id: 'tenant-001',
-  user_id: 'user-001-abcdefgh',
-  amount_crypto: '0.5',
-  crypto_currency: 'ETH',
-  amount_vnd: '25000000',
-  exchange_rate: '50000000',
-  fee_amount: '0.001',
-  fee_currency: 'ETH',
-  status: 'AWAITING_APPROVAL',
-  bank_name: 'Vietcombank',
-  bank_account_number: '1234567890',
-  bank_account_name: 'NGUYEN VAN A',
-  created_at: '2026-01-15T10:30:00Z',
-  updated_at: '2026-01-15T10:35:00Z',
+  userId: 'user-001-abcdefgh',
+  state: 'CRYPTO_RECEIVED',
+  cryptoAmount: '0.5',
+  cryptoAsset: 'ETH',
+  netVndAmount: '25000000',
+  grossVndAmount: '25100000',
+  exchangeRate: '50000000',
+  linkedRfqId: 'rfq-linked-admin-1',
+  winningLpId: 'lp-admin-1',
+  matchedRate: '50050000',
+  settlementId: 'settlement-admin-1',
+  createdAt: '2026-01-15T10:30:00Z',
+  updatedAt: '2026-01-15T10:35:00Z',
 };
 
 const mockIntents: OfframpIntent[] = [
@@ -51,26 +46,22 @@ const mockIntents: OfframpIntent[] = [
   {
     ...mockIntent,
     id: 'intent-002-12345678',
-    user_id: 'user-002-12345678',
-    status: 'COMPLETED',
-    amount_crypto: '1.0',
-    amount_vnd: '50000000',
-    bank_name: 'Techcombank',
-    completed_at: '2026-01-15T12:00:00Z',
+    userId: 'user-002-12345678',
+    state: 'COMPLETED',
+    cryptoAmount: '1.0',
+    netVndAmount: '50000000',
   },
   {
     ...mockIntent,
     id: 'intent-003-87654321',
-    user_id: 'user-003-87654321',
-    status: 'REJECTED',
-    reject_reason: 'Suspicious activity detected',
-    bank_name: 'BIDV',
+    userId: 'user-003-87654321',
+    state: 'FAILED',
   },
 ];
 
 describe('Admin Off-Ramp Dashboard', () => {
   describe('OfframpStats', () => {
-    it('renders stats cards with data', () => {
+    it('renders derived stats cards with data', () => {
       render(<OfframpStats stats={mockStats} />, { wrapper: createWrapper() });
 
       expect(screen.getByText('Total Intents')).toBeInTheDocument();
@@ -88,9 +79,6 @@ describe('Admin Off-Ramp Dashboard', () => {
 
       const statsContainer = screen.getByTestId('offramp-stats');
       expect(statsContainer).toBeInTheDocument();
-      // StatCard renders Skeleton when loading, which uses animate-pulse
-      const skeletons = statsContainer.querySelectorAll('.animate-pulse, [class*="skeleton"]');
-      // At minimum we expect the container to be there
       expect(statsContainer.children.length).toBe(5);
     });
 
@@ -121,57 +109,46 @@ describe('Admin Off-Ramp Dashboard', () => {
       render(<OfframpTable {...defaultTableProps} />, { wrapper: createWrapper() });
 
       expect(screen.getByTestId('offramp-table')).toBeInTheDocument();
-      // Check that truncated IDs appear (first 8 chars + ...)
       const truncatedIds = screen.getAllByText(/intent-0\.\.\./);
       expect(truncatedIds.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('renders bank names', () => {
+    it('renders linkage fields from real admin off-ramp DTOs', () => {
       render(<OfframpTable {...defaultTableProps} />, { wrapper: createWrapper() });
 
-      expect(screen.getByText('Vietcombank')).toBeInTheDocument();
-      expect(screen.getByText('Techcombank')).toBeInTheDocument();
-      expect(screen.getByText('BIDV')).toBeInTheDocument();
+      expect(screen.getAllByText('rfq-linked-admin-1').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('settlement-admin-1').length).toBeGreaterThan(0);
     });
 
-    it('renders status badges', () => {
+    it('renders status badges for backend states', () => {
       render(<OfframpTable {...defaultTableProps} />, { wrapper: createWrapper() });
 
-      expect(screen.getByText('awaiting approval')).toBeInTheDocument();
+      expect(screen.getByText('crypto received')).toBeInTheDocument();
       expect(screen.getByText('completed')).toBeInTheDocument();
-      expect(screen.getByText('rejected')).toBeInTheDocument();
+      expect(screen.getByText('failed')).toBeInTheDocument();
     });
 
     it('calls onRowClick when row is clicked', () => {
       const onRowClick = vi.fn();
-      render(
-        <OfframpTable {...defaultTableProps} onRowClick={onRowClick} />,
-        { wrapper: createWrapper() }
-      );
+      render(<OfframpTable {...defaultTableProps} onRowClick={onRowClick} />, { wrapper: createWrapper() });
 
-      const row = screen.getByText('Vietcombank').closest('tr');
+      const row = screen.getByText('crypto received').closest('tr');
       if (row) fireEvent.click(row);
       expect(onRowClick).toHaveBeenCalledWith(mockIntents[0]);
     });
 
-    it('filters by status', () => {
+    it('filters by backend state', () => {
       const onStatusFilterChange = vi.fn();
-      render(
-        <OfframpTable {...defaultTableProps} onStatusFilterChange={onStatusFilterChange} />,
-        { wrapper: createWrapper() }
-      );
+      render(<OfframpTable {...defaultTableProps} onStatusFilterChange={onStatusFilterChange} />, { wrapper: createWrapper() });
 
       const select = screen.getByTestId('offramp-status-filter');
-      fireEvent.change(select, { target: { value: 'PENDING' } });
-      expect(onStatusFilterChange).toHaveBeenCalledWith('PENDING');
+      fireEvent.change(select, { target: { value: 'CRYPTO_RECEIVED' } });
+      expect(onStatusFilterChange).toHaveBeenCalledWith('CRYPTO_RECEIVED');
     });
 
     it('handles search input', () => {
       const onSearchChange = vi.fn();
-      render(
-        <OfframpTable {...defaultTableProps} onSearchChange={onSearchChange} />,
-        { wrapper: createWrapper() }
-      );
+      render(<OfframpTable {...defaultTableProps} onSearchChange={onSearchChange} />, { wrapper: createWrapper() });
 
       const searchInput = screen.getByTestId('offramp-search');
       fireEvent.change(searchInput, { target: { value: 'user-001' } });
@@ -179,29 +156,9 @@ describe('Admin Off-Ramp Dashboard', () => {
     });
 
     it('shows loading state', () => {
-      render(
-        <OfframpTable {...defaultTableProps} intents={[]} loading={true} />,
-        { wrapper: createWrapper() }
-      );
+      render(<OfframpTable {...defaultTableProps} intents={[]} loading={true} />, { wrapper: createWrapper() });
 
-      const table = screen.getByTestId('offramp-table');
-      expect(table).toBeInTheDocument();
-    });
-
-    it('handles pagination change', () => {
-      const onPaginationChange = vi.fn();
-      render(
-        <OfframpTable
-          {...defaultTableProps}
-          pageCount={5}
-          onPaginationChange={onPaginationChange}
-        />,
-        { wrapper: createWrapper() }
-      );
-
-      const nextBtn = screen.getByRole('button', { name: /next/i });
-      fireEvent.click(nextBtn);
-      expect(onPaginationChange).toHaveBeenCalled();
+      expect(screen.getByTestId('offramp-table')).toBeInTheDocument();
     });
   });
 
@@ -212,38 +169,36 @@ describe('Admin Off-Ramp Dashboard', () => {
       expect(screen.getByTestId('offramp-detail')).toBeInTheDocument();
       expect(screen.getByText('Off-Ramp Intent Detail')).toBeInTheDocument();
       expect(screen.getByText(mockIntent.id)).toBeInTheDocument();
-      expect(screen.getByText(mockIntent.user_id)).toBeInTheDocument();
+      expect(screen.getByText(mockIntent.userId!)).toBeInTheDocument();
     });
 
-    it('renders transaction details', () => {
+    it('renders transaction details and linkage fields', () => {
       render(<OfframpDetail intent={mockIntent} />, { wrapper: createWrapper() });
 
       expect(screen.getByText('0.5 ETH')).toBeInTheDocument();
-      expect(screen.getByText('50000000')).toBeInTheDocument(); // Exchange rate
-      expect(screen.getByText('0.001 ETH')).toBeInTheDocument(); // Fee
+      expect(screen.getByText('50000000')).toBeInTheDocument();
+      expect(screen.getByText('rfq-linked-admin-1')).toBeInTheDocument();
+      expect(screen.getByText('lp-admin-1')).toBeInTheDocument();
+      expect(screen.getByText('50050000')).toBeInTheDocument();
+      expect(screen.getByText('settlement-admin-1')).toBeInTheDocument();
     });
 
-    it('renders bank details', () => {
+    it('does not present legacy flat bank fields as current contract fields', () => {
       render(<OfframpDetail intent={mockIntent} />, { wrapper: createWrapper() });
 
-      expect(screen.getByText('Vietcombank')).toBeInTheDocument();
-      expect(screen.getByText('1234567890')).toBeInTheDocument();
-      expect(screen.getByText('NGUYEN VAN A')).toBeInTheDocument();
+      expect(screen.queryByText('Bank Transfer Details')).not.toBeInTheDocument();
     });
 
     it('renders status timeline', () => {
       render(<OfframpDetail intent={mockIntent} />, { wrapper: createWrapper() });
 
       expect(screen.getByTestId('status-timeline')).toBeInTheDocument();
-      expect(screen.getByText('AWAITING APPROVAL')).toBeInTheDocument();
+      expect(screen.getByText('CRYPTO RECEIVED')).toBeInTheDocument();
     });
 
-    it('shows approve button for pending intents', () => {
+    it('shows approve button only for CRYPTO_RECEIVED intents', () => {
       const onApprove = vi.fn();
-      render(
-        <OfframpDetail intent={mockIntent} onApprove={onApprove} />,
-        { wrapper: createWrapper() }
-      );
+      render(<OfframpDetail intent={mockIntent} onApprove={onApprove} />, { wrapper: createWrapper() });
 
       const approveBtn = screen.getByTestId('approve-btn');
       expect(approveBtn).toBeInTheDocument();
@@ -251,88 +206,50 @@ describe('Admin Off-Ramp Dashboard', () => {
       expect(onApprove).toHaveBeenCalledWith(mockIntent.id);
     });
 
-    it('handles reject action with reason', async () => {
+    it('handles reject action with reason for CRYPTO_RECEIVED intents', () => {
       const onReject = vi.fn();
-      render(
-        <OfframpDetail intent={mockIntent} onReject={onReject} />,
-        { wrapper: createWrapper() }
-      );
+      render(<OfframpDetail intent={mockIntent} onReject={onReject} />, { wrapper: createWrapper() });
 
-      // Click reject to show input
-      const rejectBtn = screen.getByTestId('reject-btn');
-      fireEvent.click(rejectBtn);
-
-      // Enter reason
-      const reasonInput = screen.getByTestId('reject-reason-input');
-      fireEvent.change(reasonInput, { target: { value: 'Fraud detected' } });
-
-      // Confirm reject
-      const confirmBtn = screen.getByTestId('confirm-reject-btn');
-      fireEvent.click(confirmBtn);
+      fireEvent.click(screen.getByTestId('reject-btn'));
+      fireEvent.change(screen.getByTestId('reject-reason-input'), { target: { value: 'Fraud detected' } });
+      fireEvent.click(screen.getByTestId('confirm-reject-btn'));
 
       expect(onReject).toHaveBeenCalledWith(mockIntent.id, 'Fraud detected');
     });
 
     it('disables confirm reject when reason is empty', () => {
-      render(
-        <OfframpDetail intent={mockIntent} onReject={vi.fn()} />,
-        { wrapper: createWrapper() }
-      );
+      render(<OfframpDetail intent={mockIntent} onReject={vi.fn()} />, { wrapper: createWrapper() });
 
-      const rejectBtn = screen.getByTestId('reject-btn');
-      fireEvent.click(rejectBtn);
-
-      const confirmBtn = screen.getByTestId('confirm-reject-btn');
-      expect(confirmBtn).toBeDisabled();
+      fireEvent.click(screen.getByTestId('reject-btn'));
+      expect(screen.getByTestId('confirm-reject-btn')).toBeDisabled();
     });
 
     it('hides action buttons for completed intents', () => {
-      const completedIntent: OfframpIntent = {
-        ...mockIntent,
-        status: 'COMPLETED',
-      };
-      render(
-        <OfframpDetail intent={completedIntent} onApprove={vi.fn()} onReject={vi.fn()} />,
-        { wrapper: createWrapper() }
-      );
+      render(<OfframpDetail intent={{ ...mockIntent, state: 'COMPLETED' }} onApprove={vi.fn()} onReject={vi.fn()} />, { wrapper: createWrapper() });
 
       expect(screen.queryByTestId('offramp-actions')).not.toBeInTheDocument();
     });
 
-    it('shows rejection reason for rejected intents', () => {
-      const rejectedIntent: OfframpIntent = {
-        ...mockIntent,
-        status: 'REJECTED',
-        reject_reason: 'Suspicious activity detected',
-      };
-      render(<OfframpDetail intent={rejectedIntent} />, { wrapper: createWrapper() });
+    it('hides action buttons for failed intents', () => {
+      render(<OfframpDetail intent={{ ...mockIntent, state: 'FAILED' }} onApprove={vi.fn()} onReject={vi.fn()} />, { wrapper: createWrapper() });
 
-      expect(screen.getByText('Rejection Reason')).toBeInTheDocument();
-      expect(screen.getByText('Suspicious activity detected')).toBeInTheDocument();
+      expect(screen.queryByTestId('offramp-actions')).not.toBeInTheDocument();
     });
 
     it('shows loading state for approve button', () => {
-      render(
-        <OfframpDetail intent={mockIntent} onApprove={vi.fn()} approving={true} />,
-        { wrapper: createWrapper() }
-      );
+      render(<OfframpDetail intent={mockIntent} onApprove={vi.fn()} approving={true} />, { wrapper: createWrapper() });
 
       expect(screen.getByText('Approving...')).toBeInTheDocument();
     });
 
     it('calls onClose when close button clicked', () => {
       const onClose = vi.fn();
-      render(
-        <OfframpDetail intent={mockIntent} onClose={onClose} />,
-        { wrapper: createWrapper() }
-      );
+      render(<OfframpDetail intent={mockIntent} onClose={onClose} />, { wrapper: createWrapper() });
 
-      // The close button is a ghost button with X icon
       const closeButtons = screen.getAllByRole('button');
       const closeBtn = closeButtons.find(
         (btn) => btn.querySelector('.lucide-x') !== null || btn.getAttribute('class')?.includes('ghost')
       );
-      // Alternative: click close button via close icon
       if (closeBtn) {
         fireEvent.click(closeBtn);
         expect(onClose).toHaveBeenCalled();

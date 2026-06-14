@@ -25,6 +25,7 @@ use ramp_core::{
         tenant::{PgTenantRepository, TenantRepository},
         user::{PgUserRepository, UserRepository},
         webhook::PgWebhookRepository,
+        OfframpIntentRepository, PgOfframpIntentRepository,
     },
     service::{
         ledger::LedgerService, onboarding::OnboardingService, payin::PayinService,
@@ -504,6 +505,378 @@ async fn create_linked_offramp_settlement(
 // ============================================================================
 // Portal Off-Ramp E2E Tests
 // ============================================================================
+
+#[tokio::test]
+async fn test_portal_rfq_create_binds_valid_offramp_intent_immediately() {
+    if !docker_available() {
+        eprintln!("Skipping e2e_offramp_test: Docker daemon unavailable");
+        return;
+    }
+    let tenant_id = "00000000-0000-0000-0000-000000000001";
+    let pool = setup_db().await;
+    let (app, _api_key, jwt) = build_test_app(pool.clone()).await;
+
+    let (status, quote_resp) = post_json(
+        app.clone(),
+        "/v1/portal/offramp/quote".to_string(),
+        &jwt,
+        json!({
+            "cryptoAsset": "USDT",
+            "amount": "100",
+            "bankCode": "VCB",
+            "accountNumber": "1234567890",
+            "accountName": "Binding Test"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "quote response: {quote_resp}");
+    let offramp_id = quote_resp["quoteId"].as_str().unwrap().to_string();
+
+    let (status, rfq_resp) = post_json(
+        app.clone(),
+        "/v1/portal/rfq".to_string(),
+        &jwt,
+        json!({
+            "direction": "OFFRAMP",
+            "cryptoAsset": "USDT",
+            "cryptoAmount": "100.0",
+            "offrampId": offramp_id,
+            "ttlMinutes": 5
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "rfq response: {rfq_resp}");
+    let rfq_id = rfq_resp["id"].as_str().unwrap().to_string();
+
+    let repo = PgOfframpIntentRepository::new(pool);
+    let intent = repo
+        .get_intent(
+            &ramp_common::types::TenantId(tenant_id.to_string()),
+            &offramp_id,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(intent.linked_rfq_id.as_deref(), Some(rfq_id.as_str()));
+    assert!(intent.winning_lp_id.is_none());
+    assert!(intent.matched_rate.is_none());
+    assert!(intent.settlement_id.is_none());
+}
+
+#[tokio::test]
+async fn test_portal_rfq_rejects_cross_user_offramp_binding_in_same_tenant() {
+    if !docker_available() {
+        eprintln!("Skipping e2e_offramp_test: Docker daemon unavailable");
+        return;
+    }
+    let tenant_id = "00000000-0000-0000-0000-000000000001";
+    let pool = setup_db().await;
+    let (app, _api_key, jwt) = build_test_app(pool).await;
+
+    let (status, quote_resp) = post_json(
+        app.clone(),
+        "/v1/portal/offramp/quote".to_string(),
+        &jwt,
+        json!({
+            "cryptoAsset": "USDT",
+            "amount": "100",
+            "bankCode": "VCB",
+            "accountNumber": "1234567890",
+            "accountName": "Owner User"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "quote response: {quote_resp}");
+    let offramp_id = quote_resp["quoteId"].as_str().unwrap().to_string();
+    let other_user_jwt = build_portal_jwt(
+        "00000000-0000-0000-0000-00000000ffff",
+        tenant_id,
+        "test-jwt-secret-offramp",
+    );
+
+    let (status, rfq_resp) = post_json(
+        app,
+        "/v1/portal/rfq".to_string(),
+        &other_user_jwt,
+        json!({
+            "direction": "OFFRAMP",
+            "cryptoAsset": "USDT",
+            "cryptoAmount": "100",
+            "offrampId": offramp_id,
+            "ttlMinutes": 5
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "rfq response: {rfq_resp}");
+}
+
+#[tokio::test]
+async fn test_portal_rfq_rejects_offramp_asset_amount_and_terminal_state_mismatch() {
+    if !docker_available() {
+        eprintln!("Skipping e2e_offramp_test: Docker daemon unavailable");
+        return;
+    }
+    let pool = setup_db().await;
+    let (app, _api_key, jwt) = build_test_app(pool.clone()).await;
+
+    let (status, quote_resp) = post_json(
+        app.clone(),
+        "/v1/portal/offramp/quote".to_string(),
+        &jwt,
+        json!({
+            "cryptoAsset": "USDT",
+            "amount": "100",
+            "bankCode": "VCB",
+            "accountNumber": "1234567890",
+            "accountName": "Mismatch Test"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "quote response: {quote_resp}");
+    let offramp_id = quote_resp["quoteId"].as_str().unwrap().to_string();
+
+    for payload in [
+        json!({"direction": "OFFRAMP", "cryptoAsset": "USDC", "cryptoAmount": "100", "offrampId": offramp_id, "ttlMinutes": 5}),
+        json!({"direction": "OFFRAMP", "cryptoAsset": "USDT", "cryptoAmount": "101", "offrampId": offramp_id, "ttlMinutes": 5}),
+    ] {
+        let (status, rfq_resp) =
+            post_json(app.clone(), "/v1/portal/rfq".to_string(), &jwt, payload).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "rfq response: {rfq_resp}");
+    }
+
+    sqlx::query("UPDATE offramp_intents SET state = 'EXPIRED' WHERE id = $1")
+        .bind(&offramp_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (status, rfq_resp) = post_json(
+        app,
+        "/v1/portal/rfq".to_string(),
+        &jwt,
+        json!({
+            "direction": "OFFRAMP",
+            "cryptoAsset": "USDT",
+            "cryptoAmount": "100",
+            "offrampId": offramp_id,
+            "ttlMinutes": 5
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "rfq response: {rfq_resp}");
+}
+
+#[tokio::test]
+async fn test_portal_rfq_rejects_expired_offramp_quote_binding() {
+    if !docker_available() {
+        eprintln!("Skipping e2e_offramp_test: Docker daemon unavailable");
+        return;
+    }
+    let pool = setup_db().await;
+    let (app, _api_key, jwt) = build_test_app(pool.clone()).await;
+
+    let (status, quote_resp) = post_json(
+        app.clone(),
+        "/v1/portal/offramp/quote".to_string(),
+        &jwt,
+        json!({
+            "cryptoAsset": "USDT",
+            "amount": "100",
+            "bankCode": "VCB",
+            "accountNumber": "1234567890",
+            "accountName": "Expired Quote Binding Test"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "quote response: {quote_resp}");
+    let offramp_id = quote_resp["quoteId"].as_str().unwrap().to_string();
+
+    sqlx::query("UPDATE offramp_intents SET quote_expires_at = $1 WHERE id = $2")
+        .bind(Utc::now() - chrono::Duration::minutes(1))
+        .bind(&offramp_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (status, rfq_resp) = post_json(
+        app,
+        "/v1/portal/rfq".to_string(),
+        &jwt,
+        json!({
+            "direction": "OFFRAMP",
+            "cryptoAsset": "USDT",
+            "cryptoAmount": "100",
+            "offrampId": offramp_id,
+            "ttlMinutes": 5
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::GONE, "rfq response: {rfq_resp}");
+}
+
+#[tokio::test]
+async fn test_portal_rfq_create_cancels_created_rfq_when_bind_fails_after_insert() {
+    if !docker_available() {
+        eprintln!("Skipping e2e_offramp_test: Docker daemon unavailable");
+        return;
+    }
+    let tenant_id = "00000000-0000-0000-0000-000000000001";
+    let pool = setup_db().await;
+    let (app, _api_key, jwt) = build_test_app(pool.clone()).await;
+
+    let (status, quote_resp) = post_json(
+        app.clone(),
+        "/v1/portal/offramp/quote".to_string(),
+        &jwt,
+        json!({
+            "cryptoAsset": "USDT",
+            "amount": "100",
+            "bankCode": "VCB",
+            "accountNumber": "1234567890",
+            "accountName": "Compensation Test"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "quote response: {quote_resp}");
+    let offramp_id = quote_resp["quoteId"].as_str().unwrap().to_string();
+
+    sqlx::query(
+        r#"
+        CREATE OR REPLACE FUNCTION test_force_offramp_rfq_bind_conflict()
+        RETURNS trigger AS $$
+        BEGIN
+            IF NEW.offramp_id IS NOT NULL THEN
+                UPDATE offramp_intents
+                   SET linked_rfq_id = 'rfq_external_race',
+                       updated_at = NOW()
+                 WHERE id = NEW.offramp_id
+                   AND tenant_id = NEW.tenant_id
+                   AND linked_rfq_id IS NULL;
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("create bind conflict trigger function");
+    sqlx::query(
+        r#"
+        CREATE TRIGGER test_force_offramp_rfq_bind_conflict
+        AFTER INSERT ON rfq_requests
+        FOR EACH ROW
+        EXECUTE FUNCTION test_force_offramp_rfq_bind_conflict();
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("create bind conflict trigger");
+
+    let (status, rfq_resp) = post_json(
+        app,
+        "/v1/portal/rfq".to_string(),
+        &jwt,
+        json!({
+            "direction": "OFFRAMP",
+            "cryptoAsset": "USDT",
+            "cryptoAmount": "100",
+            "offrampId": offramp_id,
+            "ttlMinutes": 5
+        }),
+    )
+    .await;
+    assert!(
+        !status.is_success(),
+        "bind failure should return non-2xx response: {rfq_resp}"
+    );
+    assert_eq!(status, StatusCode::CONFLICT, "rfq response: {rfq_resp}");
+
+    let created_rfq: (String, String) = sqlx::query_as(
+        r#"
+        SELECT id, state
+        FROM rfq_requests
+        WHERE tenant_id = $1 AND offramp_id = $2
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(&offramp_id)
+    .fetch_one(&pool)
+    .await
+    .expect("created RFQ should remain observable for compensation assertion");
+    assert_eq!(created_rfq.1, "CANCELLED");
+
+    let repo = PgOfframpIntentRepository::new(pool);
+    let intent = repo
+        .get_intent(
+            &ramp_common::types::TenantId(tenant_id.to_string()),
+            &offramp_id,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_ne!(
+        intent.linked_rfq_id.as_deref(),
+        Some(created_rfq.0.as_str())
+    );
+}
+
+#[tokio::test]
+async fn test_portal_rfq_rejects_duplicate_active_offramp_binding_with_conflict() {
+    if !docker_available() {
+        eprintln!("Skipping e2e_offramp_test: Docker daemon unavailable");
+        return;
+    }
+    let pool = setup_db().await;
+    let (app, _api_key, jwt) = build_test_app(pool).await;
+
+    let (status, quote_resp) = post_json(
+        app.clone(),
+        "/v1/portal/offramp/quote".to_string(),
+        &jwt,
+        json!({
+            "cryptoAsset": "USDT",
+            "amount": "100",
+            "bankCode": "VCB",
+            "accountNumber": "1234567890",
+            "accountName": "Duplicate Test"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "quote response: {quote_resp}");
+    let offramp_id = quote_resp["quoteId"].as_str().unwrap().to_string();
+    let payload = json!({
+        "direction": "OFFRAMP",
+        "cryptoAsset": "USDT",
+        "cryptoAmount": "100",
+        "offrampId": offramp_id,
+        "ttlMinutes": 5
+    });
+
+    let (status, rfq_resp) = post_json(
+        app.clone(),
+        "/v1/portal/rfq".to_string(),
+        &jwt,
+        payload.clone(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "rfq response: {rfq_resp}");
+    let first_rfq_id = rfq_resp["id"].as_str().unwrap();
+
+    let (status, duplicate_resp) =
+        post_json(app, "/v1/portal/rfq".to_string(), &jwt, payload).await;
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "duplicate response: {duplicate_resp}"
+    );
+    assert!(duplicate_resp["error"]["message"]
+        .as_str()
+        .unwrap_or_default()
+        .contains(first_rfq_id));
+}
 
 #[tokio::test]
 async fn test_portal_offramp_quote_create_status_confirm_flow() {

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { Input } from "@/components/ui/input";
-import { X, Check, Flag, Clock, ArrowRight } from "lucide-react";
+import { X, Check, ArrowRight } from "lucide-react";
 import type { OfframpIntent } from "@/hooks/use-admin-offramp";
 
 interface OfframpDetailProps {
@@ -39,10 +39,10 @@ function formatDate(dateStr: string): string {
 }
 
 const STATUS_TIMELINE: string[] = [
-  "PENDING",
-  "AWAITING_APPROVAL",
-  "APPROVED",
-  "PROCESSING",
+  "QUOTE_CREATED",
+  "CRYPTO_PENDING",
+  "CRYPTO_RECEIVED",
+  "VND_TRANSFERRING",
   "COMPLETED",
 ];
 
@@ -57,10 +57,19 @@ export function OfframpDetail({
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectInput, setShowRejectInput] = useState(false);
 
-  const canApprove = intent.status === "AWAITING_APPROVAL" || intent.status === "PENDING";
-  const canReject = intent.status === "AWAITING_APPROVAL" || intent.status === "PENDING";
+  const displayState = intent.state;
+  const userId = intent.userId ?? "-";
+  const cryptoAmount = intent.cryptoAmount ?? "";
+  const cryptoAsset = intent.cryptoAsset ?? "";
+  const vndAmount = intent.netVndAmount ?? "";
+  const exchangeRate = intent.exchangeRate ?? "";
+  const txHash = intent.txHash;
+  const createdAt = intent.createdAt ?? "";
+  const completedAt = displayState === "COMPLETED" ? intent.updatedAt : undefined;
+  const canApprove = displayState === "CRYPTO_RECEIVED";
+  const canReject = displayState === "CRYPTO_RECEIVED";
 
-  const currentStepIndex = STATUS_TIMELINE.indexOf(intent.status);
+  const currentStepIndex = STATUS_TIMELINE.indexOf(displayState);
 
   return (
     <div className="space-y-6" data-testid="offramp-detail">
@@ -86,22 +95,22 @@ export function OfframpDetail({
             </div>
             <div>
               <span className="text-muted-foreground">User</span>
-              <p className="font-mono">{intent.user_id}</p>
+              <p className="font-mono">{userId}</p>
             </div>
             <div>
               <span className="text-muted-foreground">Status</span>
               <div className="mt-1">
-                <StatusBadge status={intent.status} showDot />
+                <StatusBadge status={displayState} showDot />
               </div>
             </div>
             <div>
               <span className="text-muted-foreground">Created</span>
-              <p>{formatDate(intent.created_at)}</p>
+              <p>{formatDate(createdAt)}</p>
             </div>
-            {intent.completed_at && (
+            {completedAt && (
               <div>
                 <span className="text-muted-foreground">Completed</span>
-                <p>{formatDate(intent.completed_at)}</p>
+                <p>{formatDate(completedAt)}</p>
               </div>
             )}
           </div>
@@ -118,27 +127,45 @@ export function OfframpDetail({
             <div>
               <span className="text-muted-foreground">Crypto Amount</span>
               <p className="font-mono font-bold">
-                {intent.amount_crypto} {intent.crypto_currency}
+                {cryptoAmount} {cryptoAsset}
               </p>
             </div>
             <div>
               <span className="text-muted-foreground">VND Amount</span>
-              <p className="font-mono font-bold">{formatVND(intent.amount_vnd)}</p>
+              <p className="font-mono font-bold">{formatVND(vndAmount)}</p>
             </div>
             <div>
               <span className="text-muted-foreground">Exchange Rate</span>
-              <p className="font-mono">{intent.exchange_rate}</p>
+              <p className="font-mono">{exchangeRate}</p>
             </div>
-            <div>
-              <span className="text-muted-foreground">Fee</span>
-              <p className="font-mono">
-                {intent.fee_amount} {intent.fee_currency}
-              </p>
-            </div>
-            {intent.tx_hash && (
+            {txHash && (
               <div className="col-span-2">
                 <span className="text-muted-foreground">Tx Hash</span>
-                <p className="font-mono text-xs break-all">{intent.tx_hash}</p>
+                <p className="font-mono text-xs break-all">{txHash}</p>
+              </div>
+            )}
+            {intent.linkedRfqId && (
+              <div>
+                <span className="text-muted-foreground">Linked RFQ</span>
+                <p className="font-mono text-xs">{intent.linkedRfqId}</p>
+              </div>
+            )}
+            {intent.winningLpId && (
+              <div>
+                <span className="text-muted-foreground">Winning LP</span>
+                <p className="font-mono text-xs">{intent.winningLpId}</p>
+              </div>
+            )}
+            {intent.matchedRate && (
+              <div>
+                <span className="text-muted-foreground">Matched Rate</span>
+                <p className="font-mono text-xs">{intent.matchedRate}</p>
+              </div>
+            )}
+            {intent.settlementId && (
+              <div>
+                <span className="text-muted-foreground">Settlement</span>
+                <p className="font-mono text-xs">{intent.settlementId}</p>
               </div>
             )}
           </div>
@@ -154,7 +181,7 @@ export function OfframpDetail({
           <div className="flex items-center gap-2" data-testid="status-timeline">
             {STATUS_TIMELINE.map((step, index) => {
               const isActive = index <= currentStepIndex && currentStepIndex >= 0;
-              const isCurrent = step === intent.status;
+              const isCurrent = step === displayState;
               return (
                 <div key={step} className="flex items-center gap-2">
                   <div
@@ -178,41 +205,6 @@ export function OfframpDetail({
           </div>
         </CardContent>
       </Card>
-
-      {/* Bank Transfer Details */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">Bank Transfer Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">Bank</span>
-              <p>{intent.bank_name}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Account Number</span>
-              <p className="font-mono">{intent.bank_account_number}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Account Name</span>
-              <p>{intent.bank_account_name}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Reject Reason */}
-      {intent.reject_reason && (
-        <Card className="border-red-500/50">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-red-600">Rejection Reason</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm">{intent.reject_reason}</p>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Action Buttons */}
       {(canApprove || canReject) && (

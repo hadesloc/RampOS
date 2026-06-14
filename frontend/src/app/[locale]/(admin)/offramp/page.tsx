@@ -11,9 +11,9 @@ import { OfframpTable } from "@/components/admin/offramp/OfframpTable";
 import { OfframpDetail } from "@/components/admin/offramp/OfframpDetail";
 import {
   useOfframpIntents,
-  useOfframpStats,
   useApproveOfframpIntent,
   useRejectOfframpIntent,
+  deriveOfframpStats,
   type OfframpIntent,
 } from "@/hooks/use-admin-offramp";
 import { useToast } from "@/components/ui/use-toast";
@@ -21,8 +21,6 @@ import { useToast } from "@/components/ui/use-toast";
 export default function AdminOfframpPage() {
   const { toast } = useToast();
   const [selectedIntent, setSelectedIntent] = useState<OfframpIntent | null>(null);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
   const [{ pageIndex, pageSize }, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: 10,
@@ -35,11 +33,7 @@ export default function AdminOfframpPage() {
   } = useOfframpIntents({
     page: pageIndex + 1,
     per_page: pageSize,
-    status: statusFilter || undefined,
-    user_search: searchQuery || undefined,
   });
-
-  const { data: stats, isLoading: statsLoading } = useOfframpStats();
 
   const approveMutation = useApproveOfframpIntent();
   const rejectMutation = useRejectOfframpIntent();
@@ -78,25 +72,10 @@ export default function AdminOfframpPage() {
     [rejectMutation, toast]
   );
 
-  const handleStatusFilterChange = useCallback(
-    (status: string) => {
-      setStatusFilter(status);
-      setPagination((p) => ({ ...p, pageIndex: 0 }));
-    },
-    []
-  );
-
-  const handleSearchChange = useCallback(
-    (query: string) => {
-      setSearchQuery(query);
-      setPagination((p) => ({ ...p, pageIndex: 0 }));
-    },
-    []
-  );
-
   const intents = intentsData?.data ?? [];
+  const stats = deriveOfframpStats(intents, intentsData?.total ?? intents.length);
   const pageCount = intentsData
-    ? Math.ceil(intentsData.total / intentsData.per_page)
+    ? Math.ceil(intentsData.total / (intentsData.limit || pageSize))
     : 0;
 
   if (selectedIntent) {
@@ -135,7 +114,7 @@ export default function AdminOfframpPage() {
         }
       />
 
-      <OfframpStats stats={stats} loading={statsLoading} />
+      <OfframpStats stats={stats} loading={intentsLoading} />
 
       <Card>
         <CardContent className="p-4">
@@ -146,10 +125,10 @@ export default function AdminOfframpPage() {
             pagination={{ pageIndex, pageSize }}
             onPaginationChange={setPagination}
             onRowClick={setSelectedIntent}
-            statusFilter={statusFilter}
-            onStatusFilterChange={handleStatusFilterChange}
-            searchQuery={searchQuery}
-            onSearchChange={handleSearchChange}
+            statusFilter=""
+            onStatusFilterChange={() => {}}
+            searchQuery=""
+            onSearchChange={() => {}}
           />
         </CardContent>
       </Card>

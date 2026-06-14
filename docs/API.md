@@ -488,32 +488,137 @@ List KYB evidence packages for institutional due diligence. Auth: Admin key.
 
 #### GET /v1/admin/treasury-evidence
 
-List treasury evidence imports (external balance snapshots). Auth: Admin key.
+List treasury evidence imports (external balance snapshots). Auth: Admin key. Treasury evidence imports are the only live treasury evidence source; absent imports, workbench/control-tower snapshots are sample/provenance-marked and must not be treated as production decision truth.
 
 ---
 
-### RFQ Auction — Bidirectional Price Discovery
+### Yield Strategy Runtime
 
-The RFQ layer provides a competitive LP auction marketplace where Liquidity Providers compete to offer the best rates for USDT↔VND conversions.
+`/v1/yield/*` and admin yield strategy/APY endpoints are not configured for the current launch environment unless live APY providers and on-chain reads are available. In the current launch scope they fail closed rather than fabricating hardcoded rates.
 
-**Flow:**
+---
+
+### Off-Ramp + RFQ Auction — Linked Price Discovery and Settlement Kickoff
+
+The RFQ layer provides a competitive LP auction marketplace for USDT↔VND conversions. RFQs can be used in two modes:
+
+- **Standalone RFQ**: create an `OFFRAMP` or `ONRAMP` RFQ without `offrampId`; finalization matches a winning LP/rate on the RFQ only.
+- **OFFRAMP-linked RFQ**: create an off-ramp quote/intent first, then create an `OFFRAMP` RFQ with `offrampId`; finalization persists linkage onto the off-ramp intent and creates/reuses the linked settlement kickoff.
+
+This contract is bounded to application state linkage. It does not claim automatic custody movement, bank execution, or external launch readiness.
+
+**Linked OFFRAMP flow:**
 ```
-OFF-RAMP: User creates RFQ → LPs bid (highest VND wins) → User accepts → MATCHED
-ON-RAMP:  User creates RFQ → LPs bid (lowest VND wins) → User accepts → MATCHED
+POST /v1/portal/offramp/quote
+→ POST /v1/portal/offramp/create
+→ POST /v1/portal/rfq with offrampId
+→ POST /v1/lp/rfq/:rfq_id/bid
+→ POST /v1/portal/rfq/:id/accept or /v1/admin/rfq/:id/finalize
+→ linked off-ramp stores linkedRfqId, winningLpId, matchedRate, settlementId
+→ POST /v1/admin/settlement/:id/outcome with COMPLETED or FAILED
+```
+
+#### POST /v1/portal/offramp/quote
+
+Create an off-ramp quote. Auth: Portal JWT.
+
+**Request Body**
+```json
+{
+  "cryptoAsset": "USDT",
+  "amount": "100",
+  "bankCode": "VCB",
+  "accountNumber": "1234567890",
+  "accountName": "NGUYEN VAN A"
+}
+```
+
+**Response** (200 OK)
+```json
+{
+  "quoteId": "ofr_01jn...",
+  "cryptoAsset": "USDT",
+  "cryptoAmount": "100",
+  "exchangeRate": "25000",
+  "grossVndAmount": "2500000",
+  "netVndAmount": "2475000",
+  "feeTotal": "25000",
+  "expiresAt": "2026-03-08T18:05:00Z"
+}
+```
+
+#### POST /v1/portal/offramp/create
+
+Create an off-ramp intent from a quote and allocate a deposit address. Auth: Portal JWT.
+
+**Request Body**
+```json
+{
+  "quoteId": "ofr_01jn...",
+  "chainId": 1
+}
+```
+
+**Response** (200 OK)
+```json
+{
+  "id": "ofr_01jn...",
+  "state": "CRYPTO_PENDING",
+  "cryptoAsset": "USDT",
+  "cryptoAmount": "100",
+  "exchangeRate": "25000",
+  "netVndAmount": "2475000",
+  "grossVndAmount": "2500000",
+  "depositAddress": "0xabc123...",
+  "chainId": 1,
+  "txHash": null,
+  "bankReference": null,
+  "linkedRfqId": null,
+  "winningLpId": null,
+  "matchedRate": null,
+  "settlementId": null,
+  "createdAt": "2026-03-08T18:00:00Z",
+  "updatedAt": "2026-03-08T18:00:01Z"
+}
+```
+
+#### GET /v1/portal/offramp/:id/status
+
+Return the current off-ramp intent, including RFQ/settlement linkage fields when present. Auth: Portal JWT.
+
+#### POST /v1/portal/offramp/:id/confirm
+
+Confirm bank/off-ramp details and ensure the intent is waiting for crypto. Auth: Portal JWT.
+
+#### POST /v1/portal/offramp/:id/crypto-received
+
+Persist submitted chain facts for an off-ramp. Auth: Portal JWT.
+
+**Request Body**
+```json
+{
+  "txHash": "0xfeed...",
+  "chainId": 1,
+  "fromAddress": "0xsender...",
+  "toAddress": "0xabc123...",
+  "blockNumber": 12345678,
+  "confirmations": 12
+}
 ```
 
 #### POST /v1/portal/rfq
+
+Create a new RFQ auction. Auth: Portal JWT.
 
 Operational guarantees for RFQ:
 - RFQ detail, portal accept, and admin finalize use the same best-price selection rule.
 - LP bids are rejected if `vndAmount != cryptoAmount * exchangeRate`.
 - ONRAMP bids are rejected if they exceed the RFQ `vndAmount` budget.
+- `offrampId` is optional and only valid for `OFFRAMP`; when supplied, the off-ramp intent must belong to the portal user, match asset/amount, be in `QUOTE_CREATED`, `CRYPTO_PENDING`, or `CRYPTO_RECEIVED`, and not already be linked to an active RFQ.
 - `X-LP-Key` is validated against `registered_lp_keys` with secret-hash, active, expiry, direction-permission, and optional max-bid checks.
 - Stale bids are transitioned from `PENDING` to `EXPIRED` during service read/finalize paths.
 
-Create a new RFQ auction. Auth: Portal JWT.
-
-**Request Body**
+**Standalone request body**
 ```json
 {
   "direction": "OFFRAMP",
@@ -524,15 +629,28 @@ Create a new RFQ auction. Auth: Portal JWT.
 }
 ```
 
+**OFFRAMP-linked request body**
+```json
+{
+  "direction": "OFFRAMP",
+  "cryptoAsset": "USDT",
+  "cryptoAmount": "100",
+  "vndAmount": null,
+  "offrampId": "ofr_01jn...",
+  "ttlMinutes": 5
+}
+```
+
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `direction` | string | Yes | `OFFRAMP` or `ONRAMP` |
 | `cryptoAsset` | string | Yes | Crypto symbol (e.g. `USDT`) |
 | `cryptoAmount` | string | Yes | Amount to swap |
 | `vndAmount` | string | ONRAMP only | VND budget (required for ONRAMP) |
+| `offrampId` | string | No | Existing off-ramp intent to link; only valid for `OFFRAMP` RFQs |
 | `ttlMinutes` | integer | No | Auction TTL 1-60 min (default: 5) |
 
-**Response** (201 Created)
+**Response** (200 OK)
 ```json
 {
   "id": "rfq_01jn...",
@@ -557,7 +675,7 @@ Get RFQ with all bids and best rate. Auth: Portal JWT.
 **Response** (200 OK)
 ```json
 {
-  "rfq": { "id": "rfq_01jn...", "state": "OPEN", ... },
+  "rfq": { "id": "rfq_01jn...", "state": "OPEN" },
   "bids": [
     { "id": "bid_01jn...", "lpId": "lp_acme", "exchangeRate": "26000", "vndAmount": "2600000", "state": "PENDING" }
   ],
@@ -568,7 +686,7 @@ Get RFQ with all bids and best rate. Auth: Portal JWT.
 
 #### POST /v1/portal/rfq/:id/accept
 
-Accept best bid and finalize the auction. Auth: Portal JWT.
+Accept best bid and finalize the auction. Auth: Portal JWT. For OFFRAMP-linked RFQs, this records the winning LP/rate and settlement reference on the off-ramp intent.
 
 #### POST /v1/portal/rfq/:id/cancel
 
@@ -599,7 +717,77 @@ List all open RFQs. Auth: Admin key. Query: `?direction=OFFRAMP&limit=20&offset=
 
 #### POST /v1/admin/rfq/:id/finalize
 
-Manually trigger matching for an RFQ. Auth: Admin key.
+Manually trigger matching for an RFQ. Auth: Admin key. Uses the same linked execution coordinator as portal accept.
+
+**Response** (200 OK)
+```json
+{
+  "rfqId": "rfq_01jn...",
+  "state": "MATCHED",
+  "winningLpId": "lp_acme",
+  "finalRate": "26000"
+}
+```
+
+After finalizing an OFFRAMP-linked RFQ, `GET /v1/portal/offramp/:id/status` and admin off-ramp responses include linkage fields:
+
+```json
+{
+  "id": "ofr_01jn...",
+  "state": "CRYPTO_RECEIVED",
+  "cryptoAsset": "USDT",
+  "cryptoAmount": "100",
+  "exchangeRate": "25000",
+  "netVndAmount": "2475000",
+  "grossVndAmount": "2500000",
+  "txHash": "0xfeed...",
+  "bankReference": null,
+  "linkedRfqId": "rfq_01jn...",
+  "winningLpId": "lp_acme",
+  "matchedRate": "26000",
+  "settlementId": "stl_01jn...",
+  "createdAt": "2026-03-08T18:00:00Z",
+  "updatedAt": "2026-03-08T18:06:00Z"
+}
+```
+
+#### GET /v1/admin/offramp/pending
+
+List `CRYPTO_RECEIVED` off-ramp intents awaiting operator handling. Auth: Admin key. Query: `?limit=20&offset=0`.
+
+#### POST /v1/admin/offramp/:id/approve
+
+Approve an off-ramp request and move it to `VND_TRANSFERRING`, assigning `bankReference` if needed. Auth: Admin key. This represents operator transfer initiation, not confirmed bank settlement.
+
+#### POST /v1/admin/offramp/:id/reject
+
+Reject an off-ramp request with a reason and move it to `FAILED`. Auth: Admin key.
+
+#### POST /v1/admin/settlement/:id/outcome
+
+Apply the terminal outcome for a settlement created by linked OFFRAMP RFQ finalization. Auth: Admin key.
+
+`COMPLETED` updates the linked off-ramp terminal state to `COMPLETED`; `FAILED` updates it to `FAILED` and may store an `errorMessage`. Outcome application is idempotent for already-terminal matching outcomes and remains bounded to persisted state changes.
+
+**Request Body**
+```json
+{
+  "outcome": "COMPLETED",
+  "errorMessage": null
+}
+```
+
+**Response** (200 OK)
+```json
+{
+  "settlementId": "stl_01jn...",
+  "offrampIntentId": "ofr_01jn...",
+  "status": "COMPLETED",
+  "rfqId": "rfq_01jn...",
+  "lpId": "lp_acme",
+  "finalRate": "26000"
+}
+```
 
 ### RFQ State Machine
 

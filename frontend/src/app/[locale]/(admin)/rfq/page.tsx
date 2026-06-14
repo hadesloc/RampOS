@@ -115,6 +115,12 @@ export default function RfqAdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [finalizing, setFinalizing] = useState<string | null>(null);
+  const [finalizeResult, setFinalizeResult] = useState<{
+    rfqId: string;
+    state: string;
+    winningLpId: string;
+    finalRate: string;
+  } | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -136,7 +142,13 @@ export default function RfqAdminPage() {
   const handleFinalize = async (rfqId: string) => {
     setFinalizing(rfqId);
     try {
-      await apiRequest(`/v1/admin/rfq/${rfqId}/finalize`, { method: "POST" });
+      const result = await apiRequest<{
+        rfqId: string;
+        state: string;
+        winningLpId: string;
+        finalRate: string;
+          }>(`/v1/admin/rfq/${rfqId}/finalize`, { method: "POST" });
+      setFinalizeResult(result);
       await fetchData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Finalize failed");
@@ -220,6 +232,12 @@ export default function RfqAdminPage() {
       {error && (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
+        </div>
+      )}
+
+      {finalizeResult && (
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm">
+          <span className="font-medium">RFQ matched:</span> {finalizeResult.rfqId} · LP {finalizeResult.winningLpId} · rate {Number(finalizeResult.finalRate).toLocaleString("vi-VN")}.
         </div>
       )}
 

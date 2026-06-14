@@ -29,6 +29,9 @@ describe('RampOSClient', () => {
     expect(client.ledger).toBeDefined();
     expect(client.aa).toBeDefined();
     expect(client.passkey).toBeDefined();
+    expect(client.rfq).toBeDefined();
+    expect(client.offramp).toBeDefined();
+    expect(client.settlement).toBeDefined();
     expect(client.webhooks).toBeDefined();
   });
 

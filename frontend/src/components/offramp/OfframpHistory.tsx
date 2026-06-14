@@ -33,12 +33,13 @@ const STATUS_VARIANTS: Record<
   OfframpStatus,
   "default" | "secondary" | "destructive" | "success" | "warning" | "info"
 > = {
-  PENDING: "warning",
-  PROCESSING: "info",
-  SENDING: "info",
+  QUOTE_CREATED: "warning",
+  CRYPTO_PENDING: "warning",
+  CRYPTO_RECEIVED: "info",
+  VND_TRANSFERRING: "info",
   COMPLETED: "success",
   FAILED: "destructive",
-  CANCELLED: "secondary",
+  EXPIRED: "secondary",
 };
 
 export function OfframpHistory({
@@ -82,21 +83,27 @@ export function OfframpHistory({
               <TableHead>Amount (Crypto)</TableHead>
               <TableHead>Amount (VND)</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Linked RFQ</TableHead>
+              <TableHead>Settlement</TableHead>
               <TableHead>Bank</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody isLoading={isLoading} columns={6} rows={5}>
+          <TableBody isLoading={isLoading} columns={8} rows={5}>
             {!isLoading && intents.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
+                <TableCell colSpan={8} className="text-center py-8">
                   <p className="text-muted-foreground">
                     No transactions yet
                   </p>
                 </TableCell>
               </TableRow>
             ) : (
-              intents.map((intent) => (
+              intents.map((intent) => {
+                const displayState = intent.state;
+                const cryptoAsset = intent.cryptoAsset ?? "";
+                const vndAmount = intent.netVndAmount ?? "";
+                return (
                 <TableRow
                   key={intent.id}
                   className="cursor-pointer"
@@ -106,18 +113,24 @@ export function OfframpHistory({
                     {formatDate(intent.createdAt)}
                   </TableCell>
                   <TableCell className="font-medium">
-                    {formatAmount(intent.cryptoAmount, intent.cryptoCurrency)}
+                    {formatAmount(intent.cryptoAmount, cryptoAsset)}
                   </TableCell>
                   <TableCell className="font-medium">
-                    {formatAmount(intent.fiatAmount, "VND")}
+                    {formatAmount(vndAmount, "VND")}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={STATUS_VARIANTS[intent.status]} shape="pill">
-                      {intent.status}
+                    <Badge variant={STATUS_VARIANTS[displayState]} shape="pill">
+                      {displayState}
                     </Badge>
                   </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {intent.linkedRfqId || "-"}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {intent.settlementId || "-"}
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {intent.bankName || "-"}
+                    {intent.bankReference || "-"}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
@@ -132,7 +145,8 @@ export function OfframpHistory({
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>

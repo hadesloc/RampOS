@@ -4,165 +4,87 @@ import { OfframpForm } from "../OfframpForm";
 import { OfframpStatus } from "../OfframpStatus";
 import { OfframpHistory } from "../OfframpHistory";
 import type {
-  ExchangeRate,
-  BankAccount,
   OfframpIntent,
+  OfframpQuoteResponse,
 } from "@/hooks/use-offramp";
 
 // Mock radix-ui select
 vi.mock("@radix-ui/react-select", async () => {
   const React = await import("react");
-  const Root = ({
-    children,
-    value,
-    onValueChange,
-  }: {
-    children: React.ReactNode;
-    value?: string;
-    onValueChange?: (v: string) => void;
-  }) =>
-    React.createElement(
-      "div",
-      { "data-testid": "select-root" },
-      children
-    );
+  const Root = ({ children }: { children: React.ReactNode }) =>
+    React.createElement("div", { "data-testid": "select-root" }, children);
   const Trigger = React.forwardRef<
     HTMLButtonElement,
     React.PropsWithChildren<{ className?: string; id?: string }>
   >(({ children, className, id, ...props }, ref) =>
-    React.createElement(
-      "button",
-      { ref, className, id, role: "combobox", ...props },
-      children
-    )
+    React.createElement("button", { ref, className, id, role: "combobox", ...props }, children)
   );
   Trigger.displayName = "Trigger";
   const Value = ({ placeholder }: { placeholder?: string }) =>
     React.createElement("span", null, placeholder || "");
-  const Content = React.forwardRef<
-    HTMLDivElement,
-    React.PropsWithChildren<{ className?: string }>
-  >(({ children }, ref) =>
-    React.createElement("div", { ref }, children)
+  const Content = React.forwardRef<HTMLDivElement, React.PropsWithChildren<{ className?: string }>>(
+    ({ children }, ref) => React.createElement("div", { ref }, children)
   );
   Content.displayName = "Content";
   const Item = React.forwardRef<
     HTMLDivElement,
     React.PropsWithChildren<{ value: string; className?: string }>
   >(({ children, value, ...props }, ref) =>
-    React.createElement(
-      "div",
-      { ref, role: "option", "data-value": value, ...props },
-      children
-    )
+    React.createElement("div", { ref, role: "option", "data-value": value, ...props }, children)
   );
   Item.displayName = "Item";
-  const ItemText = ({ children }: { children: React.ReactNode }) =>
-    React.createElement("span", null, children);
-  const ItemIndicator = ({ children }: { children: React.ReactNode }) =>
-    React.createElement("span", null, children);
-  const Icon = ({ children }: { children: React.ReactNode }) =>
-    React.createElement("span", null, children);
-  const Portal = ({ children }: { children: React.ReactNode }) =>
-    React.createElement("div", null, children);
-  const Viewport = React.forwardRef<
-    HTMLDivElement,
-    React.PropsWithChildren<{ className?: string }>
-  >(({ children }, ref) =>
-    React.createElement("div", { ref }, children)
+  const ItemText = ({ children }: { children: React.ReactNode }) => React.createElement("span", null, children);
+  const ItemIndicator = ({ children }: { children: React.ReactNode }) => React.createElement("span", null, children);
+  const Icon = ({ children }: { children: React.ReactNode }) => React.createElement("span", null, children);
+  const Portal = ({ children }: { children: React.ReactNode }) => React.createElement("div", null, children);
+  const Viewport = React.forwardRef<HTMLDivElement, React.PropsWithChildren<{ className?: string }>>(
+    ({ children }, ref) => React.createElement("div", { ref }, children)
   );
   Viewport.displayName = "Viewport";
-  const Group = ({ children }: { children: React.ReactNode }) =>
-    React.createElement("div", null, children);
-  const Label = React.forwardRef<
-    HTMLDivElement,
-    React.PropsWithChildren<{ className?: string }>
-  >(({ children }, ref) =>
-    React.createElement("div", { ref }, children)
+  const Group = ({ children }: { children: React.ReactNode }) => React.createElement("div", null, children);
+  const Label = React.forwardRef<HTMLDivElement, React.PropsWithChildren<{ className?: string }>>(
+    ({ children }, ref) => React.createElement("div", { ref }, children)
   );
   Label.displayName = "Label";
-  const Separator = React.forwardRef<
-    HTMLDivElement,
-    { className?: string }
-  >((props, ref) => React.createElement("div", { ref }));
+  const Separator = React.forwardRef<HTMLDivElement, { className?: string }>((props, ref) =>
+    React.createElement("div", { ref })
+  );
   Separator.displayName = "Separator";
-  const ScrollUpButton = React.forwardRef<
-    HTMLDivElement,
-    React.PropsWithChildren<{ className?: string }>
-  >(({ children }, ref) =>
-    React.createElement("div", { ref }, children)
+  const ScrollUpButton = React.forwardRef<HTMLDivElement, React.PropsWithChildren<{ className?: string }>>(
+    ({ children }, ref) => React.createElement("div", { ref }, children)
   );
   ScrollUpButton.displayName = "ScrollUpButton";
-  const ScrollDownButton = React.forwardRef<
-    HTMLDivElement,
-    React.PropsWithChildren<{ className?: string }>
-  >(({ children }, ref) =>
-    React.createElement("div", { ref }, children)
+  const ScrollDownButton = React.forwardRef<HTMLDivElement, React.PropsWithChildren<{ className?: string }>>(
+    ({ children }, ref) => React.createElement("div", { ref }, children)
   );
   ScrollDownButton.displayName = "ScrollDownButton";
 
-  return {
-    Root,
-    Trigger,
-    Value,
-    Content,
-    Item,
-    ItemText,
-    ItemIndicator,
-    Icon,
-    Portal,
-    Viewport,
-    Group,
-    Label,
-    Separator,
-    ScrollUpButton,
-    ScrollDownButton,
-  };
+  return { Root, Trigger, Value, Content, Item, ItemText, ItemIndicator, Icon, Portal, Viewport, Group, Label, Separator, ScrollUpButton, ScrollDownButton };
 });
 
-const mockExchangeRate: ExchangeRate = {
-  fromCurrency: "USDT",
-  toCurrency: "VND",
-  rate: "25000",
-  networkFee: "1",
-  serviceFeePercent: "0.5",
-  minAmount: "10",
-  maxAmount: "10000",
-  updatedAt: "2025-01-01T00:00:00Z",
+const mockQuote: OfframpQuoteResponse = {
+  quoteId: "quote-1",
+  cryptoAsset: "USDT",
+  cryptoAmount: "100",
+  exchangeRate: "25000",
+  grossVndAmount: "2500000",
+  netVndAmount: "2475000",
+  feeTotal: "25000",
+  expiresAt: "2099-01-01T00:00:00Z",
 };
-
-const mockBankAccounts: BankAccount[] = [
-  {
-    id: "bank-1",
-    bankName: "Vietcombank",
-    accountNumber: "1234567890",
-    accountName: "Nguyen Van A",
-    isDefault: true,
-  },
-  {
-    id: "bank-2",
-    bankName: "Techcombank",
-    accountNumber: "0987654321",
-    accountName: "Nguyen Van A",
-    isDefault: false,
-  },
-];
 
 const mockIntent: OfframpIntent = {
   id: "intent-1",
-  userId: "user-1",
+  state: "CRYPTO_RECEIVED",
   cryptoAmount: "100",
-  cryptoCurrency: "USDT",
-  fiatAmount: "2475000",
-  fiatCurrency: "VND",
+  cryptoAsset: "USDT",
+  netVndAmount: "2475000",
+  grossVndAmount: "2500000",
   exchangeRate: "25000",
-  networkFee: "1",
-  serviceFee: "0.5",
-  totalFee: "1.5",
-  status: "PROCESSING",
-  bankAccountId: "bank-1",
-  bankName: "Vietcombank",
-  bankAccountNumber: "1234567890",
+  linkedRfqId: "rfq-linked-1",
+  winningLpId: "lp-winning-1",
+  matchedRate: "25050",
+  settlementId: "settlement-1",
   createdAt: "2025-01-15T10:00:00Z",
   updatedAt: "2025-01-15T10:05:00Z",
 };
@@ -172,9 +94,9 @@ const mockIntents: OfframpIntent[] = [
   {
     ...mockIntent,
     id: "intent-2",
-    status: "COMPLETED",
+    state: "COMPLETED",
     cryptoAmount: "50",
-    fiatAmount: "1237500",
+    netVndAmount: "1237500",
     completedAt: "2025-01-14T15:00:00Z",
     txHash: "0xabc123",
     bankReference: "REF-001",
@@ -182,26 +104,23 @@ const mockIntents: OfframpIntent[] = [
   {
     ...mockIntent,
     id: "intent-3",
-    status: "FAILED",
+    state: "FAILED",
     cryptoAmount: "200",
-    fiatAmount: "4950000",
+    netVndAmount: "4950000",
   },
 ];
 
 describe("OfframpForm", () => {
-  it("renders all form fields", () => {
-    render(
-      <OfframpForm
-        exchangeRate={mockExchangeRate}
-        bankAccounts={mockBankAccounts}
-      />
-    );
+  it("renders quote request fields", () => {
+    render(<OfframpForm />);
 
     expect(screen.getByText("Off-Ramp")).toBeInTheDocument();
     expect(screen.getByLabelText(/Amount/i)).toBeInTheDocument();
-    expect(screen.getByText("Crypto Currency")).toBeInTheDocument();
-    expect(screen.getByText("Bank Account")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Convert to VND/i })).toBeInTheDocument();
+    expect(screen.getByText("Crypto Asset")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Bank Code/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Account Number/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Account Name/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Request Quote/i })).toBeInTheDocument();
   });
 
   it("shows loading state", () => {
@@ -209,97 +128,58 @@ describe("OfframpForm", () => {
     expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
   });
 
-  it("validates amount input (min/max)", () => {
-    render(
-      <OfframpForm
-        exchangeRate={mockExchangeRate}
-        bankAccounts={mockBankAccounts}
-      />
-    );
+  it("validates amount input", () => {
+    render(<OfframpForm />);
 
     const amountInput = screen.getByLabelText(/Amount/i);
-    fireEvent.change(amountInput, { target: { value: "5" } });
+    fireEvent.change(amountInput, { target: { value: "0" } });
 
     expect(screen.getByRole("alert")).toBeInTheDocument();
-    expect(screen.getByRole("alert").textContent).toContain("10");
+    expect(screen.getByRole("alert").textContent).toContain("greater than 0");
   });
 
-  it("shows exchange rate display", () => {
-    render(
-      <OfframpForm
-        exchangeRate={mockExchangeRate}
-        bankAccounts={mockBankAccounts}
-      />
-    );
+  it("submits quote request with backend contract fields", () => {
+    const onCreateQuote = vi.fn();
+    render(<OfframpForm onCreateQuote={onCreateQuote} />);
 
-    expect(screen.getByTestId("exchange-rate")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Amount/i), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText(/Bank Code/i), { target: { value: "VCB" } });
+    fireEvent.change(screen.getByLabelText(/Account Number/i), { target: { value: "1234567890" } });
+    fireEvent.change(screen.getByLabelText(/Account Name/i), { target: { value: "NGUYEN VAN A" } });
+    fireEvent.click(screen.getByRole("button", { name: /Request Quote/i }));
+
+    expect(onCreateQuote).toHaveBeenCalledWith({
+      cryptoAsset: "USDT",
+      amount: "100",
+      bankCode: "VCB",
+      accountNumber: "1234567890",
+      accountName: "NGUYEN VAN A",
+    });
+  });
+
+  it("shows quote summary after quote response", () => {
+    render(<OfframpForm quote={mockQuote} />);
+
+    expect(screen.getByTestId("quote-summary")).toBeInTheDocument();
     expect(screen.getByTestId("exchange-rate").textContent).toContain("25.000");
+    expect(screen.getByTestId("fee-breakdown").textContent).toContain("Total Fee");
+    expect(screen.getByTestId("fee-breakdown").textContent).toContain("You Receive");
   });
 
-  it("shows fee breakdown when amount entered", () => {
-    render(
-      <OfframpForm
-        exchangeRate={mockExchangeRate}
-        bankAccounts={mockBankAccounts}
-      />
-    );
+  it("creates off-ramp from quote with chain ID", () => {
+    const onCreateOfframp = vi.fn();
+    render(<OfframpForm quote={mockQuote} onCreateOfframp={onCreateOfframp} />);
 
-    const amountInput = screen.getByLabelText(/Amount/i);
-    fireEvent.change(amountInput, { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText(/Chain ID/i), { target: { value: "56" } });
+    fireEvent.click(screen.getByRole("button", { name: /Create Off-Ramp/i }));
 
-    const feeBreakdown = screen.getByTestId("fee-breakdown");
-    expect(feeBreakdown).toBeInTheDocument();
-    expect(feeBreakdown.textContent).toContain("Network Fee");
-    expect(feeBreakdown.textContent).toContain("Service Fee");
-    expect(feeBreakdown.textContent).toContain("Total Fee");
-    expect(feeBreakdown.textContent).toContain("You Receive");
+    expect(onCreateOfframp).toHaveBeenCalledWith({ chainId: 56 });
   });
 
-  it("calls onSubmit when form is submitted", () => {
-    const onSubmit = vi.fn();
-    render(
-      <OfframpForm
-        exchangeRate={mockExchangeRate}
-        bankAccounts={mockBankAccounts}
-        onSubmit={onSubmit}
-      />
-    );
+  it("shows submitting text when isSubmitting is true", () => {
+    render(<OfframpForm quote={mockQuote} isSubmitting={true} />);
 
-    // The submit button should be disabled without valid amount and bank account
-    const submitBtn = screen.getByRole("button", { name: /Convert to VND/i });
-    expect(submitBtn).toBeDisabled();
-  });
-
-  it("shows no bank accounts message when empty", () => {
-    render(
-      <OfframpForm exchangeRate={mockExchangeRate} bankAccounts={[]} />
-    );
-
-    expect(screen.getByText(/No bank accounts found/i)).toBeInTheDocument();
-  });
-
-  it("shows min/max range from exchange rate", () => {
-    render(
-      <OfframpForm
-        exchangeRate={mockExchangeRate}
-        bankAccounts={mockBankAccounts}
-      />
-    );
-
-    expect(screen.getByText(/Min: 10/i)).toBeInTheDocument();
-    expect(screen.getByText(/Max: 10000/i)).toBeInTheDocument();
-  });
-
-  it("shows Processing text when isSubmitting is true", () => {
-    render(
-      <OfframpForm
-        exchangeRate={mockExchangeRate}
-        bankAccounts={mockBankAccounts}
-        isSubmitting={true}
-      />
-    );
-
-    expect(screen.getByText("Processing...")).toBeInTheDocument();
+    expect(screen.getByText("Creating off-ramp...")).toBeInTheDocument();
   });
 });
 
@@ -318,32 +198,35 @@ describe("OfframpStatus", () => {
     render(<OfframpStatus intent={mockIntent} />);
 
     expect(screen.getByText("Transaction Status")).toBeInTheDocument();
-    // "Processing" appears both in the badge and the step label
-    const processingElements = screen.getAllByText("Processing");
-    expect(processingElements.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Crypto Received").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("shows intent details", () => {
+  it("shows intent details and off-ramp linkage fields", () => {
     render(<OfframpStatus intent={mockIntent} />);
 
     const details = screen.getByTestId("intent-details");
     expect(details.textContent).toContain("100");
     expect(details.textContent).toContain("USDT");
+    expect(details.textContent).toContain("rfq-linked-1");
+    expect(details.textContent).toContain("lp-winning-1");
+    expect(details.textContent).toContain("25050");
+    expect(details.textContent).toContain("settlement-1");
   });
 
   it("shows progress steps", () => {
     render(<OfframpStatus intent={mockIntent} />);
 
-    expect(screen.getByText("Pending")).toBeInTheDocument();
-    expect(screen.getAllByText("Processing").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Sending to Bank")).toBeInTheDocument();
+    expect(screen.getByText("Quote Created")).toBeInTheDocument();
+    expect(screen.getByText("Crypto Pending")).toBeInTheDocument();
+    expect(screen.getAllByText("Crypto Received").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("VND Transferring")).toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
   });
 
   it("shows completed intent with bank reference", () => {
     const completedIntent: OfframpIntent = {
       ...mockIntent,
-      status: "COMPLETED",
+      state: "COMPLETED",
       bankReference: "REF-12345",
       txHash: "0xdef456",
       completedAt: "2025-01-15T12:00:00Z",
@@ -355,11 +238,7 @@ describe("OfframpStatus", () => {
   });
 
   it("shows FAILED status correctly", () => {
-    const failedIntent: OfframpIntent = {
-      ...mockIntent,
-      status: "FAILED",
-    };
-    render(<OfframpStatus intent={failedIntent} />);
+    render(<OfframpStatus intent={{ ...mockIntent, state: "FAILED" }} />);
 
     expect(screen.getByText("Failed")).toBeInTheDocument();
   });
@@ -374,14 +253,13 @@ describe("OfframpHistory", () => {
     expect(screen.getByText("Amount (Crypto)")).toBeInTheDocument();
     expect(screen.getByText("Amount (VND)")).toBeInTheDocument();
     expect(screen.getByText("Status")).toBeInTheDocument();
-    expect(screen.getByText("Bank")).toBeInTheDocument();
     expect(screen.getByText("Actions")).toBeInTheDocument();
   });
 
   it("renders transaction rows", () => {
     render(<OfframpHistory intents={mockIntents} />);
 
-    expect(screen.getByText("PROCESSING")).toBeInTheDocument();
+    expect(screen.getByText("CRYPTO_RECEIVED")).toBeInTheDocument();
     expect(screen.getByText("COMPLETED")).toBeInTheDocument();
     expect(screen.getByText("FAILED")).toBeInTheDocument();
   });
@@ -394,20 +272,12 @@ describe("OfframpHistory", () => {
 
   it("shows loading state", () => {
     const { container } = render(<OfframpHistory isLoading={true} />);
-    // TableBody with isLoading shows skeleton rows
     const skeletons = container.querySelectorAll(".animate-pulse");
     expect(skeletons.length).toBeGreaterThan(0);
   });
 
   it("renders pagination when multiple pages", () => {
-    render(
-      <OfframpHistory
-        intents={mockIntents}
-        page={1}
-        totalPages={3}
-        total={30}
-      />
-    );
+    render(<OfframpHistory intents={mockIntents} page={1} totalPages={3} total={30} />);
 
     expect(screen.getByText(/page 1 of 3/i)).toBeInTheDocument();
     expect(screen.getByLabelText("Previous page")).toBeDisabled();
@@ -416,15 +286,7 @@ describe("OfframpHistory", () => {
 
   it("calls onPageChange when clicking pagination", () => {
     const onPageChange = vi.fn();
-    render(
-      <OfframpHistory
-        intents={mockIntents}
-        page={2}
-        totalPages={3}
-        total={30}
-        onPageChange={onPageChange}
-      />
-    );
+    render(<OfframpHistory intents={mockIntents} page={2} totalPages={3} total={30} onPageChange={onPageChange} />);
 
     fireEvent.click(screen.getByLabelText("Next page"));
     expect(onPageChange).toHaveBeenCalledWith(3);
@@ -435,25 +297,15 @@ describe("OfframpHistory", () => {
 
   it("calls onSelect when clicking a row", () => {
     const onSelect = vi.fn();
-    render(
-      <OfframpHistory intents={mockIntents} onSelect={onSelect} />
-    );
+    render(<OfframpHistory intents={mockIntents} onSelect={onSelect} />);
 
-    // Click "View" button on first row
     const viewButtons = screen.getAllByText("View");
     fireEvent.click(viewButtons[0]);
     expect(onSelect).toHaveBeenCalledWith(mockIntents[0]);
   });
 
   it("does not show pagination when single page", () => {
-    render(
-      <OfframpHistory
-        intents={mockIntents}
-        page={1}
-        totalPages={1}
-        total={3}
-      />
-    );
+    render(<OfframpHistory intents={mockIntents} page={1} totalPages={1} total={3} />);
 
     expect(screen.queryByLabelText("Previous page")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Next page")).not.toBeInTheDocument();

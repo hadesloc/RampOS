@@ -4,11 +4,13 @@
 //! - Off-ramp (USDT→VND): LP competing to pay most VND, user picks best rate
 //! - On-ramp (VND→USDT): LP competing to sell cheapest, user picks lowest rate
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use ramp_common::{types::TenantId, Error, Result};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::cmp::Ordering;
+use std::future::Future;
 use std::sync::Arc;
 use tracing::{info, instrument, warn};
 
@@ -700,13 +702,22 @@ impl RfqService {
             .filter(|bid| bid.state == "PENDING" && bid.valid_until > now)
             .collect();
 
-        if pending_bids.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(pending_bids
-            .into_iter()
-            .reduce(best_price_bid(&rfq.direction)))
+        select_best_executable_bid(&rfq.direction, pending_bids, now, |bid| {
+            let tenant_id = tenant_id.clone();
+            let lp_id = bid.lp_id.clone();
+            let direction = rfq.direction.clone();
+            async move {
+                self.rfq_repo
+                    .get_latest_reliability_snapshot(
+                        &tenant_id,
+                        &lp_id,
+                        &direction,
+                        RELIABILITY_WINDOW_KIND,
+                    )
+                    .await
+            }
+        })
+        .await
     }
 
     async fn expire_stale_pending_bids(&self, tenant_id: &TenantId, rfq_id: &str) -> Result<()> {
@@ -976,24 +987,145 @@ fn expire_request(rfq: &mut RfqRequestRow) {
     rfq.updated_at = Utc::now();
 }
 
-fn best_price_bid(direction: &str) -> impl FnMut(RfqBidRow, RfqBidRow) -> RfqBidRow + '_ {
-    move |left, right| {
-        let choose_right = if direction == "ONRAMP" {
-            right.exchange_rate.cmp(&left.exchange_rate).is_lt()
-                || (right.exchange_rate == left.exchange_rate
-                    && right.vnd_amount.cmp(&left.vnd_amount).is_lt())
-        } else {
-            right.exchange_rate.cmp(&left.exchange_rate).is_gt()
-                || (right.exchange_rate == left.exchange_rate
-                    && right.vnd_amount.cmp(&left.vnd_amount).is_gt())
+const RELIABILITY_WINDOW_KIND: &str = "ROLLING_30D";
+const RFQ_POLICY_MIN_QUOTE_COUNT_FOR_ENFORCEMENT: i32 = 3;
+const RFQ_POLICY_MAX_REJECT_RATE: &str = "0.20";
+const RFQ_POLICY_MAX_DISPUTE_RATE: &str = "0.10";
+const RFQ_POLICY_MAX_AVG_SLIPPAGE_BPS: &str = "20";
+const RFQ_POLICY_MAX_P95_SETTLEMENT_LATENCY_SECONDS: i32 = 900;
+const RFQ_POLICY_MIN_RELIABILITY_SCORE_RATIO: &str = "0.50";
+const RFQ_POLICY_MIN_RELIABILITY_SCORE_PERCENT: &str = "50";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BidPolicyDecision {
+    Eligible,
+    Disqualified,
+}
+
+impl BidPolicyDecision {
+    fn is_eligible(self) -> bool {
+        matches!(self, Self::Eligible)
+    }
+}
+
+/// Service-authoritative RFQ bid scorer.
+///
+/// It only selects executable bids (`PENDING` and `valid_until > now`). Direction keeps raw price
+/// semantics: OFFRAMP maximizes rate/VND amount and ONRAMP minimizes them. Reliability snapshots are
+/// treated as explicit policy gates only when there is enough ROLLING_30D history; missing or thin
+/// snapshots are neutral so an LP is not silently demoted by absent data. Stable tie-breakers prevent
+/// display-best and settlement winner from diverging across repository ordering differences.
+async fn select_best_executable_bid<F, Fut>(
+    direction: &str,
+    bids: Vec<RfqBidRow>,
+    now: DateTime<Utc>,
+    mut snapshot_lookup: F,
+) -> Result<Option<RfqBidRow>>
+where
+    F: FnMut(&RfqBidRow) -> Fut,
+    Fut: Future<Output = Result<Option<LpReliabilitySnapshotRow>>>,
+{
+    let mut best: Option<ScoredBid> = None;
+
+    for bid in bids {
+        if bid.state != "PENDING" || bid.valid_until <= now {
+            continue;
+        }
+
+        let snapshot = snapshot_lookup(&bid).await?;
+        let policy_decision = rfq_bid_policy_decision(snapshot.as_ref());
+        if !policy_decision.is_eligible() {
+            continue;
+        }
+
+        let candidate = ScoredBid {
+            bid,
+            policy_decision,
         };
 
-        if choose_right {
-            right
-        } else {
-            left
+        if best
+            .as_ref()
+            .map(|current| compare_scored_bids(direction, &candidate, current).is_lt())
+            .unwrap_or(true)
+        {
+            best = Some(candidate);
         }
     }
+
+    Ok(best.map(|scored| scored.bid))
+}
+
+#[derive(Debug, Clone)]
+struct ScoredBid {
+    bid: RfqBidRow,
+    policy_decision: BidPolicyDecision,
+}
+
+fn compare_scored_bids(direction: &str, left: &ScoredBid, right: &ScoredBid) -> Ordering {
+    compare_bid_policy(left.policy_decision, right.policy_decision)
+        .then_with(|| compare_bid_price(direction, &left.bid, &right.bid))
+        .then_with(|| left.bid.created_at.cmp(&right.bid.created_at))
+        .then_with(|| left.bid.id.cmp(&right.bid.id))
+}
+
+fn compare_bid_policy(left: BidPolicyDecision, right: BidPolicyDecision) -> Ordering {
+    match (left, right) {
+        (BidPolicyDecision::Eligible, BidPolicyDecision::Disqualified) => Ordering::Less,
+        (BidPolicyDecision::Disqualified, BidPolicyDecision::Eligible) => Ordering::Greater,
+        _ => Ordering::Equal,
+    }
+}
+
+fn compare_bid_price(direction: &str, left: &RfqBidRow, right: &RfqBidRow) -> Ordering {
+    if direction == "ONRAMP" {
+        left.exchange_rate
+            .cmp(&right.exchange_rate)
+            .then_with(|| left.vnd_amount.cmp(&right.vnd_amount))
+    } else {
+        right
+            .exchange_rate
+            .cmp(&left.exchange_rate)
+            .then_with(|| right.vnd_amount.cmp(&left.vnd_amount))
+    }
+}
+
+fn rfq_bid_policy_decision(snapshot: Option<&LpReliabilitySnapshotRow>) -> BidPolicyDecision {
+    let Some(snapshot) = snapshot else {
+        return BidPolicyDecision::Eligible;
+    };
+
+    if snapshot.window_kind != RELIABILITY_WINDOW_KIND
+        || snapshot.quote_count < RFQ_POLICY_MIN_QUOTE_COUNT_FOR_ENFORCEMENT
+    {
+        return BidPolicyDecision::Eligible;
+    }
+
+    if snapshot.reject_rate > decimal_policy(RFQ_POLICY_MAX_REJECT_RATE)
+        || snapshot.dispute_rate > decimal_policy(RFQ_POLICY_MAX_DISPUTE_RATE)
+        || snapshot.avg_slippage_bps > decimal_policy(RFQ_POLICY_MAX_AVG_SLIPPAGE_BPS)
+        || snapshot.p95_settlement_latency_seconds > RFQ_POLICY_MAX_P95_SETTLEMENT_LATENCY_SECONDS
+        || reliability_score_breaches_policy(snapshot.reliability_score)
+    {
+        return BidPolicyDecision::Disqualified;
+    }
+
+    BidPolicyDecision::Eligible
+}
+
+fn reliability_score_breaches_policy(reliability_score: Option<Decimal>) -> bool {
+    let Some(score) = reliability_score else {
+        return false;
+    };
+
+    if score <= Decimal::ONE {
+        score < decimal_policy(RFQ_POLICY_MIN_RELIABILITY_SCORE_RATIO)
+    } else {
+        score < decimal_policy(RFQ_POLICY_MIN_RELIABILITY_SCORE_PERCENT)
+    }
+}
+
+fn decimal_policy(value: &str) -> Decimal {
+    Decimal::from_str_exact(value).expect("RFQ policy decimal constant must parse")
 }
 
 // ============================================================================
@@ -1395,7 +1527,192 @@ mod tests {
             .unwrap();
 
         let best = svc.get_best_bid(&tenant(), &rfq.id).await.unwrap().unwrap();
-        assert_eq!(best.id, weaker.id);
+        assert_eq!(best.id, stronger.id);
+    }
+
+    #[tokio::test]
+    async fn test_get_best_bid_treats_missing_reliability_snapshot_as_neutral() {
+        let (repo, svc) = make_service_with_repo();
+
+        let rfq = svc
+            .create_rfq(CreateRfqRequest {
+                tenant_id: tenant(),
+                user_id: "u_neutral".to_string(),
+                direction: "OFFRAMP".to_string(),
+                offramp_id: None,
+                crypto_asset: "USDT".to_string(),
+                crypto_amount: Decimal::new(100, 0),
+                vnd_amount: None,
+                ttl_minutes: 5,
+            })
+            .await
+            .unwrap();
+
+        let now = Utc::now();
+        let mut scored = rfq_bid_for_scoring(
+            "bid_scored_neutral",
+            "lp_scored",
+            "OFFRAMP",
+            dec!(25900),
+            now,
+        );
+        scored.rfq_id = rfq.id.clone();
+        let mut unscored = rfq_bid_for_scoring(
+            "bid_unscored_neutral",
+            "lp_unscored",
+            "OFFRAMP",
+            dec!(26000),
+            now + chrono::Duration::seconds(1),
+        );
+        unscored.rfq_id = rfq.id.clone();
+        repo.create_bid(&scored).await.unwrap();
+        repo.create_bid(&unscored).await.unwrap();
+
+        repo.upsert_reliability_snapshot(&LpReliabilitySnapshotRow {
+            id: "lprs_scored_neutral".to_string(),
+            tenant_id: tenant().0,
+            lp_id: scored.lp_id.clone(),
+            direction: "OFFRAMP".to_string(),
+            window_kind: "ROLLING_30D".to_string(),
+            window_started_at: now - chrono::Duration::days(30),
+            window_ended_at: now,
+            snapshot_version: "v1".to_string(),
+            quote_count: 10,
+            fill_count: 9,
+            reject_count: 0,
+            settlement_count: 9,
+            dispute_count: 0,
+            fill_rate: dec!(0.90),
+            reject_rate: dec!(0.01),
+            dispute_rate: dec!(0.01),
+            avg_slippage_bps: dec!(4),
+            p95_settlement_latency_seconds: 180,
+            reliability_score: Some(dec!(0.95)),
+            metadata: json!({}),
+            created_at: now,
+            updated_at: now,
+        })
+        .await
+        .unwrap();
+
+        // Simulate a brand-new LP with no reliability row. Missing snapshots are neutral;
+        // they do not override raw price unless a populated snapshot breaches policy.
+        let best = svc.get_best_bid(&tenant(), &rfq.id).await.unwrap().unwrap();
+        assert_eq!(best.id, unscored.id);
+    }
+
+    #[tokio::test]
+    async fn test_offramp_tie_breaks_by_created_at_then_id() {
+        let now = Utc::now();
+        let earlier = rfq_bid_for_scoring("bid_a", "lp_a", "OFFRAMP", dec!(26000), now);
+        let later = rfq_bid_for_scoring(
+            "bid_b",
+            "lp_b",
+            "OFFRAMP",
+            dec!(26000),
+            now + chrono::Duration::seconds(1),
+        );
+
+        let best = select_best_executable_bid(
+            "OFFRAMP",
+            vec![later.clone(), earlier.clone()],
+            now,
+            |_| async { Ok(None) },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(best.id, earlier.id);
+
+        let z_id = rfq_bid_for_scoring("bid_z", "lp_z", "OFFRAMP", dec!(26000), now);
+        let a_id = rfq_bid_for_scoring("bid_a", "lp_a", "OFFRAMP", dec!(26000), now);
+        let best =
+            select_best_executable_bid("OFFRAMP", vec![z_id, a_id.clone()], now, |_| async {
+                Ok(None)
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(best.id, a_id.id);
+    }
+
+    #[tokio::test]
+    async fn test_onramp_tie_breaks_by_created_at_then_id() {
+        let now = Utc::now();
+        let earlier = rfq_bid_for_scoring("bid_a", "lp_a", "ONRAMP", dec!(25000), now);
+        let later = rfq_bid_for_scoring(
+            "bid_b",
+            "lp_b",
+            "ONRAMP",
+            dec!(25000),
+            now + chrono::Duration::seconds(1),
+        );
+
+        let best = select_best_executable_bid(
+            "ONRAMP",
+            vec![later.clone(), earlier.clone()],
+            now,
+            |_| async { Ok(None) },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(best.id, earlier.id);
+
+        let z_id = rfq_bid_for_scoring("bid_z", "lp_z", "ONRAMP", dec!(25000), now);
+        let a_id = rfq_bid_for_scoring("bid_a", "lp_a", "ONRAMP", dec!(25000), now);
+        let best = select_best_executable_bid("ONRAMP", vec![z_id, a_id.clone()], now, |_| async {
+            Ok(None)
+        })
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(best.id, a_id.id);
+    }
+
+    #[tokio::test]
+    async fn test_scorer_excludes_expired_and_non_pending_bids() {
+        let now = Utc::now();
+        let mut expired =
+            rfq_bid_for_scoring("bid_expired", "lp_expired", "OFFRAMP", dec!(27000), now);
+        expired.valid_until = now - chrono::Duration::seconds(1);
+        let mut accepted =
+            rfq_bid_for_scoring("bid_accepted", "lp_accepted", "OFFRAMP", dec!(28000), now);
+        accepted.state = "ACCEPTED".to_string();
+        let pending = rfq_bid_for_scoring("bid_pending", "lp_pending", "OFFRAMP", dec!(26000), now);
+
+        let best = select_best_executable_bid(
+            "OFFRAMP",
+            vec![expired, accepted, pending.clone()],
+            now,
+            |_| async { Ok(None) },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(best.id, pending.id);
+    }
+
+    fn rfq_bid_for_scoring(
+        id: &str,
+        lp_id: &str,
+        direction: &str,
+        exchange_rate: Decimal,
+        created_at: DateTime<Utc>,
+    ) -> RfqBidRow {
+        let crypto_amount = Decimal::new(100, 0);
+        RfqBidRow {
+            id: id.to_string(),
+            rfq_id: format!("rfq_{}", direction.to_ascii_lowercase()),
+            tenant_id: tenant().0,
+            lp_id: lp_id.to_string(),
+            lp_name: None,
+            exchange_rate,
+            vnd_amount: crypto_amount * exchange_rate,
+            valid_until: created_at + chrono::Duration::minutes(5),
+            state: "PENDING".to_string(),
+            created_at,
+        }
     }
 
     #[tokio::test]

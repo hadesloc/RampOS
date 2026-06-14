@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import {
   Card,
   CardContent,
@@ -21,78 +21,62 @@ import {
 import { Loader2, ArrowDown } from "lucide-react";
 import type {
   OfframpCurrency,
-  ExchangeRate,
-  BankAccount,
+  OfframpQuoteRequest,
+  OfframpQuoteResponse,
 } from "@/hooks/use-offramp";
 
 interface OfframpFormProps {
-  exchangeRate?: ExchangeRate | null;
-  bankAccounts?: BankAccount[];
-  onSubmit?: (
-    amount: string,
-    currency: OfframpCurrency,
-    bankAccountId: string
-  ) => void;
+  quote?: OfframpQuoteResponse | null;
+  onCreateQuote?: (data: OfframpQuoteRequest) => void;
+  onCreateOfframp?: (data?: { chainId?: number }) => void;
   isLoading?: boolean;
+  isQuoting?: boolean;
   isSubmitting?: boolean;
   selectedCurrency?: OfframpCurrency;
   onCurrencyChange?: (currency: OfframpCurrency) => void;
 }
 
 export function OfframpForm({
-  exchangeRate,
-  bankAccounts = [],
-  onSubmit,
+  quote,
+  onCreateQuote,
+  onCreateOfframp,
   isLoading,
+  isQuoting,
   isSubmitting,
   selectedCurrency = "USDT",
   onCurrencyChange,
 }: OfframpFormProps) {
   const [amount, setAmount] = useState("");
-  const [bankAccountId, setBankAccountId] = useState("");
+  const [bankCode, setBankCode] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [accountName, setAccountName] = useState("");
+  const [chainId, setChainId] = useState("1");
 
-  const fees = useMemo(() => {
-    if (!exchangeRate || !amount || isNaN(parseFloat(amount))) {
-      return { networkFee: "0", serviceFee: "0", totalFee: "0", vndAmount: "0" };
-    }
-    const cryptoAmount = parseFloat(amount);
-    const rate = parseFloat(exchangeRate.rate);
-    const networkFee = parseFloat(exchangeRate.networkFee);
-    const serviceFeePercent = parseFloat(exchangeRate.serviceFeePercent);
+  const canCreateQuote =
+    Number.parseFloat(amount) > 0 && bankCode.trim() && accountNumber.trim() && accountName.trim() && !isQuoting;
+  const canCreateOfframp = Boolean(quote?.quoteId) && !isSubmitting;
 
-    const serviceFee = cryptoAmount * (serviceFeePercent / 100);
-    const totalFee = networkFee + serviceFee;
-    const netAmount = cryptoAmount - totalFee;
-    const vndAmount = netAmount > 0 ? netAmount * rate : 0;
-
-    return {
-      networkFee: networkFee.toFixed(4),
-      serviceFee: serviceFee.toFixed(4),
-      totalFee: totalFee.toFixed(4),
-      vndAmount: Math.floor(vndAmount).toLocaleString("vi-VN"),
-    };
-  }, [amount, exchangeRate]);
-
-  const isAmountValid = useMemo(() => {
-    if (!amount || !exchangeRate) return false;
-    const num = parseFloat(amount);
-    if (isNaN(num) || num <= 0) return false;
-    const min = parseFloat(exchangeRate.minAmount);
-    const max = parseFloat(exchangeRate.maxAmount);
-    return num >= min && num <= max;
-  }, [amount, exchangeRate]);
-
-  const canSubmit = isAmountValid && bankAccountId && !isSubmitting;
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleQuoteSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) return;
-    onSubmit?.(amount, selectedCurrency, bankAccountId);
+    if (!canCreateQuote) return;
+    onCreateQuote?.({
+      cryptoAsset: selectedCurrency,
+      amount,
+      bankCode: bankCode.trim(),
+      accountNumber: accountNumber.trim(),
+      accountName: accountName.trim(),
+    });
   };
 
-  const formatRate = (rate: string) => {
-    const num = parseFloat(rate);
-    if (isNaN(num)) return rate;
+  const handleCreateOfframp = () => {
+    if (!canCreateOfframp) return;
+    const parsedChainId = Number.parseInt(chainId, 10);
+    onCreateOfframp?.({ chainId: Number.isFinite(parsedChainId) ? parsedChainId : undefined });
+  };
+
+  const formatVnd = (value: string) => {
+    const num = Number.parseFloat(value);
+    if (!Number.isFinite(num)) return value;
     return new Intl.NumberFormat("vi-VN").format(num);
   };
 
@@ -105,40 +89,34 @@ export function OfframpForm({
       <CardHeader>
         <CardTitle>Off-Ramp</CardTitle>
         <CardDescription>
-          Convert crypto to VND and withdraw to your bank account
+          Request a live quote, then create an off-ramp intent backed by the current API contract.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Currency selector */}
+        <form onSubmit={handleQuoteSubmit} className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="currency">Crypto Currency</Label>
+            <Label htmlFor="currency">Crypto Asset</Label>
             <Select
               value={selectedCurrency}
-              onValueChange={(v) =>
-                onCurrencyChange?.(v as OfframpCurrency)
-              }
+              onValueChange={(v) => onCurrencyChange?.(v as OfframpCurrency)}
             >
               <SelectTrigger id="currency">
-                <SelectValue placeholder="Select currency" />
+                <SelectValue placeholder="Select asset" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="USDT">USDT (Tether)</SelectItem>
                 <SelectItem value="USDC">USDC (Circle)</SelectItem>
+                <SelectItem value="ETH">ETH</SelectItem>
+                <SelectItem value="BNB">BNB</SelectItem>
+                <SelectItem value="MATIC">MATIC</SelectItem>
+                <SelectItem value="SOL">SOL</SelectItem>
+                <SelectItem value="BTC">BTC</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {/* Amount input */}
           <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label htmlFor="amount">Amount ({selectedCurrency})</Label>
-              {exchangeRate && (
-                <span className="text-xs text-muted-foreground">
-                  Min: {exchangeRate.minAmount} / Max: {exchangeRate.maxAmount}
-                </span>
-              )}
-            </div>
+            <Label htmlFor="amount">Amount ({selectedCurrency})</Label>
             <Input
               id="amount"
               type="number"
@@ -146,100 +124,104 @@ export function OfframpForm({
               placeholder="0.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              disabled={isSubmitting}
-              variant={
-                amount && !isAmountValid ? "error" : "default"
-              }
+              disabled={isQuoting || isSubmitting}
+              variant={amount && Number.parseFloat(amount) <= 0 ? "error" : "default"}
             />
-            {amount && !isAmountValid && (
+            {amount && Number.parseFloat(amount) <= 0 && (
               <p className="text-xs text-red-500" role="alert">
-                Amount must be between {exchangeRate?.minAmount} and{" "}
-                {exchangeRate?.maxAmount} {selectedCurrency}
+                Amount must be greater than 0 {selectedCurrency}
               </p>
             )}
           </div>
 
-          {/* Exchange rate display */}
-          {exchangeRate && (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="bank-code">Bank Code</Label>
+              <Input
+                id="bank-code"
+                placeholder="VCB"
+                value={bankCode}
+                onChange={(e) => setBankCode(e.target.value)}
+                disabled={isQuoting || isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="account-number">Account Number</Label>
+              <Input
+                id="account-number"
+                placeholder="1234567890"
+                value={accountNumber}
+                onChange={(e) => setAccountNumber(e.target.value)}
+                disabled={isQuoting || isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="account-name">Account Name</Label>
+              <Input
+                id="account-name"
+                placeholder="NGUYEN VAN A"
+                value={accountName}
+                onChange={(e) => setAccountName(e.target.value)}
+                disabled={isQuoting || isSubmitting}
+              />
+            </div>
+          </div>
+
+          <Button type="submit" className="w-full" disabled={!canCreateQuote}>
+            {isQuoting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isQuoting ? "Requesting quote..." : "Request Quote"}
+          </Button>
+        </form>
+
+        {quote && (
+          <div className="mt-6 space-y-4 rounded-lg border p-4" data-testid="quote-summary">
             <div className="flex items-center justify-center py-2">
               <div className="flex flex-col items-center gap-1 text-sm text-muted-foreground">
                 <ArrowDown className="h-4 w-4" />
                 <span data-testid="exchange-rate">
-                  1 {selectedCurrency} = {formatRate(exchangeRate.rate)} VND
+                  1 {quote.cryptoAsset} = {formatVnd(quote.exchangeRate)} VND
                 </span>
               </div>
             </div>
-          )}
 
-          {/* Fee breakdown */}
-          {amount && parseFloat(amount) > 0 && (
-            <div
-              className="rounded-lg border p-4 space-y-2 text-sm"
-              data-testid="fee-breakdown"
-            >
+            <div className="space-y-2 text-sm" data-testid="fee-breakdown">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Network Fee</span>
-                <span>
-                  {fees.networkFee} {selectedCurrency}
-                </span>
+                <span className="text-muted-foreground">Gross VND</span>
+                <span>{formatVnd(quote.grossVndAmount)} VND</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Service Fee</span>
-                <span>
-                  {fees.serviceFee} {selectedCurrency}
-                </span>
-              </div>
-              <div className="flex justify-between border-t pt-2 font-medium">
                 <span className="text-muted-foreground">Total Fee</span>
-                <span>
-                  {fees.totalFee} {selectedCurrency}
-                </span>
+                <span>{formatVnd(quote.feeTotal)} VND</span>
               </div>
               <div className="flex justify-between border-t pt-2 font-semibold text-base">
                 <span>You Receive</span>
                 <span className="text-green-600 dark:text-green-400">
-                  {fees.vndAmount} VND
+                  {formatVnd(quote.netVndAmount)} VND
                 </span>
               </div>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Quote expires</span>
+                <span>{new Date(quote.expiresAt).toLocaleString("vi-VN")}</span>
+              </div>
             </div>
-          )}
 
-          {/* Bank account selector */}
-          <div className="space-y-2">
-            <Label htmlFor="bank-account">Bank Account</Label>
-            {bankAccounts.length > 0 ? (
-              <Select value={bankAccountId} onValueChange={setBankAccountId}>
-                <SelectTrigger id="bank-account">
-                  <SelectValue placeholder="Select bank account" />
-                </SelectTrigger>
-                <SelectContent>
-                  {bankAccounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id}>
-                      {account.bankName} - {account.accountNumber} (
-                      {account.accountName})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No bank accounts found. Please add a bank account first.
-              </p>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="chain-id">Chain ID</Label>
+              <Input
+                id="chain-id"
+                type="number"
+                value={chainId}
+                onChange={(e) => setChainId(e.target.value)}
+                disabled={isSubmitting}
+              />
+            </div>
+
+            <Button className="w-full" disabled={!canCreateOfframp} onClick={handleCreateOfframp}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isSubmitting ? "Creating off-ramp..." : "Create Off-Ramp"}
+            </Button>
           </div>
-
-          {/* Submit */}
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={!canSubmit}
-          >
-            {isSubmitting && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
-            {isSubmitting ? "Processing..." : "Convert to VND"}
-          </Button>
-        </form>
+        )}
       </CardContent>
     </Card>
   );

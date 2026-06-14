@@ -9,6 +9,9 @@ Complete API reference for the RampOS TypeScript SDK.
 - [UserService](#userservice)
 - [LedgerService](#ledgerservice)
 - [AAService (Account Abstraction)](#aaservice)
+- [RfqService](#rfqservice)
+- [OfframpService](#offrampservice)
+- [SettlementService](#settlementservice)
 - [WebhookVerifier](#webhookverifier)
 - [Type Definitions](#type-definitions)
 - [Enums](#enums)
@@ -41,6 +44,9 @@ new RampOSClient(options: RampOSClientOptions)
 | `users` | `UserService` | User management service |
 | `ledger` | `LedgerService` | Ledger query service |
 | `aa` | `AAService` | Account Abstraction service |
+| `rfq` | `RfqService` | Portal/admin/LP RFQ auction service |
+| `offramp` | `OfframpService` | Portal/admin off-ramp service with RFQ linkage fields |
+| `settlement` | `SettlementService` | Admin settlement workbench and outcome service |
 | `webhooks` | `WebhookVerifier` | Webhook signature verifier |
 
 ### Example
@@ -502,6 +508,163 @@ const estimate = await client.aa.estimateGas({
 });
 
 console.log('Total gas:', estimate.total);
+```
+
+---
+
+## RfqService
+
+RFQ methods cover the backend routes under `/v1/portal/rfq`, `/v1/admin/rfq`, and `/v1/lp/rfq`. Standalone RFQs omit `offrampId`; OFFRAMP-linked RFQs set `offrampId` to an existing off-ramp intent and finalization stores the winning LP/rate linkage for the later settlement outcome step.
+
+### Methods
+
+| Method | Backend route | Description |
+|--------|---------------|-------------|
+| `create(data: CreateRfqRequest)` | `POST /v1/portal/rfq` | Create standalone or OFFRAMP-linked RFQ |
+| `get(id: string)` | `GET /v1/portal/rfq/:id` | Get RFQ with bids |
+| `accept(id: string)` | `POST /v1/portal/rfq/:id/accept` | Portal accepts best bid and finalizes RFQ |
+| `cancel(id: string)` | `POST /v1/portal/rfq/:id/cancel` | Cancel open RFQ |
+| `admin.listOpen(query?)` | `GET /v1/admin/rfq/open` | List open RFQs |
+| `admin.finalize(id)` | `POST /v1/admin/rfq/:id/finalize` | Admin/operator finalizes RFQ |
+| `lp.submitBid(rfqId, data)` | `POST /v1/lp/rfq/:rfqId/bid` | LP submits an RFQ bid |
+
+```typescript
+const rfq = await client.rfq.create({
+  direction: 'OFFRAMP',
+  cryptoAsset: 'USDT',
+  cryptoAmount: '100',
+  offrampId: 'ofr_123',
+  ttlMinutes: 5,
+});
+
+await client.rfq.lp.submitBid(rfq.id, {
+  exchangeRate: '25100',
+  vndAmount: '2510000',
+  lpName: 'LP One',
+});
+
+const finalized = await client.rfq.admin.finalize(rfq.id);
+console.log(finalized.rfqId, finalized.winningLpId, finalized.finalRate);
+```
+
+### Linked RFQ request/response fields
+
+```typescript
+interface CreateRfqRequest {
+  direction: 'OFFRAMP' | 'ONRAMP';
+  cryptoAsset: string;
+  cryptoAmount: string;
+  vndAmount?: string;
+  offrampId?: string;
+  ttlMinutes?: number;
+}
+
+interface FinalizeRfqResponse {
+  rfqId: string;
+  state: string;
+  winningLpId: string;
+  finalRate: string;
+}
+```
+
+---
+
+## OfframpService
+
+Off-ramp methods cover the current backend routes under `/v1/portal/offramp` and `/v1/admin/offramp`. Responses preserve camelCase linkage fields from the API: `linkedRfqId`, `winningLpId`, `matchedRate`, and `settlementId`.
+
+### Methods
+
+| Method | Backend route | Description |
+|--------|---------------|-------------|
+| `quote(data)` | `POST /v1/portal/offramp/quote` | Create quote row in `QUOTE_CREATED` |
+| `create(data)` | `POST /v1/portal/offramp/create` | Create off-ramp intent from quote |
+| `status(id)` | `GET /v1/portal/offramp/:id/status` | Read off-ramp status and linkage fields |
+| `confirm(id)` | `POST /v1/portal/offramp/:id/confirm` | Confirm quote/bank details |
+| `cryptoReceived(id, data)` | `POST /v1/portal/offramp/:id/crypto-received` | Record observed crypto deposit facts |
+| `admin.listPending(query?)` | `GET /v1/admin/offramp/pending` | List pending admin off-ramps |
+| `admin.approve(id)` | `POST /v1/admin/offramp/:id/approve` | Move pending off-ramp to VND transferring |
+| `admin.reject(id, data)` | `POST /v1/admin/offramp/:id/reject` | Reject off-ramp with reason |
+
+```typescript
+const quote = await client.offramp.quote({
+  cryptoAsset: 'USDT',
+  amount: '100',
+  bankCode: 'VCB',
+  accountNumber: '1234567890',
+  accountName: 'Nguyen Van A',
+});
+
+const offramp = await client.offramp.create({
+  quoteId: quote.quoteId,
+  chainId: 137,
+});
+
+const linked = await client.offramp.status(offramp.id);
+console.log(linked.linkedRfqId, linked.winningLpId, linked.matchedRate, linked.settlementId);
+```
+
+### Off-ramp linkage type
+
+```typescript
+interface OfframpIntentResponse {
+  id: string;
+  state: string;
+  cryptoAsset: string;
+  cryptoAmount: string;
+  exchangeRate: string;
+  grossVndAmount: string;
+  netVndAmount: string;
+  depositAddress?: string | null;
+  chainId?: number | null;
+  txHash?: string | null;
+  bankReference?: string | null;
+  linkedRfqId?: string | null;
+  winningLpId?: string | null;
+  matchedRate?: string | null;
+  settlementId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+---
+
+## SettlementService
+
+Settlement methods cover `/v1/admin/settlement/workbench`, `/v1/admin/settlement/export`, and `/v1/admin/settlement/:id/outcome`. Applying an outcome is the bounded terminal step for a linked off-ramp settlement; RFQ finalization does not by itself imply bank/custody completion.
+
+### Methods
+
+| Method | Backend route | Description |
+|--------|---------------|-------------|
+| `getWorkbench(query?)` | `GET /v1/admin/settlement/workbench` | Load settlement workbench metadata |
+| `exportWorkbench(query?)` | `GET /v1/admin/settlement/export` | Export settlement workbench data |
+| `applyOutcome(settlementId, data)` | `POST /v1/admin/settlement/:id/outcome` | Mark linked settlement `COMPLETED` or `FAILED` |
+
+```typescript
+const outcome = await client.settlement.applyOutcome('set_789', {
+  outcome: 'COMPLETED',
+});
+
+console.log(
+  outcome.settlementId,
+  outcome.offrampIntentId,
+  outcome.rfqId,
+  outcome.lpId,
+  outcome.finalRate
+);
+```
+
+```typescript
+interface SettlementOutcomeResponse {
+  settlementId: string;
+  offrampIntentId: string;
+  status: string;
+  rfqId?: string | null;
+  lpId?: string | null;
+  finalRate?: string | null;
+}
 ```
 
 ---

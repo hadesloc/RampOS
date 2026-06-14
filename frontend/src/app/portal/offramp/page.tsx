@@ -9,14 +9,11 @@ export default function OfframpPage() {
   const {
     selectedCurrency,
     setSelectedCurrency,
-    setCurrentIntentId,
-    page,
-    setPage,
-    exchangeRate,
-    bankAccounts,
+    currentQuote,
     currentIntent,
-    intents,
-    createIntent,
+    createQuote,
+    createOfframp,
+    isCreatingQuote,
     isCreating,
   } = useOfframp();
 
@@ -31,10 +28,10 @@ export default function OfframpPage() {
 
       <div className="grid gap-8 lg:grid-cols-2">
         <OfframpForm
-          exchangeRate={exchangeRate.data}
-          bankAccounts={bankAccounts.data}
-          onSubmit={createIntent}
-          isLoading={exchangeRate.isLoading || bankAccounts.isLoading}
+          quote={currentQuote}
+          onCreateQuote={createQuote}
+          onCreateOfframp={createOfframp}
+          isQuoting={isCreatingQuote}
           isSubmitting={isCreating}
           selectedCurrency={selectedCurrency}
           onCurrencyChange={setSelectedCurrency}
@@ -47,13 +44,10 @@ export default function OfframpPage() {
       </div>
 
       <OfframpHistory
-        intents={intents.data?.data}
-        total={intents.data?.total}
-        page={page}
-        totalPages={intents.data?.totalPages}
-        onPageChange={setPage}
-        onSelect={(intent) => setCurrentIntentId(intent.id)}
-        isLoading={intents.isLoading}
+        intents={currentIntent.data ? [currentIntent.data] : []}
+        total={currentIntent.data ? 1 : 0}
+        totalPages={1}
+        isLoading={false}
       />
     </div>
   );

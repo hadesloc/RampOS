@@ -32,7 +32,8 @@ function formatVND(amount: string): string {
   }).format(num);
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr?: string): string {
+  if (!dateStr) return "-";
   return new Date(dateStr).toLocaleDateString("vi-VN", {
     day: "2-digit",
     month: "2-digit",
@@ -78,10 +79,10 @@ export function OfframpTable({
         },
       },
       {
-        accessorKey: "user_id",
+        accessorKey: "userId",
         header: "User",
         cell: ({ row }) => {
-          const userId = row.getValue("user_id") as string;
+          const userId = (row.original.userId ?? "-") as string;
           return (
             <span className="font-mono text-xs" title={userId}>
               {userId.substring(0, 8)}...
@@ -90,7 +91,7 @@ export function OfframpTable({
         },
       },
       {
-        accessorKey: "amount_crypto",
+        accessorKey: "cryptoAmount",
         header: ({ column }) => (
           <div className="text-right">
             <Button
@@ -104,8 +105,8 @@ export function OfframpTable({
           </div>
         ),
         cell: ({ row }) => {
-          const amount = row.getValue("amount_crypto") as string;
-          const currency = row.original.crypto_currency;
+          const amount = row.original.cryptoAmount ?? "-";
+          const currency = row.original.cryptoAsset ?? "";
           return (
             <div className="text-right font-mono text-sm">
               {amount} {currency}
@@ -114,7 +115,7 @@ export function OfframpTable({
         },
       },
       {
-        accessorKey: "amount_vnd",
+        accessorKey: "netVndAmount",
         header: ({ column }) => (
           <div className="text-right">
             <Button
@@ -128,12 +129,12 @@ export function OfframpTable({
           </div>
         ),
         cell: ({ row }) => {
-          const amount = row.getValue("amount_vnd") as string;
+          const amount = row.original.netVndAmount ?? "-";
           return <div className="text-right font-mono text-sm">{formatVND(amount)}</div>;
         },
       },
       {
-        accessorKey: "status",
+        accessorKey: "state",
         header: ({ column }) => (
           <Button
             variant="ghost"
@@ -145,17 +146,30 @@ export function OfframpTable({
           </Button>
         ),
         cell: ({ row }) => {
-          const status = row.getValue("status") as string;
+          const status = row.original.state ?? "-";
           return <StatusBadge status={status} showDot />;
         },
       },
       {
-        accessorKey: "bank_name",
-        header: "Bank",
-        cell: ({ row }) => <span className="text-sm">{row.getValue("bank_name")}</span>,
+        accessorKey: "linkedRfqId",
+        header: "Linked RFQ",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs text-muted-foreground">
+            {row.original.linkedRfqId ?? "-"}
+          </span>
+        ),
       },
       {
-        accessorKey: "created_at",
+        accessorKey: "settlementId",
+        header: "Settlement",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs text-muted-foreground">
+            {row.original.settlementId ?? "-"}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "createdAt",
         header: ({ column }) => (
           <Button
             variant="ghost"
@@ -167,7 +181,7 @@ export function OfframpTable({
           </Button>
         ),
         cell: ({ row }) => {
-          const date = row.getValue("created_at") as string;
+          const date = row.original.createdAt;
           return <span className="text-muted-foreground text-sm">{formatDate(date)}</span>;
         },
       },
@@ -195,14 +209,14 @@ export function OfframpTable({
             onChange={(e) => onStatusFilterChange(e.target.value)}
             data-testid="offramp-status-filter"
           >
-            <option value="">All Statuses</option>
-            <option value="PENDING">Pending</option>
-            <option value="AWAITING_APPROVAL">Awaiting Approval</option>
-            <option value="PROCESSING">Processing</option>
-            <option value="APPROVED">Approved</option>
+            <option value="">All States</option>
+            <option value="QUOTE_CREATED">Quote Created</option>
+            <option value="CRYPTO_PENDING">Crypto Pending</option>
+            <option value="CRYPTO_RECEIVED">Crypto Received</option>
+            <option value="VND_TRANSFERRING">VND Transferring</option>
             <option value="COMPLETED">Completed</option>
-            <option value="REJECTED">Rejected</option>
             <option value="FAILED">Failed</option>
+            <option value="EXPIRED">Expired</option>
           </select>
         </div>
       </div>

@@ -22,12 +22,20 @@ describe("VenueFundingCard", () => {
           },
         ]}
         selectedVenueKey="hyperliquid"
+        amount=""
+        venueConnectionId=""
+        venueAccountId=""
+        walletAttestationId=""
         walletTransferReference=""
         onSelectVenue={vi.fn()}
         onConnect={vi.fn()}
         onCheckEligibility={vi.fn()}
         onPrepare={vi.fn()}
         onSubmit={vi.fn()}
+        onAmountChange={vi.fn()}
+        onVenueConnectionIdChange={vi.fn()}
+        onVenueAccountIdChange={vi.fn()}
+        onWalletAttestationIdChange={vi.fn()}
         onWalletTransferReferenceChange={vi.fn()}
       />
     );
