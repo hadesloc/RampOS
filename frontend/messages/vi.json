@@ -332,7 +332,12 @@
       "amount": "Số tiền",
       "date": "Ngày",
       "reference": "Tham chiếu",
-      "export": "Xuất CSV"
+      "export": "Xuất CSV",
+      "completed": "Hoàn thành",
+      "pending": "Đang chờ",
+      "failed": "Thất bại",
+      "processing": "Đang xử lý",
+      "cancelled": "Đã hủy"
     },
     "settings": {
       "title": "Cài đặt",
@@ -392,6 +397,30 @@
         "already_have_account": "Đã có tài khoản?",
         "sign_in": "Đăng nhập"
       }
+    },
+    "kyc": {
+      "title": "Xác minh danh tính",
+      "description": "Hoàn tất xác minh KYC để mở khóa hạn mức cao hơn và toàn bộ tính năng.",
+      "step_1": "Thông tin cá nhân",
+      "step_1_desc": "Nhập họ tên hợp pháp, ngày sinh và địa chỉ thường trú.",
+      "step_2": "Giấy tờ tùy thân",
+      "step_3": "Xác minh khuôn mặt",
+      "step_3_desc": "Tải lên ảnh chân dung rõ nét để đối chiếu với giấy tờ tùy thân.",
+      "step_4": "Xem lại & Gửi",
+      "step_4_desc": "Kiểm tra lại thông tin và gửi đi để xác minh.",
+      "first_name": "Tên",
+      "last_name": "Họ",
+      "dob": "Ngày sinh",
+      "address": "Địa chỉ thường trú",
+      "id_type": "Loại giấy tờ",
+      "id_front": "Mặt trước giấy tờ",
+      "id_back": "Mặt sau giấy tờ",
+      "upload_front": "Tải mặt trước",
+      "upload_back": "Tải mặt sau",
+      "upload_selfie": "Tải ảnh chân dung",
+      "pending": "Đang chờ xác minh",
+      "verified": "Đã xác minh",
+      "failed": "Xác minh thất bại"
     }
   }
 }

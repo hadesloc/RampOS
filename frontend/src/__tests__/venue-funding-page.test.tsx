@@ -90,7 +90,7 @@ describe("VenueFundingPage", () => {
 
     render(<VenueFundingPage />);
 
-    expect(screen.getByText("Venue Funding")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Venue Funding" })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Hyperliquid" })).toBeInTheDocument();

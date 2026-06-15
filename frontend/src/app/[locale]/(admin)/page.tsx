@@ -113,13 +113,18 @@ export default function DashboardPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [statsData, intentsData] = await Promise.all([
-        api.dashboard.getStats(),
-        api.intents.list({ page: 1, per_page: 5 })
-      ]);
+      const statsData = await api.dashboard.getStats();
       setStats(statsData);
-      setRecentIntents(intentsData.data);
       setIsDemo(false);
+      // Recent intents is best-effort: there is no system-wide admin intents
+      // list endpoint yet (the backend list is per-user), so a failure here
+      // must not drag the whole dashboard back into demo mode.
+      try {
+        const intentsData = await api.intents.list({ page: 1, per_page: 5 });
+        setRecentIntents(intentsData.data);
+      } catch {
+        setRecentIntents([]);
+      }
     } catch (err: any) {
       console.warn("API unavailable, using demo data:", err.message);
       setStats(DEMO_STATS);

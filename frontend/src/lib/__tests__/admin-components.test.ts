@@ -330,13 +330,13 @@ describe('API proxy routing', () => {
 
   it('proxy handles empty search params', () => {
     const API_URL = 'http://localhost:8080';
-    const path = 'v1/admin/dashboard/stats';
+    const path = 'v1/admin/dashboard';
     const searchParams = '';
 
     const cleanApiUrl = API_URL.replace(/\/$/, '');
     const url = `${cleanApiUrl}/${path}${searchParams ? `?${searchParams}` : ''}`;
 
-    expect(url).toBe('http://localhost:8080/v1/admin/dashboard/stats');
+    expect(url).toBe('http://localhost:8080/v1/admin/dashboard');
     expect(url).not.toContain('?');
   });
 

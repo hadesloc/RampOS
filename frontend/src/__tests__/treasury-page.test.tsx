@@ -177,6 +177,6 @@ describe("TreasuryPage", () => {
     expect((await screen.findAllByText(/treasury workbench unavailable/i)).length).toBeGreaterThan(
       0,
     );
-    expect(screen.getByRole("button", { name: /reload workbench/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
   });
 });

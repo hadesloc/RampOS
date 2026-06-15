@@ -30,7 +30,8 @@ type QueueResponse = {
   actionMode: string;
 };
 
-function humanize(value: string): string {
+function humanize(value?: string | null): string {
+  if (!value) return "—";
   return toLabel(value.toLowerCase());
 }
 
@@ -61,7 +62,7 @@ export default function PassportAdminQueue() {
   const queue = data?.queue ?? [];
   const consented = queue.filter((item) => item.consentStatus === "GRANTED" || item.consentStatus === "ACTIVE").length;
   const reviewRequired = queue.filter((item) => item.reviewStatus === "REVIEW_REQUIRED" || item.reviewStatus === "PENDING").length;
-  const fieldCount = queue.reduce((total, item) => total + item.fieldsShared.length, 0);
+  const fieldCount = queue.reduce((total, item) => total + (item.fieldsShared?.length ?? 0), 0);
 
   return (
     <div className="flex flex-col gap-section" data-testid="passport-admin-queue">
@@ -123,7 +124,7 @@ export default function PassportAdminQueue() {
                   <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#00D4FF]">
                     Shared fields
                   </div>
-                  {item.fieldsShared.length > 0 ? (
+                  {(item.fieldsShared?.length ?? 0) > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
                       {item.fieldsShared.map((field) => (
                         <StatusBadge key={field} status={humanize(field)} severity="info" dot={false} />

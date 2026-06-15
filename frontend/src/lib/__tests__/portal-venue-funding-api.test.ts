@@ -43,7 +43,7 @@ describe("venueFundingApi", () => {
     expect(result.venues[0].supportsWalletFunding).toBe(true);
     expect(result.venues[1].supportsWalletFunding).toBe(false);
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://localhost:3000/v1/portal/venue-funding/venues",
+      "/api/v1/portal/venue-funding/venues",
       expect.objectContaining({
         headers: {
           "Content-Type": "application/json",
@@ -78,7 +78,7 @@ describe("venueFundingApi", () => {
 
     expect(result.walletTransferReference).toBe("wallet_tx_001");
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://localhost:3000/v1/portal/venue-funding/flow_123/submit",
+      "/api/v1/portal/venue-funding/flow_123/submit",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ walletTransferReference: "wallet_tx_001" }),
@@ -118,7 +118,7 @@ describe("venueFundingApi", () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://localhost:3000/v1/portal/venue-funding/prepare",
+      "/api/v1/portal/venue-funding/prepare",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({

@@ -11,6 +11,25 @@ const nextConfig = {
   output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '..'),
   async headers() {
+    // Next.js dev mode (webpack eval-source-map + React Fast Refresh) requires
+    // 'unsafe-eval' for client modules to execute and hydrate, and a websocket
+    // connection for HMR. Production needs neither, so keep the strict policy there.
+    const isDev = process.env.NODE_ENV !== 'production';
+    const scriptSrc = isDev
+      ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+      : "script-src 'self' 'unsafe-inline'";
+    const connectSrc = isDev
+      ? "connect-src 'self' ws: wss:"
+      : "connect-src 'self'";
+    const csp = [
+      "default-src 'self'",
+      scriptSrc,
+      // Google Fonts are used by the white-label theming/branding feature.
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "img-src 'self' data:",
+      "font-src 'self' https://fonts.gstatic.com data:",
+      connectSrc,
+    ].join('; ');
     return [{
       source: '/(.*)',
       headers: [
@@ -20,11 +39,7 @@ const nextConfig = {
         { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
         { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
-        {
-          key: 'Content-Security-Policy',
-          value:
-            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'",
-        },
+        { key: 'Content-Security-Policy', value: csp },
       ],
     }];
   },

@@ -108,9 +108,7 @@ describe("SettlementPage", () => {
 
     render(<SettlementPage />);
 
-    expect(
-      await screen.findByRole("heading", { name: /settlement workbench unavailable/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /reload workbench/i })).toBeInTheDocument();
+    expect(await screen.findByText(/settlement workbench unavailable/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
   });
 });

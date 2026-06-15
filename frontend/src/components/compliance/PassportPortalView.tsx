@@ -34,7 +34,8 @@ type KycStatus = {
   passportSummary?: PassportSummary | null;
 };
 
-function humanize(value: string): string {
+function humanize(value?: string | null): string {
+  if (!value) return "—";
   return toLabel(value.toLowerCase());
 }
 

@@ -6,6 +6,11 @@ import { Provider as UrqlProvider } from "urql";
 import { ThemeProvider } from "next-themes";
 import { useState } from "react";
 import { graphqlClient } from "@/lib/graphql-client";
+import { installCsrfProxyInterceptor } from "@/lib/csrf-interceptor";
+
+// Install before any child component mounts so the first proxy fetch already
+// carries a CSRF token (effect order runs children before parents).
+installCsrfProxyInterceptor();
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());

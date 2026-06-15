@@ -115,7 +115,7 @@ describe('SandboxPage', () => {
       expect(screen.getAllByText(/pending_implementation/i).length).toBeGreaterThan(0);
     });
     expect(screen.getByText(/\[REDACTED\]/i)).toBeInTheDocument();
-    expect(screen.getByText(/scenario execution will land/i)).toBeInTheDocument();
+    expect(screen.getByText(/scenario execution lands in a later slice/i)).toBeInTheDocument();
     expect(screen.getByText(/reset workflow stays bounded/i)).toBeInTheDocument();
   });
 });

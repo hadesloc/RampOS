@@ -3,8 +3,7 @@
 import { useEffect } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/auth-context";
-import Link from "next/link";
-import { useRouter } from "@/navigation";
+import { useRouter, Link } from "@/navigation";
 import { AlertCircle, Shield, Lock } from "lucide-react";
 import { useTranslations } from "next-intl";
 

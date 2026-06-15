@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { NotificationCenter } from '../layout/notification-center'
 
 // Mock lucide-react
@@ -18,7 +18,7 @@ vi.mock('@/components/ui/button', () => ({
 
 vi.mock('@/components/ui/popover', () => ({
   Popover: ({ children }: any) => <div data-testid="popover">{children}</div>,
-  PopoverTrigger: ({ children, asChild }: any) => (
+  PopoverTrigger: ({ children }: any) => (
     <div data-testid="popover-trigger">{children}</div>
   ),
   PopoverContent: ({ children, className }: any) => (
@@ -62,7 +62,7 @@ describe('NotificationCenter', () => {
 
   it('renders bell icon button', () => {
     render(<NotificationCenter />)
-    expect(screen.getByTestId('bell-icon')).toBeInTheDocument()
+    expect(screen.getAllByTestId('bell-icon').length).toBeGreaterThan(0)
   })
 
   it('renders toggle notifications sr-only text', () => {
@@ -70,11 +70,9 @@ describe('NotificationCenter', () => {
     expect(screen.getByText('Toggle notifications')).toBeInTheDocument()
   })
 
-  it('shows unread indicator when there are unread notifications', () => {
+  it('does not show unread indicator when there are no notifications', () => {
     const { container } = render(<NotificationCenter />)
-    // The mock data has 2 unread notifications, so the red dot should exist
-    const unreadDot = container.querySelector('.bg-red-500')
-    expect(unreadDot).toBeInTheDocument()
+    expect(container.querySelector('.bg-red-500')).not.toBeInTheDocument()
   })
 
   it('renders notification header with title', () => {
@@ -82,32 +80,23 @@ describe('NotificationCenter', () => {
     expect(screen.getByText('Notifications')).toBeInTheDocument()
   })
 
-  it('renders "Mark all read" button when unread exist', () => {
+  it('does not render "Mark all read" button when there are no unread notifications', () => {
     render(<NotificationCenter />)
-    expect(screen.getByText('Mark all read')).toBeInTheDocument()
+    expect(screen.queryByText('Mark all read')).not.toBeInTheDocument()
   })
 
-  it('renders all notification titles from mock data', () => {
+  it('renders empty state in all notification panels', () => {
     render(<NotificationCenter />)
-    // Mock data in component: System Maintenance, High Volume Alert, New Feature Available
-    // "All" tab shows all 3, "alerts" shows 1, "system" shows 1
-    // All tabs render so all items appear
-    expect(screen.getAllByText('System Maintenance').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('High Volume Alert').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('New Feature Available').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('No notifications')).toHaveLength(3)
   })
 
-  it('renders notification descriptions', () => {
+  it('renders no seeded notification titles or descriptions', () => {
     render(<NotificationCenter />)
-    expect(screen.getAllByText('Scheduled maintenance on Sunday at 2 AM UTC.').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('Unusual spike in pay-in volume detected.').length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('renders notification dates', () => {
-    render(<NotificationCenter />)
-    expect(screen.getAllByText('2 hours ago').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('5 hours ago').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('1 day ago').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText('System Maintenance')).not.toBeInTheDocument()
+    expect(screen.queryByText('High Volume Alert')).not.toBeInTheDocument()
+    expect(screen.queryByText('New Feature Available')).not.toBeInTheDocument()
+    expect(screen.queryByText('Scheduled maintenance on Sunday at 2 AM UTC.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Unusual spike in pay-in volume detected.')).not.toBeInTheDocument()
   })
 
   it('renders tab filters: All, Alerts, System', () => {
@@ -145,63 +134,23 @@ describe('NotificationCenter', () => {
     expect(screen.getByTestId('tab-content-system')).toBeInTheDocument()
   })
 
-  it('mark all read removes unread indicator', () => {
+  it('renders no unread item indicator dots', () => {
     const { container } = render(<NotificationCenter />)
-
-    // Initially has unread dot
-    expect(container.querySelector('.bg-red-500')).toBeInTheDocument()
-
-    // Click "Mark all read"
-    const markAllBtn = screen.getByText('Mark all read')
-    fireEvent.click(markAllBtn)
-
-    // After marking all read, red dot should be gone
-    expect(container.querySelector('.bg-red-500')).not.toBeInTheDocument()
+    expect(container.querySelectorAll('.bg-blue-500')).toHaveLength(0)
   })
 
-  it('mark all read hides the "Mark all read" button', () => {
-    render(<NotificationCenter />)
-
-    const markAllBtn = screen.getByText('Mark all read')
-    fireEvent.click(markAllBtn)
-
-    // Button should disappear since no unread items remain
-    expect(screen.queryByText('Mark all read')).not.toBeInTheDocument()
-  })
-
-  it('unread notifications have blue indicator dot', () => {
-    const { container } = render(<NotificationCenter />)
-    // Unread notifications have bg-blue-500 indicator
-    const blueDots = container.querySelectorAll('.bg-blue-500')
-    expect(blueDots.length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('mark all read removes blue indicator dots', () => {
-    const { container } = render(<NotificationCenter />)
-
-    const markAllBtn = screen.getByText('Mark all read')
-    fireEvent.click(markAllBtn)
-
-    const blueDots = container.querySelectorAll('.bg-blue-500')
-    expect(blueDots.length).toBe(0)
-  })
-
-  it('alerts tab content renders only alert type notifications', () => {
+  it('alerts tab content renders empty alert state', () => {
     render(<NotificationCenter />)
     const alertsPanel = screen.getByTestId('tab-content-alerts')
-    // Only "High Volume Alert" is type 'alert'
-    expect(alertsPanel).toHaveTextContent('High Volume Alert')
-    // System Maintenance is type 'system', should not be in alerts tab
-    expect(alertsPanel).not.toHaveTextContent('System Maintenance')
+    expect(alertsPanel).toHaveTextContent('No notifications')
+    expect(alertsPanel).not.toHaveTextContent('High Volume Alert')
   })
 
-  it('system tab content renders only system type notifications', () => {
+  it('system tab content renders empty system state', () => {
     render(<NotificationCenter />)
     const systemPanel = screen.getByTestId('tab-content-system')
-    // Only "System Maintenance" is type 'system'
-    expect(systemPanel).toHaveTextContent('System Maintenance')
-    // High Volume Alert is type 'alert', should not be in system tab
-    expect(systemPanel).not.toHaveTextContent('High Volume Alert')
+    expect(systemPanel).toHaveTextContent('No notifications')
+    expect(systemPanel).not.toHaveTextContent('System Maintenance')
   })
 
   it('popover structure is rendered', () => {

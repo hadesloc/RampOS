@@ -64,11 +64,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsAuthenticated(false);
         }
       } catch (err) {
+        // The initial session probe is a background check: any failure (401,
+        // network error, or a 5xx because the backend is unreachable) simply
+        // means the visitor is not authenticated yet. Fail closed quietly — the
+        // login screen already communicates availability, so a probe failure
+        // must not surface an alarming error banner to users.
         setUser(null);
         setWallet(null);
         setIsAuthenticated(false);
-        if (!(err instanceof PortalApiError && err.status === 401)) {
-          setError(err instanceof Error ? err.message : "Failed to load session");
+        if (process.env.NODE_ENV !== "production") {
+          console.debug("Portal session probe failed (treating as logged out):", err);
         }
       } finally {
         setIsLoading(false);

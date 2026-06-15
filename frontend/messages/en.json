@@ -332,7 +332,12 @@
       "amount": "Amount",
       "date": "Date",
       "reference": "Reference",
-      "export": "Export CSV"
+      "export": "Export CSV",
+      "completed": "Completed",
+      "pending": "Pending",
+      "failed": "Failed",
+      "processing": "Processing",
+      "cancelled": "Cancelled"
     },
     "settings": {
       "title": "Settings",
@@ -392,6 +397,30 @@
         "already_have_account": "Already have an account?",
         "sign_in": "Sign in"
       }
+    },
+    "kyc": {
+      "title": "Identity Verification",
+      "description": "Complete KYC verification to unlock higher limits and full features.",
+      "step_1": "Personal Information",
+      "step_1_desc": "Enter your legal name, date of birth, and residential address.",
+      "step_2": "Identity Document",
+      "step_3": "Selfie Verification",
+      "step_3_desc": "Upload a clear selfie to match against your ID document.",
+      "step_4": "Review & Submit",
+      "step_4_desc": "Review your details and submit for verification.",
+      "first_name": "First Name",
+      "last_name": "Last Name",
+      "dob": "Date of Birth",
+      "address": "Residential Address",
+      "id_type": "Document Type",
+      "id_front": "Document Front",
+      "id_back": "Document Back",
+      "upload_front": "Upload front",
+      "upload_back": "Upload back",
+      "upload_selfie": "Upload selfie",
+      "pending": "Verification Pending",
+      "verified": "Verified",
+      "failed": "Verification Failed"
     }
   }
 }

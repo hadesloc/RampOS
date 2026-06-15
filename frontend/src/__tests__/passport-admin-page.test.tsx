@@ -32,6 +32,6 @@ describe("PassportAdminPage", () => {
     render(<PassportAdminPage />);
 
     expect(await screen.findByText(/pkg_passport_active_001/i)).toBeInTheDocument();
-    expect(screen.getByText(/pending_review/i)).toBeInTheDocument();
+    expect(screen.getByText(/pending review/i)).toBeInTheDocument();
   });
 });

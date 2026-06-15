@@ -48,11 +48,9 @@ describe("VenueFundingCard", () => {
     expect(
       screen.getByText(/active wallet-funding pilot for hyperliquid usdt lanes/i)
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", {
-        name: /kraken visible for discovery only; wallet funding is not active for this venue active/i,
-      })
-    ).toBeDisabled();
+    const krakenButton = screen.getByRole("button", { name: /kraken/i });
+    expect(krakenButton).toHaveTextContent(/visible for discovery only/i);
+    expect(krakenButton).toBeDisabled();
   });
 
   it("submits the wallet transfer reference through the workflow action", () => {

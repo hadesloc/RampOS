@@ -76,7 +76,8 @@ function getApiBaseUrl(): string {
   if (process.env.NODE_ENV?.trim().toLowerCase() === "production") {
     throw new Error("Missing required production environment variable: NEXT_PUBLIC_API_URL");
   }
-  return "http://localhost:3000";
+  // Dev default: same-origin '/api' (CSP-safe, proxied via next.config rewrites).
+  return "/api";
 }
 
 async function offrampRequest<T>(

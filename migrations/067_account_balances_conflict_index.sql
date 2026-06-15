@@ -22,13 +22,31 @@
 --   3. Create a UNIQUE expression index that matches the inference clause
 --      character-for-character.
 
--- Step 1: Normalise NULL user_id to '' for system-account rows
+-- Step 1: Collapse any pre-existing NULL/'' duplicates before normalising.
+-- Older seed data inserted both NULL and '' system-account rows; updating NULL
+-- directly would trip the legacy plain unique constraint before it can be
+-- replaced by the expression index below.
+WITH ranked AS (
+    SELECT
+        id,
+        ROW_NUMBER() OVER (
+            PARTITION BY tenant_id, COALESCE(user_id, ''), account_type, currency
+            ORDER BY (user_id = '') DESC, updated_at DESC, id DESC
+        ) AS row_number
+    FROM account_balances
+)
+DELETE FROM account_balances AS account_balance
+USING ranked
+WHERE account_balance.id = ranked.id
+  AND ranked.row_number > 1;
+
+-- Step 2: Normalise NULL user_id to '' for system-account rows
 UPDATE account_balances SET user_id = '' WHERE user_id IS NULL;
 
--- Step 2: Drop the plain unique constraint (replaced by the expression index below)
+-- Step 3: Drop the plain unique constraint (replaced by the expression index below)
 ALTER TABLE account_balances DROP CONSTRAINT IF EXISTS account_balances_unique;
 
--- Step 3: Create a UNIQUE expression index matching the application ON CONFLICT
+-- Step 4: Create a UNIQUE expression index matching the application ON CONFLICT
 -- inference exactly — expression must be character-for-character identical to
 -- COALESCE(user_id, '') as written in the application SQL.
 CREATE UNIQUE INDEX IF NOT EXISTS account_balances_unique_idx

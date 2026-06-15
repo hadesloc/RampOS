@@ -24,7 +24,7 @@ import {
   EmptyState,
   ErrorState,
 } from "@/components/shared";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -173,10 +173,8 @@ export default function UsersPage() {
       enableSorting: false,
       cell: ({ row }) => (
         <Avatar className="h-8 w-8">
-          <AvatarImage
-            src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${row.original.id}`}
-            alt={row.original.id}
-          />
+          {/* Local initials avatar — avoids sending user IDs to a third-party
+              avatar CDN (api.dicebear.com) and keeps the strict img-src CSP. */}
           <AvatarFallback className="text-xs bg-[#7B61FF]/20 text-[#7B61FF]">
             {getInitials(row.original.id)}
           </AvatarFallback>

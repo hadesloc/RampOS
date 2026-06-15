@@ -38,6 +38,50 @@ use ramp_compliance::reports::ReportGenerator;
 use ramp_compliance::rules::RuleCacheManager;
 use ramp_compliance::store::postgres::PostgresCaseStore;
 
+async fn seed_dev_admin_from_env(pool: &sqlx::PgPool) -> anyhow::Result<()> {
+    let password = match std::env::var("RAMPOS_DEV_ADMIN_PASSWORD") {
+        Ok(value) if !value.is_empty() => value,
+        _ => return Ok(()),
+    };
+
+    let env = std::env::var("RAMPOS_ENV")
+        .or_else(|_| std::env::var("RUST_ENV"))
+        .unwrap_or_default();
+    if env.eq_ignore_ascii_case("production") || env.eq_ignore_ascii_case("prod") {
+        anyhow::bail!("RAMPOS_DEV_ADMIN_PASSWORD must not be set in production");
+    }
+
+    let email = std::env::var("RAMPOS_DEV_ADMIN_EMAIL")
+        .unwrap_or_else(|_| "admin@rampos.local".to_string());
+    let display_name = std::env::var("RAMPOS_DEV_ADMIN_NAME")
+        .unwrap_or_else(|_| "Local Dev Admin".to_string());
+    let password_hash = ramp_api::handlers::admin::admin_auth::hash_password(&password)
+        .map_err(|e| anyhow::anyhow!("Failed to hash dev admin password: {:?}", e))?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO admin_users (email, password_hash, display_name, role, is_active, failed_login_count, locked_until)
+        VALUES ($1, $2, $3, 'superadmin', true, 0, NULL)
+        ON CONFLICT (email) DO UPDATE SET
+            password_hash = EXCLUDED.password_hash,
+            display_name = EXCLUDED.display_name,
+            role = EXCLUDED.role,
+            is_active = true,
+            failed_login_count = 0,
+            locked_until = NULL,
+            updated_at = NOW()
+        "#,
+    )
+    .bind(&email)
+    .bind(&password_hash)
+    .bind(&display_name)
+    .execute(pool)
+    .await?;
+
+    info!(email = %email, "Seeded local development admin from environment");
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize telemetry
@@ -65,6 +109,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Run migrations
     sqlx::migrate!("../../migrations").run(&pool).await?;
+
+    seed_dev_admin_from_env(&pool).await?;
 
     // Create repositories
     let intent_repo = Arc::new(PgIntentRepository::new(pool.clone()));
