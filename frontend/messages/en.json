@@ -286,7 +286,8 @@
       "kyc_rejected": "Your verification was not successful.",
       "kyc_none": "Complete your identity verification to unlock all features.",
       "verify_now": "Verify Now",
-      "quick_actions": "Quick Actions"
+      "quick_actions": "Quick Actions",
+      "verified": "Verified"
     },
     "wallet": {
       "no_wallet": "No Wallet Found",
@@ -373,7 +374,12 @@
         "send_magic_link": "Send Magic Link",
         "back_to_passkey": "Back to Passkey Login",
         "no_account": "Do not have an account?",
-        "create_account": "Create an account"
+        "create_account": "Create an account",
+        "connect_wallet": "Connect Wallet",
+        "connecting_wallet": "Connecting wallet...",
+        "wallet_hint": "Sign in with MetaMask or any EIP-1193 wallet",
+        "other_methods_unavailable": "Other sign-in methods (passkey, magic link) are not yet enabled.",
+        "wallet_owner": "Connected wallet (owner)"
       },
       "register": {
         "browser_unsupported": "Browser Not Supported",

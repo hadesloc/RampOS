@@ -247,6 +247,7 @@ export default function PortalPage() {
             <WalletCard
               address={wallet?.address || ""}
               deployed={wallet?.deployed || false}
+              owner={wallet?.owner}
               onCopy={copyAddress}
               loading={authLoading}
             />

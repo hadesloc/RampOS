@@ -286,7 +286,8 @@
       "kyc_rejected": "Xác minh danh tính không thành công.",
       "kyc_none": "Hoàn tất xác minh danh tính để mở khóa tính năng.",
       "verify_now": "Xác minh ngay",
-      "quick_actions": "Thao tác nhanh"
+      "quick_actions": "Thao tác nhanh",
+      "verified": "Đã xác minh"
     },
     "wallet": {
       "no_wallet": "Chưa có ví",
@@ -373,7 +374,12 @@
         "send_magic_link": "Gửi liên kết đăng nhập",
         "back_to_passkey": "Quay lại đăng nhập Passkey",
         "no_account": "Chưa có tài khoản?",
-        "create_account": "Tạo tài khoản"
+        "create_account": "Tạo tài khoản",
+        "connect_wallet": "Kết nối ví",
+        "connecting_wallet": "Đang kết nối ví...",
+        "wallet_hint": "Đăng nhập bằng MetaMask hoặc ví EIP-1193",
+        "other_methods_unavailable": "Các phương thức đăng nhập khác (passkey, magic link) chưa được kích hoạt.",
+        "wallet_owner": "Ví kết nối (chủ sở hữu)"
       },
       "register": {
         "browser_unsupported": "Trình duyệt không hỗ trợ",

@@ -48,11 +48,11 @@ const nextConfig = {
     return [
       {
         source: '/api/v1/auth/:path*',
-        destination: 'http://localhost:8080/api/v1/auth/:path*',
+        destination: 'http://localhost:8080/v1/auth/:path*',
       },
       {
         source: '/api/v1/portal/:path*',
-        destination: 'http://localhost:8080/api/v1/portal/:path*',
+        destination: 'http://localhost:8080/v1/portal/:path*',
       },
     ]
   },

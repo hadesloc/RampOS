@@ -11,11 +11,13 @@ import { Skeleton } from "@/components/ui/skeleton"
 interface WalletCardProps {
   address: string
   deployed: boolean
+  /** EOA address that owns this smart account (= connected wallet) */
+  owner?: string
   onCopy?: () => void
   loading?: boolean
 }
 
-export function WalletCard({ address, deployed, onCopy, loading }: WalletCardProps) {
+export function WalletCard({ address, deployed, owner, onCopy, loading }: WalletCardProps) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
@@ -64,7 +66,7 @@ export function WalletCard({ address, deployed, onCopy, loading }: WalletCardPro
       </div>
 
       <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">
-        Wallet Address
+        Smart Account
       </p>
       <div className="flex items-center gap-2">
         <span className="text-lg font-bold tracking-tight font-mono text-foreground tabular-nums">
@@ -86,6 +88,17 @@ export function WalletCard({ address, deployed, onCopy, loading }: WalletCardPro
           </Button>
         )}
       </div>
+
+      {owner && (
+        <div className="mt-3 pt-3 border-t border-white/[0.06]">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+            Owner (EOA)
+          </p>
+          <span className="text-xs font-mono text-white/50 tabular-nums">
+            {truncateMiddle(owner, 8, 6)}
+          </span>
+        </div>
+      )}
     </Panel>
   )
 }

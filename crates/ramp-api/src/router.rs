@@ -235,6 +235,19 @@ pub fn create_router(state: AppState) -> Router {
     let admin_general_routes = Router::new()
         // Dashboard
         .route("/dashboard", get(handlers::get_dashboard))
+        // Tenants (read-only list — create/update/activate/suspend are in tenant_routes)
+        .route("/tenants", get(handlers::admin::list_tenants))
+        // KYC documents list
+        .route("/documents", get(handlers::admin::list_kyc_documents))
+        // Fraud detection
+        .route(
+            "/fraud/checks",
+            get(handlers::admin::fraud::list_fraud_checks),
+        )
+        .route(
+            "/fraud/rules",
+            get(handlers::admin::fraud::list_fraud_rules),
+        )
         // Intents
         .route("/intents/:id/cancel", post(handlers::admin::cancel_intent))
         .route("/intents/:id/retry", post(handlers::admin::retry_intent))

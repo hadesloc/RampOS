@@ -77,31 +77,76 @@ impl Default for PortalAuthConfig {
 
 /// Portal authentication middleware
 ///
-/// Extracts and verifies JWT token from Authorization header,
-/// then injects PortalUser into request extensions.
+/// Extracts and verifies JWT token from the `Authorization: Bearer` header.
+/// Falls back to the `auth_token` httpOnly cookie when the header is absent.
+/// The Bearer-header path is byte-for-byte unchanged so existing tests stay green.
 pub async fn portal_auth_middleware(
     State(config): State<Arc<PortalAuthConfig>>,
     mut req: Request,
     next: Next,
 ) -> Result<Response, Response> {
-    // Extract Authorization header
-    let auth_header = req
-        .headers()
-        .get("Authorization")
-        .and_then(|v| v.to_str().ok());
+    // Resolve token as an owned String to avoid cross-borrow lifetime issues
+    // between the header borrow and the cookie borrow.
+    let token: String = {
+        let headers = req.headers();
 
-    let token = match auth_header {
-        Some(header) if header.starts_with("Bearer ") => &header[7..],
-        _ => {
+        // Primary: Authorization: Bearer <token>
+        let from_bearer = headers
+            .get("Authorization")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|h| {
+                if h.starts_with("Bearer ") {
+                    Some(h[7..].to_string())
+                } else {
+                    None
+                }
+            });
+
+        // Check whether a malformed (non-Bearer) Authorization header was sent.
+        let has_bad_auth_header = headers
+            .get("Authorization")
+            .and_then(|v| v.to_str().ok())
+            .map(|h| !h.starts_with("Bearer "))
+            .unwrap_or(false);
+
+        if has_bad_auth_header {
             warn!("Portal auth: Missing or invalid Authorization header");
             return Err(unauthorized_response(
                 "Missing or invalid Authorization header",
             ));
         }
+
+        match from_bearer {
+            Some(t) => t,
+            None => {
+                // Fallback: read auth_token cookie
+                let from_cookie = headers
+                    .get(axum::http::header::COOKIE)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|cookie_str| {
+                        cookie_str.split(';').find_map(|part| {
+                            let part = part.trim();
+                            part.strip_prefix("auth_token=")
+                                .filter(|v| !v.is_empty())
+                                .map(|v| v.to_string())
+                        })
+                    });
+
+                match from_cookie {
+                    Some(t) => t,
+                    None => {
+                        warn!("Portal auth: Missing or invalid Authorization header");
+                        return Err(unauthorized_response(
+                            "Missing or invalid Authorization header",
+                        ));
+                    }
+                }
+            }
+        }
     };
 
     // Verify and decode the JWT token
-    let portal_user = match verify_jwt_token(token, &config) {
+    let portal_user = match verify_jwt_token(&token, &config) {
         Ok(user) => user,
         Err(e) => {
             warn!(error = %e, "Portal auth: JWT verification failed");

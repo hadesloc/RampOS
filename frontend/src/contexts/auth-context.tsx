@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   authApi,
   walletApi,
+  walletAuthApi,
   AuthUser,
   SmartAccount,
   PortalApiError,
@@ -21,6 +22,7 @@ interface AuthContextType {
   registerWithPasskey: (email: string) => Promise<void>;
   loginWithMagicLink: (email: string) => Promise<void>;
   verifyMagicLink: (token: string) => Promise<void>;
+  loginWithWallet: () => Promise<void>;
   logout: () => Promise<void>;
   // Wallet methods
   refreshWallet: () => Promise<void>;
@@ -171,6 +173,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const loginWithWallet = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      if (!window.ethereum) {
+        throw new Error(
+          "No Ethereum wallet detected. Install MetaMask to sign in with your wallet."
+        );
+      }
+
+      // 1. Request account access
+      const accounts = (await window.ethereum.request({
+        method: "eth_requestAccounts",
+      })) as string[];
+      const address = accounts[0];
+      if (!address) {
+        throw new Error("No account returned from wallet.");
+      }
+
+      // 2. Get nonce + EIP-4361 message from backend
+      const { message } = await walletAuthApi.getNonce(address);
+
+      // 3. Sign the exact message string — do NOT modify it
+      const signature = (await window.ethereum.request({
+        method: "personal_sign",
+        params: [message, address],
+      })) as string;
+
+      // 4. Verify signature with backend → receive session cookies + user
+      const res = await walletAuthApi.verify(message, signature);
+      setUser(res.user);
+      setIsAuthenticated(true);
+
+      // 5. Load smart account provisioned during verify
+      await refreshWallet();
+
+      router.push("/portal");
+    } catch (err) {
+      // EIP-1193 user rejection
+      const code = (err as { code?: number }).code;
+      const message =
+        code === 4001
+          ? "Wallet sign-in cancelled."
+          : err instanceof PortalApiError
+          ? err.message
+          : err instanceof Error
+          ? err.message
+          : "Wallet sign-in failed.";
+      setError(message);
+      setIsAuthenticated(false);
+      setUser(null);
+      setWallet(null);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [router, refreshWallet]);
+
   const createWallet = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -204,6 +264,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     registerWithPasskey,
     loginWithMagicLink,
     verifyMagicLink,
+    loginWithWallet,
     logout,
     refreshWallet,
     createWallet,

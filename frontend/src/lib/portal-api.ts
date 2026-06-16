@@ -31,6 +31,7 @@ export interface AuthUser {
   kycTier: number;
   status: 'ACTIVE' | 'SUSPENDED' | 'PENDING';
   createdAt: string;
+  walletAddress?: string;
 }
 
 export interface AuthResponse {
@@ -457,6 +458,32 @@ export const authApi = {
   // Check session status.
   checkSession: async (): Promise<SessionStatus> => {
     return portalRequest<SessionStatus>('/v1/auth/session');
+  },
+};
+
+// Wallet auth nonce response
+export interface WalletNonceResponse {
+  nonce: string;
+  message: string;
+  expiresAt: number;
+}
+
+// Wallet Auth API (SIWE — EIP-4361)
+// POST /v1/portal/auth/wallet/nonce  { address } → { nonce, message, expiresAt }
+// POST /v1/portal/auth/wallet/verify { message, signature } → AuthResponse
+export const walletAuthApi = {
+  getNonce: async (address: string): Promise<WalletNonceResponse> => {
+    return portalRequest<WalletNonceResponse>('/v1/portal/auth/wallet/nonce', {
+      method: 'POST',
+      body: JSON.stringify({ address }),
+    });
+  },
+
+  verify: async (message: string, signature: string): Promise<AuthResponse> => {
+    return portalRequest<AuthResponse>('/v1/portal/auth/wallet/verify', {
+      method: 'POST',
+      body: JSON.stringify({ message, signature }),
+    });
   },
 };
 

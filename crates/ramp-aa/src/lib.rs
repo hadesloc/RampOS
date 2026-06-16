@@ -15,6 +15,7 @@ pub mod gas;
 pub mod passkey;
 pub mod paymaster;
 pub mod policy;
+pub mod signature;
 pub mod smart_account;
 pub mod types;
 pub mod user_operation;
@@ -35,6 +36,7 @@ pub use paymaster::{
     MultiTokenPaymaster, MultiTokenPaymasterConfig, Paymaster, PaymasterService, PriceOracle,
     SponsorshipPolicy, SupportedChain, TenantGasLimits,
 };
+pub use signature::recover_personal_sign;
 pub use smart_account::SmartAccountService;
 pub use types::*;
 pub use user_operation::UserOperation;
