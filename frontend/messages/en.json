@@ -290,6 +290,7 @@
       "verified": "Verified"
     },
     "wallet": {
+      "smart_account": "Smart Account",
       "no_wallet": "No Wallet Found",
       "create_text": "Create a smart wallet to start using RampOS",
       "create_btn": "Create Wallet",

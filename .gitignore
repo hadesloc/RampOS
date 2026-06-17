@@ -137,3 +137,5 @@ scripts/__pycache__/
 scripts/.pytest_cache/
 .workflow/
 .remember/
+.gstack/
+.devlog/

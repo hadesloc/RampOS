@@ -290,6 +290,7 @@
       "verified": "Đã xác minh"
     },
     "wallet": {
+      "smart_account": "Ví thông minh",
       "no_wallet": "Chưa có ví",
       "create_text": "Tạo ví thông minh để bắt đầu sử dụng RampOS",
       "create_btn": "Tạo ví",

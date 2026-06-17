@@ -228,11 +228,16 @@ export function PortalSidebar() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary ring-2 ring-background">
-                  {user?.email?.[0].toUpperCase() || "U"}
+                  {(user?.email?.[0] || user?.walletAddress?.[2])?.toUpperCase() || "U"}
                 </div>
                 <div className="flex flex-col overflow-hidden">
                   <p className="text-sm font-medium truncate text-foreground">My Account</p>
-                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {user?.email ||
+                      (user?.walletAddress
+                        ? `${user.walletAddress.slice(0, 6)}…${user.walletAddress.slice(-4)}`
+                        : "")}
+                  </p>
                 </div>
               </div>
               <LocaleSwitcher />

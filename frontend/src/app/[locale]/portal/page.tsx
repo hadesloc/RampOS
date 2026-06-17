@@ -176,7 +176,7 @@ export default function PortalPage() {
           loading={authLoading}
         />
         <StatCard
-          title={tWallet('no_wallet')}
+          title={wallet ? tWallet('smart_account') : tWallet('no_wallet')}
           value={wallet?.deployed ? t('verified') : wallet ? "Created" : "—"}
           subtitle={wallet?.address ? `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}` : tWallet('create_text')}
           icon={<WalletIcon className="h-4 w-4" />}
