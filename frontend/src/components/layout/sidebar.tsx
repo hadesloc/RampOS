@@ -2,7 +2,7 @@
 
 import { usePathname } from "@/navigation";
 import { Link } from "@/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -50,8 +50,38 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [admin, setAdmin] = useState<{
+    email: string | null;
+    displayName: string | null;
+    role: string | null;
+  } | null>(null);
   const t = useTranslations('Navigation');
   const tDashboard = useTranslations('Dashboard');
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/admin/session");
+        if (!r.ok) return;
+        const data = await r.json();
+        if (active && data?.authenticated) {
+          setAdmin({ email: data.email, displayName: data.displayName, role: data.role });
+        }
+      } catch {
+        // Not signed in, or endpoint unavailable (e.g. in unit tests) — keep defaults.
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const adminName = admin?.displayName || "Administrator";
+  const adminEmail = admin?.email || "";
+  const adminInitial = (admin?.displayName || admin?.email || "A")
+    .charAt(0)
+    .toUpperCase();
 
   const sidebarSections = [
     {
@@ -263,13 +293,13 @@ export default function Sidebar() {
               <TooltipTrigger asChild>
                 <div className="flex justify-center cursor-pointer">
                   <div className="h-8 w-8 rounded-full bg-[#00FF87]/10 flex items-center justify-center text-xs font-bold text-[#00FF87] ring-1 ring-[#00FF87]/20">
-                    A
+                    {adminInitial}
                   </div>
                 </div>
               </TooltipTrigger>
               <TooltipContent side="right" className="bg-[#111113] border-white/[0.06]">
-                <p className="font-medium">Administrator</p>
-                <p className="text-xs text-muted-foreground">admin@rampos.io</p>
+                <p className="font-medium">{adminName}</p>
+                <p className="text-xs text-muted-foreground">{adminEmail}</p>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -279,11 +309,11 @@ export default function Sidebar() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="h-8 w-8 rounded-full bg-[#00FF87]/10 flex items-center justify-center text-xs font-bold text-[#00FF87] ring-1 ring-[#00FF87]/20">
-                  A
+                  {adminInitial}
                 </div>
                 <div className="flex flex-col overflow-hidden">
-                  <p className="text-sm font-medium truncate text-white">Administrator</p>
-                  <p className="text-[11px] text-muted-foreground truncate">admin@rampos.io</p>
+                  <p className="text-sm font-medium truncate text-white">{adminName}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{adminEmail}</p>
                 </div>
               </div>
               <NotificationCenter />
