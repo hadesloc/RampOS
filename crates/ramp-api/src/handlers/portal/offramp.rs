@@ -753,6 +753,12 @@ mod tests {
 
     #[test]
     fn test_issue_portal_deposit_address_is_chain_aware() {
+        // `issue()` fails closed for EVM placeholders when `is_production()` is true.
+        // Other tests in this binary toggle RUST_ENV/RAMPOS_ENV to "production" under
+        // the shared env lock, so hold that lock and clear the vars to avoid a race.
+        let _env = ramp_common::onchain_gate::test_env_lock();
+        std::env::remove_var("RUST_ENV");
+        std::env::remove_var("RAMPOS_ENV");
         let allocator = OfframpDepositAddressAllocator::new();
         let evm_address = allocator
             .issue(&OfframpDepositAddressRequest {

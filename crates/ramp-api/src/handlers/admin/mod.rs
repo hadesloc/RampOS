@@ -64,6 +64,20 @@ pub mod venue_trust;
 pub mod webhooks;
 pub mod yield_strategy;
 
+/// Process-wide mutex serializing every test that mutates admin-auth environment
+/// variables (`RAMPOS_ADMIN_KEY`, `RAMPOS_ADMIN_ROLE`, `RAMPOS_ADMIN_JWT_SECRET`).
+///
+/// Those vars are process-global, and admin tests across several modules in this
+/// test binary set/remove them. Each module previously had its own `env_lock()`
+/// (a distinct mutex) or none at all, so tests still raced across modules — e.g.
+/// a JWT signed with one secret was validated after another test overwrote the
+/// secret, yielding the wrong error. Every such test must hold this single lock.
+#[cfg(test)]
+pub(crate) fn admin_env_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
+}
+
 pub use audit::*;
 pub use bridge::*;
 pub use commercial_readiness::*;
@@ -1189,6 +1203,9 @@ mod security_tests {
 
     #[tokio::test]
     async fn create_recon_batch_rejects_viewer_role() {
+        let _env = crate::handlers::admin::admin_env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
 
         let mut headers = HeaderMap::new();
@@ -1299,6 +1316,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_recon_batch_rejects_viewer_role() {
+        let _env = crate::handlers::admin::admin_env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", TEST_ADMIN_JWT_SECRET);
 
         let mut headers = HeaderMap::new();

@@ -448,6 +448,13 @@ mod tests {
         // Test that our signature computation matches the SDK format
         use ramp_core::repository::tenant::TenantRow;
 
+        // The tenant stores a legacy plaintext secret, which `decode_secret_from_storage`
+        // only accepts outside production. Sibling tests toggle RUST_ENV/RAMPOS_ENV to
+        // "production" under the shared env lock, so hold it and clear the vars here.
+        let _env = ramp_common::onchain_gate::test_env_lock();
+        std::env::remove_var("RUST_ENV");
+        std::env::remove_var("RAMPOS_ENV");
+
         let tenant = TenantRow {
             id: "test-tenant".to_string(),
             name: "Test".to_string(),
@@ -509,6 +516,9 @@ mod tests {
 
     #[test]
     fn test_decode_stored_api_secret_rejects_legacy_raw_secret_in_production_without_key() {
+        // Hold the shared env lock: this test sets RUST_ENV=production, which would
+        // otherwise poison sibling tests that require non-production behavior.
+        let _env = ramp_common::onchain_gate::test_env_lock();
         std::env::set_var("RUST_ENV", "production");
         std::env::remove_var("ENCRYPTION_MASTER_KEY");
 

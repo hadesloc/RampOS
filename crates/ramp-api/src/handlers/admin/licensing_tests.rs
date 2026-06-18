@@ -23,7 +23,7 @@ mod tests {
         CreateLicenseRequirementRequest, CreateLicenseSubmissionRequest, LicenseRequirementRow,
         LicenseSubmissionRow, LicensingRepository, TenantLicenseStatusRow,
     };
-    use std::sync::{Arc, Mutex, OnceLock};
+    use std::sync::{Arc, Mutex};
 
     #[derive(Default)]
     struct MockLicensingRepository {
@@ -208,8 +208,8 @@ mod tests {
     const TEST_ADMIN_JWT_SECRET: &str = "licensing-tests-admin-jwt-secret";
 
     pub fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
+        // Single process-wide lock shared by all admin env-mutating tests.
+        crate::handlers::admin::admin_env_lock()
     }
 
     fn make_admin_jwt(role: &str) -> String {

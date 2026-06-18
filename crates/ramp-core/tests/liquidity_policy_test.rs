@@ -290,15 +290,20 @@ async fn seed_snapshot(
         .unwrap();
 }
 
+/// When an LP has enough ROLLING_30D history to enforce policy, a breaching
+/// reliability profile (high reject/dispute/slippage/latency, low score) is a
+/// hard disqualifier — so a reliable LP wins even though a disqualified LP quoted
+/// a better raw price. This is the OFFRAMP yield/reliability-gating contract; it
+/// mirrors the service unit test `test_get_best_bid_prefers_best_price_even_with_reliability_data`.
 #[tokio::test]
-async fn policy_ranking_prefers_best_price_even_with_high_reliability() {
+async fn policy_disqualifies_low_reliability_lp_even_when_it_has_best_price() {
     let repo = Arc::new(TestRfqRepository::new());
     let rfq_service = rfq_service(repo.clone());
     let reliability_service = reliability_service(repo);
     let tenant_id = tenant_id();
 
     let rfq = create_rfq(&rfq_service, &tenant_id, "OFFRAMP").await;
-    submit_bid(
+    let reliable_bid = submit_bid(
         &rfq_service,
         &tenant_id,
         &rfq.id,
@@ -354,8 +359,14 @@ async fn policy_ranking_prefers_best_price_even_with_high_reliability() {
         .unwrap()
         .unwrap();
 
-    assert_eq!(best.id, best_price_bid.id);
-    assert_eq!(best.lp_id, "lp_price_only");
+    // The low-reliability LP is gated out by policy despite the better raw price,
+    // so the reliable LP wins.
+    assert_eq!(best.id, reliable_bid.id);
+    assert_eq!(best.lp_id, "lp_reliable");
+    assert_ne!(
+        best.id, best_price_bid.id,
+        "disqualified low-reliability LP must not win on price alone"
+    );
 }
 
 #[tokio::test]

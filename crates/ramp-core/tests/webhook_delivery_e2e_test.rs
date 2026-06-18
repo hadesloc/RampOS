@@ -776,11 +776,12 @@ async fn test_webhook_concurrent_delivery() {
     // Process all pending events
     let process_result = service.process_pending_events(50).await;
     assert!(process_result.is_ok());
-    // With http-client enabled, deliver_event tries HTTP POST which fails
-    // because DummyTenantRepo returns None (TenantNotFound). Without
-    // http-client, deliver_event just logs and returns Ok.
+    // Neither build counts these as delivered: with http-client, deliver_event
+    // tries an HTTP POST that fails because DummyTenantRepo returns None
+    // (TenantNotFound); without http-client, delivery fails closed (GAP-001).
+    // Either way nothing is counted delivered and the events remain PENDING.
     #[cfg(not(feature = "http-client"))]
-    assert_eq!(process_result.unwrap(), 20);
+    assert_eq!(process_result.unwrap(), 0);
     #[cfg(feature = "http-client")]
     {
         let _ = process_result.unwrap();
@@ -964,12 +965,12 @@ async fn test_webhook_full_lifecycle_e2e() {
     assert_eq!(repo.count_by_status("FAILED"), 0);
 
     // Phase 2: Process pending events
-    // Without http-client, deliver_event just logs and returns Ok(()).
+    // Without http-client, delivery fails closed (GAP-001) and nothing is counted.
     // With http-client, deliver_event tries HTTP POST which fails because
-    // DummyTenantRepo returns None (TenantNotFound).
+    // DummyTenantRepo returns None (TenantNotFound). Either way: 0 delivered.
     let processed = service.process_pending_events(10).await.unwrap();
     #[cfg(not(feature = "http-client"))]
-    assert_eq!(processed, 1);
+    assert_eq!(processed, 0);
     #[cfg(feature = "http-client")]
     assert_eq!(processed, 0);
 
@@ -1333,12 +1334,12 @@ async fn test_webhook_crypto_service_integration() {
     assert_eq!(stored.tenant_id, "tenant_crypto_e2e");
 
     // Process pending events through the crypto-enabled service.
-    // Without http-client, deliver_event just logs and returns Ok(()).
+    // Without http-client, delivery fails closed (GAP-001) and nothing is counted.
     // With http-client, deliver_event tries HTTP POST which fails because
-    // DummyTenantRepo returns None (TenantNotFound).
+    // DummyTenantRepo returns None (TenantNotFound). Either way: 0 delivered.
     let processed = service.process_pending_events(10).await.unwrap();
     #[cfg(not(feature = "http-client"))]
-    assert_eq!(processed, 1);
+    assert_eq!(processed, 0);
     #[cfg(feature = "http-client")]
     assert_eq!(processed, 0);
 

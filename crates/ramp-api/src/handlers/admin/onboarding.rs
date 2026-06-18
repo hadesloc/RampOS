@@ -207,11 +207,11 @@ mod tests {
         test_utils::{MockLedgerRepository, MockTenantRepository},
     };
     use rust_decimal_macros::dec;
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::Mutex;
 
     fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
+        // Single process-wide lock shared by all admin env-mutating tests.
+        crate::handlers::admin::admin_env_lock()
     }
 
     #[tokio::test]

@@ -223,12 +223,25 @@ impl BridgeAdapter for MockBridgeAdapter {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_mock_bridge_quote_basic() {
+    /// Construct a `MockBridgeAdapter` deterministically.
+    ///
+    /// `MockBridgeAdapter::new()` asserts it is not in production by reading the
+    /// process-global `RUST_ENV`/`RAMPOS_ENV`. Other tests in this binary toggle
+    /// those vars to "production" (e.g. `test_mock_bridge_constructor_rejected_in_production`,
+    /// the Stripe production test), so unguarded construction races and panics
+    /// intermittently. Hold the shared env lock while clearing the vars and
+    /// constructing; the adapter never re-reads env afterwards, so releasing the
+    /// lock on return is safe even across later `.await` points.
+    fn new_mock_adapter() -> MockBridgeAdapter {
         let _guard = onchain_gate::test_env_lock();
         std::env::remove_var("RUST_ENV");
         std::env::remove_var("RAMPOS_ENV");
-        let adapter = MockBridgeAdapter::new();
+        MockBridgeAdapter::new()
+    }
+
+    #[tokio::test]
+    async fn test_mock_bridge_quote_basic() {
+        let adapter = new_mock_adapter();
         let quote = adapter
             .get_bridge_quote(
                 ChainId::ETHEREUM,
@@ -260,10 +273,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_bridge_l2_to_l2_faster() {
-        let _guard = onchain_gate::test_env_lock();
-        std::env::remove_var("RUST_ENV");
-        std::env::remove_var("RAMPOS_ENV");
-        let adapter = MockBridgeAdapter::new();
+        let adapter = new_mock_adapter();
 
         let l1_quote = adapter
             .get_bridge_quote(ChainId::ETHEREUM, ChainId::ARBITRUM, "USDC", 1_000_000)
@@ -283,7 +293,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_bridge_fee_calculation() {
-        let adapter = MockBridgeAdapter::new();
+        let adapter = new_mock_adapter();
         let amount = 10_000_000_000_000_000_000u128; // 10 ETH
         let quote = adapter
             .get_bridge_quote(ChainId::ARBITRUM, ChainId::BASE, "WETH", amount)
@@ -301,7 +311,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_bridge_zero_amount_rejected() {
-        let adapter = MockBridgeAdapter::new();
+        let adapter = new_mock_adapter();
         let result = adapter
             .get_bridge_quote(ChainId::ETHEREUM, ChainId::ARBITRUM, "USDC", 0)
             .await;
@@ -311,7 +321,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_bridge_same_chain_rejected() {
-        let adapter = MockBridgeAdapter::new();
+        let adapter = new_mock_adapter();
         let result = adapter
             .get_bridge_quote(ChainId::ETHEREUM, ChainId::ETHEREUM, "USDC", 1000)
             .await;
@@ -321,7 +331,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_bridge_initiate() {
-        let adapter = MockBridgeAdapter::new();
+        let adapter = new_mock_adapter();
         let quote = adapter
             .get_bridge_quote(ChainId::ETHEREUM, ChainId::ARBITRUM, "USDC", 1_000_000)
             .await
@@ -343,7 +353,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_bridge_initiate_empty_sender_rejected() {
-        let adapter = MockBridgeAdapter::new();
+        let adapter = new_mock_adapter();
         let quote = adapter
             .get_bridge_quote(ChainId::ETHEREUM, ChainId::BASE, "USDC", 1000)
             .await
@@ -355,7 +365,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_bridge_check_status() {
-        let adapter = MockBridgeAdapter::new();
+        let adapter = new_mock_adapter();
         let status = adapter
             .check_bridge_status("bridge-1-42161-1000000")
             .await
@@ -368,7 +378,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_bridge_check_status_empty_id_rejected() {
-        let adapter = MockBridgeAdapter::new();
+        let adapter = new_mock_adapter();
         let result = adapter.check_bridge_status("").await;
         assert!(result.is_err());
     }

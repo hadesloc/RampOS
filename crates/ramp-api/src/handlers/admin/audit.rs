@@ -464,11 +464,9 @@ mod tests {
 
     const TEST_ADMIN_JWT_SECRET: &str = "audit-tests-admin-jwt-secret";
 
-    use std::sync::OnceLock;
-
     fn env_lock() -> &'static std::sync::Mutex<()> {
-        static LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+        // Single process-wide lock shared by all admin env-mutating tests.
+        crate::handlers::admin::admin_env_lock()
     }
 
     fn make_admin_jwt(role: &str) -> String {

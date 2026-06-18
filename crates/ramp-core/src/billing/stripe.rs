@@ -957,6 +957,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_stripe_client_production_rejects_missing_key() {
+        // Also serialize on the shared cross-crate env lock so toggling RUST_ENV
+        // to "production" here cannot poison other env-reading tests in this
+        // binary (e.g. MockBridgeAdapter construction) running in parallel.
+        let _env_guard = ramp_common::onchain_gate::test_env_lock();
         let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         clear_env();
         std::env::set_var("RUST_ENV", "production");

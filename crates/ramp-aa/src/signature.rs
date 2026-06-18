@@ -108,7 +108,6 @@ mod tests {
 
         // Derive expected Ethereum address from the private key
         use k256::ecdsa::SigningKey;
-        use k256::elliptic_curve::sec1::ToEncodedPoint;
         let signing_key = SigningKey::from_bytes((&privkey).into()).unwrap();
         let verifying_key = signing_key.verifying_key();
         let pub_point = verifying_key.to_encoded_point(false);
