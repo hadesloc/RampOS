@@ -825,11 +825,21 @@ export const intentsApi = {
     if (params?.intent_type) searchParams.set('intent_type', params.intent_type);
 
     const query = searchParams.toString();
-    return apiRequest<PaginatedResponse<Intent>>(`/v1/admin/intents${query ? `?${query}` : ''}`);
+    // Backend serializes camelCase; downstream consumers (intents page + dashboard
+    // recent-intents) read snake_case, so normalize here per the per-endpoint
+    // convention. Accept either a bare array or a {data,...} wrapper.
+    const raw = await apiRequest<unknown>(`/v1/admin/intents${query ? `?${query}` : ''}`);
+    if (Array.isArray(raw)) {
+      return normalizePage<Intent>({ data: raw }, (item) => snakeizeKeys<Intent>(item));
+    }
+    return normalizePage<Intent>(raw as Record<string, unknown>, (item) =>
+      snakeizeKeys<Intent>(item)
+    );
   },
 
   get: async (id: string): Promise<Intent> => {
-    return apiRequest<Intent>(`/v1/admin/intents/${id}`);
+    const raw = await apiRequest<unknown>(`/v1/admin/intents/${id}`);
+    return snakeizeKeys<Intent>(raw);
   },
 
   cancel: async (id: string): Promise<Intent> => {

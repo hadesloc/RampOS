@@ -78,6 +78,18 @@ export default function PortalPage() {
     }
   }, [isAuthenticated, wallet]);
 
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#09090B]">
+        <RefreshCw className="h-8 w-8 animate-spin text-[#00FF87]" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
