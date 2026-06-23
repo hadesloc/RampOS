@@ -29,6 +29,7 @@ pub mod bridge;
 pub mod commercial_readiness;
 pub mod commercialization_pack;
 pub mod config_bundle;
+pub mod dashboard_reads;
 pub mod documents;
 pub mod execution_explainability;
 pub mod extensions;
@@ -1055,14 +1056,66 @@ pub async fn get_dashboard(
         .await
         .map_err(ApiError::from)?;
 
+    // Real per-type / per-state intent breakdown for today. Best-effort: if the
+    // pool is unavailable or the query fails, fall back to the daily-summary
+    // aggregate so the endpoint never errors.
+    let start_of_day = now
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .map(|d| d.and_utc())
+        .unwrap_or(now);
+    let mut payin_count = report.total_transactions as i64;
+    let mut payout_count = 0i64;
+    let mut completed_count = 0i64;
+    let mut pending_count = 0i64;
+    let mut failed_count = 0i64;
+    let mut total_count = report.total_transactions as i64;
+    let mut payin_vnd = report.total_volume_vnd.to_string();
+    let mut payout_vnd = "0".to_string();
+    let mut trade_vnd = "0".to_string();
+
+    if let Some(pool) = app_state.db_pool.as_ref() {
+        use sqlx::Row;
+        if let Ok(row) = sqlx::query(
+            r#"SELECT
+                 COUNT(*) FILTER (WHERE intent_type = 'PAYIN_VND')                                                          AS payin_count,
+                 COUNT(*) FILTER (WHERE intent_type = 'PAYOUT_VND')                                                         AS payout_count,
+                 COUNT(*) FILTER (WHERE state = 'COMPLETED')                                                                AS completed_count,
+                 COUNT(*) FILTER (WHERE state IN ('PENDING_BANK','PROCESSING','INITIATED','BANK_CONFIRMED','PENDING_RAILS')) AS pending_count,
+                 COUNT(*) FILTER (WHERE state IN ('EXPIRED','CANCELLED','RAILS_FAILED','FAILED'))                           AS failed_count,
+                 COUNT(*)                                                                                                   AS total_count,
+                 COALESCE(SUM(amount) FILTER (WHERE intent_type = 'PAYIN_VND'     AND currency = 'VND'), 0)::text           AS payin_vnd,
+                 COALESCE(SUM(amount) FILTER (WHERE intent_type = 'PAYOUT_VND'    AND currency = 'VND'), 0)::text           AS payout_vnd,
+                 COALESCE(SUM(amount) FILTER (WHERE intent_type = 'TRADE_EXECUTED' AND currency = 'VND'), 0)::text          AS trade_vnd
+               FROM intents
+               WHERE tenant_id = $1 AND created_at BETWEEN $2 AND $3"#,
+        )
+        .bind(tenant_ctx.tenant_id.0.clone())
+        .bind(start_of_day)
+        .bind(now)
+        .fetch_one(pool)
+        .await
+        {
+            payin_count = row.try_get("payin_count").unwrap_or(payin_count);
+            payout_count = row.try_get("payout_count").unwrap_or(0);
+            completed_count = row.try_get("completed_count").unwrap_or(0);
+            pending_count = row.try_get("pending_count").unwrap_or(0);
+            failed_count = row.try_get("failed_count").unwrap_or(0);
+            total_count = row.try_get("total_count").unwrap_or(total_count);
+            payin_vnd = row.try_get("payin_vnd").unwrap_or(payin_vnd);
+            payout_vnd = row.try_get("payout_vnd").unwrap_or_else(|_| "0".to_string());
+            trade_vnd = row.try_get("trade_vnd").unwrap_or_else(|_| "0".to_string());
+        }
+    }
+
     Ok(Json(DashboardStats {
         intents: IntentStats {
-            total_today: report.total_transactions as i64,
-            payin_count: report.total_transactions as i64,
-            payout_count: 0,
-            pending_count: 0,
-            completed_count: 0,
-            failed_count: 0,
+            total_today: total_count,
+            payin_count,
+            payout_count,
+            pending_count,
+            completed_count,
+            failed_count,
         },
         cases: CaseStats {
             total: report.cases_opened as i64,
@@ -1085,9 +1138,9 @@ pub async fn get_dashboard(
             new_today,
         },
         volume: VolumeStats {
-            total_payin_vnd: report.total_volume_vnd.to_string(),
-            total_payout_vnd: "0".to_string(),
-            total_trade_vnd: "0".to_string(),
+            total_payin_vnd: payin_vnd,
+            total_payout_vnd: payout_vnd,
+            total_trade_vnd: trade_vnd,
             period: "24h".to_string(),
         },
     }))

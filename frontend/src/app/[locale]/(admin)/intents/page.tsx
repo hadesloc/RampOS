@@ -43,7 +43,7 @@ function getTypeStyle(type: string): string {
 }
 
 function mapApiIntentToLocal(apiIntent: ApiIntent): Intent {
-  let intentType: string = apiIntent.intent_type;
+  let intentType: string = apiIntent.intent_type ?? "";
   if (intentType.startsWith("PAYIN")) intentType = "PAYIN";
   else if (intentType.startsWith("PAYOUT")) intentType = "PAYOUT";
   else if (intentType.startsWith("TRADE")) intentType = "TRADE";
@@ -183,24 +183,19 @@ export default function IntentsPage() {
     setLoading(true);
     setError(null);
     try {
+      // Admin ops view: pull the full working set in one bounded request (the
+      // backend caps the scan and clamps per_page to 200) and let the DataTable
+      // paginate client-side. This keeps the total count and page navigation
+      // correct — server-side paging here showed only the first page as the
+      // whole dataset because the table isn't wired for manual pagination.
       const response = await intentsApi.list({
-        page: pageIndex + 1,
-        per_page: pageSize,
+        page: 1,
+        per_page: 200,
         status: filter.state || undefined,
         intent_type: filter.type || undefined,
       });
       setIntents(response.data.map(mapApiIntentToLocal));
-      const meta = (response as any).meta || {};
-      if (meta.total_pages) {
-        setPageCount(meta.total_pages);
-      } else {
-        const currentCount = response.data.length;
-        if (currentCount < pageSize) {
-          setPageCount(pageIndex + 1);
-        } else {
-          setPageCount(pageIndex + 2);
-        }
-      }
+      setPageCount(Math.max(1, Math.ceil(response.data.length / pageSize)));
     } catch (err: any) {
       console.error("Failed to fetch intents:", err);
       const message = err.message || "Failed to load intents";

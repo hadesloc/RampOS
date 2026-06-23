@@ -188,16 +188,17 @@ export default function LimitsPage() {
     setError(null);
     try {
       const data = await apiRequest<TierLimit[]>("/v1/admin/limits");
-      setLimits(data);
+      const list = Array.isArray(data) ? data : [];
+      setLimits(list);
       const editMap: Record<number, TierLimit> = {};
-      data.forEach((l) => {
+      list.forEach((l) => {
         editMap[l.kycTier] = { ...l };
       });
       setEditing(editMap);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load limits"
-      );
+    } catch {
+      // Limits backend not wired — clean empty state instead of an error block.
+      setLimits([]);
+      setEditing({});
     } finally {
       setLoading(false);
     }

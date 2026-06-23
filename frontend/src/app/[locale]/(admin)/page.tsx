@@ -186,12 +186,12 @@ export default function DashboardPage() {
   // Recent activity
   const recentActivityData = isDemo ? DEMO_ACTIVITY : recentIntents.map(intent => ({
     id: intent.id,
-    description: `${intent.intent_type.replace('_', ' ')}`,
+    description: `${(intent.intent_type ?? "").replace('_', ' ')}`,
     amount: parseInt(intent.amount),
     currency: intent.currency,
     status: intent.state,
     timestamp: intent.created_at,
-    type: intent.intent_type,
+    type: intent.intent_type ?? "",
     user: { name: intent.user_id, email: intent.user_id }
   }));
 

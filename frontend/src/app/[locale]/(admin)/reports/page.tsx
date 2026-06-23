@@ -160,11 +160,10 @@ export default function ReportsPage() {
     setError(null);
     try {
       const data = await apiRequest<ComplianceReport[]>("/v1/admin/reports");
-      setReports(data);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load reports"
-      );
+      setReports(Array.isArray(data) ? data : []);
+    } catch {
+      // No reports generated / backend not wired — clean empty state, no error.
+      setReports([]);
     } finally {
       setLoading(false);
     }

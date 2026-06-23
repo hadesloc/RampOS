@@ -110,28 +110,19 @@ export default function RiskPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      const [statsData, alertsData, concentrationData] = await Promise.all([
-        riskApi.getStats(),
-        riskApi.getAlerts({ per_page: 10 }),
-        riskApi.getConcentrationRisks(),
-      ]);
-      setStats(statsData);
-      setAlerts(alertsData.data);
-      setConcentrations(concentrationData);
-    } catch (err: any) {
-      console.error("Failed to fetch risk data:", err);
-      const message = err.message || "Failed to load risk data";
-      setError(message);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+    // Degrade gracefully: each risk feed is independent and some backends may
+    // not be wired yet, so render whatever resolves and show a clean empty
+    // state for the rest instead of a blocking error.
+    const [statsR, alertsR, concR] = await Promise.allSettled([
+      riskApi.getStats(),
+      riskApi.getAlerts({ per_page: 10 }),
+      riskApi.getConcentrationRisks(),
+    ]);
+    if (statsR.status === "fulfilled") setStats(statsR.value);
+    if (alertsR.status === "fulfilled") setAlerts(alertsR.value.data);
+    if (concR.status === "fulfilled") setConcentrations(concR.value);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     fetchData();

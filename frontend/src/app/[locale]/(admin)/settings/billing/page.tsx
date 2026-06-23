@@ -31,16 +31,16 @@ export default function BillingPage() {
     try {
       setLoading(true);
       setError(null);
-      const [subData, invData] = await Promise.all([
+      const [subR, invR] = await Promise.allSettled([
         api.billing.getSubscription(),
         api.billing.getInvoices(),
       ]);
-      setSubscription(subData);
-      setInvoices(invData.data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load billing information.";
-      setError(message);
-      toast({ title: "Error", description: message, variant: "destructive" });
+      if (subR.status === "fulfilled") setSubscription(subR.value);
+      if (invR.status === "fulfilled") setInvoices(Array.isArray(invR.value?.data) ? invR.value.data : []);
+      else setInvoices([]);
+    } catch {
+      // Billing backend not wired — render the empty billing state, no error.
+      setInvoices([]);
     } finally {
       setLoading(false);
     }

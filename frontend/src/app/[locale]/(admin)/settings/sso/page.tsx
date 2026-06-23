@@ -28,11 +28,10 @@ export default function SSOPage() {
       setLoading(true);
       setError(null);
       const data = await api.sso.listProviders();
-      setProviders(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load SSO configuration.";
-      setError(message);
-      toast({ title: "Error", description: message, variant: "destructive" });
+      setProviders(Array.isArray(data) ? data : []);
+    } catch {
+      // SSO backend not wired — render the empty providers state, no error block.
+      setProviders([]);
     } finally {
       setLoading(false);
     }

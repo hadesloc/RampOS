@@ -200,6 +200,7 @@ pub fn create_router(state: AppState) -> Router {
 
     // Report routes
     let report_routes: Router = Router::new()
+        .route("/", get(handlers::admin::dashboard_reads::list_reports))
         .route("/aml", get(handlers::admin::reports::generate_aml_report))
         .route(
             "/aml/export",
@@ -249,6 +250,8 @@ pub fn create_router(state: AppState) -> Router {
             get(handlers::admin::fraud::list_fraud_rules),
         )
         // Intents
+        .route("/intents", get(handlers::admin::admin_list_intents))
+        .route("/intents/:id", get(handlers::admin::admin_get_intent))
         .route("/intents/:id/cancel", post(handlers::admin::cancel_intent))
         .route("/intents/:id/retry", post(handlers::admin::retry_intent))
         // Rules
@@ -328,6 +331,39 @@ pub fn create_router(state: AppState) -> Router {
             get(handlers::admin::get_user_limit_status)
                 .put(handlers::admin::set_user_limits)
                 .delete(handlers::admin::remove_user_limits),
+        )
+        // Dashboard read endpoints (risk / billing / treasury txns / events / tier limits)
+        .route(
+            "/limits",
+            get(handlers::admin::dashboard_reads::list_tier_limits),
+        )
+        .route(
+            "/risk/stats",
+            get(handlers::admin::dashboard_reads::risk_stats),
+        )
+        .route(
+            "/risk/alerts",
+            get(handlers::admin::dashboard_reads::risk_alerts),
+        )
+        .route(
+            "/risk/concentration",
+            get(handlers::admin::dashboard_reads::risk_concentration),
+        )
+        .route(
+            "/billing/subscription",
+            get(handlers::admin::dashboard_reads::billing_subscription),
+        )
+        .route(
+            "/billing/invoices",
+            get(handlers::admin::dashboard_reads::billing_invoices),
+        )
+        .route(
+            "/treasury/transactions",
+            get(handlers::admin::dashboard_reads::treasury_transactions),
+        )
+        .route(
+            "/events",
+            get(handlers::admin::dashboard_reads::events_catalog),
         )
         // Off-ramp management
         .route(
@@ -673,6 +709,22 @@ pub fn create_router(state: AppState) -> Router {
             .with_state(licensing_repo.clone())
     } else {
         Router::new()
+            .route(
+                "/licensing/status",
+                get(handlers::admin::dashboard_reads::licensing_status_fallback),
+            )
+            .route(
+                "/licensing/requirements",
+                get(handlers::admin::dashboard_reads::licensing_requirements_fallback),
+            )
+            .route(
+                "/licensing/submissions",
+                get(handlers::admin::dashboard_reads::licensing_submissions_fallback),
+            )
+            .route(
+                "/licensing/deadlines",
+                get(handlers::admin::dashboard_reads::licensing_deadlines_fallback),
+            )
     };
 
     // Compliance Audit routes

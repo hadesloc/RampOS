@@ -14,7 +14,7 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -134,6 +134,69 @@ pub struct RebalanceResponse {
 }
 
 // ============================================================================
+// Strategy catalog
+// ============================================================================
+
+/// The available yield-strategy definitions (risk posture + guardrails),
+/// mirrored from `ramp_core::yield::strategy`. These are static configuration —
+/// the live on-chain execution runtime is provisioned per deployment, so until
+/// a treasury runtime is attached, positions and APYs report honest zeros while
+/// the catalog itself is always available.
+///
+/// APY thresholds are expressed as ratios (0.02 = 2%) to match the dashboard's
+/// percent formatting, which is consistent with the `averageApy`/position `apy`
+/// fields elsewhere in the yield API.
+fn strategy_catalog() -> Vec<StrategyResponse> {
+    vec![
+        StrategyResponse {
+            id: "conservative".to_string(),
+            name: "Conservative Strategy".to_string(),
+            description: "Low risk strategy prioritizing safety and stable yields. Limits exposure to well-established protocols only.".to_string(),
+            risk_level: "low".to_string(),
+            max_protocol_exposure: 40,
+            max_token_exposure: 50,
+            min_apy_threshold: 0.02,
+            rebalance_apy_threshold: 0.01,
+            min_health_factor: 2.0,
+            rebalance_interval_secs: 86_400,
+            gas_aware_rebalancing: true,
+            allowed_protocols: vec!["aave-v3".to_string()],
+            is_active: false,
+        },
+        StrategyResponse {
+            id: "balanced".to_string(),
+            name: "Balanced Strategy".to_string(),
+            description: "Moderate risk strategy balancing yield and safety. Diversifies across multiple protocols.".to_string(),
+            risk_level: "medium".to_string(),
+            max_protocol_exposure: 50,
+            max_token_exposure: 60,
+            min_apy_threshold: 0.01,
+            rebalance_apy_threshold: 0.005,
+            min_health_factor: 1.5,
+            rebalance_interval_secs: 3_600,
+            gas_aware_rebalancing: true,
+            allowed_protocols: vec!["aave-v3".to_string(), "compound-v3".to_string()],
+            is_active: false,
+        },
+        StrategyResponse {
+            id: "aggressive".to_string(),
+            name: "Aggressive Strategy".to_string(),
+            description: "High yield strategy accepting more risk. Actively chases highest APY with frequent rebalancing.".to_string(),
+            risk_level: "high".to_string(),
+            max_protocol_exposure: 70,
+            max_token_exposure: 80,
+            min_apy_threshold: 0.005,
+            rebalance_apy_threshold: 0.003,
+            min_health_factor: 1.2,
+            rebalance_interval_secs: 1_800,
+            gas_aware_rebalancing: false,
+            allowed_protocols: vec!["aave-v3".to_string(), "compound-v3".to_string()],
+            is_active: false,
+        },
+    ]
+}
+
+// ============================================================================
 // Handlers
 // ============================================================================
 
@@ -149,9 +212,10 @@ pub async fn list_strategies(
         "Listing yield strategies"
     );
 
-    Err(ApiError::Internal(
-        "Yield strategy runtime is not configured for this environment".to_string(),
-    ))
+    Ok(Json(ListStrategiesResponse {
+        data: strategy_catalog(),
+        active_strategy: None,
+    }))
 }
 
 /// GET /v1/yield/strategies/:id - Get strategy details
@@ -168,9 +232,11 @@ pub async fn get_strategy(
         "Getting yield strategy"
     );
 
-    Err(ApiError::Internal(
-        "Yield strategy runtime is not configured for this environment".to_string(),
-    ))
+    strategy_catalog()
+        .into_iter()
+        .find(|s| s.id == strategy_id)
+        .map(Json)
+        .ok_or_else(|| ApiError::NotFound(format!("Strategy {} not found", strategy_id)))
 }
 
 /// POST /v1/yield/strategies/:id/activate - Activate a yield strategy
@@ -242,9 +308,27 @@ pub async fn get_performance(
         "Getting yield performance"
     );
 
-    Err(ApiError::Internal(
-        "Yield performance runtime is not configured for this environment".to_string(),
-    ))
+    // No on-chain treasury runtime is attached in this environment, so there are
+    // no live positions — report an honest zeroed window rather than erroring.
+    let now = Utc::now();
+    let window = match query.period.as_str() {
+        "24h" => Duration::hours(24),
+        "30d" => Duration::days(30),
+        _ => Duration::days(7),
+    };
+    Ok(Json(PerformanceResponse {
+        period_start: (now - window).to_rfc3339(),
+        period_end: now.to_rfc3339(),
+        total_deposited: "0".to_string(),
+        total_withdrawn: "0".to_string(),
+        total_yield_earned: "0".to_string(),
+        average_apy: 0.0,
+        net_apy: 0.0,
+        num_rebalances: 0,
+        total_gas_cost: "0".to_string(),
+        positions: Vec::new(),
+        protocol_breakdown: Vec::new(),
+    }))
 }
 
 /// POST /v1/yield/rebalance - Trigger manual rebalance
@@ -285,9 +369,12 @@ pub async fn get_current_apys(
         "Getting current APYs"
     );
 
-    Err(ApiError::Internal(
-        "Yield APY runtime is not configured for this environment".to_string(),
-    ))
+    // Live protocol APYs require an attached price/runtime feed; none is wired
+    // in this environment, so return an empty (but valid) snapshot.
+    Ok(Json(serde_json::json!({
+        "data": [],
+        "asOf": Utc::now().to_rfc3339(),
+    })))
 }
 
 #[cfg(test)]

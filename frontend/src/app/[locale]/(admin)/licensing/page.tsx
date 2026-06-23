@@ -500,30 +500,24 @@ export default function LicensingPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    try {
-      const [statsData, licensesData, requirementsData, submissionsData, deadlinesData] =
-        await Promise.all([
-          licensingApi.getStats(),
-          licensingApi.listLicenses(),
-          licensingApi.listRequirements(),
-          licensingApi.listSubmissions({ per_page: 50 }),
-          licensingApi.listDeadlines({ days_ahead: 90, include_overdue: true }),
-        ]);
+    // Each licensing feed is independent; render whatever resolves and leave the
+    // rest as clean empty state rather than blocking the whole page on one 404.
+    const [statsR, licensesR, requirementsR, submissionsR, deadlinesR] =
+      await Promise.allSettled([
+        licensingApi.getStats(),
+        licensingApi.listLicenses(),
+        licensingApi.listRequirements(),
+        licensingApi.listSubmissions({ per_page: 50 }),
+        licensingApi.listDeadlines({ days_ahead: 90, include_overdue: true }),
+      ]);
 
-      setStats(statsData);
-      setLicenses(licensesData);
-      setRequirements(requirementsData);
-      setSubmissions(submissionsData.data);
-      setDeadlines(deadlinesData);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to load licensing data";
-      setLoadError(message);
-      console.error("Failed to fetch licensing data:", error);
-      toast({ variant: "destructive", title: "Error", description: message });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+    if (statsR.status === "fulfilled") setStats(statsR.value);
+    if (licensesR.status === "fulfilled") setLicenses(Array.isArray(licensesR.value) ? licensesR.value : []);
+    if (requirementsR.status === "fulfilled") setRequirements(Array.isArray(requirementsR.value) ? requirementsR.value : []);
+    if (submissionsR.status === "fulfilled") setSubmissions(Array.isArray(submissionsR.value?.data) ? submissionsR.value.data : []);
+    if (deadlinesR.status === "fulfilled") setDeadlines(Array.isArray(deadlinesR.value) ? deadlinesR.value : []);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     fetchData();

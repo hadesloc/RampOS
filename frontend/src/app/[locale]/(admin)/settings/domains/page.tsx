@@ -38,7 +38,14 @@ export default function DomainsPage() {
       setLoading(true);
       setError(null);
       const data = await api.domains.list();
-      setDomains(data);
+      // Backend may return a bare array, a paginated wrapper, or nothing —
+      // coerce to an array so the list render never throws.
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray((data as { data?: Domain[] })?.data)
+          ? (data as { data: Domain[] }).data
+          : [];
+      setDomains(list);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load domains.";
       setError(message);

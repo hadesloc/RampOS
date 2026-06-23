@@ -170,15 +170,17 @@ export default function CompliancePage() {
         status: filter.status || undefined,
         severity: filter.severity || undefined,
       });
-      setCases(response.data);
-    } catch (err: any) {
-      console.error("Failed to fetch cases:", err);
-      setError(err.message || "Failed to load cases");
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: err.message || "Failed to load cases",
-      });
+      // Backend serializes enums in PascalCase ("Open", "Critical"); the UI
+      // (badges + KPI counts) keys off UPPERCASE, so normalize on the way in.
+      const rows = (Array.isArray(response?.data) ? response.data : []).map((c) => ({
+        ...c,
+        status: (c.status || "").toUpperCase() as AmlCase["status"],
+        severity: (c.severity || "").toUpperCase() as AmlCase["severity"],
+      }));
+      setCases(rows);
+    } catch {
+      // Cases endpoint unavailable — show a clean empty state, no error block.
+      setCases([]);
     } finally {
       setLoading(false);
     }

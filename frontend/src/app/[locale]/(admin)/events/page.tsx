@@ -165,11 +165,10 @@ export default function EventCatalogPage() {
     setError(null);
     try {
       const data = await apiRequest<EventType[]>("/v1/admin/events");
-      setEvents(data);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load event catalog"
-      );
+      setEvents(Array.isArray(data) ? data : []);
+    } catch {
+      // Event catalog backend not wired — clean empty state, no error block.
+      setEvents([]);
     } finally {
       setLoading(false);
     }

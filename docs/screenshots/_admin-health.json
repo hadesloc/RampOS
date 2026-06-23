@@ -1,0 +1,14 @@
+[
+  {
+    "route": "/admin-login",
+    "file": "admin-login.png",
+    "errors": []
+  },
+  {
+    "route": "/licensing",
+    "file": "licensing.png",
+    "http": 200,
+    "demoBadge": false,
+    "errors": []
+  }
+]
