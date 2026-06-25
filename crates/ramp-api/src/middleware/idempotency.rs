@@ -351,7 +351,7 @@ pub async fn idempotency_middleware(
     let tenant_id = req
         .extensions()
         .get::<PortalUser>()
-        .map(|user| format!("portal:{}:{}", user.tenant_id, user.user_id))
+        .map(|user| format!("portal:{}:{}", user.tenant_id, user.financial_user_id))
         .or_else(|| {
             req.extensions()
                 .get::<TenantContext>()

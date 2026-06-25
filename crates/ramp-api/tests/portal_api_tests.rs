@@ -32,6 +32,7 @@ use ramp_core::service::{
 };
 use ramp_core::test_utils::*;
 use rust_decimal::Decimal;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -85,6 +86,39 @@ fn create_unique_jwt_token(email: &str) -> String {
     let user_id = Uuid::new_v4().to_string();
     let tenant_id = Uuid::new_v4().to_string();
     create_jwt_token(&user_id, &tenant_id, email)
+}
+
+fn create_jwt_token_with_financial_user(
+    portal_user_id: &str,
+    financial_user_id: &str,
+    tenant_id: &str,
+    email: &str,
+) -> String {
+    #[derive(Serialize)]
+    struct ExtendedClaims<'a> {
+        #[serde(flatten)]
+        claims: PortalClaims,
+        financial_user_id: &'a str,
+    }
+
+    let now = Utc::now().timestamp();
+    let claims = ExtendedClaims {
+        claims: PortalClaims {
+            sub: portal_user_id.to_string(),
+            tenant_id: Some(tenant_id.to_string()),
+            email: email.to_string(),
+            iat: now,
+            exp: now + 3600,
+            token_type: "access".to_string(),
+        },
+        financial_user_id,
+    };
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(TEST_JWT_SECRET.as_bytes()),
+    )
+    .unwrap()
 }
 
 async fn setup_portal_app() -> TestPortalApp {
@@ -510,6 +544,92 @@ async fn test_get_wallet_balances() {
 
     // Should return array of balances
     assert!(body.is_array());
+}
+
+#[tokio::test]
+async fn test_financial_endpoints_use_extended_financial_user_claim() {
+    let app = setup_portal_app_with_idempotency(true).await;
+    let portal_user_id = Uuid::new_v4().to_string();
+    let token = create_jwt_token_with_financial_user(
+        &portal_user_id,
+        TEST_USER_ID,
+        TEST_TENANT_ID,
+        "linked@example.com",
+    );
+
+    let balance_response = app
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/v1/portal/wallet/balances")
+                .method("GET")
+                .header("Authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(balance_response.status(), StatusCode::OK);
+
+    let intent_response = app
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/v1/portal/intents/deposit")
+                .method("POST")
+                .header("Authorization", format!("Bearer {token}"))
+                .header("Content-Type", "application/json")
+                .header("Idempotency-Key", "linked-financial-user-intent")
+                .body(Body::from(
+                    r#"{"method":"VND_BANK","amount":"1000000","currency":"VND"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(intent_response.status(), StatusCode::OK);
+
+    let intents = app.intent_repo.intents.lock().unwrap();
+    let created = intents.last().expect("deposit intent should be created");
+    assert_eq!(created.user_id, TEST_USER_ID);
+    assert_ne!(created.user_id, portal_user_id);
+    drop(intents);
+
+    let second_portal_user_id = Uuid::new_v4().to_string();
+    let second_token = create_jwt_token_with_financial_user(
+        &second_portal_user_id,
+        TEST_USER_ID,
+        TEST_TENANT_ID,
+        "linked-again@example.com",
+    );
+    let replay_response = app
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/v1/portal/intents/deposit")
+                .method("POST")
+                .header("Authorization", format!("Bearer {second_token}"))
+                .header("Content-Type", "application/json")
+                .header("Idempotency-Key", "linked-financial-user-intent")
+                .body(Body::from(
+                    r#"{"method":"VND_BANK","amount":"1000000","currency":"VND"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(replay_response.status(), StatusCode::OK);
+    assert_eq!(
+        replay_response
+            .headers()
+            .get("Idempotent-Replayed")
+            .and_then(|value| value.to_str().ok()),
+        Some("true")
+    );
+    assert_eq!(app.intent_repo.intents.lock().unwrap().len(), 1);
 }
 
 #[tokio::test]

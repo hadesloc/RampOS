@@ -439,13 +439,13 @@ pub async fn get_kyc_status(
     portal_user: PortalUser,
 ) -> Result<Json<KYCStatus>, ApiError> {
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         tenant_id = %portal_user.tenant_id,
         "Get KYC status requested"
     );
 
     let tenant_id = ramp_common::types::TenantId::new(portal_user.tenant_id.to_string());
-    let user_id = ramp_common::types::UserId::new(portal_user.user_id.to_string());
+    let user_id = ramp_common::types::UserId::new(portal_user.financial_user_id.to_string());
     let user = app_state
         .user_service
         .get_user(&tenant_id, &user_id)
@@ -514,7 +514,7 @@ pub async fn submit_kyc(
     }
 
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         tenant_id = %portal_user.tenant_id,
         status = "PENDING",
         "KYC submission received"
@@ -522,7 +522,7 @@ pub async fn submit_kyc(
 
     let now = Utc::now();
     let tenant_id = ramp_common::types::TenantId::new(portal_user.tenant_id.to_string());
-    let user_id = ramp_common::types::UserId::new(portal_user.user_id.to_string());
+    let user_id = ramp_common::types::UserId::new(portal_user.financial_user_id.to_string());
     let pii_fields = KycPiiFields {
         full_name: format!("{} {}", req.first_name, req.last_name),
         date_of_birth: req.date_of_birth.clone(),
@@ -692,7 +692,7 @@ pub async fn upload_document(
     }
 
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         tenant_id = %portal_user.tenant_id,
         status = "PENDING",
         "Document upload processing"
@@ -721,7 +721,7 @@ pub async fn upload_document(
         storage
             .upload(
                 portal_user.tenant_id.to_string(),
-                portal_user.user_id.to_string(),
+                portal_user.financial_user_id.to_string(),
                 storage_doc_type,
                 file_bytes,
                 extension,
@@ -750,14 +750,14 @@ pub async fn get_tier(
     portal_user: PortalUser,
 ) -> Result<Json<TierInfo>, ApiError> {
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         tenant_id = %portal_user.tenant_id,
         "Get tier info requested"
     );
 
     // Read real user tier from user service
     let tenant_id = ramp_common::types::TenantId::new(portal_user.tenant_id.to_string());
-    let user_id = ramp_common::types::UserId::new(portal_user.user_id.to_string());
+    let user_id = ramp_common::types::UserId::new(portal_user.financial_user_id.to_string());
     let user = app_state
         .user_service
         .get_user(&tenant_id, &user_id)
@@ -835,7 +835,7 @@ pub async fn create_zk_kyc_challenge(
     req.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    let user_id = portal_user.user_id.to_string();
+    let user_id = portal_user.financial_user_id.to_string();
     let service = zk_kyc_service();
     let challenge = service.create_challenge(
         &user_id,
@@ -844,7 +844,7 @@ pub async fn create_zk_kyc_challenge(
     );
 
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         tenant_id = %portal_user.tenant_id,
         required_kyc_level = req.required_kyc_level,
         "ZK-KYC challenge created via portal API"
@@ -867,7 +867,7 @@ pub async fn verify_zk_kyc_proof(
     req.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    let user_id = portal_user.user_id.to_string();
+    let user_id = portal_user.financial_user_id.to_string();
 
     let proof_bytes = STANDARD
         .decode(&req.proof_data)
@@ -889,7 +889,7 @@ pub async fn verify_zk_kyc_proof(
         let _ = issuer.issue_credential(&user_id, &result.commitment_hash);
 
         info!(
-            user_id = %portal_user.user_id,
+            financial_user_id = %portal_user.financial_user_id,
             tenant_id = %portal_user.tenant_id,
             commitment_hash = %result.commitment_hash,
             "ZK-KYC proof verified and credential issued"
@@ -910,7 +910,7 @@ pub async fn get_zk_credential_status(
     State(_app_state): State<AppState>,
     portal_user: PortalUser,
 ) -> Result<Json<Option<ZkCredentialResponse>>, ApiError> {
-    let user_id = portal_user.user_id.to_string();
+    let user_id = portal_user.financial_user_id.to_string();
     let service = zk_kyc_service();
     if !service.is_verified(&user_id) {
         return Ok(Json(None));

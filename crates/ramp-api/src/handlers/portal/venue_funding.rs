@@ -266,14 +266,14 @@ pub async fn connect_venue_funding(
 
     let id = encode_connection_id(&VenueFundingConnectionContext {
         tenant_id: portal_user.tenant_id.to_string(),
-        subject_id: portal_user.user_id.to_string(),
+        subject_id: portal_user.financial_user_id.to_string(),
         request: request.clone(),
     })?;
 
     Ok(Json(VenueFundingConnectionResponse {
         id: id.clone(),
         subject_type: "user".to_string(),
-        subject_id: portal_user.user_id.to_string(),
+        subject_id: portal_user.financial_user_id.to_string(),
         source: "registry".to_string(),
         connections: vec![VenueFundingConnectionSummaryResponse {
             id: id.clone(),
@@ -321,7 +321,7 @@ pub async fn get_venue_funding_eligibility(
         .evaluate(&ProductEligibilityRequest {
             tenant_id,
             subject_type: "user".to_string(),
-            subject_id: portal_user.user_id.to_string(),
+            subject_id: portal_user.financial_user_id.to_string(),
             jurisdiction: query.jurisdiction.clone(),
             user_tier: query.user_tier.clone(),
             kyb_state: query.kyb_state.clone(),
@@ -399,7 +399,7 @@ pub async fn prepare_venue_funding(
     let prepared = funding_service
         .prepare_wallet_to_venue_transfer(&PrepareVenueFundingTransferRequest {
             tenant_id,
-            user_id: portal_user.user_id.to_string(),
+            user_id: portal_user.financial_user_id.to_string(),
             venue_connection_id: request.venue_connection_id.clone(),
             venue_account_id: request.venue_account_id.clone(),
             wallet_attestation_id: request.wallet_attestation_id,
@@ -452,7 +452,7 @@ pub async fn submit_venue_funding(
     let submitted = funding_service
         .submit_wallet_to_venue_transfer(&SubmitVenueFundingTransferRequest {
             tenant_id: portal_user.tenant_id.to_string(),
-            user_id: portal_user.user_id.to_string(),
+            user_id: portal_user.financial_user_id.to_string(),
             transfer_id: id,
             wallet_transfer_reference: request.wallet_transfer_reference.clone(),
         })
@@ -462,7 +462,7 @@ pub async fn submit_venue_funding(
     Ok(Json(VenueFundingSubmitResponse {
         id: submitted.transfer_id,
         subject_type: "user".to_string(),
-        subject_id: portal_user.user_id.to_string(),
+        subject_id: portal_user.financial_user_id.to_string(),
         status: submitted.status,
         eligibility_decision: "allow".to_string(),
         source: "persisted_transfer".to_string(),
@@ -505,7 +505,7 @@ pub async fn get_venue_funding_status(
     let transfer = funding_service
         .get_wallet_to_venue_transfer(
             &portal_user.tenant_id.to_string(),
-            &portal_user.user_id.to_string(),
+            &portal_user.financial_user_id.to_string(),
             &id,
         )
         .await
@@ -515,7 +515,7 @@ pub async fn get_venue_funding_status(
     Ok(Json(VenueFundingStatusResponse {
         id: transfer.transfer_id,
         subject_type: "user".to_string(),
-        subject_id: portal_user.user_id.to_string(),
+        subject_id: portal_user.financial_user_id.to_string(),
         status: transfer.status,
         eligibility_decision: "allow".to_string(),
         source: "persisted_transfer".to_string(),
@@ -576,7 +576,7 @@ async fn evaluate_request(
         .evaluate(&ProductEligibilityRequest {
             tenant_id: tenant_id.to_string(),
             subject_type: "user".to_string(),
-            subject_id: portal_user.user_id.to_string(),
+            subject_id: portal_user.financial_user_id.to_string(),
             jurisdiction: request.jurisdiction.clone(),
             user_tier: request.user_tier.clone(),
             kyb_state: request.kyb_state.clone(),
@@ -632,7 +632,7 @@ fn map_response(
 ) -> VenueFundingEligibilityResponse {
     VenueFundingEligibilityResponse {
         subject_type: "user".to_string(),
-        subject_id: portal_user.user_id.to_string(),
+        subject_id: portal_user.financial_user_id.to_string(),
         decision: map_decision_state(decision.decision).to_string(),
         source: decision.source,
         reasons: decision
@@ -670,7 +670,7 @@ fn map_prepare_response(
     Ok(VenueFundingPrepareResponse {
         id: prepared.transfer_id,
         subject_type: "user".to_string(),
-        subject_id: portal_user.user_id.to_string(),
+        subject_id: portal_user.financial_user_id.to_string(),
         status: prepared.status,
         eligibility_decision: decision_state,
         source,
@@ -769,7 +769,7 @@ fn apply_connection_context(
 ) -> Result<ProductEligibilityDecision, ApiError> {
     let connection = decode_connection_id(connection_id)?;
     if connection.tenant_id != portal_user.tenant_id.to_string()
-        || connection.subject_id != portal_user.user_id.to_string()
+        || connection.subject_id != portal_user.financial_user_id.to_string()
         || connection.request.venue_key != expected_venue_key
     {
         return Err(ApiError::NotFound(

@@ -108,7 +108,7 @@ pub async fn prepare_hyperliquid_cashout(
     let prepared = service
         .prepare_hyperliquid_cashout(&PrepareHyperliquidCashoutRequest {
             tenant_id: portal_user.tenant_id.to_string(),
-            user_id: portal_user.user_id.to_string(),
+            user_id: portal_user.financial_user_id.to_string(),
             venue_connection_id: request.venue_connection_id,
             venue_account_id: request.venue_account_id,
             beneficiary_profile_id: request.beneficiary_profile_id,
@@ -152,7 +152,7 @@ pub async fn confirm_hyperliquid_wallet_receipt(
     let confirmed = service
         .confirm_wallet_receipt(&ConfirmVenueCashoutReceiptRequest {
             tenant_id: portal_user.tenant_id.to_string(),
-            user_id: portal_user.user_id.to_string(),
+            user_id: portal_user.financial_user_id.to_string(),
             transfer_id,
             wallet_tx_hash: request.wallet_tx_hash,
             ttl_minutes: request.ttl_minutes,

@@ -154,7 +154,7 @@ pub async fn create_deposit(
     );
 
     let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
-    let user_id = UserId::new(&portal_user.user_id.to_string());
+    let user_id = UserId::new(&portal_user.financial_user_id.to_string());
 
     // Determine rails provider based on method
     let rails_provider = if method == "VND_BANK" {
@@ -295,7 +295,7 @@ pub async fn create_withdraw(
     }
 
     let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
-    let user_id = UserId::new(&portal_user.user_id.to_string());
+    let user_id = UserId::new(&portal_user.financial_user_id.to_string());
 
     // Determine rails provider based on method
     let rails_provider = if method == "VND_BANK" {
@@ -386,7 +386,7 @@ pub async fn get_intent(
 
     match intent_row {
         Some(row) => {
-            if row.user_id != portal_user.user_id.to_string() {
+            if row.user_id != portal_user.financial_user_id.to_string() {
                 return Err(ApiError::Forbidden(
                     "Intent does not belong to user".to_string(),
                 ));
@@ -446,7 +446,7 @@ pub async fn confirm_intent(
 
     match intent_row {
         Some(row) => {
-            if row.user_id != portal_user.user_id.to_string() {
+            if row.user_id != portal_user.financial_user_id.to_string() {
                 return Err(ApiError::Forbidden(
                     "Intent does not belong to user".to_string(),
                 ));

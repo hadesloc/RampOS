@@ -269,7 +269,7 @@ pub async fn create_rfq(
             .await?
             .ok_or_else(|| ApiError::NotFound("Off-ramp intent not found".to_string()))?;
 
-        if intent.user_id != portal_user.user_id.to_string() {
+        if intent.user_id != portal_user.financial_user_id.to_string() {
             return Err(ApiError::NotFound("Off-ramp intent not found".to_string()));
         }
         if !is_rfq_eligible_offramp_state(&intent.state) {
@@ -323,7 +323,7 @@ pub async fn create_rfq(
         &tenant_id,
         CreateRfqRequest {
             tenant_id: tenant_id.clone(),
-            user_id: portal_user.user_id.to_string(),
+            user_id: portal_user.financial_user_id.to_string(),
             direction: direction.clone(),
             offramp_id: req.offramp_id.clone(),
             crypto_asset: crypto_asset.clone(),
@@ -336,7 +336,7 @@ pub async fn create_rfq(
 
     info!(
         rfq_id = %rfq.id,
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         direction = %direction,
         "Portal: RFQ created"
     );
@@ -362,7 +362,7 @@ pub async fn get_rfq(
         .ok_or_else(|| ApiError::NotFound("RFQ not found".to_string()))?;
 
     // Ownership check
-    if rfq.user_id != portal_user.user_id.to_string() {
+    if rfq.user_id != portal_user.financial_user_id.to_string() {
         return Err(ApiError::NotFound("RFQ not found".to_string()));
     }
 
@@ -423,7 +423,7 @@ pub async fn accept_rfq(
         .map_err(ApiError::from)?
         .ok_or_else(|| ApiError::NotFound("RFQ not found".to_string()))?;
 
-    if rfq.user_id != portal_user.user_id.to_string() {
+    if rfq.user_id != portal_user.financial_user_id.to_string() {
         return Err(ApiError::NotFound("RFQ not found".to_string()));
     }
 
@@ -433,7 +433,7 @@ pub async fn accept_rfq(
             .get_intent(&tenant_id, offramp_id)
             .await?
             .ok_or_else(|| ApiError::Conflict("Linked off-ramp intent is missing".to_string()))?;
-        if intent.user_id != portal_user.user_id.to_string()
+        if intent.user_id != portal_user.financial_user_id.to_string()
             || intent.linked_rfq_id.as_deref() != Some(rfq.id.as_str())
         {
             return Err(ApiError::Conflict(format!(
@@ -452,7 +452,7 @@ pub async fn accept_rfq(
 
     info!(
         rfq_id = %id,
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         winning_lp = %result.winning_bid.lp_id,
         final_rate = %result.winning_bid.exchange_rate,
         "Portal: RFQ accepted"
@@ -502,7 +502,7 @@ pub async fn cancel_rfq(
         .map_err(ApiError::from)?
         .ok_or_else(|| ApiError::NotFound("RFQ not found".to_string()))?;
 
-    if rfq.user_id != portal_user.user_id.to_string() {
+    if rfq.user_id != portal_user.financial_user_id.to_string() {
         return Err(ApiError::NotFound("RFQ not found".to_string()));
     }
 
@@ -512,7 +512,11 @@ pub async fn cancel_rfq(
         .await
         .map_err(ApiError::from)?;
 
-    info!(rfq_id = %id, user_id = %portal_user.user_id, "Portal: RFQ cancelled");
+    info!(
+        rfq_id = %id,
+        financial_user_id = %portal_user.financial_user_id,
+        "Portal: RFQ cancelled"
+    );
 
     Ok(Json(map_rfq_response(&cancelled)))
 }
