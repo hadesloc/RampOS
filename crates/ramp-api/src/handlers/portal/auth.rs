@@ -6,6 +6,7 @@
 //! - Session endpoints (`/session`, `/me`, `/refresh`, `/logout`) are wired to the DB + JWT.
 
 pub mod identity;
+pub mod password;
 
 use axum::{
     extract::State,
@@ -209,6 +210,9 @@ pub struct SessionStatus {
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        // Core password authentication
+        .route("/register", post(password::register))
+        .route("/login", post(password::login))
         // WebAuthn endpoints (stubs)
         .route("/webauthn/register/challenge", post(webauthn_register_challenge))
         .route("/webauthn/register/complete", post(webauthn_register_complete))
@@ -986,7 +990,7 @@ fn set_auth_cookies(jar: CookieJar, access_token: &str, refresh_token: &str, sec
     let mut auth = Cookie::build((AUTH_COOKIE_NAME.to_string(), access_token.to_string()))
         .path("/")
         .http_only(true)
-        .same_site(axum_extra::extract::cookie::SameSite::Lax)
+        .same_site(axum_extra::extract::cookie::SameSite::Strict)
         .max_age(time::Duration::seconds(ACCESS_TOKEN_EXPIRY_SECS));
 
     if secure {
@@ -996,7 +1000,7 @@ fn set_auth_cookies(jar: CookieJar, access_token: &str, refresh_token: &str, sec
     let mut refresh = Cookie::build((REFRESH_COOKIE_NAME.to_string(), refresh_token.to_string()))
         .path("/")
         .http_only(true)
-        .same_site(axum_extra::extract::cookie::SameSite::Lax)
+        .same_site(axum_extra::extract::cookie::SameSite::Strict)
         .max_age(time::Duration::seconds(REFRESH_TOKEN_EXPIRY_SECS));
 
     if secure {
