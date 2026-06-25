@@ -7,6 +7,7 @@
 
 pub mod identity;
 pub mod password;
+pub mod session;
 pub mod siwe;
 
 use axum::{
@@ -16,12 +17,11 @@ use axum::{
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar};
 use chrono::{Duration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation, Algorithm};
+use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
 use ramp_aa::recover_personal_sign;
 use ramp_common::types::{TenantId, UserId};
 use ramp_core::repository::CreateSmartAccountRequest;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use tracing::{info, warn};
 use uuid::Uuid;
 use validator::Validate;
@@ -226,8 +226,8 @@ pub fn router() -> Router<AppState> {
         .route("/wallet/nonce", post(wallet_nonce))
         .route("/wallet/verify", post(wallet_verify))
         // Session endpoints (real)
-        .route("/refresh", post(refresh_token))
-        .route("/logout", post(logout))
+        .route("/refresh", post(session::refresh))
+        .route("/logout", post(session::logout))
         .route("/me", get(get_me))
         .route("/session", get(check_session))
 }
@@ -236,6 +236,7 @@ pub fn protected_router() -> Router<AppState> {
     Router::new()
         .route("/wallet/link/nonce", post(siwe::wallet_link_nonce))
         .route("/wallet/link/verify", post(siwe::wallet_link_verify))
+        .route("/logout-all", post(session::logout_all))
 }
 
 // ============================================================================
@@ -590,7 +591,7 @@ pub async fn wallet_verify(
         financial_user_id = %identity.financial_user_id,
         "Portal wallet login successful"
     );
-    password::issue_session(&app_state, jar, &identity).await
+    session::issue_session(&app_state, jar, &identity).await
 }
 
 // ============================================================================
@@ -641,161 +642,6 @@ pub async fn get_me(
     Ok(Json(user))
 }
 
-/// POST /refresh — validate opaque refresh token cookie, issue new access token.
-pub async fn refresh_token(
-    State(app_state): State<AppState>,
-    jar: CookieJar,
-) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
-    let refresh_val = jar
-        .get(REFRESH_COOKIE_NAME)
-        .filter(|c| !c.value().is_empty())
-        .ok_or_else(|| ApiError::Unauthorized("No refresh token provided".to_string()))?
-        .value()
-        .to_string();
-
-    let pool = app_state
-        .db_pool
-        .as_ref()
-        .ok_or_else(|| ApiError::Unauthorized("No refresh token provided".to_string()))?;
-
-    let token_hash = sha256_bytes(refresh_val.as_bytes());
-
-    // Look up non-revoked, non-expired refresh token
-    #[derive(sqlx::FromRow)]
-    struct RefreshRow {
-        user_id: String,
-    }
-
-    let row: Option<RefreshRow> = sqlx::query_as(
-        "SELECT user_id
-           FROM refresh_tokens
-          WHERE token_hash = $1
-            AND revoked = FALSE
-            AND expires_at > NOW()",
-    )
-    .bind(&token_hash)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
-
-    let row = row.ok_or_else(|| ApiError::Unauthorized("Invalid or expired refresh token".to_string()))?;
-
-    // Fetch user from DB to populate claims
-    let portal_tenant_id = std::env::var("PORTAL_TENANT_ID")
-        .unwrap_or_else(|_| PORTAL_TENANT_ID_DEFAULT.to_string());
-
-    #[derive(sqlx::FromRow)]
-    struct UserRow2 {
-        id: String,
-        kyc_status: String,
-        kyc_tier: i16,
-        status: String,
-        created_at: chrono::DateTime<Utc>,
-        wallet_address: Option<String>,
-    }
-
-    let user_row: Option<UserRow2> = sqlx::query_as(
-        "SELECT id, kyc_status, kyc_tier, status, created_at, wallet_address
-           FROM users
-          WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(&row.user_id)
-    .bind(&portal_tenant_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
-
-    let user_row = user_row.ok_or_else(|| ApiError::Unauthorized("User not found".to_string()))?;
-
-    // Revoke old refresh token (rotation)
-    sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE token_hash = $1")
-        .bind(&token_hash)
-        .execute(pool)
-        .await
-        .ok();
-
-    // Mint new tokens
-    let now = Utc::now();
-    let access_exp = now + Duration::seconds(ACCESS_TOKEN_EXPIRY_SECS);
-    let access_claims = PortalClaims {
-        sub: user_row.id.clone(),
-        tenant_id: Some(portal_tenant_id),
-        email: String::new(),
-        iat: now.timestamp(),
-        exp: access_exp.timestamp(),
-        token_type: "access".to_string(),
-    };
-
-    let jwt_secret = app_state.portal_auth_config.jwt_secret.clone();
-    let access_token = encode(
-        &Header::default(),
-        &access_claims,
-        &EncodingKey::from_secret(jwt_secret.as_bytes()),
-    )
-    .map_err(|e| ApiError::Internal(format!("Failed to create access token: {}", e)))?;
-
-    let refresh_raw = format!("prt_{}", Uuid::new_v4());
-    let refresh_hash_new = sha256_bytes(refresh_raw.as_bytes());
-    let refresh_exp = now + Duration::seconds(REFRESH_TOKEN_EXPIRY_SECS);
-    let family_id = Uuid::new_v4();
-
-    sqlx::query(
-        "INSERT INTO refresh_tokens (token_hash, user_id, expires_at, family_id)
-         VALUES ($1, $2, $3, $4)",
-    )
-    .bind(&refresh_hash_new)
-    .bind(&user_row.id)
-    .bind(refresh_exp)
-    .bind(family_id)
-    .execute(pool)
-    .await
-    .map_err(|e| ApiError::Internal(format!("Failed to store refresh token: {}", e)))?;
-
-    let is_production = std::env::var("RAMPOS_ENV").map(|v| v == "production").unwrap_or(false);
-    let jar = set_auth_cookies(jar, &access_token, &refresh_raw, is_production);
-
-    let auth_user = AuthUser {
-        id: user_row.id,
-        email: String::new(),
-        kyc_status: user_row.kyc_status,
-        kyc_tier: user_row.kyc_tier as i32,
-        status: user_row.status,
-        created_at: user_row.created_at.to_rfc3339(),
-        wallet_address: user_row.wallet_address.unwrap_or_default(),
-    };
-
-    Ok((
-        jar,
-        Json(AuthResponse {
-            user: auth_user,
-            expires_at: access_exp.timestamp(),
-        }),
-    ))
-}
-
-/// POST /logout — revoke refresh token in DB and clear cookies.
-pub async fn logout(
-    State(app_state): State<AppState>,
-    jar: CookieJar,
-) -> Result<CookieJar, ApiError> {
-    info!("User logout requested");
-
-    // Revoke refresh token if present and DB is available
-    if let Some(pool) = app_state.db_pool.as_ref() {
-        if let Some(cookie) = jar.get(REFRESH_COOKIE_NAME) {
-            let token_hash = sha256_bytes(cookie.value().as_bytes());
-            let _ = sqlx::query(
-                "UPDATE refresh_tokens SET revoked = TRUE WHERE token_hash = $1 AND revoked = FALSE",
-            )
-            .bind(&token_hash)
-            .execute(pool)
-            .await;
-        }
-    }
-
-    Ok(clear_auth_cookies(jar))
-}
-
 // ============================================================================
 // Internal helpers
 // ============================================================================
@@ -829,6 +675,7 @@ async fn build_auth_user_from_claims(claims: &PortalClaims, app_state: &AppState
         #[derive(sqlx::FromRow)]
         struct Row {
             id: String,
+            email: Option<String>,
             kyc_status: String,
             kyc_tier: i16,
             status: String,
@@ -837,9 +684,19 @@ async fn build_auth_user_from_claims(claims: &PortalClaims, app_state: &AppState
         }
 
         if let Ok(Some(row)) = sqlx::query_as::<_, Row>(
-            "SELECT id, kyc_status, kyc_tier, status, created_at, wallet_address
-               FROM users
-              WHERE id = $1 AND tenant_id = $2",
+            "SELECT
+                portal.id,
+                portal.email,
+                financial.kyc_status,
+                financial.kyc_tier,
+                financial.status,
+                portal.created_at,
+                portal.wallet_address
+               FROM portal_users portal
+               JOIN users financial
+                 ON financial.tenant_id = portal.tenant_id
+                AND financial.id = portal.financial_user_id
+              WHERE portal.id = $1 AND portal.tenant_id = $2",
         )
         .bind(&claims.sub)
         .bind(&portal_tenant_id)
@@ -848,7 +705,7 @@ async fn build_auth_user_from_claims(claims: &PortalClaims, app_state: &AppState
         {
             return AuthUser {
                 id: row.id,
-                email: claims.email.clone(),
+                email: row.email.unwrap_or_else(|| claims.email.clone()),
                 kyc_status: row.kyc_status,
                 kyc_tier: row.kyc_tier as i32,
                 status: row.status,
@@ -908,13 +765,6 @@ fn clear_auth_cookies(jar: CookieJar) -> CookieJar {
         .build();
 
     jar.add(auth).add(refresh)
-}
-
-/// SHA-256 digest as raw bytes stored in `BYTEA`.
-fn sha256_bytes(input: &[u8]) -> Vec<u8> {
-    let mut hasher = Sha256::new();
-    hasher.update(input);
-    hasher.finalize().to_vec()
 }
 
 /// Generate a random base62 string of the given length.

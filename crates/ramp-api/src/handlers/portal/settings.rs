@@ -376,6 +376,28 @@ pub async fn update_security(
         ApiError::Internal("Failed to update password".to_string())
     })?;
 
+    sqlx::query(
+        r#"
+        UPDATE refresh_tokens
+        SET
+            revoked = TRUE,
+            revoked_at = COALESCE(revoked_at, NOW()),
+            revoke_reason = COALESCE(revoke_reason, 'password_changed'),
+            updated_at = NOW()
+        WHERE tenant_id = $1
+          AND user_id = $2
+          AND revoked = FALSE
+        "#,
+    )
+    .bind(portal_user.tenant_id.to_string())
+    .bind(&user_id)
+    .execute(pool)
+    .await
+    .map_err(|e| {
+        warn!(error = %e, "Failed to revoke sessions after password change");
+        ApiError::Internal("Password changed but session revocation failed".to_string())
+    })?;
+
     info!(user_id = %user_id, "Password updated successfully");
 
     Ok(Json(UpdateSecurityResponse {

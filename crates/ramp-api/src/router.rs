@@ -867,6 +867,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/transactions", handlers::portal::transactions::router())
         .nest("/intents", handlers::portal::intents::router())
         .nest("/offramp", handlers::portal::offramp::router())
+        .nest("/settings", handlers::portal::settings::router())
         .nest("/venue-cashout", handlers::portal::venue_cashout::router())
         .nest("/venue-funding", handlers::portal::venue_funding::router())
         .merge(handlers::portal::rfq::router())

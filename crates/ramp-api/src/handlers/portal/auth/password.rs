@@ -4,24 +4,13 @@ use argon2::{
 };
 use axum::{extract::State, Json};
 use axum_extra::extract::cookie::CookieJar;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use chrono::{Duration, Utc};
-use jsonwebtoken::{encode, EncodingKey, Header};
-use rand::RngCore;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use serde::Deserialize;
 use std::sync::OnceLock;
 use tracing::{info, warn};
-use uuid::Uuid;
 use validator::Validate;
 
-use super::identity::{
-    create_password_identity, find_identity_by_email, normalize_email, PortalIdentity,
-};
-use super::{
-    set_auth_cookies, AuthResponse, AuthUser, PortalClaims, ACCESS_TOKEN_EXPIRY_SECS,
-    PORTAL_TENANT_ID_DEFAULT, REFRESH_TOKEN_EXPIRY_SECS,
-};
+use super::identity::{create_password_identity, find_identity_by_email, normalize_email};
+use super::{session, AuthResponse, PORTAL_TENANT_ID_DEFAULT};
 use crate::error::ApiError;
 use crate::router::AppState;
 
@@ -84,7 +73,7 @@ pub async fn register(
         "Portal password registration successful"
     );
 
-    issue_session(&app_state, jar, &identity).await
+    session::issue_session(&app_state, jar, &identity).await
 }
 
 pub async fn login(
@@ -146,7 +135,7 @@ pub async fn login(
         "Portal password login successful"
     );
 
-    issue_session(&app_state, jar, &identity).await
+    session::issue_session(&app_state, jar, &identity).await
 }
 
 fn hash_password(password: &str) -> Result<String, ApiError> {
@@ -183,90 +172,6 @@ fn dummy_password_hash() -> &'static str {
                 .to_string()
         })
         .as_str()
-}
-
-pub(super) async fn issue_session(
-    app_state: &AppState,
-    jar: CookieJar,
-    identity: &PortalIdentity,
-) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
-    let pool = app_state
-        .db_pool
-        .as_ref()
-        .ok_or_else(|| ApiError::Internal("Database not configured".to_string()))?;
-    let now = Utc::now();
-    let access_exp = now + Duration::seconds(ACCESS_TOKEN_EXPIRY_SECS);
-    let claims = PortalClaims {
-        sub: identity.portal_user_id.clone(),
-        tenant_id: Some(identity.tenant_id.clone()),
-        email: identity.email.clone().unwrap_or_default(),
-        iat: now.timestamp(),
-        exp: access_exp.timestamp(),
-        token_type: "access".to_string(),
-    };
-    #[derive(Serialize)]
-    struct SessionClaims<'a> {
-        #[serde(flatten)]
-        claims: &'a PortalClaims,
-        financial_user_id: &'a str,
-    }
-    let session_claims = SessionClaims {
-        claims: &claims,
-        financial_user_id: &identity.financial_user_id,
-    };
-    let access_token = encode(
-        &Header::default(),
-        &session_claims,
-        &EncodingKey::from_secret(app_state.portal_auth_config.jwt_secret.as_bytes()),
-    )
-    .map_err(|error| ApiError::Internal(format!("Failed to create access token: {error}")))?;
-
-    let mut refresh_bytes = [0u8; 32];
-    rand::rngs::OsRng.fill_bytes(&mut refresh_bytes);
-    let refresh_raw = format!("prt_{}", URL_SAFE_NO_PAD.encode(refresh_bytes));
-    let refresh_hash = Sha256::digest(refresh_raw.as_bytes()).to_vec();
-    let refresh_exp = now + Duration::seconds(REFRESH_TOKEN_EXPIRY_SECS);
-
-    sqlx::query(
-        r#"
-        INSERT INTO refresh_tokens (
-            token_hash, user_id, tenant_id, expires_at, family_id
-        ) VALUES ($1, $2, $3, $4, $5)
-        "#,
-    )
-    .bind(refresh_hash)
-    .bind(&identity.portal_user_id)
-    .bind(&identity.tenant_id)
-    .bind(refresh_exp)
-    .bind(Uuid::new_v4())
-    .execute(pool)
-    .await
-    .map_err(|error| {
-        warn!(error = %error, "Portal refresh token persistence failed");
-        ApiError::Internal("Failed to create session".to_string())
-    })?;
-
-    let secure = std::env::var("RAMPOS_ENV")
-        .map(|value| value == "production")
-        .unwrap_or(false);
-    let jar = set_auth_cookies(jar, &access_token, &refresh_raw, secure);
-    let user = AuthUser {
-        id: identity.portal_user_id.clone(),
-        email: identity.email.clone().unwrap_or_default(),
-        kyc_status: identity.kyc_status.clone(),
-        kyc_tier: identity.kyc_tier as i32,
-        status: identity.status.clone(),
-        created_at: identity.created_at.to_rfc3339(),
-        wallet_address: identity.wallet_address.clone().unwrap_or_default(),
-    };
-
-    Ok((
-        jar,
-        Json(AuthResponse {
-            user,
-            expires_at: access_exp.timestamp(),
-        }),
-    ))
 }
 
 fn portal_tenant_id() -> String {

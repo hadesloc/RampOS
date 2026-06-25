@@ -90,6 +90,38 @@ pub async fn find_identity_by_wallet(
     .await
 }
 
+pub async fn find_identity_by_id(
+    pool: &PgPool,
+    tenant_id: &str,
+    portal_user_id: &str,
+) -> Result<Option<PortalIdentity>, sqlx::Error> {
+    sqlx::query_as::<_, PortalIdentity>(
+        r#"
+        SELECT
+            portal.id AS portal_user_id,
+            portal.financial_user_id,
+            portal.tenant_id,
+            portal.email,
+            portal.wallet_address,
+            portal.auth_methods,
+            financial.kyc_status,
+            financial.kyc_tier,
+            financial.status,
+            portal.created_at
+        FROM portal_users portal
+        JOIN users financial
+          ON financial.tenant_id = portal.tenant_id
+         AND financial.id = portal.financial_user_id
+        WHERE portal.tenant_id = $1
+          AND portal.id = $2
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(portal_user_id)
+    .fetch_optional(pool)
+    .await
+}
+
 pub async fn create_password_identity(
     pool: &PgPool,
     tenant_id: &str,
