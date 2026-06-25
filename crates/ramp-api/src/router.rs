@@ -861,6 +861,7 @@ pub fn create_router(state: AppState) -> Router {
     // These routes are for the end-user portal application
     // Auth routes are excluded from JWT middleware (login/register don't need auth)
     let mut portal_protected_routes = Router::new()
+        .nest("/auth", handlers::portal::auth::protected_router())
         .nest("/kyc", handlers::portal::kyc::router())
         .nest("/wallet", handlers::portal::wallet::router())
         .nest("/transactions", handlers::portal::transactions::router())

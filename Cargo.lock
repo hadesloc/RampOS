@@ -5162,6 +5162,7 @@ dependencies = [
  "hmac 0.12.1",
  "http-body-util",
  "jsonwebtoken",
+ "k256",
  "once_cell",
  "ramp-aa",
  "ramp-common",

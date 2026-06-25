@@ -846,6 +846,7 @@ async fn test_idempotency_middleware_scopes_portal_users_independently() {
         .extensions_mut()
         .insert(ramp_api::middleware::PortalUser {
             user_id: user_a,
+            financial_user_id: user_a,
             tenant_id,
             email: "a@example.com".to_string(),
         });
@@ -883,6 +884,7 @@ async fn test_idempotency_middleware_scopes_portal_users_independently() {
         .extensions_mut()
         .insert(ramp_api::middleware::PortalUser {
             user_id: user_b,
+            financial_user_id: user_b,
             tenant_id,
             email: "b@example.com".to_string(),
         });

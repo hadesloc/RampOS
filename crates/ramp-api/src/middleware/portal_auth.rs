@@ -46,8 +46,17 @@ fn default_token_type() -> String {
 #[derive(Debug, Clone)]
 pub struct PortalUser {
     pub user_id: Uuid,
+    pub financial_user_id: Uuid,
     pub tenant_id: Uuid,
     pub email: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct DecodedPortalClaims {
+    #[serde(flatten)]
+    claims: PortalClaims,
+    #[serde(default)]
+    financial_user_id: Option<String>,
 }
 
 /// Configuration for portal authentication
@@ -183,10 +192,11 @@ fn verify_jwt_token(token: &str, config: &PortalAuthConfig) -> Result<PortalUser
 
     // Decode the token
     let decoding_key = DecodingKey::from_secret(config.jwt_secret.as_bytes());
-    let token_data = decode::<PortalClaims>(token, &decoding_key, &validation)
+    let token_data = decode::<DecodedPortalClaims>(token, &decoding_key, &validation)
         .map_err(|e| format!("Invalid token: {}", e))?;
 
-    let claims = token_data.claims;
+    let decoded = token_data.claims;
+    let claims = decoded.claims;
 
     if claims.tenant_id.is_none() && !config.allow_missing_tenant {
         return Err("Tenant ID required".to_string());
@@ -200,6 +210,11 @@ fn verify_jwt_token(token: &str, config: &PortalAuthConfig) -> Result<PortalUser
     // Parse user_id from sub claim
     let user_id =
         Uuid::parse_str(&claims.sub).map_err(|_| "Invalid user ID in token".to_string())?;
+    let financial_user_id = match decoded.financial_user_id {
+        Some(id) => Uuid::parse_str(&id)
+            .map_err(|_| "Invalid financial user ID in token".to_string())?,
+        None => user_id,
+    };
 
     // Parse tenant_id (use default if not provided and allowed)
     let tenant_id = match &claims.tenant_id {
@@ -209,6 +224,7 @@ fn verify_jwt_token(token: &str, config: &PortalAuthConfig) -> Result<PortalUser
 
     Ok(PortalUser {
         user_id,
+        financial_user_id,
         tenant_id,
         email: claims.email,
     })
@@ -316,6 +332,43 @@ mod tests {
         assert_eq!(
             user.tenant_id.to_string(),
             "660e8400-e29b-41d4-a716-446655440001"
+        );
+        assert_eq!(user.financial_user_id, user.user_id);
+    }
+
+    #[test]
+    fn test_verify_token_with_explicit_financial_user_id() {
+        #[derive(Serialize)]
+        struct ExtendedClaims<'a> {
+            #[serde(flatten)]
+            claims: &'a PortalClaims,
+            financial_user_id: &'a str,
+        }
+
+        let config = create_test_config();
+        let now = Utc::now().timestamp();
+        let claims = PortalClaims {
+            sub: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            tenant_id: Some("660e8400-e29b-41d4-a716-446655440001".to_string()),
+            email: "test@example.com".to_string(),
+            iat: now,
+            exp: now + 3600,
+            token_type: "access".to_string(),
+        };
+        let token = encode(
+            &Header::default(),
+            &ExtendedClaims {
+                claims: &claims,
+                financial_user_id: "770e8400-e29b-41d4-a716-446655440002",
+            },
+            &EncodingKey::from_secret(config.jwt_secret.as_bytes()),
+        )
+        .unwrap();
+
+        let user = verify_jwt_token(&token, &config).unwrap();
+        assert_eq!(
+            user.financial_user_id.to_string(),
+            "770e8400-e29b-41d4-a716-446655440002"
         );
     }
 

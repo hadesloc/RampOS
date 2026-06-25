@@ -58,6 +58,8 @@ async fn unified_portal_identity_schema_is_installed() {
     )
     .await;
 
+    assert_table_columns(&pool, "portal_auth_nonces", &["purpose", "portal_user_id"]).await;
+
     for index_name in [
         "idx_portal_users_normalized_email",
         "idx_portal_users_wallet",
@@ -71,6 +73,8 @@ async fn unified_portal_identity_schema_is_installed() {
         ("portal_users", "portal_users_financial_user_fk"),
         ("portal_users", "portal_users_auth_methods_check"),
         ("refresh_tokens", "refresh_tokens_rotated_to_fk"),
+        ("portal_auth_nonces", "portal_auth_nonces_purpose_check"),
+        ("portal_auth_nonces", "portal_auth_nonces_portal_user_fk"),
     ] {
         assert_constraint_exists(&pool, table_name, constraint_name).await;
     }

@@ -7,6 +7,7 @@
 
 pub mod identity;
 pub mod password;
+pub mod siwe;
 
 use axum::{
     extract::State,
@@ -231,6 +232,12 @@ pub fn router() -> Router<AppState> {
         .route("/session", get(check_session))
 }
 
+pub fn protected_router() -> Router<AppState> {
+    Router::new()
+        .route("/wallet/link/nonce", post(siwe::wallet_link_nonce))
+        .route("/wallet/link/verify", post(siwe::wallet_link_verify))
+}
+
 // ============================================================================
 // WebAuthn stubs (unchanged from original)
 // ============================================================================
@@ -446,9 +453,26 @@ pub async fn wallet_verify(
         .as_ref()
         .ok_or_else(|| ApiError::Internal("Database not configured".to_string()))?;
 
-    // 1. Parse address and nonce from the SIWE message
-    let (msg_address, msg_nonce) = parse_siwe_message(&req.message)
+    let domain = std::env::var("PORTAL_SIWE_DOMAIN")
+        .unwrap_or_else(|_| "localhost:3000".to_string());
+    let uri = std::env::var("PORTAL_SIWE_URI")
+        .unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let chain_id = app_state
+        .aa_service
+        .as_ref()
+        .map(|aa| aa.chain_config.chain_id)
+        .unwrap_or(137);
+    let validation = siwe::SiweValidationConfig {
+        domain: domain.clone(),
+        uri,
+        chain_id,
+        max_age: Duration::minutes(10),
+        clock_skew: Duration::seconds(30),
+    };
+    let parsed = siwe::parse_and_validate_message(&req.message, &validation, Utc::now())
         .map_err(|e| ApiError::Unauthorized(format!("Invalid SIWE message: {}", e)))?;
+    let msg_address = parsed.address;
+    let msg_nonce = parsed.nonce;
 
     // 2. Decode hex signature (0x-prefixed 130-hex = 65 bytes)
     let sig_hex = req.signature.trim_start_matches("0x");
@@ -476,107 +500,53 @@ pub async fn wallet_verify(
         ));
     }
 
-    // 4. Validate nonce: must exist, match address, be unused, not expired
-    #[derive(sqlx::FromRow)]
-    struct NonceRow {
-        id: uuid::Uuid,
-        used_at: Option<chrono::DateTime<Utc>>,
-        expires_at: chrono::DateTime<Utc>,
-        address: String,
-    }
-
-    let nonce_row: Option<NonceRow> = sqlx::query_as(
-        "SELECT id, used_at, expires_at, address
-           FROM portal_auth_nonces
-          WHERE nonce = $1",
+    // Consume the nonce atomically so concurrent verification has one winner.
+    let consumed_nonce: Option<Uuid> = sqlx::query_scalar(
+        r#"
+        UPDATE portal_auth_nonces
+        SET used_at = NOW()
+        WHERE nonce = $1
+          AND lower(address) = $2
+          AND domain = $3
+          AND purpose = 'login'
+          AND portal_user_id IS NULL
+          AND used_at IS NULL
+          AND expires_at > NOW()
+        RETURNING id
+        "#,
     )
     .bind(&msg_nonce)
+    .bind(&msg_address)
+    .bind(&domain)
     .fetch_optional(pool)
     .await
     .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
 
-    let nonce_row = nonce_row
-        .ok_or_else(|| ApiError::Unauthorized("Unknown nonce".to_string()))?;
-
-    if nonce_row.address.to_lowercase() != msg_address {
-        return Err(ApiError::Unauthorized("Nonce address mismatch".to_string()));
-    }
-    if nonce_row.used_at.is_some() {
-        return Err(ApiError::Unauthorized("Nonce already used".to_string()));
-    }
-    if Utc::now() > nonce_row.expires_at {
-        return Err(ApiError::Unauthorized("Nonce expired".to_string()));
+    if consumed_nonce.is_none() {
+        return Err(ApiError::Unauthorized(
+            "Invalid, expired, or already used nonce".to_string(),
+        ));
     }
 
-    // 5. Mark nonce as used (single-use)
-    sqlx::query("UPDATE portal_auth_nonces SET used_at = NOW() WHERE id = $1")
-        .bind(nonce_row.id)
-        .execute(pool)
-        .await
-        .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
-
-    // 6. Upsert portal user by (portal_tenant, lower(wallet_address))
     let portal_tenant_id = std::env::var("PORTAL_TENANT_ID")
         .unwrap_or_else(|_| PORTAL_TENANT_ID_DEFAULT.to_string());
-
-    #[derive(sqlx::FromRow)]
-    struct UserRow {
-        id: String,
-        kyc_status: String,
-        kyc_tier: i16,
-        status: String,
-        created_at: chrono::DateTime<Utc>,
+    let identity = identity::resolve_or_create_wallet_identity(
+        pool,
+        &portal_tenant_id,
+        &msg_address,
+    )
+    .await
+    .map_err(|e| ApiError::Internal(format!("Failed to resolve wallet identity: {}", e)))?;
+    if identity.status != "ACTIVE" {
+        return Err(ApiError::Unauthorized(
+            "Wallet identity is not active".to_string(),
+        ));
     }
 
-    // Try to find existing user
-    let existing: Option<UserRow> = sqlx::query_as(
-        "SELECT id, kyc_status, kyc_tier, status, created_at
-           FROM users
-          WHERE tenant_id = $1
-            AND lower(wallet_address) = lower($2)",
-    )
-    .bind(&portal_tenant_id)
-    .bind(&msg_address)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
-
-    let user_row = if let Some(u) = existing {
-        u
-    } else {
-        // Create new portal user
-        let new_id = Uuid::new_v4().to_string();
-        let now = Utc::now();
-        sqlx::query(
-            "INSERT INTO users (
-                id, tenant_id, kyc_tier, kyc_status, status,
-                risk_flags, created_at, updated_at,
-                email, wallet_address, auth_method
-             ) VALUES ($1, $2, 0, 'PENDING', 'ACTIVE',
-                       '[]'::jsonb, $3, $3,
-                       '', $4, 'wallet')",
-        )
-        .bind(&new_id)
-        .bind(&portal_tenant_id)
-        .bind(now)
-        .bind(&msg_address)
-        .execute(pool)
-        .await
-        .map_err(|e| ApiError::Internal(format!("Failed to create portal user: {}", e)))?;
-
-        UserRow {
-            id: new_id,
-            kyc_status: "PENDING".to_string(),
-            kyc_tier: 0,
-            status: "ACTIVE".to_string(),
-            created_at: now,
-        }
-    };
-
-    // 7. Provision AA smart account (owner = wallet address)
+    // Provision AA smart account against the linked financial identity.
     if let Some(ref aa_service) = app_state.aa_service {
         let tenant_id = TenantId::new(&portal_tenant_id);
-        let user_id = UserId::new(&user_row.id);
+        let user_id = UserId::new(&identity.financial_user_id);
 
         // Parse wallet address as alloy Address
         let owner_addr: alloy_primitives::Address = recovered;
@@ -590,7 +560,7 @@ pub async fn wallet_verify(
                 if let Some(ref repo) = aa_service.smart_account_repo {
                     let create_req = CreateSmartAccountRequest {
                         tenant_id: portal_tenant_id.clone(),
-                        user_id: user_row.id.clone(),
+                        user_id: identity.financial_user_id.clone(),
                         address: format!("{:?}", account.address),
                         owner_address: format!("{:?}", account.owner),
                         account_type: format!("{:?}", account.account_type),
@@ -615,67 +585,12 @@ pub async fn wallet_verify(
         }
     }
 
-    // 8. Mint access JWT + opaque refresh token
-    let now = Utc::now();
-    let access_exp = now + Duration::seconds(ACCESS_TOKEN_EXPIRY_SECS);
-    let access_claims = PortalClaims {
-        sub: user_row.id.clone(),
-        tenant_id: Some(portal_tenant_id.clone()),
-        email: String::new(),
-        iat: now.timestamp(),
-        exp: access_exp.timestamp(),
-        token_type: "access".to_string(),
-    };
-
-    let jwt_secret = app_state.portal_auth_config.jwt_secret.clone();
-    let access_token = encode(
-        &Header::default(),
-        &access_claims,
-        &EncodingKey::from_secret(jwt_secret.as_bytes()),
-    )
-    .map_err(|e| ApiError::Internal(format!("Failed to create access token: {}", e)))?;
-
-    // Opaque refresh token — store sha256 hash in refresh_tokens table
-    let refresh_raw = format!("prt_{}", Uuid::new_v4());
-    let refresh_hash = sha256_bytes(refresh_raw.as_bytes());
-    let refresh_exp = now + Duration::seconds(REFRESH_TOKEN_EXPIRY_SECS);
-    let family_id = Uuid::new_v4();
-
-    sqlx::query(
-        "INSERT INTO refresh_tokens (token_hash, user_id, expires_at, family_id)
-         VALUES ($1, $2, $3, $4)",
-    )
-    .bind(&refresh_hash)
-    .bind(&user_row.id)
-    .bind(refresh_exp)
-    .bind(family_id)
-    .execute(pool)
-    .await
-    .map_err(|e| ApiError::Internal(format!("Failed to store refresh token: {}", e)))?;
-
-    // 9. Set cookies
-    let is_production = std::env::var("RAMPOS_ENV").map(|v| v == "production").unwrap_or(false);
-    let jar = set_auth_cookies(jar, &access_token, &refresh_raw, is_production);
-
-    let auth_user = AuthUser {
-        id: user_row.id.clone(),
-        email: String::new(),
-        kyc_status: user_row.kyc_status,
-        kyc_tier: user_row.kyc_tier as i32,
-        status: user_row.status,
-        created_at: user_row.created_at.to_rfc3339(),
-        wallet_address: msg_address,
-    };
-
-    info!(user_id = %user_row.id, "Portal wallet login successful");
-
-    Ok((
-        jar,
-        Json(AuthResponse {
-            user: auth_user,
-            expires_at: access_exp.timestamp(),
-        }),
-    ))
+    info!(
+        portal_user_id = %identity.portal_user_id,
+        financial_user_id = %identity.financial_user_id,
+        "Portal wallet login successful"
+    );
+    password::issue_session(&app_state, jar, &identity).await
 }
 
 // ============================================================================
@@ -955,37 +870,6 @@ async fn build_auth_user_from_claims(claims: &PortalClaims, app_state: &AppState
     }
 }
 
-/// Parse `address` and `nonce` from a raw EIP-4361 SIWE message.
-///
-/// Expected layout:
-/// ```text
-/// {domain} wants you to sign in with your Ethereum account:
-/// {address}
-///
-/// ...
-/// Nonce: {nonce}
-/// ...
-/// ```
-fn parse_siwe_message(message: &str) -> Result<(String, String), String> {
-    let lines: Vec<&str> = message.lines().collect();
-
-    // Line 1 is the address after the "wants you to sign in" line.
-    let address = lines
-        .get(1)
-        .map(|s| s.trim().to_lowercase())
-        .filter(|s| s.starts_with("0x") && s.len() == 42)
-        .ok_or_else(|| "Cannot parse Ethereum address from SIWE message".to_string())?;
-
-    // Find "Nonce: " line
-    let nonce = lines
-        .iter()
-        .find_map(|l| l.trim().strip_prefix("Nonce: "))
-        .map(|s| s.trim().to_string())
-        .ok_or_else(|| "Cannot parse Nonce from SIWE message".to_string())?;
-
-    Ok((address, nonce))
-}
-
 fn set_auth_cookies(jar: CookieJar, access_token: &str, refresh_token: &str, secure: bool) -> CookieJar {
     let mut auth = Cookie::build((AUTH_COOKIE_NAME.to_string(), access_token.to_string()))
         .path("/")
@@ -1084,30 +968,4 @@ mod tests {
         assert!(nonce.chars().all(|c| c.is_ascii_alphanumeric()));
     }
 
-    #[test]
-    fn test_parse_siwe_message_valid() {
-        let msg = "localhost:3000 wants you to sign in with your Ethereum account:\n\
-                   0xabcdef1234567890abcdef1234567890abcdef12\n\
-                   \n\
-                   Sign in to RampOS Portal.\n\
-                   \n\
-                   URI: http://localhost:3000\n\
-                   Version: 1\n\
-                   Chain ID: 137\n\
-                   Nonce: AbCdEfGhIjKlMnOp\n\
-                   Issued At: 2025-01-01T00:00:00Z";
-
-        let (addr, nonce) = parse_siwe_message(msg).unwrap();
-        assert_eq!(addr, "0xabcdef1234567890abcdef1234567890abcdef12");
-        assert_eq!(nonce, "AbCdEfGhIjKlMnOp");
-    }
-
-    #[test]
-    fn test_parse_siwe_message_missing_nonce() {
-        let msg = "localhost:3000 wants you to sign in with your Ethereum account:\n\
-                   0xabcdef1234567890abcdef1234567890abcdef12\n\
-                   \n\
-                   Sign in to RampOS Portal.";
-        assert!(parse_siwe_message(msg).is_err());
-    }
 }

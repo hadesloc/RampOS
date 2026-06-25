@@ -55,6 +55,7 @@ hmac = "0.12"
 subtle = "2.5"
 http-body-util = "0.1"
 futures = "0.3"
+k256 = { version = "0.13", features = ["ecdsa", "ecdsa-core"] }
 
 # OpenAPI documentation
 utoipa = { version = "4", features = ["axum_extras", "chrono", "uuid", "decimal"] }

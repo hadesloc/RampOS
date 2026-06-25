@@ -248,3 +248,102 @@ pub async fn resolve_or_create_wallet_identity(
         .await?
         .ok_or(sqlx::Error::RowNotFound)
 }
+
+pub async fn link_wallet_to_identity(
+    pool: &PgPool,
+    tenant_id: &str,
+    portal_user_id: &str,
+    wallet_address: &str,
+) -> Result<PortalIdentity, sqlx::Error> {
+    let normalized_wallet = normalize_wallet(wallet_address);
+    let mut tx = pool.begin().await?;
+
+    let financial_user_id: String = sqlx::query_scalar(
+        r#"
+        SELECT financial_user_id
+        FROM portal_users
+        WHERE tenant_id = $1 AND id = $2
+        FOR UPDATE
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(portal_user_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let owned_elsewhere: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS (
+            SELECT 1
+            FROM portal_users
+            WHERE tenant_id = $1
+              AND lower(wallet_address) = $2
+              AND id <> $3
+        ) OR EXISTS (
+            SELECT 1
+            FROM users
+            WHERE tenant_id = $1
+              AND lower(wallet_address) = $2
+              AND id <> $4
+        )
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(&normalized_wallet)
+    .bind(portal_user_id)
+    .bind(&financial_user_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if owned_elsewhere {
+        return Err(sqlx::Error::Protocol(
+            "wallet address is already linked".to_string(),
+        ));
+    }
+
+    sqlx::query(
+        r#"
+        UPDATE portal_users
+        SET
+            wallet_address = $1,
+            auth_methods = (
+                SELECT ARRAY(
+                    SELECT DISTINCT method
+                    FROM unnest(auth_methods || ARRAY['wallet']::TEXT[]) AS method
+                    ORDER BY method
+                )
+            ),
+            updated_at = NOW()
+        WHERE tenant_id = $2 AND id = $3
+        "#,
+    )
+    .bind(&normalized_wallet)
+    .bind(tenant_id)
+    .bind(portal_user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET
+            wallet_address = $1,
+            auth_method = CASE
+                WHEN auth_method = 'password' THEN 'password+wallet'
+                ELSE 'wallet'
+            END,
+            updated_at = NOW()
+        WHERE tenant_id = $2 AND id = $3
+        "#,
+    )
+    .bind(&normalized_wallet)
+    .bind(tenant_id)
+    .bind(&financial_user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    find_identity_by_wallet(pool, tenant_id, &normalized_wallet)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)
+}

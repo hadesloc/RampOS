@@ -8,7 +8,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use rand::RngCore;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::OnceLock;
 use tracing::{info, warn};
@@ -185,7 +185,7 @@ fn dummy_password_hash() -> &'static str {
         .as_str()
 }
 
-async fn issue_session(
+pub(super) async fn issue_session(
     app_state: &AppState,
     jar: CookieJar,
     identity: &PortalIdentity,
@@ -204,9 +204,19 @@ async fn issue_session(
         exp: access_exp.timestamp(),
         token_type: "access".to_string(),
     };
+    #[derive(Serialize)]
+    struct SessionClaims<'a> {
+        #[serde(flatten)]
+        claims: &'a PortalClaims,
+        financial_user_id: &'a str,
+    }
+    let session_claims = SessionClaims {
+        claims: &claims,
+        financial_user_id: &identity.financial_user_id,
+    };
     let access_token = encode(
         &Header::default(),
-        &claims,
+        &session_claims,
         &EncodingKey::from_secret(app_state.portal_auth_config.jwt_secret.as_bytes()),
     )
     .map_err(|error| ApiError::Internal(format!("Failed to create access token: {error}")))?;
