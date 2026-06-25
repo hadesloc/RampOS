@@ -952,18 +952,18 @@ async fn build_auth_user_from_claims(claims: &PortalClaims, app_state: &AppState
 /// Parse `address` and `nonce` from a raw EIP-4361 SIWE message.
 ///
 /// Expected layout:
-/// ```
+/// ```text
 /// {domain} wants you to sign in with your Ethereum account:
 /// {address}
 ///
-/// …
+/// ...
 /// Nonce: {nonce}
-/// …
+/// ...
 /// ```
 fn parse_siwe_message(message: &str) -> Result<(String, String), String> {
     let lines: Vec<&str> = message.lines().collect();
 
-    // Line 1 is the address (0-indexed line after "…wants you to sign in…" on line 0)
+    // Line 1 is the address after the "wants you to sign in" line.
     let address = lines
         .get(1)
         .map(|s| s.trim().to_lowercase())

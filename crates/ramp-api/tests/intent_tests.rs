@@ -3,6 +3,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use chrono::Utc;
+use hmac::{Hmac, Mac};
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{
@@ -22,6 +23,21 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use tower::ServiceExt;
 
+fn signed_get(path: &str, api_key: &str, api_secret: &str) -> Request<Body> {
+    let timestamp = Utc::now().timestamp().to_string();
+    let message = format!("GET\n{path}\n{timestamp}\n");
+    let mut mac = Hmac::<Sha256>::new_from_slice(api_secret.as_bytes()).unwrap();
+    mac.update(message.as_bytes());
+    Request::builder()
+        .uri(path)
+        .method("GET")
+        .header("Authorization", format!("Bearer {api_key}"))
+        .header("X-Timestamp", timestamp)
+        .header("X-Signature", hex::encode(mac.finalize().into_bytes()))
+        .body(Body::empty())
+        .unwrap()
+}
+
 #[tokio::test]
 async fn test_get_intent_endpoint() {
     // Setup repositories
@@ -33,6 +49,7 @@ async fn test_get_intent_endpoint() {
 
     // Setup tenant
     let api_key = "test_api_key";
+    let api_secret = "test_api_secret";
     let mut hasher = Sha256::new();
     hasher.update(api_key.as_bytes());
     let api_key_hash = hex::encode(hasher.finalize());
@@ -42,7 +59,7 @@ async fn test_get_intent_endpoint() {
         name: "Test Tenant".to_string(),
         status: "ACTIVE".to_string(),
         api_key_hash: api_key_hash.clone(),
-        api_secret_encrypted: None,
+        api_secret_encrypted: Some(api_secret.as_bytes().to_vec()),
         webhook_secret_hash: "secret".to_string(),
         webhook_secret_encrypted: None,
         webhook_url: None,
@@ -175,12 +192,8 @@ async fn test_get_intent_endpoint() {
     let app = create_router(app_state);
 
     // Test GET /v1/intents/:id
-    let request = Request::builder()
-        .uri(format!("/v1/intents/{}", intent_id))
-        .method("GET")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .body(Body::empty())
-        .unwrap();
+    let path = format!("/v1/intents/{intent_id}");
+    let request = signed_get(&path, api_key, api_secret);
 
     let response = app.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -209,6 +222,7 @@ async fn test_get_intent_not_found() {
 
     // Setup tenant
     let api_key = "test_api_key";
+    let api_secret = "test_api_secret";
     let mut hasher = Sha256::new();
     hasher.update(api_key.as_bytes());
     let api_key_hash = hex::encode(hasher.finalize());
@@ -218,7 +232,7 @@ async fn test_get_intent_not_found() {
         name: "Test Tenant".to_string(),
         status: "ACTIVE".to_string(),
         api_key_hash: api_key_hash.clone(),
-        api_secret_encrypted: None,
+        api_secret_encrypted: Some(api_secret.as_bytes().to_vec()),
         webhook_secret_hash: "secret".to_string(),
         webhook_secret_encrypted: None,
         webhook_url: None,
@@ -320,12 +334,7 @@ async fn test_get_intent_not_found() {
     let app = create_router(app_state);
 
     // Test GET /v1/intents/:id - Non existent
-    let request = Request::builder()
-        .uri("/v1/intents/non_existent")
-        .method("GET")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .body(Body::empty())
-        .unwrap();
+    let request = signed_get("/v1/intents/non_existent", api_key, api_secret);
 
     let response = app.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -342,6 +351,7 @@ async fn test_get_intent_wrong_tenant() {
 
     // Setup tenant 1
     let api_key1 = "key1";
+    let api_secret1 = "secret1";
     let mut hasher1 = Sha256::new();
     hasher1.update(api_key1.as_bytes());
     let api_key_hash1 = hex::encode(hasher1.finalize());
@@ -351,7 +361,7 @@ async fn test_get_intent_wrong_tenant() {
         name: "Tenant 1".to_string(),
         status: "ACTIVE".to_string(),
         api_key_hash: api_key_hash1,
-        api_secret_encrypted: None,
+        api_secret_encrypted: Some(api_secret1.as_bytes().to_vec()),
         webhook_secret_hash: "s1".to_string(),
         webhook_secret_encrypted: None,
         webhook_url: None,
@@ -365,6 +375,7 @@ async fn test_get_intent_wrong_tenant() {
 
     // Setup tenant 2
     let api_key2 = "key2";
+    let api_secret2 = "secret2";
     let mut hasher2 = Sha256::new();
     hasher2.update(api_key2.as_bytes());
     let api_key_hash2 = hex::encode(hasher2.finalize());
@@ -374,7 +385,7 @@ async fn test_get_intent_wrong_tenant() {
         name: "Tenant 2".to_string(),
         status: "ACTIVE".to_string(),
         api_key_hash: api_key_hash2,
-        api_secret_encrypted: None,
+        api_secret_encrypted: Some(api_secret2.as_bytes().to_vec()),
         webhook_secret_hash: "s2".to_string(),
         webhook_secret_encrypted: None,
         webhook_url: None,
@@ -505,12 +516,7 @@ async fn test_get_intent_wrong_tenant() {
     let app = create_router(app_state);
 
     // Test GET /v1/intents/intent_t1 with Tenant 2 Key
-    let request = Request::builder()
-        .uri("/v1/intents/intent_t1")
-        .method("GET")
-        .header("Authorization", format!("Bearer {}", api_key2))
-        .body(Body::empty())
-        .unwrap();
+    let request = signed_get("/v1/intents/intent_t1", api_key2, api_secret2);
 
     let response = app.clone().oneshot(request).await.unwrap();
     // Should be Not Found because repository filters by tenant_id

@@ -228,32 +228,35 @@ impl IntentRepository for MockIntentRepository {
         Ok(())
     }
 
-    async fn get_by_id(&self, _tenant_id: &TenantId, id: &IntentId) -> Result<Option<IntentRow>> {
+    async fn get_by_id(&self, tenant_id: &TenantId, id: &IntentId) -> Result<Option<IntentRow>> {
         let intents = self.intents.lock().unwrap();
-        Ok(intents.iter().find(|i| i.id == id.0).cloned())
+        Ok(intents
+            .iter()
+            .find(|i| i.tenant_id == tenant_id.0 && i.id == id.0)
+            .cloned())
     }
 
     async fn get_by_idempotency_key(
         &self,
-        _tenant_id: &TenantId,
+        tenant_id: &TenantId,
         key: &IdempotencyKey,
     ) -> Result<Option<IntentRow>> {
         let intents = self.intents.lock().unwrap();
         Ok(intents
             .iter()
-            .find(|i| i.idempotency_key == Some(key.0.clone()))
+            .find(|i| i.tenant_id == tenant_id.0 && i.idempotency_key == Some(key.0.clone()))
             .cloned())
     }
 
     async fn get_by_reference_code(
         &self,
-        _tenant_id: &TenantId,
+        tenant_id: &TenantId,
         code: &ReferenceCode,
     ) -> Result<Option<IntentRow>> {
         let intents = self.intents.lock().unwrap();
         Ok(intents
             .iter()
-            .find(|i| i.reference_code == Some(code.0.clone()))
+            .find(|i| i.tenant_id == tenant_id.0 && i.reference_code == Some(code.0.clone()))
             .cloned())
     }
 

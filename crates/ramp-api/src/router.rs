@@ -878,17 +878,19 @@ pub fn create_router(state: AppState) -> Router {
         ));
     }
 
-    portal_protected_routes = portal_protected_routes.layer(middleware::from_fn_with_state(
-        state.portal_auth_config.clone(),
-        portal_auth_middleware,
-    ));
-
     if let Some(ref limiter) = state.rate_limiter {
         portal_protected_routes = portal_protected_routes.layer(middleware::from_fn_with_state(
             limiter.clone(),
             rate_limit_middleware,
         ));
     }
+
+    // JWT authentication must run first so rate limiting and idempotency can
+    // scope requests by portal tenant and user.
+    portal_protected_routes = portal_protected_routes.layer(middleware::from_fn_with_state(
+        state.portal_auth_config.clone(),
+        portal_auth_middleware,
+    ));
 
     // Chain routes (auth required)
     let chain_routes = Router::new()
@@ -931,10 +933,6 @@ pub fn create_router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(
             state.clone(),
             usage_metering_middleware,
-        ))
-        .layer(middleware::from_fn_with_state(
-            state.tenant_repo.clone(),
-            auth_middleware,
         ));
 
     // Add rate limiting if available
@@ -954,6 +952,13 @@ pub fn create_router(state: AppState) -> Router {
             idempotency_middleware,
         ));
     }
+
+    // Authentication must be the outer layer so tenant-scoped middleware
+    // receives TenantContext before applying limits or idempotency keys.
+    api_v1 = api_v1.layer(middleware::from_fn_with_state(
+        state.tenant_repo.clone(),
+        auth_middleware,
+    ));
 
     // Bank webhook routes (no tenant auth required - uses provider-specific signature verification)
     // POST /v1/webhooks/bank/:provider - receives bank confirmations for pay-ins
