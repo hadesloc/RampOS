@@ -5,6 +5,8 @@
 //! - Wallet login (SIWE / personal_sign) is fully wired.
 //! - Session endpoints (`/session`, `/me`, `/refresh`, `/logout`) are wired to the DB + JWT.
 
+pub mod identity;
+
 use axum::{
     extract::State,
     routing::{get, post},
