@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use crate::error::ApiError;
+use crate::handlers::portal::auth::audit;
 use crate::middleware::PortalUser;
 use crate::router::AppState;
 
@@ -47,18 +48,8 @@ pub struct UpdateProfileResponse {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WebAuthnCredentialInfo {
-    pub id: String,
-    pub name: String,
-    pub created_at: String,
-    pub last_used_at: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SecurityResponse {
     pub two_factor_enabled: bool,
-    pub webauthn_credentials: Vec<WebAuthnCredentialInfo>,
     pub last_password_change: Option<String>,
 }
 
@@ -265,28 +256,8 @@ pub async fn get_security(
 
     let (two_factor_enabled, last_password_change) = user_row.unwrap_or((false, None));
 
-    // Get WebAuthn credentials
-    let creds: Vec<(String, Option<String>, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
-        "SELECT id::text, credential_name, created_at, last_used_at FROM webauthn_credentials WHERE user_id = $1",
-    )
-    .bind(&user_id)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default();
-
-    let webauthn_credentials = creds
-        .into_iter()
-        .map(|(id, name, created, last_used)| WebAuthnCredentialInfo {
-            id,
-            name: name.unwrap_or_else(|| "Passkey".to_string()),
-            created_at: created.to_rfc3339(),
-            last_used_at: last_used.map(|d| d.to_rfc3339()),
-        })
-        .collect();
-
     Ok(Json(SecurityResponse {
         two_factor_enabled,
-        webauthn_credentials,
         last_password_change: last_password_change.map(|d| d.to_rfc3339()),
     }))
 }
@@ -341,7 +312,7 @@ pub async fn update_security(
             .verify_password(req.current_password.as_bytes(), &parsed)
             .map_err(|_| ApiError::BadRequest("Current password is incorrect".to_string()))?;
     } else {
-        // No password set (WebAuthn-only account) - current_password must be empty
+        // Wallet-only accounts can establish a password without a current password.
         if !req.current_password.is_empty() {
             return Err(ApiError::BadRequest(
                 "Current password is incorrect".to_string(),
@@ -397,6 +368,15 @@ pub async fn update_security(
         warn!(error = %e, "Failed to revoke sessions after password change");
         ApiError::Internal("Password changed but session revocation failed".to_string())
     })?;
+    let tenant_id = portal_user.tenant_id.to_string();
+    audit::record(
+        pool,
+        &tenant_id,
+        Some(&user_id),
+        "PORTAL_PASSWORD_CHANGED",
+        serde_json::json!({"sessions_revoked": true}),
+    )
+    .await;
 
     info!(user_id = %user_id, "Password updated successfully");
 
@@ -512,17 +492,11 @@ mod tests {
     fn test_security_response_serialization() {
         let resp = SecurityResponse {
             two_factor_enabled: false,
-            webauthn_credentials: vec![WebAuthnCredentialInfo {
-                id: "cred-1".to_string(),
-                name: "My Passkey".to_string(),
-                created_at: "2024-01-01T00:00:00Z".to_string(),
-                last_used_at: None,
-            }],
             last_password_change: Some("2024-06-01T12:00:00Z".to_string()),
         };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("\"twoFactorEnabled\":false"));
-        assert!(json.contains("\"webauthnCredentials\""));
+        assert!(!json.contains("webauthn"));
         assert!(json.contains("\"lastPasswordChange\""));
     }
 

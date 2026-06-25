@@ -1,10 +1,8 @@
 //! Portal Authentication Handlers
 //!
-//! Endpoints for portal authentication.
-//! - WebAuthn and magic-link remain fail-closed stubs (no native backend on Windows).
-//! - Wallet login (SIWE / personal_sign) is fully wired.
-//! - Session endpoints (`/session`, `/me`, `/refresh`, `/logout`) are wired to the DB + JWT.
+//! Core portal authentication supports email/password and wallet SIWE.
 
+pub mod audit;
 pub mod identity;
 pub mod password;
 pub mod session;
@@ -24,7 +22,6 @@ use ramp_core::repository::CreateSmartAccountRequest;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 use uuid::Uuid;
-use validator::Validate;
 
 use crate::error::ApiError;
 use crate::middleware::PortalClaims;
@@ -68,111 +65,6 @@ pub struct AuthResponse {
     pub expires_at: i64,
 }
 
-// ---- WebAuthn DTOs (unchanged stubs) ----
-
-#[derive(Debug, Clone, Deserialize, Validate)]
-#[serde(rename_all = "camelCase")]
-pub struct WebAuthnChallengeRequest {
-    #[validate(email(message = "Invalid email address"))]
-    pub email: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WebAuthnChallenge {
-    pub challenge: String,
-    pub rp_id: String,
-    pub rp_name: String,
-    pub user_id: String,
-    pub user_name: String,
-    pub user_display_name: String,
-    pub timeout: u32,
-    pub attestation: String,
-    pub authenticator_selection: AuthenticatorSelection,
-    pub pub_key_cred_params: Vec<PubKeyCredParam>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub exclude_credentials: Vec<CredentialDescriptor>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AuthenticatorSelection {
-    pub authenticator_attachment: Option<String>,
-    pub resident_key: String,
-    pub user_verification: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PubKeyCredParam {
-    #[serde(rename = "type")]
-    pub credential_type: String,
-    pub alg: i32,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CredentialDescriptor {
-    pub id: String,
-    #[serde(rename = "type")]
-    pub credential_type: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub transports: Vec<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WebAuthnCredentialResponse {
-    pub id: String,
-    pub raw_id: String,
-    #[serde(rename = "type")]
-    pub credential_type: String,
-    pub response: WebAuthnAuthenticatorResponse,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WebAuthnAuthenticatorResponse {
-    pub client_data_json: String,
-    pub attestation_object: Option<String>,
-    pub authenticator_data: Option<String>,
-    pub signature: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Validate)]
-#[serde(rename_all = "camelCase")]
-pub struct WebAuthnRegisterCompleteRequest {
-    #[validate(email(message = "Invalid email address"))]
-    pub email: String,
-    pub credential: WebAuthnCredentialResponse,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WebAuthnLoginCompleteRequest {
-    pub credential: WebAuthnCredentialResponse,
-}
-
-#[derive(Debug, Clone, Deserialize, Validate)]
-#[serde(rename_all = "camelCase")]
-pub struct MagicLinkRequest {
-    #[validate(email(message = "Invalid email address"))]
-    pub email: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MagicLinkResponse {
-    pub message: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Validate)]
-#[serde(rename_all = "camelCase")]
-pub struct MagicLinkVerifyRequest {
-    #[validate(length(min = 1, message = "Token is required"))]
-    pub token: String,
-}
-
 // ---- Wallet SIWE DTOs ----
 
 #[derive(Debug, Clone, Deserialize)]
@@ -214,14 +106,6 @@ pub fn router() -> Router<AppState> {
         // Core password authentication
         .route("/register", post(password::register))
         .route("/login", post(password::login))
-        // WebAuthn endpoints (stubs)
-        .route("/webauthn/register/challenge", post(webauthn_register_challenge))
-        .route("/webauthn/register/complete", post(webauthn_register_complete))
-        .route("/webauthn/login/challenge", post(webauthn_login_challenge))
-        .route("/webauthn/login/complete", post(webauthn_login_complete))
-        // Magic link endpoints (stubs)
-        .route("/magic-link", post(request_magic_link))
-        .route("/magic-link/verify", post(verify_magic_link))
         // Wallet SIWE endpoints
         .route("/wallet/nonce", post(wallet_nonce))
         .route("/wallet/verify", post(wallet_verify))
@@ -237,121 +121,6 @@ pub fn protected_router() -> Router<AppState> {
         .route("/wallet/link/nonce", post(siwe::wallet_link_nonce))
         .route("/wallet/link/verify", post(siwe::wallet_link_verify))
         .route("/logout-all", post(session::logout_all))
-}
-
-// ============================================================================
-// WebAuthn stubs (unchanged from original)
-// ============================================================================
-
-pub async fn webauthn_register_challenge(
-    State(_app_state): State<AppState>,
-    Json(req): Json<WebAuthnChallengeRequest>,
-) -> Result<Json<WebAuthnChallenge>, ApiError> {
-    req.validate().map_err(|e| ApiError::Validation(e.to_string()))?;
-    info!(email = %req.email, "WebAuthn registration challenge requested");
-
-    let challenge = base64_url_encode(&generate_random_bytes(32));
-    let user_id = Uuid::new_v4().to_string();
-
-    Ok(Json(WebAuthnChallenge {
-        challenge,
-        rp_id: std::env::var("WEBAUTHN_RP_ID").unwrap_or_else(|_| "localhost".to_string()),
-        rp_name: std::env::var("WEBAUTHN_RP_NAME")
-            .unwrap_or_else(|_| "RampOS Portal".to_string()),
-        user_id: base64_url_encode(user_id.as_bytes()),
-        user_name: req.email.clone(),
-        user_display_name: req.email.split('@').next().unwrap_or(&req.email).to_string(),
-        timeout: 60000,
-        attestation: "none".to_string(),
-        authenticator_selection: AuthenticatorSelection {
-            authenticator_attachment: Some("platform".to_string()),
-            resident_key: "preferred".to_string(),
-            user_verification: "required".to_string(),
-        },
-        pub_key_cred_params: vec![
-            PubKeyCredParam { credential_type: "public-key".to_string(), alg: -7 },
-            PubKeyCredParam { credential_type: "public-key".to_string(), alg: -257 },
-        ],
-        exclude_credentials: vec![],
-    }))
-}
-
-pub async fn webauthn_register_complete(
-    State(_app_state): State<AppState>,
-    _jar: CookieJar,
-    Json(req): Json<WebAuthnRegisterCompleteRequest>,
-) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
-    req.validate().map_err(|e| ApiError::Validation(e.to_string()))?;
-    info!(email = %req.email, credential_id = %req.credential.id, "WebAuthn registration completion not implemented");
-    Err(ApiError::Unauthorized(
-        "WebAuthn registration completion is not available".to_string(),
-    ))
-}
-
-pub async fn webauthn_login_challenge(
-    State(_app_state): State<AppState>,
-    Json(req): Json<Option<WebAuthnChallengeRequest>>,
-) -> Result<Json<WebAuthnChallenge>, ApiError> {
-    let email = req.map(|r| r.email).unwrap_or_default();
-    info!(email = %email, "WebAuthn login challenge requested");
-
-    let challenge = base64_url_encode(&generate_random_bytes(32));
-
-    Ok(Json(WebAuthnChallenge {
-        challenge,
-        rp_id: std::env::var("WEBAUTHN_RP_ID").unwrap_or_else(|_| "localhost".to_string()),
-        rp_name: std::env::var("WEBAUTHN_RP_NAME")
-            .unwrap_or_else(|_| "RampOS Portal".to_string()),
-        user_id: String::new(),
-        user_name: email.clone(),
-        user_display_name: email.split('@').next().unwrap_or(&email).to_string(),
-        timeout: 60000,
-        attestation: "none".to_string(),
-        authenticator_selection: AuthenticatorSelection {
-            authenticator_attachment: None,
-            resident_key: "preferred".to_string(),
-            user_verification: "required".to_string(),
-        },
-        pub_key_cred_params: vec![
-            PubKeyCredParam { credential_type: "public-key".to_string(), alg: -7 },
-            PubKeyCredParam { credential_type: "public-key".to_string(), alg: -257 },
-        ],
-        exclude_credentials: vec![],
-    }))
-}
-
-pub async fn webauthn_login_complete(
-    State(_app_state): State<AppState>,
-    _jar: CookieJar,
-    Json(req): Json<WebAuthnLoginCompleteRequest>,
-) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
-    info!(credential_id = %req.credential.id, "WebAuthn login completion not implemented");
-    Err(ApiError::Unauthorized(
-        "WebAuthn login completion is not available".to_string(),
-    ))
-}
-
-pub async fn request_magic_link(
-    State(_app_state): State<AppState>,
-    Json(req): Json<MagicLinkRequest>,
-) -> Result<Json<MagicLinkResponse>, ApiError> {
-    req.validate().map_err(|e| ApiError::Validation(e.to_string()))?;
-    info!(email = %req.email, "Magic link requested");
-    Ok(Json(MagicLinkResponse {
-        message: "If an account exists with this email, a login link has been sent.".to_string(),
-    }))
-}
-
-pub async fn verify_magic_link(
-    State(_app_state): State<AppState>,
-    _jar: CookieJar,
-    Json(req): Json<MagicLinkVerifyRequest>,
-) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
-    req.validate().map_err(|e| ApiError::Validation(e.to_string()))?;
-    info!("Magic link verification not implemented");
-    Err(ApiError::Unauthorized(
-        "Magic link verification is not available".to_string(),
-    ))
 }
 
 // ============================================================================
@@ -591,7 +360,16 @@ pub async fn wallet_verify(
         financial_user_id = %identity.financial_user_id,
         "Portal wallet login successful"
     );
-    session::issue_session(&app_state, jar, &identity).await
+    let response = session::issue_session(&app_state, jar, &identity).await?;
+    audit::record(
+        pool,
+        &identity.tenant_id,
+        Some(&identity.portal_user_id),
+        "PORTAL_LOGIN_SUCCEEDED",
+        serde_json::json!({"method": "siwe"}),
+    )
+    .await;
+    Ok(response)
 }
 
 // ============================================================================
@@ -777,17 +555,6 @@ fn generate_base62_nonce(len: usize) -> String {
         .collect()
 }
 
-fn generate_random_bytes(len: usize) -> Vec<u8> {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    (0..len).map(|_| rng.gen()).collect()
-}
-
-fn base64_url_encode(data: &[u8]) -> String {
-    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-    URL_SAFE_NO_PAD.encode(data)
-}
-
 // ============================================================================
 // Tests
 // ============================================================================
@@ -795,21 +562,6 @@ fn base64_url_encode(data: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_base64_url_encode() {
-        let data = b"hello world";
-        let encoded = base64_url_encode(data);
-        assert!(!encoded.contains('+'));
-        assert!(!encoded.contains('/'));
-        assert!(!encoded.contains('='));
-    }
-
-    #[test]
-    fn test_generate_random_bytes() {
-        let bytes = generate_random_bytes(32);
-        assert_eq!(bytes.len(), 32);
-    }
 
     #[test]
     fn test_base62_nonce_length() {

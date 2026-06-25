@@ -7,7 +7,8 @@ use uuid::Uuid;
 
 use super::identity::link_wallet_to_identity;
 use super::{
-    generate_base62_nonce, AuthUser, WalletNonceRequest, WalletNonceResponse, WalletVerifyRequest,
+    audit, generate_base62_nonce, AuthUser, WalletNonceRequest, WalletNonceResponse,
+    WalletVerifyRequest,
 };
 use crate::error::ApiError;
 use crate::middleware::PortalUser;
@@ -250,6 +251,14 @@ pub async fn wallet_link_verify(
         financial_user_id = %identity.financial_user_id,
         "Portal wallet linked"
     );
+    audit::record(
+        pool,
+        &identity.tenant_id,
+        Some(&identity.portal_user_id),
+        "PORTAL_WALLET_LINKED",
+        serde_json::json!({"method": "siwe", "wallet_address": parsed.address}),
+    )
+    .await;
 
     Ok(Json(AuthUser {
         id: identity.portal_user_id,

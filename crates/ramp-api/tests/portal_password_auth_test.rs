@@ -39,6 +39,7 @@ async fn portal_password_registration_and_login_are_production_flows() {
     let email = format!("Password.User+{suffix}@Example.COM");
     let normalized_email = email.to_lowercase();
     let password = "correct horse battery staple";
+    let audit_started_at = chrono::Utc::now();
 
     let register = request_json(
         "/v1/auth/register",
@@ -140,6 +141,30 @@ async fn portal_password_registration_and_login_are_production_flows() {
         response_json(blocked_response).await,
         wrong_body,
         "blocked identities must not be distinguishable from bad credentials"
+    );
+
+    let audit_actions: Vec<String> = sqlx::query_scalar(
+        r#"
+        SELECT action
+        FROM audit_log
+        WHERE tenant_id = '11111111-1111-1111-1111-111111111111'
+          AND resource_type = 'PORTAL_AUTH'
+          AND created_at >= $1
+        ORDER BY created_at
+        "#,
+    )
+    .bind(audit_started_at)
+    .fetch_all(&pool)
+    .await
+    .expect("portal auth audit events should load");
+    assert!(audit_actions.contains(&"PORTAL_PASSWORD_REGISTERED".to_string()));
+    assert!(audit_actions.contains(&"PORTAL_LOGIN_SUCCEEDED".to_string()));
+    assert_eq!(
+        audit_actions
+            .iter()
+            .filter(|action| action.as_str() == "PORTAL_LOGIN_FAILED")
+            .count(),
+        3
     );
 
     cleanup_identity(&pool, &normalized_email).await;

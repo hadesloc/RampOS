@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use super::identity::{find_identity_by_id, PortalIdentity};
 use super::{
-    clear_auth_cookies, set_auth_cookies, AuthResponse, AuthUser, PortalClaims,
+    audit, clear_auth_cookies, set_auth_cookies, AuthResponse, AuthUser, PortalClaims,
     ACCESS_TOKEN_EXPIRY_SECS, REFRESH_COOKIE_NAME, REFRESH_TOKEN_EXPIRY_SECS,
 };
 use crate::error::ApiError;
@@ -115,6 +115,14 @@ pub async fn refresh(
                     ApiError::Internal(format!("Failed to commit replay revocation: {error}")),
                 )
             })?;
+            audit::record(
+                pool,
+                &row.tenant_id,
+                Some(&row.user_id),
+                "PORTAL_REFRESH_REPLAY_DETECTED",
+                serde_json::json!({"family_id": row.family_id}),
+            )
+            .await;
         }
         return Err(reject(
             clear_auth_cookies(jar),
@@ -246,7 +254,7 @@ pub async fn logout(
 ) -> Result<CookieJar, ApiError> {
     if let (Some(pool), Some(cookie)) = (app_state.db_pool.as_ref(), jar.get(REFRESH_COOKIE_NAME)) {
         let token_hash = Sha256::digest(cookie.value().as_bytes()).to_vec();
-        sqlx::query(
+        let revoked_identity: Option<(String, String)> = sqlx::query_as(
             r#"
             UPDATE refresh_tokens
             SET
@@ -255,12 +263,23 @@ pub async fn logout(
                 revoke_reason = COALESCE(revoke_reason, 'logout'),
                 updated_at = NOW()
             WHERE token_hash = $1
+            RETURNING tenant_id, user_id
             "#,
         )
         .bind(token_hash)
-        .execute(pool)
+        .fetch_optional(pool)
         .await
         .map_err(|error| ApiError::Internal(format!("Failed to revoke session: {error}")))?;
+        if let Some((tenant_id, portal_user_id)) = revoked_identity {
+            audit::record(
+                pool,
+                &tenant_id,
+                Some(&portal_user_id),
+                "PORTAL_LOGOUT",
+                serde_json::json!({"scope": "current_session"}),
+            )
+            .await;
+        }
     }
     Ok(clear_auth_cookies(jar))
 }
@@ -292,6 +311,16 @@ pub async fn logout_all(
     .execute(pool)
     .await
     .map_err(|error| ApiError::Internal(format!("Failed to revoke all sessions: {error}")))?;
+    let tenant_id = portal_user.tenant_id.to_string();
+    let portal_user_id = portal_user.user_id.to_string();
+    audit::record(
+        pool,
+        &tenant_id,
+        Some(&portal_user_id),
+        "PORTAL_LOGOUT",
+        serde_json::json!({"scope": "all_sessions"}),
+    )
+    .await;
 
     info!(portal_user_id = %portal_user.user_id, "All portal sessions revoked");
     Ok(clear_auth_cookies(jar))

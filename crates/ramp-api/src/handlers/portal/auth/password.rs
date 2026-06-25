@@ -10,7 +10,7 @@ use tracing::{info, warn};
 use validator::Validate;
 
 use super::identity::{create_password_identity, find_identity_by_email, normalize_email};
-use super::{session, AuthResponse, PORTAL_TENANT_ID_DEFAULT};
+use super::{audit, session, AuthResponse, PORTAL_TENANT_ID_DEFAULT};
 use crate::error::ApiError;
 use crate::router::AppState;
 
@@ -73,7 +73,16 @@ pub async fn register(
         "Portal password registration successful"
     );
 
-    session::issue_session(&app_state, jar, &identity).await
+    let response = session::issue_session(&app_state, jar, &identity).await?;
+    audit::record(
+        pool,
+        &identity.tenant_id,
+        Some(&identity.portal_user_id),
+        "PORTAL_PASSWORD_REGISTERED",
+        serde_json::json!({"method": "password"}),
+    )
+    .await;
+    Ok(response)
 }
 
 pub async fn login(
@@ -126,7 +135,17 @@ pub async fn login(
         {
             identity
         }
-        _ => return Err(ApiError::Unauthorized(INVALID_CREDENTIALS.to_string())),
+        _ => {
+            audit::record(
+                pool,
+                &tenant_id,
+                None,
+                "PORTAL_LOGIN_FAILED",
+                serde_json::json!({"method": "password", "reason": "invalid_credentials"}),
+            )
+            .await;
+            return Err(ApiError::Unauthorized(INVALID_CREDENTIALS.to_string()));
+        }
     };
 
     info!(
@@ -135,7 +154,16 @@ pub async fn login(
         "Portal password login successful"
     );
 
-    session::issue_session(&app_state, jar, &identity).await
+    let response = session::issue_session(&app_state, jar, &identity).await?;
+    audit::record(
+        pool,
+        &identity.tenant_id,
+        Some(&identity.portal_user_id),
+        "PORTAL_LOGIN_SUCCEEDED",
+        serde_json::json!({"method": "password"}),
+    )
+    .await;
+    Ok(response)
 }
 
 fn hash_password(password: &str) -> Result<String, ApiError> {
