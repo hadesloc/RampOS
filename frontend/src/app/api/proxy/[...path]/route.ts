@@ -6,6 +6,7 @@ import {
   ADMIN_SESSION_COOKIE,
   constantTimeEqual,
   createAdminSessionToken,
+  shouldUseSecureCookies,
   readAdminSessionToken,
 } from '@/lib/admin-auth';
 
@@ -137,7 +138,7 @@ async function handleRequest(req: NextRequest, props: { params: Promise<{ path: 
             value: createAdminSessionToken(ADMIN_SESSION_SECRET, refreshedSession),
             httpOnly: true,
             sameSite: 'strict',
-            secure: process.env.NODE_ENV === 'production',
+            secure: shouldUseSecureCookies(),
             path: '/',
             maxAge: 60 * 60 * 24 * 7,
           });

@@ -10,6 +10,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
@@ -40,6 +41,8 @@ pub struct StoredResponse {
     pub status_code: u16,
     pub body: String,
     pub content_type: String,
+    #[serde(default)]
+    pub request_hash: Option<String>,
 }
 
 /// Abstract store for idempotency
@@ -356,12 +359,32 @@ pub async fn idempotency_middleware(
         })
         .unwrap_or_else(|| "anonymous".to_string());
 
-    let mut req = req;
+    let (req_parts, req_body) = req.into_parts();
+    let req_body_bytes = axum::body::to_bytes(req_body, 1024 * 1024)
+        .await
+        .map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?;
+    let mut hasher = Sha256::new();
+    hasher.update(req_parts.method.as_str().as_bytes());
+    hasher.update(b"\n");
+    hasher.update(req_parts.uri.to_string().as_bytes());
+    hasher.update(b"\n");
+    hasher.update(&req_body_bytes);
+    let request_hash = hex::encode(hasher.finalize());
+
+    let mut req = Request::from_parts(req_parts, Body::from(req_body_bytes));
     req.extensions_mut()
         .insert(IdempotencyKeyContext(idempotency_key.clone()));
 
     // Check if we have a stored response
     if let Some(stored) = handler.get(&tenant_id, &idempotency_key).await {
+        if stored
+            .request_hash
+            .as_deref()
+            .is_some_and(|stored_hash| stored_hash != request_hash)
+        {
+            return Err(StatusCode::CONFLICT);
+        }
+
         info!(
             tenant = %tenant_id,
             key = %idempotency_key,
@@ -438,6 +461,7 @@ pub async fn idempotency_middleware(
         status_code: parts.status.as_u16(),
         body: body_string.clone(),
         content_type: content_type.clone(),
+        request_hash: Some(request_hash),
     };
 
     // Cache only successful responses. Do not pin transient failures or
@@ -491,6 +515,7 @@ mod tests {
             status_code: 200,
             body: r#"{"id": "123"}"#.to_string(),
             content_type: "application/json".to_string(),
+            request_hash: None,
         };
 
         let json = serde_json::to_string(&stored).unwrap();

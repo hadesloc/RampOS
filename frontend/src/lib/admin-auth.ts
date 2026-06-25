@@ -4,6 +4,10 @@ import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 export const ADMIN_SESSION_COOKIE = "rampos_admin_session";
 export const ADMIN_AUTHORIZATION_HEADER = "X-Admin-Authorization";
 
+export function shouldUseSecureCookies(): boolean {
+  return process.env.COOKIE_SECURE?.trim().toLowerCase() === "true";
+}
+
 export type AdminSession = {
   accessToken: string;
   refreshToken: string;

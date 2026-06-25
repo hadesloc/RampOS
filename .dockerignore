@@ -1,0 +1,12 @@
+.git
+.next
+**/.next
+**/node_modules
+**/test-results
+target
+**/target
+docs/screenshots
+coverage
+**/coverage
+frontend-landing/.next
+frontend/.env.local

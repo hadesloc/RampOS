@@ -204,7 +204,7 @@ export default function IntentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [pageIndex, pageSize, filter.state, filter.type, toast, tCommon]);
+  }, [pageSize, filter.state, filter.type, toast, tCommon]);
 
   useEffect(() => {
     fetchIntents();

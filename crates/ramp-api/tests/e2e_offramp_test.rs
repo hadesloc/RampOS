@@ -742,6 +742,25 @@ async fn test_portal_rfq_create_cancels_created_rfq_when_bind_fails_after_insert
 
     sqlx::query(
         r#"
+        INSERT INTO rfq_requests (
+            id, tenant_id, user_id, direction, offramp_id,
+            crypto_asset, crypto_amount, vnd_amount, state,
+            winning_bid_id, winning_lp_id, final_rate,
+            expires_at, created_at, updated_at
+        ) VALUES (
+            'rfq_external_race', $1, '00000000-0000-0000-0000-000000000002',
+            'OFFRAMP', NULL, 'USDT', 100, NULL, 'OPEN',
+            NULL, NULL, NULL, NOW() + INTERVAL '5 minutes', NOW(), NOW()
+        )
+        "#,
+    )
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .expect("seed competing RFQ");
+
+    sqlx::query(
+        r#"
         CREATE OR REPLACE FUNCTION test_force_offramp_rfq_bind_conflict()
         RETURNS trigger AS $$
         BEGIN

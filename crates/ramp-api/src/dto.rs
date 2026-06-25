@@ -120,12 +120,14 @@ pub struct CreatePayinRequest {
     #[validate(length(min = 1, max = 64, message = "Tenant ID must be 1-64 characters"))]
     #[validate(custom(function = "validate_alphanumeric_underscore"))]
     #[schema(example = "tenant_abc123", min_length = 1, max_length = 64)]
+    #[serde(alias = "tenant_id")]
     pub tenant_id: String,
 
     /// User identifier
     #[validate(length(min = 1, max = 64, message = "User ID must be 1-64 characters"))]
     #[validate(custom(function = "validate_alphanumeric_underscore"))]
     #[schema(example = "user_xyz789", min_length = 1, max_length = 64)]
+    #[serde(alias = "user_id")]
     pub user_id: String,
 
     /// Amount in VND (minimum 1,000 VND for practical transactions)
@@ -135,11 +137,13 @@ pub struct CreatePayinRequest {
         message = "Amount must be between 1,000 and 500,000,000 VND"
     ))]
     #[schema(example = 1000000, minimum = 1000, maximum = 500000000)]
+    #[serde(alias = "amount_vnd")]
     pub amount_vnd: i64,
 
     /// Rails provider identifier (e.g., "vietqr", "napas")
     #[validate(length(min = 1, max = 32, message = "Rails provider must be 1-32 characters"))]
     #[schema(example = "vietqr", min_length = 1, max_length = 32)]
+    #[serde(alias = "rails_provider")]
     pub rails_provider: String,
 
     /// Optional metadata for the transaction

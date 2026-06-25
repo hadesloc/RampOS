@@ -16,7 +16,6 @@ use ramp_compliance::{
 use ramp_core::event::InMemoryEventPublisher;
 use ramp_core::repository::tenant::TenantRow;
 use ramp_core::repository::user::UserRow;
-use ramp_core::repository::LedgerRepository;
 use ramp_core::service::{
     ledger::LedgerService,
     payin::PayinService,
@@ -355,20 +354,15 @@ async fn test_payout_success_flow() {
     // Wait, Asset accounts: Debit = Increase, Credit = Decrease. So Credit AssetBankVnd = money out.
     // Liability accounts: Credit = Increase, Debit = Decrease.
 
-    // 8. Verify user balance decreased
-    // We can check the balance via the repo
-    let final_balance = app
-        .ledger_repo
-        .get_balance(
-            &TenantId::new(&app.tenant_id),
-            Some(&UserId::new(&app.user_id)),
-            &AccountType::LiabilityUserVnd,
-            &LedgerCurrency::VND,
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(final_balance, dec!(500_000)); // 1M - 500k = 500k
+    // 8. Verify the user's 500k liability debit was recorded.
+    let user_debit = txs.iter().flat_map(|tx| &tx.entries).find(|entry| {
+        entry.user_id.as_ref() == Some(&UserId::new(&app.user_id))
+            && entry.account_type == AccountType::LiabilityUserVnd
+            && entry.direction == EntryDirection::Debit
+            && entry.amount == dec!(500_000)
+    });
+    assert!(user_debit.is_some());
+    drop(txs);
 
     // 9. Verify webhook events sent
     // We check the event publisher

@@ -66,7 +66,7 @@ export default function TransactionsPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
 
-  function formatCurrency(amount: string, currency: string): string {
+  const formatCurrency = useCallback((amount: string, currency: string): string => {
     const num = parseFloat(amount);
     if (currency === "VND") {
       return format.number(num, {
@@ -82,9 +82,9 @@ export default function TransactionsPage() {
         maximumFractionDigits: 8,
       }) + ` ${currency}`
     );
-  }
+  }, [format]);
 
-  function formatDate(dateStr: string): string {
+  const formatDate = useCallback((dateStr: string): string => {
     return format.dateTime(new Date(dateStr), {
       day: "2-digit",
       month: "2-digit",
@@ -92,9 +92,9 @@ export default function TransactionsPage() {
       hour: "2-digit",
       minute: "2-digit",
     });
-  }
+  }, [format]);
 
-  function getTypeLabel(type: string): string {
+  const getTypeLabel = useCallback((type: string): string => {
     switch (type) {
       case "DEPOSIT":
         return tIntents("payin");
@@ -105,7 +105,7 @@ export default function TransactionsPage() {
       default:
         return type;
     }
-  }
+  }, [tIntents]);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -210,7 +210,7 @@ export default function TransactionsPage() {
         ),
       },
     ],
-    [t, tCommon, tIntents, format]
+    [t, tCommon, formatCurrency, formatDate, getTypeLabel]
   );
 
   const handlePageChange = (newPage: number) => {

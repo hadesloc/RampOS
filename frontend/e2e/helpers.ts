@@ -1,8 +1,50 @@
 import type { Page } from '@playwright/test';
+import { createHmac } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 export const LOCALE = 'en';
 export const adminPath = (path = '') => `/${LOCALE}${path}`;
 export const portalPath = (path = '') => `/${LOCALE}/portal${path}`;
+const ADMIN_SESSION_COOKIE = 'rampos_admin_session';
+
+function readDotEnvValue(name: string): string {
+  const envPath = resolve(__dirname, '../../.env');
+  if (!existsSync(envPath)) return '';
+  const line = readFileSync(envPath, 'utf8')
+    .split(/\r?\n/)
+    .find((entry) => entry.trim().startsWith(`${name}=`));
+  if (!line) return '';
+  return line.slice(line.indexOf('=') + 1).trim().replace(/^['"]|['"]$/g, '');
+}
+
+function createAdminSessionCookie(): string {
+  const secret = process.env.RAMPOS_ADMIN_JWT_SECRET || readDotEnvValue('RAMPOS_ADMIN_JWT_SECRET');
+  if (!secret) {
+    throw new Error('RAMPOS_ADMIN_JWT_SECRET is required for admin E2E session');
+  }
+
+  const accessTokenExpiresAt = Math.floor(Date.now() / 1000) + 60 * 30;
+  const payload = Buffer.from(
+    JSON.stringify({
+      accessToken: 'e2e-access-token',
+      refreshToken: 'e2e-refresh-token',
+      accessTokenExpiresAt,
+      refreshTokenExpiresAt: Math.floor(Date.now() / 1000) + 60 * 60,
+      admin: {
+        id: 'admin_e2e',
+        email: 'admin@rampos.local',
+        displayName: 'E2E Admin',
+        role: 'superadmin',
+      },
+    }),
+    'utf8'
+  ).toString('base64url');
+  const signature = createHmac('sha256', secret)
+    .update(`${payload}.${accessTokenExpiresAt}`)
+    .digest('hex');
+  return `${payload}.${accessTokenExpiresAt}.${signature}`;
+}
 
 export async function mockPortalSession(page: Page) {
   await page.route('**/api/v1/auth/session', async (route) => {
@@ -15,6 +57,17 @@ export async function mockPortalSession(page: Page) {
 }
 
 export async function mockAdminApis(page: Page) {
+  await page.context().addCookies([
+    {
+      name: ADMIN_SESSION_COOKIE,
+      value: createAdminSessionCookie(),
+      url: 'http://localhost:3000',
+      httpOnly: true,
+      sameSite: 'Strict',
+      secure: false,
+    },
+  ]);
+
   await page.route('**/api/proxy/v1/admin/dashboard', async (route) => {
     await route.fulfill({
       status: 200,

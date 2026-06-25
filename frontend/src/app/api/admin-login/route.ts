@@ -5,6 +5,7 @@ import {
   AdminSession,
   constantTimeEqual,
   createAdminSessionToken,
+  shouldUseSecureCookies,
 } from "@/lib/admin-auth";
 
 function isProductionRuntime(): boolean {
@@ -87,7 +88,7 @@ export async function POST(req: Request) {
     value: token,
     httpOnly: true,
     sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureCookies(),
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });

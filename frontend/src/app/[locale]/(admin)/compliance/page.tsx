@@ -184,7 +184,7 @@ export default function CompliancePage() {
     } finally {
       setLoading(false);
     }
-  }, [filter.severity, filter.status, toast]);
+  }, [filter.severity, filter.status]);
 
   useEffect(() => {
     fetchCases();

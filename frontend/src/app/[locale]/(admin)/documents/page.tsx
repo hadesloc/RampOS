@@ -98,7 +98,7 @@ export default function DocumentsPage() {
     fetchData();
   }, [fetchData]);
 
-  const handleAction = async (docId: string, action: "verify" | "reject") => {
+  const handleAction = useCallback(async (docId: string, action: "verify" | "reject") => {
     setActionLoading(docId);
     try {
       await apiRequest(`/v1/admin/documents/${docId}/${action}`, { method: "POST" });
@@ -108,7 +108,7 @@ export default function DocumentsPage() {
     } finally {
       setActionLoading(null);
     }
-  };
+  }, [fetchData]);
 
   const pendingCount = documents.filter((d) => d.status === "PENDING").length;
   const verifiedCount = documents.filter((d) => d.status === "VERIFIED").length;
@@ -210,7 +210,7 @@ export default function DocumentsPage() {
         ),
       },
     ],
-    [actionLoading]
+    [actionLoading, handleAction]
   );
 
   return (
