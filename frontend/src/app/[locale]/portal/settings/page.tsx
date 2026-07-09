@@ -12,10 +12,8 @@ import {
   Shield,
   User,
   Bell,
-  Key,
   Loader2,
   LogOut,
-  AlertCircle,
   Lock,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
@@ -45,6 +43,8 @@ export default function SettingsPage() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [security, setSecurity] = useState<SecuritySettings | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [notifications, setNotifications] =
     useState<NotificationPreferences | null>(null);
 
@@ -55,9 +55,6 @@ export default function SettingsPage() {
     logout,
   } = useAuth();
   const router = useRouter();
-  const passkeyUnavailableMessage =
-    "Passkey management is unavailable because portal passkey completion and management APIs are not enabled in this environment.";
-
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push("/portal/login");
@@ -141,6 +138,23 @@ export default function SettingsPage() {
       const result = await settingsApi.updateNotifications(notifications);
       setNotifications(result.preferences);
       toast.success(tCommon("success"));
+    } catch (err) {
+      const message =
+        err instanceof PortalApiError ? err.message : tCommon("error");
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    setSaving(true);
+    try {
+      await settingsApi.updatePassword({ currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      await fetchSecurity();
+      toast.success("Password updated. Sign in again on your other devices.");
     } catch (err) {
       const message =
         err instanceof PortalApiError ? err.message : tCommon("error");
@@ -310,41 +324,58 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="border-t border-white/[0.06] pt-6">
-                    <h4 className="text-sm font-medium text-white mb-4">
-                      {t("passkeys")}
-                    </h4>
-                    <div className="flex items-start gap-3 rounded-lg border border-[#FFB800]/20 bg-[#FFB800]/[0.06] p-4">
-                      <Lock className="h-4 w-4 mt-0.5 shrink-0 text-[#FFB800]" />
-                      <p className="text-sm text-[#FFB800]/80">
-                        {passkeyUnavailableMessage}
-                      </p>
+                    <div className="mb-4 flex items-center gap-2">
+                      <Lock className="h-4 w-4 text-[#7B61FF]" />
+                      <h4 className="text-sm font-medium text-white">
+                        Change password
+                      </h4>
                     </div>
-                    {security?.webauthnCredentials &&
-                      security.webauthnCredentials.length > 0 && (
-                        <div className="mt-4 space-y-2">
-                          {security.webauthnCredentials.map((cred) => (
-                            <div
-                              key={cred.id}
-                              className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-[#09090B]/60 p-4"
-                            >
-                              <Key className="h-5 w-5 text-[#7B61FF]" />
-                              <div>
-                                <p className="text-sm font-medium text-white">
-                                  {cred.name}
-                                </p>
-                                <p className="text-xs text-white/40">
-                                  Added{" "}
-                                  {format.dateTime(new Date(cred.createdAt), {
-                                    month: "short",
-                                    day: "numeric",
-                                    year: "numeric",
-                                  })}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="currentPassword" className="text-white/70">
+                          Current password
+                        </Label>
+                        <Input
+                          id="currentPassword"
+                          type="password"
+                          autoComplete="current-password"
+                          value={currentPassword}
+                          onChange={(event) => setCurrentPassword(event.target.value)}
+                          className="border-white/[0.08] bg-[#09090B] text-white"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="newPassword" className="text-white/70">
+                          New password
+                        </Label>
+                        <Input
+                          id="newPassword"
+                          type="password"
+                          autoComplete="new-password"
+                          minLength={12}
+                          maxLength={128}
+                          value={newPassword}
+                          onChange={(event) => setNewPassword(event.target.value)}
+                          className="border-white/[0.08] bg-[#09090B] text-white"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={handleChangePassword}
+                      disabled={
+                        saving ||
+                        currentPassword.length === 0 ||
+                        newPassword.length < 12
+                      }
+                      className="mt-4 bg-[#7B61FF] font-semibold text-white hover:bg-[#7B61FF]/90"
+                    >
+                      {saving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Update password"
                       )}
+                    </Button>
                   </div>
 
                   {security?.lastPasswordChange && (

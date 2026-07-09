@@ -24,14 +24,12 @@ test.describe('Navigation', () => {
 });
 
 test.describe('Portal Login Page', () => {
-  test('should display wallet login option', async ({ page }) => {
+  test('should display core password and wallet login options', async ({ page }) => {
     await page.goto(portalPath('/login'));
+    await expect(page.getByLabel('Email')).toBeVisible();
+    await expect(page.getByLabel('Password')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Connect Wallet' })).toBeVisible();
-  });
-
-  test('should explain other login methods are unavailable', async ({ page }) => {
-    await page.goto(portalPath('/login'));
-    await expect(page.getByText('Other sign-in methods (passkey, magic link) are not yet enabled.')).toBeVisible();
   });
 
   test('should have link to register page', async ({ page }) => {

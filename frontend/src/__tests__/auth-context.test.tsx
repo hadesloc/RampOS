@@ -4,13 +4,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthProvider, useAuth, withAuth } from "@/contexts/auth-context";
 
-const { mockPush, mockCheckSession, mockGetAccount } = vi.hoisted(() => ({
+const { mockPush, mockCheckSession, mockGetAccount, mockLogin, mockRegister } = vi.hoisted(() => ({
   mockPush: vi.fn(),
   mockCheckSession: vi.fn(),
   mockGetAccount: vi.fn(),
+  mockLogin: vi.fn(),
+  mockRegister: vi.fn(),
 }));
 
-vi.mock("next/navigation", () => ({
+vi.mock("@/navigation", () => ({
   useRouter: () => ({
     push: mockPush,
   }),
@@ -23,8 +25,8 @@ vi.mock("@/lib/portal-api", async () => {
     authApi: {
       ...actual.authApi,
       checkSession: mockCheckSession,
-      requestMagicLink: vi.fn(),
-      verifyMagicLink: vi.fn(),
+      login: mockLogin,
+      register: mockRegister,
       logout: vi.fn(),
     },
     walletApi: {
@@ -47,20 +49,28 @@ function AuthStateProbe() {
 }
 
 function AuthActionProbe() {
-  const {
-    error,
-    loginWithPasskey,
-    registerWithPasskey,
-    loginWithMagicLink,
-    verifyMagicLink,
-  } = useAuth();
+  const { error, loginWithPassword, registerWithPassword } = useAuth();
 
   return (
     <div>
-      <button onClick={() => void loginWithPasskey().catch(() => {})}>passkey-login</button>
-      <button onClick={() => void registerWithPasskey("user@example.com").catch(() => {})}>passkey-register</button>
-      <button onClick={() => void loginWithMagicLink("user@example.com").catch(() => {})}>magic-link-login</button>
-      <button onClick={() => void verifyMagicLink("token_123").catch(() => {})}>magic-link-verify</button>
+      <button
+        onClick={() =>
+          void loginWithPassword("user@example.com", "password-value").catch(() => {})
+        }
+      >
+        password-login
+      </button>
+      <button
+        onClick={() =>
+          void registerWithPassword(
+            "user@example.com",
+            "password-value",
+            "Portal User",
+          ).catch(() => {})
+        }
+      >
+        password-register
+      </button>
       <span data-testid="error">{error ?? "none"}</span>
     </div>
   );
@@ -71,6 +81,8 @@ describe("AuthProvider", () => {
     mockPush.mockReset();
     mockCheckSession.mockReset();
     mockGetAccount.mockReset();
+    mockLogin.mockReset();
+    mockRegister.mockReset();
   });
 
   it("fails closed when the portal session is unauthenticated", async () => {
@@ -113,11 +125,22 @@ describe("AuthProvider", () => {
     });
   });
 
-  it("fails closed for passkey login and registration", async () => {
+  it("authenticates with password login and registration", async () => {
     mockCheckSession.mockResolvedValue({
       authenticated: false,
       user: null,
     });
+    const user = {
+      id: "portal-user",
+      email: "user@example.com",
+      kycStatus: "NONE",
+      kycTier: 0,
+      status: "ACTIVE",
+      createdAt: "2026-06-25T00:00:00Z",
+    };
+    mockLogin.mockResolvedValue({ user, expiresAt: 123 });
+    mockRegister.mockResolvedValue({ user, expiresAt: 123 });
+    mockGetAccount.mockRejectedValue(new Error("not provisioned"));
 
     render(
       <AuthProvider>
@@ -130,56 +153,23 @@ describe("AuthProvider", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByText("passkey-login"));
+      fireEvent.click(screen.getByText("password-login"));
     });
     await waitFor(() => {
-      expect(screen.getByTestId("error").textContent).toContain(
-        "Passkey sign-in is not available",
-      );
+      expect(mockLogin).toHaveBeenCalledWith("user@example.com", "password-value");
+      expect(mockPush).toHaveBeenCalledWith("/portal");
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByText("passkey-register"));
+      fireEvent.click(screen.getByText("password-register"));
     });
     await waitFor(() => {
-      expect(screen.getByTestId("error").textContent).toContain(
-        "Passkey sign-in is not available",
+      expect(mockRegister).toHaveBeenCalledWith(
+        "user@example.com",
+        "password-value",
+        "Portal User",
       );
-    });
-  });
-
-  it("fails closed for magic-link login and verification", async () => {
-    mockCheckSession.mockResolvedValue({
-      authenticated: false,
-      user: null,
-    });
-
-    render(
-      <AuthProvider>
-        <AuthActionProbe />
-      </AuthProvider>,
-    );
-
-    await waitFor(() => {
       expect(screen.getByTestId("error").textContent).toBe("none");
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText("magic-link-login"));
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId("error").textContent).toContain(
-        "Magic link sign-in is not available",
-      );
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText("magic-link-verify"));
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId("error").textContent).toContain(
-        "Magic link sign-in is not available",
-      );
     });
   });
 });

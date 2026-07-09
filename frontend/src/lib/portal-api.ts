@@ -4,9 +4,8 @@
  * User-facing API client for the portal application.
  * Handles authentication, KYC, deposits, withdrawals, and transactions.
  *
- * Portal auth currently fails closed.
- * Challenge/request endpoints exist, but end-to-end session issuance and
- * validation are not fully enabled yet.
+ * Portal requests use the same-origin Next.js proxy so HttpOnly session
+ * cookies work consistently in local and container deployments.
  */
 
 // API Configuration
@@ -15,12 +14,7 @@ function getPublicApiBaseUrl(): string {
   if (configuredUrl) {
     return configuredUrl;
   }
-  if (process.env.NODE_ENV?.trim().toLowerCase() === 'production') {
-    throw new Error('Missing required production environment variable: NEXT_PUBLIC_API_URL');
-  }
-  // Dev default: same-origin '/api' so requests pass CSP (connect-src 'self')
-  // and are proxied to the backend via next.config rewrites.
-  return '/api';
+  return '/api/portal';
 }
 
 // Types
@@ -354,7 +348,16 @@ async function portalRequest<T>(
   });
 
   if (!response.ok) {
-    let errorData: { code?: string; message?: string; details?: Record<string, unknown> } = {};
+    let errorData: {
+      code?: string;
+      message?: string;
+      details?: Record<string, unknown>;
+      error?: {
+        code?: string;
+        message?: string;
+        details?: Record<string, unknown>;
+      };
+    } = {};
     try {
       errorData = await response.json();
     } catch {
@@ -363,9 +366,9 @@ async function portalRequest<T>(
 
     throw new PortalApiError(
       response.status,
-      errorData.code || 'UNKNOWN_ERROR',
-      errorData.message || 'An error occurred',
-      errorData.details
+      errorData.error?.code || errorData.code || 'UNKNOWN_ERROR',
+      errorData.error?.message || errorData.message || 'An error occurred',
+      errorData.error?.details || errorData.details
     );
   }
 
@@ -379,59 +382,21 @@ async function portalRequest<T>(
 
 // Auth API
 export const authApi = {
-  // Get WebAuthn registration challenge
-  getRegistrationChallenge: async (email: string): Promise<WebAuthnChallenge> => {
-    return portalRequest<WebAuthnChallenge>('/v1/auth/webauthn/register/challenge', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
-  },
-
-  // Complete WebAuthn registration.
-  // Current backend posture may reject this until completion/session flow is enabled.
-  completeRegistration: async (
+  register: async (
     email: string,
-    credential: WebAuthnCredentialResponse
+    password: string,
+    fullName?: string
   ): Promise<AuthResponse> => {
-    return portalRequest<AuthResponse>('/v1/auth/webauthn/register/complete', {
+    return portalRequest<AuthResponse>('/v1/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, credential }),
+      body: JSON.stringify({ email, password, fullName }),
     });
   },
 
-  // Get WebAuthn authentication challenge
-  getAuthenticationChallenge: async (email?: string): Promise<WebAuthnChallenge> => {
-    return portalRequest<WebAuthnChallenge>('/v1/auth/webauthn/login/challenge', {
+  login: async (email: string, password: string): Promise<AuthResponse> => {
+    return portalRequest<AuthResponse>('/v1/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email }),
-    });
-  },
-
-  // Complete WebAuthn authentication.
-  // Current backend posture may reject this until completion/session flow is enabled.
-  completeAuthentication: async (
-    credential: WebAuthnCredentialResponse
-  ): Promise<AuthResponse> => {
-    return portalRequest<AuthResponse>('/v1/auth/webauthn/login/complete', {
-      method: 'POST',
-      body: JSON.stringify({ credential }),
-    });
-  },
-
-  // Request magic link
-  requestMagicLink: async (email: string): Promise<{ message: string }> => {
-    return portalRequest<{ message: string }>('/v1/auth/magic-link', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
-  },
-
-  // Verify magic link token.
-  // Current backend posture may reject this until verification/session flow is enabled.
-  verifyMagicLink: async (token: string): Promise<AuthResponse> => {
-    return portalRequest<AuthResponse>('/v1/auth/magic-link/verify', {
-      method: 'POST',
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ email, password }),
     });
   },
 
@@ -469,18 +434,18 @@ export interface WalletNonceResponse {
 }
 
 // Wallet Auth API (SIWE — EIP-4361)
-// POST /v1/portal/auth/wallet/nonce  { address } → { nonce, message, expiresAt }
-// POST /v1/portal/auth/wallet/verify { message, signature } → AuthResponse
+// POST /v1/auth/wallet/nonce  { address } → { nonce, message, expiresAt }
+// POST /v1/auth/wallet/verify { message, signature } → AuthResponse
 export const walletAuthApi = {
   getNonce: async (address: string): Promise<WalletNonceResponse> => {
-    return portalRequest<WalletNonceResponse>('/v1/portal/auth/wallet/nonce', {
+    return portalRequest<WalletNonceResponse>('/v1/auth/wallet/nonce', {
       method: 'POST',
       body: JSON.stringify({ address }),
     });
   },
 
   verify: async (message: string, signature: string): Promise<AuthResponse> => {
-    return portalRequest<AuthResponse>('/v1/portal/auth/wallet/verify', {
+    return portalRequest<AuthResponse>('/v1/auth/wallet/verify', {
       method: 'POST',
       body: JSON.stringify({ message, signature }),
     });
@@ -712,16 +677,8 @@ export interface UpdateProfileResponse {
   profile: UserProfile;
 }
 
-export interface WebAuthnCredentialInfo {
-  id: string;
-  name: string;
-  createdAt: string;
-  lastUsedAt: string | null;
-}
-
 export interface SecuritySettings {
   twoFactorEnabled: boolean;
-  webauthnCredentials: WebAuthnCredentialInfo[];
   lastPasswordChange: string | null;
 }
 
