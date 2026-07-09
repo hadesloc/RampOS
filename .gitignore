@@ -133,7 +133,14 @@ tests/staging_dry_run_test.md
 
 admin-dashboard.png
 replacements.txt
+
+# Ad-hoc QA artifacts (DOM/accessibility snapshots + UI screenshots from browser testing)
+*-after.md
+ledger-final.md
+*-real-data*.png
 scripts/__pycache__/
 scripts/.pytest_cache/
 .workflow/
 .remember/
+.gstack/
+.devlog/

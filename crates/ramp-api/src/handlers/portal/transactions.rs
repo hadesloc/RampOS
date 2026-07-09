@@ -137,7 +137,7 @@ pub async fn list_transactions(
     }
 
     let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
-    let user_id = UserId::new(&portal_user.user_id.to_string());
+    let user_id = UserId::new(&portal_user.financial_user_id.to_string());
 
     // Calculate offset for pagination
     let offset = ((filters.page - 1) * filters.per_page) as i64;
@@ -414,7 +414,7 @@ pub async fn get_transaction(
 
     match intent_row {
         Some(row) => {
-            if row.user_id != portal_user.user_id.to_string() {
+            if row.user_id != portal_user.financial_user_id.to_string() {
                 return Err(ApiError::Forbidden(
                     "Transaction does not belong to user".to_string(),
                 ));

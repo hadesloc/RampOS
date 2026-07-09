@@ -101,7 +101,8 @@ impl ProtocolRegistry {
 
             match protocol.current_apy(token).await {
                 Ok(apy) => {
-                    if best.is_none() || apy > best.as_ref().map(|(_, a)| *a).unwrap_or(0.0) {
+                    if best.is_none() || apy > best.as_ref().map_or(f64::NEG_INFINITY, |(_, a)| *a)
+                    {
                         best = Some((protocol.as_ref(), apy));
                     }
                 }

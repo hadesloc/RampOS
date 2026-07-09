@@ -2,21 +2,34 @@
 
 import { useState, useCallback } from "react";
 import { PaginationState } from "@tanstack/react-table";
-import { RefreshCw, Loader2 } from "lucide-react";
-import { PageHeader } from "@/components/layout/page-header";
+import { RefreshCw, DollarSign, Clock, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { OfframpStats } from "@/components/admin/offramp/OfframpStats";
 import { OfframpTable } from "@/components/admin/offramp/OfframpTable";
 import { OfframpDetail } from "@/components/admin/offramp/OfframpDetail";
 import {
   useOfframpIntents,
-  useOfframpStats,
   useApproveOfframpIntent,
   useRejectOfframpIntent,
+  deriveOfframpStats,
   type OfframpIntent,
 } from "@/hooks/use-admin-offramp";
 import { useToast } from "@/components/ui/use-toast";
+import {
+  PageHeader,
+  StatGrid,
+  StatCard,
+  Panel,
+} from "@/components/shared";
+
+function formatVND(amount: string): string {
+  const num = parseInt(amount, 10);
+  if (isNaN(num)) return "0";
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(num);
+}
 
 export default function AdminOfframpPage() {
   const { toast } = useToast();
@@ -35,11 +48,7 @@ export default function AdminOfframpPage() {
   } = useOfframpIntents({
     page: pageIndex + 1,
     per_page: pageSize,
-    status: statusFilter || undefined,
-    user_search: searchQuery || undefined,
   });
-
-  const { data: stats, isLoading: statsLoading } = useOfframpStats();
 
   const approveMutation = useApproveOfframpIntent();
   const rejectMutation = useRejectOfframpIntent();
@@ -78,30 +87,15 @@ export default function AdminOfframpPage() {
     [rejectMutation, toast]
   );
 
-  const handleStatusFilterChange = useCallback(
-    (status: string) => {
-      setStatusFilter(status);
-      setPagination((p) => ({ ...p, pageIndex: 0 }));
-    },
-    []
-  );
-
-  const handleSearchChange = useCallback(
-    (query: string) => {
-      setSearchQuery(query);
-      setPagination((p) => ({ ...p, pageIndex: 0 }));
-    },
-    []
-  );
-
   const intents = intentsData?.data ?? [];
+  const stats = deriveOfframpStats(intents, intentsData?.total ?? intents.length);
   const pageCount = intentsData
-    ? Math.ceil(intentsData.total / intentsData.per_page)
+    ? Math.ceil(intentsData.total / (intentsData.limit || pageSize))
     : 0;
 
   if (selectedIntent) {
     return (
-      <div className="space-y-6 p-6">
+      <main className="p-page flex flex-col gap-section">
         <OfframpDetail
           intent={selectedIntent}
           onApprove={handleApprove}
@@ -110,19 +104,15 @@ export default function AdminOfframpPage() {
           approving={approveMutation.isPending}
           rejecting={rejectMutation.isPending}
         />
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <main className="p-page flex flex-col gap-section">
       <PageHeader
         title="Off-Ramp Management"
         description="Monitor and manage off-ramp withdrawal intents"
-        breadcrumbs={[
-          { label: "Dashboard", href: "/" },
-          { label: "Off-Ramp" },
-        ]}
         actions={
           <Button
             variant="outline"
@@ -135,24 +125,56 @@ export default function AdminOfframpPage() {
         }
       />
 
-      <OfframpStats stats={stats} loading={statsLoading} />
+      <StatGrid cols={4}>
+        <StatCard
+          title="Total Intents"
+          value={intentsLoading ? "-" : stats.total_intents}
+          icon={<DollarSign className="h-4 w-4" />}
+          accentColor="cyan"
+          loading={intentsLoading}
+        />
+        <StatCard
+          title="Pending Review"
+          value={intentsLoading ? "-" : stats.pending_review}
+          icon={<AlertCircle className="h-4 w-4" />}
+          accentColor="amber"
+          loading={intentsLoading}
+        />
+        <StatCard
+          title="Processing"
+          value={intentsLoading ? "-" : stats.processing}
+          icon={<Loader2 className="h-4 w-4" />}
+          accentColor="violet"
+          loading={intentsLoading}
+        />
+        <StatCard
+          title="Total Volume (VND)"
+          value={intentsLoading ? "-" : formatVND(stats.total_volume_vnd)}
+          icon={<CheckCircle2 className="h-4 w-4" />}
+          accentColor="green"
+          loading={intentsLoading}
+        />
+      </StatGrid>
 
-      <Card>
-        <CardContent className="p-4">
-          <OfframpTable
-            intents={intents}
-            loading={intentsLoading}
-            pageCount={pageCount}
-            pagination={{ pageIndex, pageSize }}
-            onPaginationChange={setPagination}
-            onRowClick={setSelectedIntent}
-            statusFilter={statusFilter}
-            onStatusFilterChange={handleStatusFilterChange}
-            searchQuery={searchQuery}
-            onSearchChange={handleSearchChange}
-          />
-        </CardContent>
-      </Card>
-    </div>
+      <Panel
+        header={{
+          title: "Off-Ramp Intents",
+          description: "Withdrawal intents pending review and in progress",
+        }}
+      >
+        <OfframpTable
+          intents={intents}
+          loading={intentsLoading}
+          pageCount={pageCount}
+          pagination={{ pageIndex, pageSize }}
+          onPaginationChange={setPagination}
+          onRowClick={setSelectedIntent}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+        />
+      </Panel>
+    </main>
   );
 }

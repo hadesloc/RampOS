@@ -55,46 +55,65 @@ RampOS là một **tầng điều phối on/off ramp cấp production** cho phé
 
 ## Ảnh chụp màn hình
 
+> Chụp trực tiếp từ hệ thống đang chạy với dữ liệu demo — dashboard admin (`:3000`), trang marketing (`:3002`) và cổng ví người dùng. Mọi màn hình đều lấy dữ liệu thật từ API, không phải ảnh dựng.
+
 ### Landing Page
-> Trang marketing với hero section, feature cards, luồng hướng dẫn và demo API.
+> Trang marketing — hero, lưới tính năng "Ramp Stack" đầy đủ và các chỉ số cho nhà phát triển.
 
 <p align="center">
-  <img src="docs/screenshots/landing-hero.png" alt="Landing Page Hero" width="800">
+  <img src="docs/screenshots/landing-hero.png" alt="Landing — Hero" width="800">
 </p>
 <p align="center">
-  <img src="docs/screenshots/landing-features.png" alt="Landing Page Features" width="800">
+  <img src="docs/screenshots/landing-features.png" alt="Landing — Feature Grid" width="800">
+</p>
+
+### Dashboard Admin
+> Trung tâm vận hành thời gian thực — khối lượng nạp, tỷ lệ thành công, số LP đang hoạt động, biểu đồ khối lượng giao dịch và biểu đồ tròn cơ cấu doanh thu theo loại giao dịch.
+
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="Admin Dashboard" width="800">
+</p>
+
+### Vận hành (Operations)
+> Quản lý toàn bộ vòng đời intent, người dùng & cấp KYC, các lệnh off-ramp chờ tất toán, và thị trường đấu giá RFQ trực tiếp.
+
+<p align="center">
+  <img src="docs/screenshots/intents.png" alt="Quản lý Intent" width="49%">
+  <img src="docs/screenshots/users.png" alt="Người dùng & KYC" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/offramp.png" alt="Quản lý Off-Ramp" width="49%">
+  <img src="docs/screenshots/rfq.png" alt="Đấu giá RFQ" width="49%">
+</p>
+
+### Tuân thủ (Compliance)
+> Quản lý hồ sơ AML — các vụ việc KYC/KYT theo loại, mức độ nghiêm trọng và trạng thái, kèm luồng xử lý của người duyệt.
+
+<p align="center">
+  <img src="docs/screenshots/compliance.png" alt="Compliance — AML Cases" width="800">
+</p>
+
+### Tài chính & Ngân quỹ (Finance & Treasury)
+> Sổ cái kép chuẩn tài chính, treasury control tower, bảng xếp hạng thanh khoản LP, và các chiến lược yield tự động.
+
+<p align="center">
+  <img src="docs/screenshots/ledger.png" alt="Sổ cái kép" width="49%">
+  <img src="docs/screenshots/treasury.png" alt="Treasury Control Tower" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/liquidity.png" alt="Liquidity Scorecard" width="49%">
+  <img src="docs/screenshots/yield.png" alt="Chiến lược Yield" width="49%">
 </p>
 
 ### Cổng người dùng (User Portal)
-> Cổng tự phục vụ cho người dùng cuối: nạp tiền, rút tiền, quản lý tài sản và lịch sử giao dịch.
+> Cổng ví tự phục vụ — đăng nhập SIWE tạo sẵn smart account ERC-4337; nạp, rút, tài sản và lịch sử giao dịch.
 
 <p align="center">
   <img src="docs/screenshots/portal.png" alt="User Portal" width="800">
 </p>
 
-### Quản lý Intent
-> Tìm kiếm, lọc và quản lý mọi payment intent (nạp, rút, giao dịch) theo loại và trạng thái.
-
-<p align="center">
-  <img src="docs/screenshots/intents.png" alt="Quản lý Intent" width="800">
-</p>
-
-### Dashboard Tuân thủ (Compliance)
-> Quản lý hồ sơ KYC/AML — xem xét giao dịch bị gắn cờ, quản lý các vụ việc compliance.
-
-<p align="center">
-  <img src="docs/screenshots/compliance.png" alt="Compliance Dashboard" width="800">
-</p>
-
-### Sổ cái kép (Ledger)
-> Giao diện kế toán thời gian thực với đường mòn kiểm toán đầy đủ cho mọi giao dịch.
-
-<p align="center">
-  <img src="docs/screenshots/ledger.png" alt="Ledger" width="800">
-</p>
-
 ### Đăng nhập Admin
-> Xác thực admin key bảo mật để truy cập dashboard.
+> Xác thực admin bảo mật để truy cập dashboard vận hành.
 
 <p align="center">
   <img src="docs/screenshots/admin-login.png" alt="Admin Login" width="600">

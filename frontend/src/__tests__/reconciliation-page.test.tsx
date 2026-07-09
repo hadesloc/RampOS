@@ -129,12 +129,12 @@ describe("ReconciliationPage", () => {
 
     render(<ReconciliationPage />);
 
-    expect(await screen.findByText(/reconciliation ops workbench/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /reconciliation/i })).toBeInTheDocument();
     expect(screen.getByText(/source of truth/i)).toBeInTheDocument();
     expect(screen.getByText(/^sample_fallback$/i)).toBeInTheDocument();
     expect(screen.getByText(/provenance warning/i)).toBeInTheDocument();
     expect(screen.getByText(/sla guardian/i)).toBeInTheDocument();
-    expect(screen.getByText(/1 needs attention within 15 min/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 item need attention within 15 min/i)).toBeInTheDocument();
     expect(screen.getByText(/offchain recording gap/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button", { name: /view evidence/i })[0]);
@@ -143,13 +143,13 @@ describe("ReconciliationPage", () => {
       expect(screen.getByText(/stl_recon_status_001/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/lineage summary/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /lineage/i })).toBeInTheDocument();
     expect(screen.getByText(/review: pending review/i)).toBeInTheDocument();
     expect(screen.getByText(/recon_src_001/i)).toBeInTheDocument();
     expect(screen.getByText(/recommended response target/i)).toBeInTheDocument();
     expect(screen.getByText(/page banking partner and incident commander/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /export queue csv/i }));
+    fireEvent.click(screen.getByRole("button", { name: /export csv/i }));
     await waitFor(() => {
       expect(screen.getByText(/queue export ready in csv format/i)).toBeInTheDocument();
     });
@@ -185,7 +185,7 @@ describe("ReconciliationPage", () => {
     render(<ReconciliationPage />);
 
     expect(await screen.findByText(/reconciliation workbench unavailable/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /reload workbench/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
     expect(screen.getByText(/switch between the active ops demo and a clean control case/i)).toBeInTheDocument();
   });
 });

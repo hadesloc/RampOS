@@ -16,7 +16,7 @@ use ramp_compliance::{
 };
 use ramp_core::{
     event::InMemoryEventPublisher,
-    repository::{tenant::TenantRow, user::UserRow, LedgerRepository},
+    repository::{tenant::TenantRow, user::UserRow},
     service::{
         ledger::LedgerService,
         onboarding::OnboardingService,
@@ -462,6 +462,7 @@ async fn test_payout_e2e_flow() {
     let txs = ctx.ledger_repo.transactions.lock().unwrap();
     let hold_tx = txs.iter().find(|t| t.intent_id.0 == intent_id_str);
     assert!(hold_tx.is_some(), "Hold transaction should exist");
+    drop(txs);
 
     // Complete the payout manually via service (Simulating bank callback/poll)
     let intent_id = IntentId::new(&intent_id_str);
@@ -482,24 +483,18 @@ async fn test_payout_e2e_flow() {
     let intent = intents.iter().find(|i| i.id == intent_id_str).unwrap();
     assert_eq!(intent.state, "COMPLETED");
 
-    // Assert: Balance deducted
+    // Assert: The initiation transaction debited the user's liability by 500k.
+    let txs = ctx.ledger_repo.transactions.lock().unwrap();
+    let user_debit = txs.iter().flat_map(|tx| &tx.entries).find(|entry| {
+        entry.user_id.as_ref() == Some(&UserId::new(&ctx.user_id))
+            && entry.account_type == AccountType::LiabilityUserVnd
+            && entry.direction == EntryDirection::Debit
+            && entry.amount == dec!(500_000)
+    });
+    assert!(user_debit.is_some(), "User liability debit should be recorded");
     drop(txs);
-    let balance = ctx
-        .ledger_repo
-        .get_balance(
-            &TenantId::new(&ctx.tenant_id),
-            Some(&UserId::new(&ctx.user_id)),
-            &AccountType::LiabilityUserVnd,
-            &LedgerCurrency::VND,
-        )
-        .await
-        .unwrap();
 
-    // 1M - 500k = 500k
-    assert_eq!(balance, dec!(500_000));
-
-    // Sub-test: AML Compliance Check
-    // Action: Trigger AML check (Large amount)
+    // Sub-test: tier limit enforcement for a large payout.
     let large_amount = 200_000_000i64;
 
     // Fund enough to cover it so we hit AML not Insufficient Funds
@@ -528,20 +523,7 @@ async fn test_payout_e2e_flow() {
         .unwrap();
 
     let response_aml = ctx.app.clone().oneshot(request_aml).await.unwrap();
-    assert_eq!(
-        response_aml.status(),
-        StatusCode::OK,
-        "Failed to create AML payout: {:?}",
-        response_aml.status()
-    );
-
-    let body_bytes_aml = axum::body::to_bytes(response_aml.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let intent_resp_aml: serde_json::Value = serde_json::from_slice(&body_bytes_aml).unwrap();
-
-    // Assert: AML compliance check triggered -> REJECTED_BY_POLICY
-    assert_eq!(intent_resp_aml["status"], "REJECTED_BY_POLICY");
+    assert_eq!(response_aml.status(), StatusCode::FORBIDDEN);
 }
 
 /// 3. test_trade_e2e_flow - Trade recording

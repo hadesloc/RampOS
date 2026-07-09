@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import RescreeningQueue, {
   type RescreeningRunRow,
 } from "@/components/compliance/RescreeningQueue";
+import { PageHeader } from "@/components/shared";
 
 type RestrictionResponse = {
   userId: string;
@@ -119,14 +120,11 @@ export default function RescreeningPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Continuous Rescreening</h1>
-        <p className="text-muted-foreground">
-          Monitor scheduled due-runs, alert-driven reviews, and bounded restriction actions for
-          active users.
-        </p>
-      </div>
+    <main className="p-page flex flex-col gap-section">
+      <PageHeader
+        title="Continuous Rescreening"
+        description="Monitor scheduled due-runs, alert-driven reviews, and bounded restriction actions for active users."
+      />
 
       <RescreeningQueue
         runs={runs}
@@ -141,6 +139,6 @@ export default function RescreeningPage() {
         }}
         onApplyRestriction={handleApplyRestriction}
       />
-    </div>
+    </main>
   );
 }

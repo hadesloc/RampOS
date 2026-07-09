@@ -34,6 +34,6 @@ describe("KybPage", () => {
     render(<KybPage />);
 
     expect(await screen.findByText(/ramp ops vietnam ltd/i)).toBeInTheDocument();
-    expect(screen.getByText(/shareholder_register/i)).toBeInTheDocument();
+    expect(screen.getByText(/shareholder register/i)).toBeInTheDocument();
   });
 });

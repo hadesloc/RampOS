@@ -425,6 +425,52 @@ fn parse_document_type(s: &str) -> Result<ComplianceReportType, String> {
     }
 }
 
+// ============================================================================
+// KYC Document List Endpoint
+// ============================================================================
+
+/// Shape the frontend documents page expects: a bare array of KycDocument.
+/// Fields: id, userId, userName, documentType, fileName, status,
+///         uploadedAt, reviewedAt, reviewedBy, rejectionReason.
+///
+/// The backend does not yet store KYC document upload metadata in its own
+/// table (documents are verified through the KYC service integration, not
+/// persisted as rows accessible to a generic admin list query). We return
+/// an empty list so the page renders a clean empty state rather than 500.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KycDocumentListItem {
+    pub id: String,
+    pub user_id: String,
+    pub user_name: String,
+    pub document_type: String,
+    pub file_name: String,
+    pub status: String,
+    pub uploaded_at: String,
+    pub reviewed_at: Option<String>,
+    pub reviewed_by: Option<String>,
+    pub rejection_reason: Option<String>,
+}
+
+/// GET /v1/admin/documents
+/// List KYC document uploads for the admin documents page.
+/// Returns an empty list when no document-metadata store is configured.
+pub async fn list_kyc_documents(
+    headers: HeaderMap,
+    Extension(tenant_ctx): Extension<TenantContext>,
+) -> Result<Json<Vec<KycDocumentListItem>>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
+
+    tracing::info!(
+        tenant = %tenant_ctx.tenant_id.0,
+        "Listing KYC documents"
+    );
+
+    // KYC document metadata persistence is not yet wired to a queryable store.
+    // Return empty list so the page renders an empty state rather than erroring.
+    Ok(Json(vec![]))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

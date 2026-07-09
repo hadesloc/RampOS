@@ -209,9 +209,9 @@ describe("RiskLabPage", () => {
 
     render(<RiskLabPage />);
 
-    expect(await screen.findByText(/rule-based scorer/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/rule-based scorer/i)).length).toBeGreaterThan(0);
     expect(
-      screen.getByText(/load a replay to compare the primary scorer against the shadow lane/i),
+      screen.getByText(/run a replay to compare the primary scorer against the shadow lane/i),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /run replay/i }));
@@ -263,13 +263,13 @@ describe("RiskLabPage", () => {
 
     render(<RiskLabPage />);
 
-    expect(await screen.findByText(/onnx heuristic scorer/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/onnx heuristic scorer/i)).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: /run replay/i }));
 
     expect(screen.getByRole("button", { name: /running replay/i })).toBeDisabled();
     expect(
-      screen.getByText(/preparing compare and explanation surfaces for the selected replay/i),
+      screen.getByText(/waiting for replay scoring, challenger comparison, and graph assembly/i),
     ).toBeInTheDocument();
   });
 
@@ -284,9 +284,9 @@ describe("RiskLabPage", () => {
     render(<RiskLabPage />);
 
     expect(await screen.findByText(/risk lab catalog unavailable/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /retry catalog/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
     expect(
-      screen.getByText(/catalog data defines the bounded compare surface exposed by the backend/i),
+      screen.getByText(/the workbench stays bounded until the catalog can be fetched again/i),
     ).toBeInTheDocument();
   });
 
@@ -305,12 +305,12 @@ describe("RiskLabPage", () => {
 
     render(<RiskLabPage />);
 
-    expect(await screen.findByText(/rule-based scorer/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/rule-based scorer/i)).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: /run replay/i }));
 
     expect(await screen.findByText(/replay contract unavailable/i)).toBeInTheDocument();
-    expect(screen.getByText(/adjust the feature snapshot or compare lane and rerun/i)).toBeInTheDocument();
+    expect(screen.getByText(/the compare lane remains intact so the operator can adjust and rerun/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /run replay/i })).toBeInTheDocument();
   });
 });

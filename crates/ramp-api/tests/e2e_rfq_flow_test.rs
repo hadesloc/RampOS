@@ -23,6 +23,21 @@ fn tenant() -> TenantId {
     TenantId("tenant_rfq_e2e".to_string())
 }
 
+async fn seed_tenant(pool: &PgPool) {
+    sqlx::query(
+        r#"
+        INSERT INTO tenants (
+            id, name, status, api_key_hash, webhook_secret_hash, config
+        ) VALUES ($1, 'RFQ E2E Tenant', 'ACTIVE', 'rfq-e2e-api-key', 'rfq-e2e-webhook', '{}')
+        ON CONFLICT (id) DO NOTHING
+        "#,
+    )
+    .bind(&tenant().0)
+    .execute(pool)
+    .await
+    .expect("RFQ E2E tenant should exist");
+}
+
 /// Full RFQ flow via real PostgreSQL:
 /// Create OFFRAMP RFQ → 2 LP bids → Finalize → highest rate wins
 ///
@@ -42,6 +57,7 @@ async fn rfq_offramp_full_auction_with_db() {
         .run(&pool)
         .await
         .expect("migrations should succeed");
+    seed_tenant(&pool).await;
 
     let repo = Arc::new(PgRfqRepository::new(pool.clone()));
     let events = Arc::new(InMemoryEventPublisher::new());
@@ -129,6 +145,7 @@ async fn rfq_onramp_lowest_rate_wins_with_db() {
         .run(&pool)
         .await
         .expect("migrations");
+    seed_tenant(&pool).await;
 
     let repo = Arc::new(PgRfqRepository::new(pool.clone()));
     let events = Arc::new(InMemoryEventPublisher::new());
@@ -200,6 +217,7 @@ async fn rfq_cancel_before_finalization_with_db() {
         .run(&pool)
         .await
         .expect("migrations");
+    seed_tenant(&pool).await;
 
     let repo = Arc::new(PgRfqRepository::new(pool.clone()));
     let events = Arc::new(InMemoryEventPublisher::new());

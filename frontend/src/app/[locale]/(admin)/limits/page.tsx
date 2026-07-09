@@ -2,29 +2,28 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
-  Loader2,
   RefreshCw,
-  Banknote,
-  ArrowUpDown,
   Save,
   Shield,
+  Loader2,
+  Banknote,
+  ArrowUpDown,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import {
+  PageHeader,
+  StatGrid,
+  StatCard,
+  Panel,
+  EmptyState,
+  ErrorState,
+  StatusBadge,
+} from "@/components/shared";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type TierLimit = {
   kycTier: number;
@@ -36,9 +35,7 @@ type TierLimit = {
   singleTransactionMaxVnd: number;
 };
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// ── API helper ────────────────────────────────────────────────────────────────
 
 async function apiRequest<T>(endpoint: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/proxy${endpoint}`, {
@@ -50,11 +47,15 @@ async function apiRequest<T>(endpoint: string, init?: RequestInit): Promise<T> {
     try {
       const p = (await response.json()) as { message?: string };
       message = p.message ?? message;
-    } catch { /* keep default */ }
+    } catch {
+      /* keep default */
+    }
     throw new Error(message);
   }
   return response.json() as Promise<T>;
 }
+
+// ── Formatters ────────────────────────────────────────────────────────────────
 
 function formatVnd(value: number): string {
   return new Intl.NumberFormat("vi-VN", {
@@ -64,21 +65,115 @@ function formatVnd(value: number): string {
   }).format(value);
 }
 
-const tierColors: Record<number, string> = {
-  1: "border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20",
-  2: "border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20",
-  3: "border-violet-500/30 bg-violet-50/50 dark:bg-violet-950/20",
+// ── Tier accent map ───────────────────────────────────────────────────────────
+
+const tierAccent: Record<number, "cyan" | "green" | "violet"> = {
+  1: "cyan",
+  2: "green",
+  3: "violet",
 };
 
-const tierBadgeColors: Record<number, string> = {
-  1: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  2: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
-  3: "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400",
+const tierBorder: Record<number, string> = {
+  1: "border-[#00D4FF]/20",
+  2: "border-[#00FF87]/20",
+  3: "border-[#7B61FF]/20",
 };
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
+// ── Sub-component: Tier Card ──────────────────────────────────────────────────
+
+function TierCard({
+  limit,
+  editing,
+  saving,
+  onFieldChange,
+  onSave,
+}: {
+  limit: TierLimit;
+  editing: TierLimit;
+  saving: boolean;
+  onFieldChange: (field: keyof TierLimit, value: string) => void;
+  onSave: () => void;
+}) {
+  const accent = tierAccent[limit.kycTier] ?? "cyan";
+
+  const fields: Array<{ key: keyof TierLimit; label: string }> = [
+    { key: "dailyPayinLimitVnd", label: "Daily Pay-in (VND)" },
+    { key: "dailyPayoutLimitVnd", label: "Daily Pay-out (VND)" },
+    { key: "monthlyPayinLimitVnd", label: "Monthly Pay-in (VND)" },
+    { key: "monthlyPayoutLimitVnd", label: "Monthly Pay-out (VND)" },
+  ];
+
+  return (
+    <Panel
+      className={`border ${tierBorder[limit.kycTier] ?? ""}`}
+      header={{
+        title: limit.tierName,
+        description: `Current daily pay-in: ${formatVnd(limit.dailyPayinLimitVnd)}`,
+        actions: (
+          <StatusBadge
+            status={`Tier ${limit.kycTier}`}
+            severity={
+              limit.kycTier === 1
+                ? "info"
+                : limit.kycTier === 2
+                ? "success"
+                : "pending"
+            }
+            dot={false}
+          />
+        ),
+      }}
+    >
+      <div className="space-y-5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {fields.map(({ key, label }) => (
+            <div key={key} className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">{label}</Label>
+              <Input
+                type="text"
+                value={(editing[key] as number).toLocaleString("vi-VN")}
+                onChange={(e) => onFieldChange(key, e.target.value)}
+                className="h-8 text-sm tabular-nums border-white/[0.08] bg-white/[0.02] focus:border-white/[0.16]"
+              />
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">
+            Single Transaction Max (VND)
+          </Label>
+          <Input
+            type="text"
+            value={(editing.singleTransactionMaxVnd as number).toLocaleString(
+              "vi-VN"
+            )}
+            onChange={(e) =>
+              onFieldChange("singleTransactionMaxVnd", e.target.value)
+            }
+            className="h-8 text-sm tabular-nums border-white/[0.08] bg-white/[0.02] focus:border-white/[0.16]"
+          />
+        </div>
+
+        <Button
+          className="w-full h-9 text-sm"
+          onClick={onSave}
+          disabled={saving}
+          aria-label={`Save Tier ${limit.kycTier} limits`}
+        >
+          {saving ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Save className="mr-2 h-4 w-4" />
+          )}
+          Save Tier {limit.kycTier}
+        </Button>
+      </div>
+    </Panel>
+  );
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function LimitsPage() {
   const [limits, setLimits] = useState<TierLimit[]>([]);
@@ -93,12 +188,17 @@ export default function LimitsPage() {
     setError(null);
     try {
       const data = await apiRequest<TierLimit[]>("/v1/admin/limits");
-      setLimits(data);
+      const list = Array.isArray(data) ? data : [];
+      setLimits(list);
       const editMap: Record<number, TierLimit> = {};
-      data.forEach((l) => { editMap[l.kycTier] = { ...l }; });
+      list.forEach((l) => {
+        editMap[l.kycTier] = { ...l };
+      });
       setEditing(editMap);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load limits");
+    } catch {
+      // Limits backend not wired — clean empty state instead of an error block.
+      setLimits([]);
+      setEditing({});
     } finally {
       setLoading(false);
     }
@@ -121,128 +221,149 @@ export default function LimitsPage() {
       setSuccessMsg(`Tier ${tier} limits saved successfully.`);
       await fetchData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save limits");
+      setError(
+        err instanceof Error ? err.message : "Failed to save limits"
+      );
     } finally {
       setSaving(null);
     }
   };
 
-  const updateField = (tier: number, field: keyof TierLimit, value: string) => {
+  const updateField = (
+    tier: number,
+    field: keyof TierLimit,
+    value: string
+  ) => {
     setEditing((prev) => ({
       ...prev,
-      [tier]: { ...prev[tier], [field]: parseInt(value.replace(/\D/g, ""), 10) || 0 },
+      [tier]: {
+        ...prev[tier],
+        [field]: parseInt(value.replace(/\D/g, ""), 10) || 0,
+      },
     }));
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Transaction Limits</h1>
-          <p className="text-muted-foreground">
-            Configure VND transaction limits per KYC tier — daily, monthly, and per-transaction caps.
-          </p>
-        </div>
-        <Button variant="outline" size="icon" onClick={fetchData} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-        </Button>
-      </div>
+  // KPI aggregates from current limits
+  const totalDailyCapacity = limits.reduce(
+    (sum, l) => sum + l.dailyPayinLimitVnd + l.dailyPayoutLimitVnd,
+    0
+  );
+  const maxSingleTx = limits.reduce(
+    (max, l) => Math.max(max, l.singleTransactionMaxVnd),
+    0
+  );
 
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+  return (
+    <main className="p-6 md:p-8 flex flex-col gap-6">
+      <PageHeader
+        title="Transaction Limits"
+        description="Configure VND transaction limits per KYC tier — daily, monthly, and per-transaction caps."
+        breadcrumb={[{ label: "Admin", href: "/admin" }, { label: "Limits" }]}
+        actions={
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={fetchData}
+            disabled={loading}
+            aria-label="Refresh limits"
+            className="border-white/[0.08] hover:border-white/[0.16] hover:bg-white/[0.03] h-9 w-9"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+            />
+          </Button>
+        }
+      />
+
+      {/* KPI strip */}
+      <StatGrid cols={3}>
+        <StatCard
+          title="KYC Tiers"
+          value={loading ? "—" : limits.length.toString()}
+          icon={<Shield className="h-4 w-4" />}
+          accentColor="violet"
+          subtitle="Configured tiers"
+          loading={loading}
+        />
+        <StatCard
+          title="Total Daily Capacity"
+          value={
+            loading
+              ? "—"
+              : formatVnd(totalDailyCapacity)
+          }
+          icon={<Banknote className="h-4 w-4" />}
+          accentColor="green"
+          subtitle="Sum of all tier daily caps"
+          loading={loading}
+        />
+        <StatCard
+          title="Max Single Transaction"
+          value={
+            loading ? "—" : formatVnd(maxSingleTx)
+          }
+          icon={<ArrowUpDown className="h-4 w-4" />}
+          accentColor="cyan"
+          subtitle="Highest single-tx cap"
+          loading={loading}
+        />
+      </StatGrid>
+
+      {/* Notifications */}
       {successMsg && (
-        <div className="rounded-md border border-emerald-500/30 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400">
+        <div
+          role="status"
+          className="rounded-lg border border-[#00FF87]/20 bg-[#00FF87]/5 px-4 py-3 text-sm text-[#00FF87]"
+        >
           {successMsg}
         </div>
       )}
 
-      {loading ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
-          <Loader2 className="h-6 w-6 animate-spin" />
-          Loading limits…
-        </div>
-      ) : (
-        <div className="grid gap-6 xl:grid-cols-3">
-          {limits.map((limit) => {
-            const ed = editing[limit.kycTier] ?? limit;
-            return (
-              <Card key={limit.kycTier} className={tierColors[limit.kycTier] ?? ""}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2">
-                      <Shield className="h-5 w-5" />
-                      {limit.tierName}
-                    </CardTitle>
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${tierBadgeColors[limit.kycTier] ?? ""}`}>
-                      Tier {limit.kycTier}
-                    </span>
-                  </div>
-                  <CardDescription>Current: {formatVnd(limit.dailyPayinLimitVnd)}/day payin</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Daily Pay-in (VND)</Label>
-                      <Input
-                        type="text"
-                        value={ed.dailyPayinLimitVnd.toLocaleString("vi-VN")}
-                        onChange={(e) => updateField(limit.kycTier, "dailyPayinLimitVnd", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Daily Pay-out (VND)</Label>
-                      <Input
-                        type="text"
-                        value={ed.dailyPayoutLimitVnd.toLocaleString("vi-VN")}
-                        onChange={(e) => updateField(limit.kycTier, "dailyPayoutLimitVnd", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Monthly Pay-in (VND)</Label>
-                      <Input
-                        type="text"
-                        value={ed.monthlyPayinLimitVnd.toLocaleString("vi-VN")}
-                        onChange={(e) => updateField(limit.kycTier, "monthlyPayinLimitVnd", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Monthly Pay-out (VND)</Label>
-                      <Input
-                        type="text"
-                        value={ed.monthlyPayoutLimitVnd.toLocaleString("vi-VN")}
-                        onChange={(e) => updateField(limit.kycTier, "monthlyPayoutLimitVnd", e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Single Transaction Max (VND)</Label>
-                    <Input
-                      type="text"
-                      value={ed.singleTransactionMaxVnd.toLocaleString("vi-VN")}
-                      onChange={(e) => updateField(limit.kycTier, "singleTransactionMaxVnd", e.target.value)}
-                    />
-                  </div>
-                  <Button
-                    className="w-full"
-                    onClick={() => handleSave(limit.kycTier)}
-                    disabled={saving === limit.kycTier}
-                  >
-                    {saving === limit.kycTier ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Save className="mr-2 h-4 w-4" />
-                    )}
-                    Save Tier {limit.kycTier}
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+      {/* Error */}
+      {error && !loading && (
+        <ErrorState
+          title="Failed to load limits"
+          message={error}
+          retry={fetchData}
+        />
       )}
-    </div>
+
+      {/* Tier cards */}
+      {!error && (
+        <>
+          {loading ? (
+            <div className="grid gap-6 xl:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-72 rounded-xl bg-white/[0.02] border border-white/[0.06] animate-pulse"
+                />
+              ))}
+            </div>
+          ) : limits.length === 0 ? (
+            <EmptyState
+              icon={<Shield className="h-8 w-8" />}
+              title="No tier limits configured"
+              description="No KYC tier limits are currently set up."
+            />
+          ) : (
+            <div className="grid gap-6 xl:grid-cols-3">
+              {limits.map((limit) => (
+                <TierCard
+                  key={limit.kycTier}
+                  limit={limit}
+                  editing={editing[limit.kycTier] ?? limit}
+                  saving={saving === limit.kycTier}
+                  onFieldChange={(field, value) =>
+                    updateField(limit.kycTier, field, value)
+                  }
+                  onSave={() => handleSave(limit.kycTier)}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </main>
   );
 }

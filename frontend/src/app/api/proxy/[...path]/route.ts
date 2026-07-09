@@ -6,6 +6,7 @@ import {
   ADMIN_SESSION_COOKIE,
   constantTimeEqual,
   createAdminSessionToken,
+  shouldUseSecureCookies,
   readAdminSessionToken,
 } from '@/lib/admin-auth';
 
@@ -101,7 +102,18 @@ async function handleRequest(req: NextRequest, props: { params: Promise<{ path: 
 
     let response = await fetch(url, options);
 
-    if (response.status === 401 && session.refreshToken) {
+    // Recover from an expired admin access token. The backend returns 401 for
+    // a missing/invalid token, but 403 with an "Invalid admin token:
+    // ExpiredSignature" body once the short-lived (30 min) access token
+    // expires. Both are recoverable by exchanging the refresh token; a 403
+    // that is NOT an expiry (genuine permission denial) is left untouched.
+    let shouldRefresh = response.status === 401;
+    if (!shouldRefresh && response.status === 403) {
+      const peeked = await response.clone().text().catch(() => '');
+      shouldRefresh = /ExpiredSignature|Invalid admin token/i.test(peeked);
+    }
+
+    if (shouldRefresh && session.refreshToken) {
       const refreshResponse = await fetch(`${cleanApiUrl}/v1/admin/auth/refresh`, {
         method: 'POST',
         headers: {
@@ -126,7 +138,7 @@ async function handleRequest(req: NextRequest, props: { params: Promise<{ path: 
             value: createAdminSessionToken(ADMIN_SESSION_SECRET, refreshedSession),
             httpOnly: true,
             sameSite: 'strict',
-            secure: process.env.NODE_ENV === 'production',
+            secure: shouldUseSecureCookies(),
             path: '/',
             maxAge: 60 * 60 * 24 * 7,
           });

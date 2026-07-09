@@ -1,20 +1,13 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { PageHeader } from "@/components/layout/page-header";
-import { StatCard } from "@/components/dashboard/stat-card";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Activity,
   CheckCircle2,
   AlertOctagon,
   AlertTriangle,
-  Clock,
   Server,
   Zap,
-  Loader2,
   RefreshCw,
 } from "lucide-react";
 import {
@@ -24,37 +17,174 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer
+  ResponsiveContainer,
+  Legend,
 } from "recharts";
-import { ChartContainer } from "@/components/dashboard/chart-container";
-import { healthApi } from "@/lib/api";
-import { useToast } from "@/components/ui/use-toast";
 
-// Types for SLA data
+import {
+  PageHeader,
+  StatGrid,
+  StatCard,
+  Panel,
+  ChartCard,
+  DataTable,
+  StatusBadge,
+  EmptyState,
+  ErrorState,
+  chartColors,
+  cartesianGridProps,
+  axisProps,
+  tooltipStyle,
+} from "@/components/shared";
+import { Button } from "@/components/ui/button";
+import { ColumnDef } from "@tanstack/react-table";
+import { healthApi } from "@/lib/api";
+import { formatNumber } from "@/lib/format";
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+
 interface SystemStatus {
   service: string;
-  status: 'operational' | 'degraded' | 'down';
-  uptime: number; // Percentage
-  latency: number; // ms
+  status: "operational" | "degraded" | "down";
+  uptime: number;
+  latency: number;
 }
 
 interface Incident {
   id: string;
   title: string;
-  status: 'investigating' | 'identified' | 'monitoring' | 'resolved';
-  severity: 'minor' | 'major' | 'critical';
+  status: "investigating" | "identified" | "monitoring" | "resolved";
+  severity: "minor" | "major" | "critical";
   service: string;
   startedAt: string;
   resolvedAt?: string;
 }
+
+// ── Status helpers ─────────────────────────────────────────────────────────────
+
+function statusSeverity(
+  s: SystemStatus["status"]
+): "success" | "warning" | "danger" {
+  if (s === "operational") return "success";
+  if (s === "degraded") return "warning";
+  return "danger";
+}
+
+function incidentSeverity(
+  sev: Incident["severity"]
+): "danger" | "warning" | "info" {
+  if (sev === "critical") return "danger";
+  if (sev === "major") return "warning";
+  return "info";
+}
+
+function incidentStatusSeverity(
+  s: Incident["status"]
+): "danger" | "warning" | "info" | "success" {
+  if (s === "investigating") return "danger";
+  if (s === "identified") return "warning";
+  if (s === "monitoring") return "info";
+  return "success";
+}
+
+// ── Table columns ──────────────────────────────────────────────────────────────
+
+const statusColumns: ColumnDef<SystemStatus>[] = [
+  {
+    accessorKey: "service",
+    header: "Service",
+    cell: ({ row }) => (
+      <span className="font-medium text-sm">{row.original.service}</span>
+    ),
+  },
+  {
+    accessorKey: "status",
+    header: "Status",
+    cell: ({ row }) => (
+      <StatusBadge
+        status={row.original.status.charAt(0).toUpperCase() + row.original.status.slice(1)}
+        severity={statusSeverity(row.original.status)}
+      />
+    ),
+  },
+  {
+    accessorKey: "uptime",
+    header: "Uptime",
+    cell: ({ row }) => (
+      <span className="tabular-nums text-sm">
+        {formatNumber(row.original.uptime, 2)}%
+      </span>
+    ),
+  },
+  {
+    accessorKey: "latency",
+    header: "Latency",
+    cell: ({ row }) => (
+      <span className="tabular-nums text-sm text-muted-foreground">
+        {row.original.latency}ms
+      </span>
+    ),
+  },
+];
+
+const incidentColumns: ColumnDef<Incident>[] = [
+  {
+    accessorKey: "title",
+    header: "Incident",
+    cell: ({ row }) => (
+      <div>
+        <div className="font-medium text-sm">{row.original.title}</div>
+        <div className="text-xs text-muted-foreground">{row.original.service}</div>
+      </div>
+    ),
+  },
+  {
+    accessorKey: "severity",
+    header: "Severity",
+    cell: ({ row }) => (
+      <StatusBadge
+        status={row.original.severity.toUpperCase()}
+        severity={incidentSeverity(row.original.severity)}
+      />
+    ),
+  },
+  {
+    accessorKey: "status",
+    header: "Status",
+    cell: ({ row }) => (
+      <StatusBadge
+        status={row.original.status}
+        severity={incidentStatusSeverity(row.original.status)}
+      />
+    ),
+  },
+  {
+    accessorKey: "startedAt",
+    header: "Started",
+    cell: ({ row }) => (
+      <span className="text-xs text-muted-foreground tabular-nums">
+        {new Date(row.original.startedAt).toLocaleString("en-GB", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })}
+      </span>
+    ),
+  },
+];
+
+// ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function SLAMonitoringPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<SystemStatus[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [latencyData, setLatencyData] = useState<{ time: string; api: number; db: number }[]>([]);
-  const { toast } = useToast();
+  const [latencyData, setLatencyData] = useState<
+    { time: string; api: number; db: number }[]
+  >([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -65,18 +195,15 @@ export default function SLAMonitoringPage() {
         healthApi.ready(),
       ]);
 
-      // Transform health check data into SystemStatus entries
       const serviceStatuses: SystemStatus[] = [];
 
-      // Core API status from /health
       serviceStatuses.push({
         service: "Core API",
         status: healthData.status === "ok" ? "operational" : "degraded",
         uptime: healthData.status === "ok" ? 99.99 : 95.0,
-        latency: 0, // Will be estimated from response time
+        latency: 0,
       });
 
-      // Transform readiness checks into service statuses
       if (readyData.checks) {
         for (const [serviceName, isHealthy] of Object.entries(readyData.checks)) {
           const displayName = serviceName
@@ -93,7 +220,6 @@ export default function SLAMonitoringPage() {
 
       setStatuses(serviceStatuses);
 
-      // Build incidents from any non-operational services
       const activeIncidents: Incident[] = serviceStatuses
         .filter((s) => s.status !== "operational")
         .map((s, idx) => ({
@@ -106,216 +232,165 @@ export default function SLAMonitoringPage() {
         }));
       setIncidents(activeIncidents);
 
-      // Latency chart placeholder - no historical endpoint available
-      setLatencyData([
-        { time: "Now", api: 0, db: 0 },
-      ]);
+      setLatencyData([{ time: "Now", api: 0, db: 0 }]);
     } catch (err: any) {
       console.error("Failed to fetch monitoring data:", err);
-      const message = err.message || "Failed to load monitoring data";
-      setError(message);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: message,
-      });
+      setError(err.message || "Failed to load monitoring data");
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const getStatusColor = (status: SystemStatus['status']) => {
-    switch (status) {
-      case 'operational': return "text-green-600 dark:text-green-400";
-      case 'degraded': return "text-yellow-600 dark:text-yellow-400";
-      case 'down': return "text-red-600 dark:text-red-400";
-      default: return "text-gray-600";
-    }
-  };
-
-  const getStatusIcon = (status: SystemStatus['status']) => {
-    switch (status) {
-      case 'operational': return <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />;
-      case 'degraded': return <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />;
-      case 'down': return <AlertOctagon className="h-5 w-5 text-red-600 dark:text-red-400" />;
-    }
-  };
+  const avgUptime =
+    statuses.length > 0
+      ? statuses.reduce((sum, s) => sum + s.uptime, 0) / statuses.length
+      : 0;
+  const operationalCount = statuses.filter((s) => s.status === "operational").length;
+  const activeIncidentCount = incidents.filter((i) => i.status !== "resolved").length;
+  const slaBreachCount = statuses.filter((s) => s.status === "down").length;
 
   return (
-    <div className="space-y-6 p-6">
+    <main className="p-page flex flex-col gap-section">
       <PageHeader
         title="SLA Monitoring"
         description="System uptime, latency metrics, and incident tracking"
+        breadcrumb={[
+          { label: "Admin", href: "/admin" },
+          { label: "Monitoring" },
+        ]}
         actions={
-          <Button variant="outline" size="icon" onClick={fetchData} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={fetchData}
+            disabled={loading}
+            className="border-white/[0.08] hover:border-white/[0.16] hover:bg-white/[0.03] h-9 w-9"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
         }
       />
 
-      {/* Top Level Stats */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* KPIs */}
+      <StatGrid cols={4}>
         <StatCard
           title="Global Uptime (30d)"
-          value={statuses.length > 0 ? `${(statuses.reduce((sum, s) => sum + s.uptime, 0) / statuses.length).toFixed(2)}%` : "N/A"}
-          icon={<Server className="h-4 w-4 text-muted-foreground" />}
+          value={statuses.length > 0 ? `${formatNumber(avgUptime, 2)}%` : "N/A"}
+          icon={<Server className="h-4 w-4" />}
+          accentColor="green"
           loading={loading}
         />
         <StatCard
           title="Services Operational"
-          value={`${statuses.filter(s => s.status === 'operational').length}/${statuses.length}`}
-          icon={<Zap className="h-4 w-4 text-muted-foreground" />}
+          value={loading ? "—" : `${operationalCount} / ${statuses.length}`}
+          icon={<Zap className="h-4 w-4" />}
+          accentColor="cyan"
           loading={loading}
         />
         <StatCard
           title="Active Incidents"
-          value={incidents.filter(i => i.status !== 'resolved').length}
-          icon={<AlertTriangle className="h-4 w-4 text-muted-foreground" />}
+          value={loading ? "—" : activeIncidentCount}
+          icon={<AlertTriangle className="h-4 w-4" />}
+          accentColor={activeIncidentCount > 0 ? "amber" : "green"}
           loading={loading}
-          className={incidents.some(i => i.status !== 'resolved') ? "border-yellow-500/50 bg-yellow-50/10" : ""}
         />
         <StatCard
           title="SLA Breaches"
-          value={statuses.filter(s => s.status === 'down').length}
-          icon={<Activity className="h-4 w-4 text-muted-foreground" />}
+          value={loading ? "—" : slaBreachCount}
+          icon={<Activity className="h-4 w-4" />}
+          accentColor={slaBreachCount > 0 ? "violet" : "green"}
           loading={loading}
         />
-      </div>
+      </StatGrid>
 
+      {error && (
+        <ErrorState
+          title="Failed to load monitoring data"
+          message={error}
+          retry={fetchData}
+        />
+      )}
+
+      {/* Service status + incidents side by side */}
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Service Status List */}
-        <Card>
-          <CardHeader>
-            <CardTitle>System Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-4">
-                {[1, 2, 3, 4].map(i => <div key={i} className="h-12 bg-muted/20 animate-pulse rounded" />)}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {statuses.map((status) => (
-                  <div key={status.service} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      {getStatusIcon(status.status)}
-                      <div>
-                        <div className="font-medium">{status.service}</div>
-                        <div className="text-xs text-muted-foreground">Latency: {status.latency}ms</div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className={`font-bold ${getStatusColor(status.status)}`}>
-                        {status.status.charAt(0).toUpperCase() + status.status.slice(1)}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Uptime: {status.uptime}%</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <Panel header={{ title: "System Status" }}>
+          <DataTable
+            columns={statusColumns}
+            data={statuses}
+            loading={loading}
+            skeletonRows={5}
+            emptyState={
+              <EmptyState
+                icon={<CheckCircle2 className="h-8 w-8" />}
+                title="No services detected"
+                description="Health check returned no service records."
+              />
+            }
+          />
+        </Panel>
 
-        {/* Recent Incidents */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Incidents</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-4">
-                {[1, 2].map(i => <div key={i} className="h-20 bg-muted/20 animate-pulse rounded" />)}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {incidents.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">No incidents reported</div>
-                ) : (
-                  incidents.map((incident) => (
-                    <div key={incident.id} className="p-4 border rounded-lg space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Badge variant={incident.severity === 'critical' ? 'destructive' : 'outline'}>
-                            {incident.severity.toUpperCase()}
-                          </Badge>
-                          <span className="font-medium">{incident.title}</span>
-                        </div>
-                        <Badge variant={incident.status === 'resolved' ? 'secondary' : 'default'}>
-                          {incident.status}
-                        </Badge>
-                      </div>
-                      <div className="text-sm text-muted-foreground flex items-center gap-2">
-                        <Clock className="h-3 w-3" />
-                        Started: {new Date(incident.startedAt).toLocaleString()}
-                      </div>
-                      {incident.resolvedAt && (
-                        <div className="text-sm text-green-600 flex items-center gap-2">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Resolved: {new Date(incident.resolvedAt).toLocaleString()}
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <Panel header={{ title: "Recent Incidents" }}>
+          <DataTable
+            columns={incidentColumns}
+            data={incidents}
+            loading={loading}
+            skeletonRows={3}
+            emptyState={
+              <EmptyState
+                icon={<CheckCircle2 className="h-8 w-8" />}
+                title="All systems nominal"
+                description="No active incidents at this time."
+              />
+            }
+          />
+        </Panel>
       </div>
 
-      {/* Latency Chart */}
-      <ChartContainer
+      {/* Latency chart */}
+      <ChartCard
         title="API Latency (24h)"
         description="Average response time in milliseconds"
+        loading={loading}
+        empty={!loading && latencyData.every((d) => d.api === 0 && d.db === 0)}
+        height={300}
       >
-        <ResponsiveContainer width="100%" height={300}>
+        <ResponsiveContainer width="100%" height="100%">
           <LineChart data={latencyData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis
-              dataKey="time"
-              stroke="#888888"
-              fontSize={12}
-              tickLine={false}
-              axisLine={false}
-            />
+            <CartesianGrid {...cartesianGridProps} />
+            <XAxis dataKey="time" {...axisProps} />
             <YAxis
-              stroke="#888888"
-              fontSize={12}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(value) => `${value}ms`}
+              {...axisProps}
+              tickFormatter={(v: number) => `${v}ms`}
             />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(var(--background))",
-                borderColor: "hsl(var(--border))",
-              }}
-              itemStyle={{ color: "hsl(var(--primary))" }}
+            <Tooltip {...tooltipStyle} />
+            <Legend
+              wrapperStyle={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}
             />
             <Line
               type="monotone"
               dataKey="api"
               name="Core API"
-              stroke="hsl(var(--primary))"
+              stroke={chartColors.green}
               strokeWidth={2}
               dot={false}
+              activeDot={{ r: 4 }}
             />
             <Line
               type="monotone"
               dataKey="db"
               name="Database"
-              stroke="#82ca9d"
+              stroke={chartColors.cyan}
               strokeWidth={2}
               dot={false}
+              activeDot={{ r: 4 }}
             />
           </LineChart>
         </ResponsiveContainer>
-      </ChartContainer>
-    </div>
+      </ChartCard>
+    </main>
   );
 }

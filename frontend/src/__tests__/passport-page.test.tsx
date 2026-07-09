@@ -32,6 +32,7 @@ describe("PassportPortalPage", () => {
     render(<PassportPortalPage />);
 
     expect(await screen.findByText(/pkg_passport_001/i)).toBeInTheDocument();
-    expect(screen.getByText(/reuse allowed: yes/i)).toBeInTheDocument();
+    expect(screen.getByText(/reuse allowed/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/status: yes/i)).toBeInTheDocument();
   });
 });

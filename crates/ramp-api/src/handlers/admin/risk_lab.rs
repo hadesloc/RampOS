@@ -568,7 +568,7 @@ mod tests {
         },
     };
     use sqlx::PgPool;
-    use std::sync::{Arc, Mutex, OnceLock};
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn compare_query_deserializes_camel_case_filters() {
@@ -628,8 +628,8 @@ mod tests {
     const TEST_ADMIN_JWT_SECRET: &str = "risk-lab-tests-admin-jwt-secret";
 
     fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
+        // Single process-wide lock shared by all admin env-mutating tests.
+        crate::handlers::admin::admin_env_lock()
     }
 
     fn make_admin_jwt(role: &str) -> String {

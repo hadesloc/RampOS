@@ -189,14 +189,14 @@ describe('F15 Frontend Data Flow', () => {
   // =========================================================================
 
   describe('API functions call real endpoints (no hardcoded / mock data)', () => {
-    it('dashboardApi.getStats fetches from /v1/admin/dashboard/stats', async () => {
+    it('dashboardApi.getStats fetches from /v1/admin/dashboard', async () => {
       setupCsrfThenApi(DASHBOARD_STATS);
 
       const result = await dashboardApi.getStats();
 
       // The SECOND fetch call is the actual API call (first is CSRF)
       const apiCall = mockFetch.mock.calls[1];
-      expect(apiCall[0]).toContain('/v1/admin/dashboard/stats');
+      expect(apiCall[0]).toContain('/v1/admin/dashboard');
       // Verify the data comes from the fetch response, not inline
       expect(result).toEqual(DASHBOARD_STATS);
       expect(result.intents.totalToday).toBe(42);
@@ -875,7 +875,7 @@ describe('F15 Frontend Data Flow', () => {
       dashboardApi.getStats().then(() => {
         const apiCallUrl = mockFetch.mock.calls[1][0] as string;
         // In jsdom (test env), should use /api/proxy prefix
-        expect(apiCallUrl).toContain('/v1/admin/dashboard/stats');
+        expect(apiCallUrl).toContain('/v1/admin/dashboard');
       });
     });
   });

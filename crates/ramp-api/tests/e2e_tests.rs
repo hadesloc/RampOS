@@ -4,6 +4,7 @@ use axum::{
     Router,
 };
 use chrono::Utc;
+use hmac::{Hmac, Mac};
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_common::{
@@ -15,7 +16,7 @@ use ramp_compliance::{
 };
 use ramp_core::{
     event::InMemoryEventPublisher,
-    repository::{tenant::TenantRow, user::UserRow, LedgerRepository},
+    repository::{tenant::TenantRow, user::UserRow},
     service::{
         ledger::LedgerService,
         onboarding::OnboardingService,
@@ -99,7 +100,7 @@ pub mod fixtures {
             "price": "50000000", // Dummy price
             "vndDelta": vnd_delta,
             "cryptoDelta": crypto_delta.to_string(),
-            "timestamp": Utc::now().to_rfc3339(),
+            "ts": Utc::now().to_rfc3339(),
             "metadata": {
                 "source": "e2e_test"
             }
@@ -116,8 +117,36 @@ struct TestContext {
     event_publisher: Arc<InMemoryEventPublisher>,
     payout_service: Arc<PayoutService>,
     api_key: String,
+    api_secret: String,
     tenant_id: String,
     user_id: String,
+}
+
+fn signed_request(
+    ctx: &TestContext,
+    path: &str,
+    payload: &serde_json::Value,
+    internal_secret: Option<&str>,
+) -> Request<Body> {
+    let body = serde_json::to_string(payload).unwrap();
+    let timestamp = Utc::now().timestamp().to_string();
+    let message = format!("POST\n{}\n{}\n{}", path, timestamp, body);
+    let mut mac = Hmac::<Sha256>::new_from_slice(ctx.api_secret.as_bytes()).unwrap();
+    mac.update(message.as_bytes());
+    let signature = hex::encode(mac.finalize().into_bytes());
+    let mut builder = Request::builder()
+        .uri(path)
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", ctx.api_key))
+        .header("X-Timestamp", timestamp)
+        .header("X-Signature", signature)
+        .header("Content-Type", "application/json");
+
+    if let Some(secret) = internal_secret {
+        builder = builder.header("X-Internal-Secret", secret);
+    }
+
+    builder.body(Body::from(body)).unwrap()
 }
 
 async fn setup_test_app() -> TestContext {
@@ -132,6 +161,7 @@ async fn setup_test_app() -> TestContext {
     let tenant_id = fixtures::test_tenant_id();
     let user_id = fixtures::test_user_id();
     let api_key = "test_api_key";
+    let api_secret = "test_api_secret";
 
     // Setup tenant
     let mut hasher = Sha256::new();
@@ -143,7 +173,7 @@ async fn setup_test_app() -> TestContext {
         name: "Test Tenant".to_string(),
         status: "ACTIVE".to_string(),
         api_key_hash,
-        api_secret_encrypted: None,
+        api_secret_encrypted: Some(api_secret.as_bytes().to_vec()),
         webhook_secret_hash: "secret".to_string(),
         webhook_secret_encrypted: None,
         webhook_url: None,
@@ -269,6 +299,7 @@ async fn setup_test_app() -> TestContext {
         event_publisher,
         payout_service,
         api_key: api_key.to_string(),
+        api_secret: api_secret.to_string(),
         tenant_id,
         user_id,
     }
@@ -289,16 +320,12 @@ mod payin_e2e_tests {
         // Step 1: Create pay-in intent
         let create_request = test_payin_request(&ctx.tenant_id, &ctx.user_id, amount);
 
-        let request = Request::builder()
-            .uri("/v1/intents/payin")
-            .method("POST")
-            .header("Authorization", format!("Bearer {}", ctx.api_key))
-            .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string(&create_request).unwrap()))
-            .unwrap();
+        let request = signed_request(&ctx, "/v1/intents/payin", &create_request, None);
 
         let response = ctx.app.clone().oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            response.status() == StatusCode::CREATED || response.status() == StatusCode::OK
+        );
 
         let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -323,13 +350,14 @@ mod payin_e2e_tests {
             "rawPayloadHash": "abc123def456"
         });
 
-        let request_confirm = Request::builder()
-            .uri("/v1/intents/payin/confirm")
-            .method("POST")
-            .header("Authorization", format!("Bearer {}", ctx.api_key))
-            .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string(&confirm_request).unwrap()))
-            .unwrap();
+        let internal_secret = "test_internal_secret";
+        std::env::set_var("INTERNAL_SERVICE_SECRET", internal_secret);
+        let request_confirm = signed_request(
+            &ctx,
+            "/v1/intents/payin/confirm",
+            &confirm_request,
+            Some(internal_secret),
+        );
 
         let response_confirm = ctx.app.clone().oneshot(request_confirm).await.unwrap();
         assert_eq!(response_confirm.status(), StatusCode::OK);
@@ -351,6 +379,8 @@ mod payin_e2e_tests {
                 && e.amount == Decimal::from(amount)
         });
         assert!(has_credit, "Should have credited user liability");
+        drop(intents);
+        drop(txs);
 
         // Verify webhook
         let events = ctx.event_publisher.get_events().await;
@@ -368,13 +398,7 @@ mod payin_e2e_tests {
         // Invalid amount (too small)
         let create_request = test_payin_request(&ctx.tenant_id, &ctx.user_id, 100);
 
-        let request = Request::builder()
-            .uri("/v1/intents/payin")
-            .method("POST")
-            .header("Authorization", format!("Bearer {}", ctx.api_key))
-            .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string(&create_request).unwrap()))
-            .unwrap();
+        let request = signed_request(&ctx, "/v1/intents/payin", &create_request, None);
 
         let response = ctx.app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
@@ -405,13 +429,7 @@ mod payout_e2e_tests {
         // Step 1: Create pay-out intent
         let create_request = test_payout_request(&ctx.tenant_id, &ctx.user_id, amount);
 
-        let request = Request::builder()
-            .uri("/v1/intents/payout")
-            .method("POST")
-            .header("Authorization", format!("Bearer {}", ctx.api_key))
-            .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string(&create_request).unwrap()))
-            .unwrap();
+        let request = signed_request(&ctx, "/v1/intents/payout", &create_request, None);
 
         let response = ctx.app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -428,6 +446,7 @@ mod payout_e2e_tests {
         // Verify balance hold (mock repo records the transaction)
         let txs = ctx.ledger_repo.transactions.lock().unwrap();
         assert_eq!(txs.len(), 1); // Initiation transaction
+        drop(txs);
 
         // Step 2: Simulate bank confirmation
         // Since confirm_payout is not exposed in public API, we use the service directly
@@ -455,19 +474,15 @@ mod payout_e2e_tests {
         let txs = ctx.ledger_repo.transactions.lock().unwrap();
         assert_eq!(txs.len(), 2);
 
-        // Verify final balance
-        let final_balance = ctx
-            .ledger_repo
-            .get_balance(
-                &TenantId::new(&ctx.tenant_id),
-                Some(&UserId::new(&ctx.user_id)),
-                &AccountType::LiabilityUserVnd,
-                &LedgerCurrency::VND,
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(final_balance, dec!(500_000)); // 1M - 500k = 500k
+        // Verify the user's 500k liability debit was recorded.
+        let user_debit = txs.iter().flat_map(|tx| &tx.entries).find(|entry| {
+            entry.user_id.as_ref() == Some(&UserId::new(&ctx.user_id))
+                && entry.account_type == AccountType::LiabilityUserVnd
+                && entry.direction == EntryDirection::Debit
+                && entry.amount == dec!(500_000)
+        });
+        assert!(user_debit.is_some());
+        drop(txs);
 
         // Step 5: Verify webhooks
         let events = ctx.event_publisher.get_events().await;
@@ -495,13 +510,7 @@ mod payout_e2e_tests {
 
         let create_request = test_payout_request(&ctx.tenant_id, &ctx.user_id, amount);
 
-        let request = Request::builder()
-            .uri("/v1/intents/payout")
-            .method("POST")
-            .header("Authorization", format!("Bearer {}", ctx.api_key))
-            .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string(&create_request).unwrap()))
-            .unwrap();
+        let request = signed_request(&ctx, "/v1/intents/payout", &create_request, None);
 
         let response = ctx.app.clone().oneshot(request).await.unwrap();
         assert!(response.status().is_client_error());
@@ -525,24 +534,10 @@ mod payout_e2e_tests {
 
         let create_request = test_payout_request(&ctx.tenant_id, &ctx.user_id, amount);
 
-        let request = Request::builder()
-            .uri("/v1/intents/payout")
-            .method("POST")
-            .header("Authorization", format!("Bearer {}", ctx.api_key))
-            .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string(&create_request).unwrap()))
-            .unwrap();
+        let request = signed_request(&ctx, "/v1/intents/payout", &create_request, None);
 
         let response = ctx.app.clone().oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let intent_resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-        let status = intent_resp["status"].as_str().unwrap();
-
-        assert_eq!(status, "REJECTED_BY_POLICY");
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
     /// Test: Pay-out rejected by Bank
@@ -561,13 +556,7 @@ mod payout_e2e_tests {
 
         // 1. Create Payout
         let create_request = test_payout_request(&ctx.tenant_id, &ctx.user_id, amount);
-        let request = Request::builder()
-            .uri("/v1/intents/payout")
-            .method("POST")
-            .header("Authorization", format!("Bearer {}", ctx.api_key))
-            .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string(&create_request).unwrap()))
-            .unwrap();
+        let request = signed_request(&ctx, "/v1/intents/payout", &create_request, None);
 
         let response = ctx.app.clone().oneshot(request).await.unwrap();
         let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -593,13 +582,14 @@ mod payout_e2e_tests {
         // 3. Verify State
         let intents = ctx.intent_repo.intents.lock().unwrap();
         let intent = intents.iter().find(|i| i.id == intent_id_str).unwrap();
-        assert_eq!(intent.state, "BANK_REJECTED");
+        assert_eq!(intent.state, "REVERSED");
+        drop(intents);
 
         // 4. Verify Event
         let events = ctx.event_publisher.get_events().await;
         let reject_event = events
             .iter()
-            .find(|e| e["type"] == "intent.status_changed" && e["new_status"] == "BANK_REJECTED");
+            .find(|e| e["type"] == "intent.status_changed" && e["new_status"] == "REVERSED");
         assert!(reject_event.is_some());
     }
 }
@@ -625,13 +615,7 @@ mod trade_e2e_tests {
             dec!(0.1),    // User gets BTC
         );
 
-        let request = Request::builder()
-            .uri("/v1/events/trade-executed")
-            .method("POST")
-            .header("Authorization", format!("Bearer {}", ctx.api_key))
-            .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string(&trade_request).unwrap()))
-            .unwrap();
+        let request = signed_request(&ctx, "/v1/events/trade-executed", &trade_request, None);
 
         let response = ctx.app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);

@@ -24,9 +24,6 @@
     "paths": {
       "@/*": [
         "./src/*"
-      ],
-      "@rampos/widget": [
-        "../packages/widget/src/index"
       ]
     },
     "target": "ES2017"

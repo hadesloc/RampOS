@@ -306,11 +306,11 @@ pub fn validate_production_providers() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
 
-    /// All tests in this module mutate process-wide environment variables.
-    /// This mutex serializes them so parallel test threads don't interfere.
-    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+    // All tests in this module mutate process-wide environment variables
+    // (RUST_ENV/RAMPOS_ENV/provider config). They serialize on the shared
+    // `ramp_common::onchain_gate::test_env_lock()` so they don't interfere with
+    // each other or with env-sensitive tests in sibling modules across this binary.
 
     /// Helper: clear all provider-related env vars to a known baseline.
     fn clear_env() {
@@ -331,14 +331,14 @@ mod tests {
 
     #[test]
     fn test_is_production_false_by_default() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         assert!(!is_production());
     }
 
     #[test]
     fn test_is_production_true() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("RUST_ENV", "production");
         assert!(is_production());
@@ -347,7 +347,7 @@ mod tests {
 
     #[test]
     fn test_is_production_case_insensitive() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("RUST_ENV", "Production");
         assert!(is_production());
@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn test_is_production_ignores_empty_rust_env_and_falls_through_to_rampos_env() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("RUST_ENV", "   ");
         std::env::set_var("RAMPOS_ENV", "production");
@@ -366,7 +366,7 @@ mod tests {
 
     #[test]
     fn test_production_rejects_mock_billing() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("RUST_ENV", "production");
         std::env::set_var("BILLING_PROVIDER", "mock");
@@ -379,7 +379,7 @@ mod tests {
 
     #[test]
     fn test_production_rejects_default_billing() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("RUST_ENV", "production");
         let result = build_billing_provider(None);
@@ -389,7 +389,7 @@ mod tests {
 
     #[test]
     fn test_production_rejects_mock_vnst() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("RUST_ENV", "production");
         std::env::set_var("VNST_PROVIDER", "mock");
@@ -402,7 +402,7 @@ mod tests {
 
     #[test]
     fn test_dev_allows_mock_billing() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("BILLING_PROVIDER", "mock");
         let result = build_billing_provider(None);
@@ -412,7 +412,7 @@ mod tests {
 
     #[test]
     fn test_dev_allows_mock_vnst() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("VNST_PROVIDER", "mock");
         let result = build_vnst_provider();
@@ -422,7 +422,7 @@ mod tests {
 
     #[test]
     fn test_postgres_billing_requires_pool() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("BILLING_PROVIDER", "postgres");
         let result = build_billing_provider(None);
@@ -434,7 +434,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dev_builds_postgres_billing_with_pool() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("BILLING_PROVIDER", "postgres");
         let pool = sqlx::postgres::PgPoolOptions::new()
@@ -447,7 +447,7 @@ mod tests {
 
     #[test]
     fn test_live_vnst_requires_rpc_url() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("VNST_PROVIDER", "live");
         std::env::set_var(
@@ -463,7 +463,7 @@ mod tests {
 
     #[test]
     fn test_live_vnst_requires_contract_address() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("VNST_PROVIDER", "live");
         std::env::set_var("VNST_RPC_URL", "https://rpc.example.invalid");
@@ -476,7 +476,7 @@ mod tests {
 
     #[test]
     fn test_dev_builds_live_vnst_with_config() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("VNST_PROVIDER", "live");
         std::env::set_var("VNST_RPC_URL", "https://rpc.example.invalid");
@@ -495,7 +495,7 @@ mod tests {
 
     #[test]
     fn test_live_vnst_rejects_zero_contract_address() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("VNST_PROVIDER", "live");
         std::env::set_var("VNST_RPC_URL", "https://rpc.example.invalid");
@@ -511,7 +511,7 @@ mod tests {
 
     #[test]
     fn test_unknown_provider_rejected() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("BILLING_PROVIDER", "invalid");
         let result = build_billing_provider(None);
@@ -523,7 +523,7 @@ mod tests {
 
     #[test]
     fn test_validate_production_providers_fails_with_defaults() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("RUST_ENV", "production");
 
@@ -539,7 +539,7 @@ mod tests {
 
     #[test]
     fn test_validate_production_providers_allows_postgres_billing_and_live_vnst() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("RUST_ENV", "production");
         std::env::set_var("EVENT_PUBLISHER", "nats");
@@ -556,7 +556,7 @@ mod tests {
 
     #[test]
     fn test_validate_production_providers_rejects_mock_vnst_even_with_real_rails() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("RUST_ENV", "production");
         std::env::set_var("EVENT_PUBLISHER", "nats");
@@ -576,7 +576,7 @@ mod tests {
 
     #[test]
     fn test_validate_production_providers_rejects_simulation_rails() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("RUST_ENV", "production");
         std::env::set_var("EVENT_PUBLISHER", "nats");
@@ -595,7 +595,7 @@ mod tests {
 
     #[test]
     fn test_validate_production_providers_rejects_no_real_rails() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("RUST_ENV", "production");
         std::env::set_var("EVENT_PUBLISHER", "nats");
@@ -612,7 +612,7 @@ mod tests {
 
     #[test]
     fn test_validate_production_providers_allows_configured_real_rail() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         std::env::set_var("RUST_ENV", "production");
         std::env::set_var("EVENT_PUBLISHER", "nats");
@@ -629,7 +629,7 @@ mod tests {
 
     #[test]
     fn test_validate_skips_in_dev() {
-        let _lock = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ramp_common::onchain_gate::test_env_lock();
         clear_env();
         let result = validate_production_providers();
         assert!(result.is_ok());

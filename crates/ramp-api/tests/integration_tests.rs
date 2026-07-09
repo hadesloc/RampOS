@@ -3,6 +3,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use chrono::{Duration, Utc};
+use hmac::{Hmac, Mac};
 use ramp_api::middleware::{
     IdempotencyConfig, IdempotencyHandler, PortalAuthConfig, RateLimitConfig, RateLimiter,
 };
@@ -40,6 +41,39 @@ struct TestApp {
     #[allow(dead_code)]
     event_publisher: Arc<InMemoryEventPublisher>,
     api_key: String,
+    api_secret: String,
+}
+
+fn signed_request(
+    method: &str,
+    path: &str,
+    api_key: &str,
+    api_secret: &str,
+    body: String,
+    timestamp: Option<String>,
+    idempotency_key: Option<&str>,
+    internal_secret: Option<&str>,
+) -> Request<Body> {
+    let timestamp = timestamp.unwrap_or_else(|| Utc::now().timestamp().to_string());
+    let message = format!("{method}\n{path}\n{timestamp}\n{body}");
+    let mut mac = Hmac::<Sha256>::new_from_slice(api_secret.as_bytes()).unwrap();
+    mac.update(message.as_bytes());
+    let mut builder = Request::builder()
+        .uri(path)
+        .method(method)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .header("X-Timestamp", timestamp)
+        .header("X-Signature", hex::encode(mac.finalize().into_bytes()));
+    if !body.is_empty() {
+        builder = builder.header("Content-Type", "application/json");
+    }
+    if let Some(key) = idempotency_key {
+        builder = builder.header("Idempotency-Key", key);
+    }
+    if let Some(secret) = internal_secret {
+        builder = builder.header("X-Internal-Secret", secret);
+    }
+    builder.body(Body::from(body)).unwrap()
 }
 
 async fn setup_app() -> TestApp {
@@ -52,6 +86,7 @@ async fn setup_app() -> TestApp {
 
     // Setup tenant
     let api_key = "test_api_key";
+    let api_secret = "test_api_secret";
     let mut hasher = Sha256::new();
     hasher.update(api_key.as_bytes());
     let api_key_hash = hex::encode(hasher.finalize());
@@ -61,7 +96,7 @@ async fn setup_app() -> TestApp {
         name: "Test Tenant".to_string(),
         status: "ACTIVE".to_string(),
         api_key_hash: api_key_hash.clone(),
-        api_secret_encrypted: None,
+        api_secret_encrypted: Some(api_secret.as_bytes().to_vec()),
         webhook_secret_hash: "secret".to_string(),
         webhook_secret_encrypted: None,
         webhook_url: None,
@@ -126,9 +161,9 @@ async fn setup_app() -> TestApp {
 
     // Setup middleware
     let rate_limiter = Some(Arc::new(RateLimiter::with_memory(RateLimitConfig {
-        global_max_requests: 100,
+        global_max_requests: 1_000,
         tenant_max_requests: 10,
-        window_seconds: 1, // Short window for testing
+        window_seconds: 60,
         key_prefix: "test:ratelimit".to_string(),
         endpoint_limits: std::collections::HashMap::new(),
     })));
@@ -200,6 +235,7 @@ async fn setup_app() -> TestApp {
         tenant_repo,
         event_publisher,
         api_key: api_key.to_string(),
+        api_secret: api_secret.to_string(),
     }
 }
 
@@ -225,48 +261,58 @@ async fn test_payin_flow() {
 
     // 1. Create Payin
     let payload = serde_json::json!({
-        "tenant_id": "tenant1",
-        "user_id": "user1",
-        "amount_vnd": 100000,
-        "rails_provider": "VIETCOMBANK",
+        "tenantId": "tenant1",
+        "userId": "user1",
+        "amountVnd": 100000,
+        "railsProvider": "VIETCOMBANK",
         "metadata": {}
     });
-
-    let request = Request::builder()
-        .uri("/v1/intents/payin")
-        .method("POST")
-        .header("Authorization", format!("Bearer {}", app.api_key))
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&payload).unwrap()))
-        .unwrap();
+    let request = signed_request(
+        "POST",
+        "/v1/intents/payin",
+        &app.api_key,
+        &app.api_secret,
+        payload.to_string(),
+        None,
+        None,
+        None,
+    );
 
     let response = app.router.clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert!(matches!(
+        response.status(),
+        StatusCode::OK | StatusCode::CREATED
+    ));
 
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
     let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-    let intent_id = body.get("intent_id").and_then(|v| v.as_str()).unwrap();
-    let reference_code = body.get("reference_code").and_then(|v| v.as_str()).unwrap();
+    let intent_id = body.get("intentId").and_then(|v| v.as_str()).unwrap();
+    let reference_code = body.get("referenceCode").and_then(|v| v.as_str()).unwrap();
 
     // 2. Confirm Payin
     let confirm_payload = serde_json::json!({
-        "tenant_id": "tenant1",
-        "reference_code": reference_code,
-        "bank_tx_id": "BANK_TX_123",
-        "amount_vnd": 100000,
-        "settled_at": Utc::now().to_rfc3339(),
-        "raw_payload_hash": "dummy_hash"
+        "tenantId": "tenant1",
+        "referenceCode": reference_code,
+        "status": "FUNDS_CONFIRMED",
+        "bankTxId": "BANK_TX_123",
+        "amountVnd": 100000,
+        "settledAt": Utc::now().to_rfc3339(),
+        "rawPayloadHash": "dummy_hash"
     });
-
-    let request = Request::builder()
-        .uri("/v1/intents/payin/confirm")
-        .method("POST")
-        .header("Authorization", format!("Bearer {}", app.api_key))
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&confirm_payload).unwrap()))
-        .unwrap();
+    let internal_secret = "integration-test-secret";
+    std::env::set_var("INTERNAL_SERVICE_SECRET", internal_secret);
+    let request = signed_request(
+        "POST",
+        "/v1/intents/payin/confirm",
+        &app.api_key,
+        &app.api_secret,
+        confirm_payload.to_string(),
+        None,
+        None,
+        Some(internal_secret),
+    );
 
     let response = app.router.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -291,25 +337,27 @@ async fn test_payout_creation() {
     );
 
     let payload = serde_json::json!({
-        "tenant_id": "tenant1",
-        "user_id": "user1",
-        "amount_vnd": 50000,
-        "rails_provider": "VIETCOMBANK",
-        "bank_account": {
-            "bank_code": "VCB",
-            "account_number": "123456789",
-            "account_name": "Nguyen Van A"
+        "tenantId": "tenant1",
+        "userId": "user1",
+        "amountVnd": 50000,
+        "railsProvider": "VIETCOMBANK",
+        "bankAccount": {
+            "bankCode": "VCB",
+            "accountNumber": "123456789",
+            "accountName": "Nguyen Van A"
         },
         "metadata": {}
     });
-
-    let request = Request::builder()
-        .uri("/v1/intents/payout")
-        .method("POST")
-        .header("Authorization", format!("Bearer {}", app.api_key))
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&payload).unwrap()))
-        .unwrap();
+    let request = signed_request(
+        "POST",
+        "/v1/intents/payout",
+        &app.api_key,
+        &app.api_secret,
+        payload.to_string(),
+        None,
+        None,
+        None,
+    );
 
     let response = app.router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -320,23 +368,25 @@ async fn test_trade_recording() {
     let app = setup_app().await;
 
     let payload = serde_json::json!({
-        "tenant_id": "tenant1",
-        "user_id": "user1",
-        "trade_id": "trade_1",
+        "tenantId": "tenant1",
+        "userId": "user1",
+        "tradeId": "trade_1",
         "symbol": "BTC/VND",
         "price": 1_000_000_000,
-        "vnd_delta": -1_000_000,
-        "crypto_delta": "0.001",
-        "timestamp": Utc::now().to_rfc3339()
+        "vndDelta": -1_000_000,
+        "cryptoDelta": "0.001",
+        "ts": Utc::now().to_rfc3339()
     });
-
-    let request = Request::builder()
-        .uri("/v1/events/trade-executed")
-        .method("POST")
-        .header("Authorization", format!("Bearer {}", app.api_key))
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&payload).unwrap()))
-        .unwrap();
+    let request = signed_request(
+        "POST",
+        "/v1/events/trade-executed",
+        &app.api_key,
+        &app.api_secret,
+        payload.to_string(),
+        None,
+        None,
+        None,
+    );
 
     let response = app.router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -373,12 +423,16 @@ async fn test_get_intent() {
     };
     app.intent_repo.create(&intent).await.unwrap();
 
-    let request = Request::builder()
-        .uri("/v1/intents/intent_get_1")
-        .method("GET")
-        .header("Authorization", format!("Bearer {}", app.api_key))
-        .body(Body::empty())
-        .unwrap();
+    let request = signed_request(
+        "GET",
+        "/v1/intents/intent_get_1",
+        &app.api_key,
+        &app.api_secret,
+        String::new(),
+        None,
+        None,
+        None,
+    );
 
     let response = app.router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -397,12 +451,16 @@ async fn test_get_balances() {
         Decimal::from(500_000),
     );
 
-    let request = Request::builder()
-        .uri("/v1/balance/user1")
-        .method("GET")
-        .header("Authorization", format!("Bearer {}", app.api_key))
-        .body(Body::empty())
-        .unwrap();
+    let request = signed_request(
+        "GET",
+        "/v1/balance/user1",
+        &app.api_key,
+        &app.api_secret,
+        String::new(),
+        None,
+        None,
+        None,
+    );
 
     let response = app.router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -424,13 +482,16 @@ async fn test_auth_validation() {
     let app = setup_app().await;
 
     // 1. Invalid Signature/Key
-    let request = Request::builder()
-        .uri("/v1/intents/payin")
-        .method("POST")
-        .header("Authorization", "Bearer invalid_key")
-        .header("Content-Type", "application/json")
-        .body(Body::from("{}"))
-        .unwrap();
+    let request = signed_request(
+        "POST",
+        "/v1/intents/payin",
+        "invalid_key",
+        &app.api_secret,
+        "{}".to_string(),
+        None,
+        None,
+        None,
+    );
 
     let response = app.router.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -440,6 +501,8 @@ async fn test_auth_validation() {
         .uri("/v1/intents/payin")
         .method("POST")
         // Missing Authorization
+        .header("X-Timestamp", Utc::now().timestamp().to_string())
+        .header("X-Signature", "00")
         .header("Content-Type", "application/json")
         .body(Body::from("{}"))
         .unwrap();
@@ -449,14 +512,16 @@ async fn test_auth_validation() {
 
     // 3. Expired Timestamp
     let expired = Utc::now() - Duration::seconds(301);
-    let request = Request::builder()
-        .uri("/v1/intents/payin")
-        .method("POST")
-        .header("Authorization", format!("Bearer {}", app.api_key))
-        .header("X-Timestamp", expired.to_rfc3339())
-        .header("Content-Type", "application/json")
-        .body(Body::from("{}"))
-        .unwrap();
+    let request = signed_request(
+        "POST",
+        "/v1/intents/payin",
+        &app.api_key,
+        &app.api_secret,
+        "{}".to_string(),
+        Some(expired.to_rfc3339()),
+        None,
+        None,
+    );
 
     let response = app.router.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -469,35 +534,41 @@ async fn test_rate_limiting_enforcement() {
     let app = setup_app().await;
 
     let payload = serde_json::json!({
-        "tenant_id": "tenant1",
-        "user_id": "user1",
-        "amount_vnd": 100000,
-        "rails_provider": "VIETCOMBANK",
+        "tenantId": "tenant1",
+        "userId": "user1",
+        "amountVnd": 100000,
+        "railsProvider": "VIETCOMBANK",
         "metadata": {}
     });
 
-    // Send 10 requests (limit is 10)
-    for _ in 0..10 {
-        let request = Request::builder()
-            .uri("/v1/intents/payin")
-            .method("POST")
-            .header("Authorization", format!("Bearer {}", app.api_key))
-            .header("Content-Type", "application/json")
-            .body(Body::from(serde_json::to_string(&payload).unwrap()))
-            .unwrap();
+    // Standard tenants use the tiered API limit of 100 requests per window.
+    for _ in 0..100 {
+        let request = signed_request(
+            "POST",
+            "/v1/intents/payin",
+            &app.api_key,
+            &app.api_secret,
+            payload.to_string(),
+            None,
+            None,
+            None,
+        );
 
         let response = app.router.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
 
-    // 11th request should be blocked
-    let request = Request::builder()
-        .uri("/v1/intents/payin")
-        .method("POST")
-        .header("Authorization", format!("Bearer {}", app.api_key))
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&payload).unwrap()))
-        .unwrap();
+    // The 101st request should be blocked.
+    let request = signed_request(
+        "POST",
+        "/v1/intents/payin",
+        &app.api_key,
+        &app.api_secret,
+        payload.to_string(),
+        None,
+        None,
+        None,
+    );
 
     let response = app.router.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
@@ -510,37 +581,41 @@ async fn test_idempotency() {
     let app = setup_app().await;
 
     let payload = serde_json::json!({
-        "tenant_id": "tenant1",
-        "user_id": "user1",
-        "amount_vnd": 100000,
-        "rails_provider": "VIETCOMBANK",
+        "tenantId": "tenant1",
+        "userId": "user1",
+        "amountVnd": 100000,
+        "railsProvider": "VIETCOMBANK",
         "metadata": {}
     });
 
     let idem_key = "idem_test_key_1";
 
     // Request 1 with Idempotency-Key
-    let request1 = Request::builder()
-        .uri("/v1/intents/payin")
-        .method("POST")
-        .header("Authorization", format!("Bearer {}", app.api_key))
-        .header("Content-Type", "application/json")
-        .header("Idempotency-Key", idem_key)
-        .body(Body::from(serde_json::to_string(&payload).unwrap()))
-        .unwrap();
+    let request1 = signed_request(
+        "POST",
+        "/v1/intents/payin",
+        &app.api_key,
+        &app.api_secret,
+        payload.to_string(),
+        None,
+        Some(idem_key),
+        None,
+    );
 
     let response1 = app.router.clone().oneshot(request1).await.unwrap();
     assert_eq!(response1.status(), StatusCode::OK);
 
     // Request 2 with same Idempotency-Key
-    let request2 = Request::builder()
-        .uri("/v1/intents/payin")
-        .method("POST")
-        .header("Authorization", format!("Bearer {}", app.api_key))
-        .header("Content-Type", "application/json")
-        .header("Idempotency-Key", idem_key)
-        .body(Body::from(serde_json::to_string(&payload).unwrap()))
-        .unwrap();
+    let request2 = signed_request(
+        "POST",
+        "/v1/intents/payin",
+        &app.api_key,
+        &app.api_secret,
+        payload.to_string(),
+        None,
+        Some(idem_key),
+        None,
+    );
 
     let response2 = app.router.clone().oneshot(request2).await.unwrap();
     assert_eq!(response2.status(), StatusCode::OK);

@@ -33,10 +33,8 @@ vi.mock("@/contexts/auth-context", () => ({
     isLoading: false,
     isAuthenticated: true,
     error: null,
-    loginWithPasskey: vi.fn(),
-    registerWithPasskey: vi.fn(),
-    loginWithMagicLink: vi.fn(),
-    verifyMagicLink: vi.fn(),
+    loginWithPassword: vi.fn(),
+    registerWithPassword: vi.fn(),
     logout: vi.fn(),
     refreshWallet: vi.fn(),
     createWallet: vi.fn(),
@@ -90,7 +88,7 @@ describe("VenueFundingPage", () => {
 
     render(<VenueFundingPage />);
 
-    expect(screen.getByText("Venue Funding")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Venue Funding" })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Hyperliquid" })).toBeInTheDocument();

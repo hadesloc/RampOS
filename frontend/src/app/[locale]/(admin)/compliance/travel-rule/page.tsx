@@ -7,6 +7,7 @@ import TravelRuleQueue, {
   type TravelRuleExceptionRow,
   type TravelRuleRegistryRow,
 } from "@/components/compliance/TravelRuleQueue";
+import { PageHeader } from "@/components/shared";
 
 async function apiRequest<T>(endpoint: string, init?: RequestInit): Promise<T> {
   const url = `/api/proxy${endpoint}`;
@@ -154,14 +155,11 @@ export default function TravelRulePage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Travel Rule Queue</h1>
-        <p className="text-muted-foreground">
-          Monitor registry readiness, disclosure retries, and exception resolution for Travel Rule
-          operations.
-        </p>
-      </div>
+    <main className="p-page flex flex-col gap-section">
+      <PageHeader
+        title="Travel Rule Queue"
+        description="Monitor registry readiness, disclosure retries, and exception resolution for Travel Rule operations."
+      />
 
       <TravelRuleQueue
         registry={registry}
@@ -180,6 +178,6 @@ export default function TravelRulePage() {
         onRetryDisclosure={handleRetryDisclosure}
         onResolveException={handleResolveException}
       />
-    </div>
+    </main>
   );
 }

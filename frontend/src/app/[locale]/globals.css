@@ -200,3 +200,28 @@
 .glow-hover-amber:hover {
   box-shadow: 0 0 25px rgba(255, 184, 0, 0.15), inset 0 1px 0 rgba(255, 184, 0, 0.05);
 }
+
+/* Gradient text utility for headings / hero labels */
+.gradient-text-green {
+  background: linear-gradient(135deg, #00FF87 0%, #00D4FF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.gradient-text-violet {
+  background: linear-gradient(135deg, #7B61FF 0%, #00D4FF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Subtle table row hover glow used by DataTable */
+.row-glow-hover:hover {
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+/* Section spacing token */
+.section-gap {
+  margin-bottom: 1.5rem;
+}

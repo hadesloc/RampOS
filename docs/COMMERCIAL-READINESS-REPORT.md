@@ -1,8 +1,8 @@
 # RampOS Commercial-Readiness — Final Report
 
-**Date:** 2026-06-13 (updated — Session 2 afternoon: Ledger-A remainder completed)
+**Date:** 2026-06-14 (updated — RFQ/off-ramp/settlement W1-W5 locally verified)
 **Author:** Fable orchestrator (orchestration + certification; implementation by background subagents)
-**HEAD:** e40aa5354 (all remediation is uncommitted working-tree work)
+**HEAD:** cda90fa44 baseline; RFQ/off-ramp/settlement W1-W5 contract-surface wave locally verified in working tree
 **Scope:** Honest commercial-readiness certification of the RampOS repo, repo-side and external.
 
 ---
@@ -12,7 +12,7 @@
 The repo carries two separable readiness questions; conflating them would be dishonest, so they are reported on the mission's two ledgers:
 
 - **Ledger A — Repository code-side: `REPO_READY_WITH_ACCEPTED_RISKS`**
-  Every CRITICAL and HIGH correctness/security gap is closed and adversarially reviewed. All previously fake-success money/on-chain paths fail closed and report honestly; secrets fail-fast; KYC PII is encrypted at rest; idempotency is per-actor. **Session 2 additionally fixed a HIGH ledger data-integrity bug (GAP-021, `balance_after`) and a CRITICAL latent ledger persistence bug (GAP-066, `ON CONFLICT` inference) that adversarial review surfaced.** Remaining open items are MEDIUM/LOW and accepted-risk (one unsound transitive dep behind an alloy pin; a single-threaded test-suite constraint; staging-only runtime verification of the two new ledger fixes) and do **not** create money-loss, fake-success, or security-bypass behavior in the code itself.
+  Every CRITICAL and HIGH correctness/security gap in the certified commercial-readiness wave is closed and adversarially reviewed. All previously fake-success money/on-chain paths fail closed and report honestly; secrets fail-fast; KYC PII is encrypted at rest; idempotency is per-actor. **Session 2 additionally fixed a HIGH ledger data-integrity bug (GAP-021, `balance_after`) and a CRITICAL latent ledger persistence bug (GAP-066, `ON CONFLICT` inference) that adversarial review surfaced.** RFQ/off-ramp/settlement contract-surface alignment W1-W5 is now locally verified across frontend, SDK, Rust API/core, and docs/status. Remaining open items are MEDIUM/LOW and accepted-risk (one unsound transitive dep behind an alloy pin; a single-threaded test-suite constraint; staging-only runtime verification of the two ledger fixes) and do **not** create money-loss, fake-success, or security-bypass behavior in the certified code itself.
 
 - **Ledger B — Commercial launch: `BLOCKED_BY_EXTERNAL_REQUIREMENTS`**
   Actual go-live is gated by items that **cannot be closed in this repo on this host**: live bank-rail/chain credentials and RPC, staging/DB/Redis validation (now including runtime execution of migrations 067/999 and the GAP-021 atomic ledger path against real Postgres), external security review, legal/AML licensing, and a Windows-host OpenSSL toolchain for the vetted WebAuthn crate. Tracked in `external-blockers.md` (EXT-01..09); never to be marked done from inside the repo.
@@ -78,11 +78,12 @@ Plus the on-chain fail-closed sweep across **six** surfaces (relayer, IntentExec
 | GAP-042 — `lru 0.12.5` unsound (RUSTSEC-2026-0002) | MED | **accepted-risk** — alloy-provider 0.1.4-pinned; needs alloy-stack upgrade (also clears `proc-macro-error2` unmaintained). Not on a hot path; revisit on alloy bump |
 | GAP-067 — parallel test isolation | LOW | **closed-with-accepted-limitation** (run single-threaded; `serial_test` follow-up tracked) |
 | GAP-066 — ledger ON CONFLICT runtime | — | **remediated in-repo; runtime verification = EXT-01 (staging Postgres)** |
-| GAP-038 — treasury `Sample` source docs wording | MED | open (docs nicety) |
-| GAP-039 — Temporal degraded-fallback caveat | LOW | open (docs nicety) |
-| GAP-010 — yield APY hardcoded fallbacks | MED | scope decision (yield module launch scope) |
+| GAP-038 — treasury/reconciliation provenance wording | MED | **DONE** — docs/UI/operator wording aligned to explicit provenance: default treasury snapshots are sample/synthetic unless evidence-backed; reconciliation is caller-supplied comparison only, not independent settlement discovery |
+| GAP-039 — Temporal degraded-fallback caveat | LOW | **DONE** — workflow runtime contract and ops runbook explicitly document transitional mode: submit can fall back in-process, status can degrade to local tracking, and signals without fallback are warn-only/lost |
+| GAP-010 — yield APY hardcoded fallbacks | MED | **DONE_WITH_ACCEPTED_SCOPE** — yield strategy/APY runtime is excluded from launch; admin API fail-closes and core protocol APY/rebalance paths no longer fabricate rates |
 | GAP-037 — adaptive rate-limit / secret-rotation / alerting | — | scope decision (roadmap) |
-| Phase-5 full build matrix (frontend/widget/k8s done; forge Docker-only; 3 SDKs) | — | frontend `pnpm build` 0, widget 0, `kustomize build k8s/base` PASS; forge needs Docker; SDK builds optional |
+| Phase-5 full build matrix (frontend/widget/k8s done; forge Docker-only; 3 SDKs) | — | frontend `pnpm build` 0, widget 0, `kustomize build k8s/base` PASS; forge needs Docker; SDK builds were optional in that historical matrix, so this is not evidence that the current linked RFQ/off-ramp/settlement SDK/API/frontend contract surfaces are complete |
+| RFQ/off-ramp/settlement contract-surface alignment W1-W5 | MED | **locally verified** — frontend portal/admin routes and DTOs, SDK off-ramp service/types, Rust RFQ/off-ramp money path, docs/status truthfulness, and stale-route/type greps passed. See `.claude/handoffs/RFQ-W5-VERIFY.md`. |
 
 ---
 
@@ -112,7 +113,7 @@ These subsume the deferred-to-staging verifications: real-RPC VNST `total_supply
 
 ## RECOMMENDED COMMIT BREAKDOWN (PROPOSAL ONLY — no commits made, none without explicit instruction)
 
-The 2026-05-13 "landed" OFFRAMP wave **and** all remediation are uncommitted (GAP-060, the single biggest truth gap). Suggested ordering when you choose to commit:
+The 2026-05-13 OFFRAMP wave and certified commercial-readiness remediation are now present in git history (`0f2e2cf20` and follow-up docs commit `cda90fa44`). RFQ/off-ramp/settlement W1-W5 follow-up is locally verified in the working tree; it remains uncommitted until the user requests a commit. Suggested historical commit ordering retained below for audit context:
 
 1. `feat(offramp): land RFQ↔settlement linkage wave` — the pre-existing user wave (`linked_offramp_execution.rs`, `migration 064`, frontend/SDK/config). *Squash or preserve as authored — your call.*
 2. `fix(security): fail-closed webhook delivery + rails/mock prod gating + secret fail-fast` — R-1, R-2/2b/2c (GAP-001/002/003/005/006).
@@ -135,9 +136,9 @@ Reviews remain captured in `.workflow/commercial-readiness/evidence.md`.
 
 1. **Worktree cleanup — DONE (delegated):** the 18 SUPERSEDED_BY_MAIN worktrees were removed with diffs archived to `worktree-archive/` and **all branches kept** (fully reversible); 13 UNIQUE_CONTENT_PRESERVE held untouched. See `cleanup-manifest.md` (CL-2). Branch deletion remains deferred (branches are the recovery anchor).
 2. **EXT-09 / WebAuthn (GAP-031):** decided (delegated) — verify via Docker/Linux CI (`rust:latest` has libssl-dev); host-OpenSSL install declined (no machine pollution); unvetted pure-Rust crate declined. WebAuthn impl deferred to a quota-available session.
-3. **Commit:** when you want, apply the breakdown above. Nothing is committed or pushed.
+3. **Commit:** the certified remediation has since been committed locally; RFQ/off-ramp/settlement W1-W5 is locally verified in the working tree along with this truth-doc/yield fail-closed cleanup. Do not push without explicit instruction.
 4. **GAP-066 follow-through:** when staging Postgres exists (EXT-01), run the full migration set + an integration write through `payin/payout/trade` and confirm the upserts and conflict index behave (the only piece not verifiable locally).
 
 ## Ledger-A remainder: COMPLETE
 
-All A-side items are now closed, accepted-risk, or scope-decisions. The only repo-side work that cannot be finished locally is GAP-066's **runtime** confirmation, which is inherently a staging (Ledger B / EXT-01) activity. No further local Ledger-A work remains.
+The certified security/money-path Ledger-A remediation is closed, accepted-risk, or scope-decided. RFQ/off-ramp/settlement contract-surface alignment W1-W5 is locally verified. GAP-066's **runtime** confirmation is inherently staging (Ledger B / EXT-01). Commercial launch remains blocked by external Ledger B requirements.

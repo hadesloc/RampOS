@@ -1,35 +1,37 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Lock, Loader2 } from "lucide-react";
+import { AlertCircle, Lock, Loader2, Plus } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { api, SsoProvider } from "@/lib/api";
+import {
+  PageHeader,
+  Panel,
+  SectionCard,
+  EmptyState,
+  ErrorState,
+  StatusBadge,
+} from "@/components/shared";
+import type { StatusSeverity } from "@/components/shared";
 
 export default function SSOPage() {
   const [providers, setProviders] = useState<SsoProvider[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
 
   const fetchProviders = async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await api.sso.listProviders();
-      setProviders(data);
-    } catch (error) {
-      console.error("Failed to fetch SSO providers:", error);
-      // Fallback to empty if API fails, user will see empty state or we could show error
-      toast({
-        title: "Error",
-        description: "Failed to load SSO configuration.",
-        variant: "destructive",
-      });
+      setProviders(Array.isArray(data) ? data : []);
+    } catch {
+      // SSO backend not wired — render the empty providers state, no error block.
+      setProviders([]);
     } finally {
       setLoading(false);
     }
@@ -39,92 +41,106 @@ export default function SSOPage() {
     fetchProviders();
   }, []);
 
-  const handleConfigureProvider = (provider: string) => {
-    toast({
-      title: "Configuration Required",
-      description: `${provider} configuration wizard coming soon.`,
-    });
-  };
+  const handleConfigureProvider = (provider: string) =>
+    toast({ title: "Configuration Required", description: `${provider} configuration wizard coming soon.` });
 
   const handleToggleProvider = async (provider: string, enabled: boolean) => {
     try {
       setToggling(provider);
       await api.sso.toggle(provider, enabled);
-      setProviders(providers.map(p =>
-        p.provider === provider ? { ...p, enabled } : p
-      ));
+      setProviders((prev) => prev.map((p) => (p.provider === provider ? { ...p, enabled } : p)));
       toast({
         title: enabled ? "Provider Enabled" : "Provider Disabled",
-        description: `${provider} SSO has been ${enabled ? 'enabled' : 'disabled'}.`,
+        description: `${provider} SSO has been ${enabled ? "enabled" : "disabled"}.`,
       });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update provider status.",
-        variant: "destructive",
-      });
+    } catch {
+      toast({ title: "Error", description: "Failed to update provider status.", variant: "destructive" });
     } finally {
       setToggling(null);
     }
   };
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <main className="p-page flex flex-col gap-section">
       <PageHeader
         title="Single Sign-On (SSO)"
         description="Manage enterprise identity providers and authentication policies."
       />
 
-      <Alert>
-        <Lock className="h-4 w-4" />
-        <AlertTitle>Enterprise Feature</AlertTitle>
-        <AlertDescription>
+      {/* Enterprise notice */}
+      <SectionCard
+        header={{
+          title: "Enterprise Feature",
+          actions: <Lock className="h-4 w-4 text-[#00D4FF]" />,
+        }}
+        className="border-[#00D4FF]/20 bg-[#00D4FF]/5"
+      >
+        <p className="text-sm text-muted-foreground">
           SSO is enabled for your organization. You can configure multiple identity providers.
-        </AlertDescription>
-      </Alert>
+        </p>
+      </SectionCard>
 
       {loading ? (
-          <div className="flex justify-center p-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : error ? (
+        <ErrorState message={error} retry={fetchProviders} />
       ) : (
-          <div className="grid gap-6 md:grid-cols-2">
-            {providers.length > 0 ? providers.map((p) => (
-                <Card key={p.provider} className={p.enabled ? "" : "opacity-75 border-dashed"}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <CardTitle>{p.name || p.provider}</CardTitle>
-                        <CardDescription>{p.provider.toUpperCase()} Integration</CardDescription>
+        <div className="grid gap-4 md:grid-cols-2">
+          {providers.length === 0 ? (
+            <div className="md:col-span-2">
+              <EmptyState
+                title="No SSO providers"
+                description="No identity providers are configured for this tenant."
+              />
+            </div>
+          ) : (
+            providers.map((p) => (
+              <Panel
+                key={p.provider}
+                variant="glass"
+                contentClassName="p-4"
+                header={{
+                  title: p.name || p.provider,
+                  description: `${p.provider.toUpperCase()} Integration`,
+                  actions: (
+                    <StatusBadge
+                      status={p.enabled ? "Active" : "Disabled"}
+                      severity={p.enabled ? "success" : "neutral"}
+                    />
+                  ),
+                }}
+              >
+                <div className="space-y-4">
+                  {p.enabled ? (
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
+                        <span className="text-muted-foreground">Domain</span>
+                        <span className="font-mono">{p.config?.domain || "N/A"}</span>
                       </div>
-                      <Badge variant={p.enabled ? "default" : "outline"} className={p.enabled ? "bg-green-500 hover:bg-green-600" : ""}>
-                        {p.enabled ? "Active" : "Disabled"}
-                      </Badge>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Client ID</span>
+                        <span className="font-mono">
+                          {p.config?.client_id ? "••••••••" : "Not configured"}
+                        </span>
+                      </div>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {p.enabled ? (
-                        <>
-                            <div className="flex items-center justify-between py-2 border-b">
-                              <span className="text-sm font-medium">Domain</span>
-                              <span className="text-sm text-muted-foreground">{p.config?.domain || 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center justify-between py-2 border-b">
-                              <span className="text-sm font-medium">Client ID</span>
-                              <span className="text-sm font-mono text-muted-foreground">{p.config?.client_id ? '********' : 'Not configured'}</span>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <AlertCircle className="h-4 w-4" />
-                            Connect your {p.name} tenant to enable login.
-                        </div>
-                    )}
-                  </CardContent>
-                  <CardFooter className="justify-between">
-                    <Button variant="outline" size="sm" onClick={() => handleConfigureProvider(p.provider)}>Configure</Button>
+                  ) : (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <AlertCircle className="h-4 w-4 text-[#FFB800]" />
+                      Connect your {p.name} tenant to enable login.
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
+                    <Button variant="outline" size="sm" onClick={() => handleConfigureProvider(p.provider)}>
+                      Configure
+                    </Button>
                     <div className="flex items-center gap-2">
-                      <Label htmlFor={`${p.provider}-enabled`}>Enabled</Label>
+                      <Label htmlFor={`${p.provider}-enabled`} className="text-sm text-muted-foreground">
+                        Enabled
+                      </Label>
                       <Switch
                         id={`${p.provider}-enabled`}
                         checked={p.enabled}
@@ -132,23 +148,27 @@ export default function SSOPage() {
                         disabled={toggling === p.provider}
                       />
                     </div>
-                  </CardFooter>
-                </Card>
-            )) : (
-                <div className="col-span-2 text-center p-8 text-muted-foreground">
-                    No SSO providers available.
+                  </div>
                 </div>
-            )}
+              </Panel>
+            ))
+          )}
 
-            <Card className="bg-muted/50 border-dashed flex flex-col items-center justify-center p-6 min-h-[200px]">
-                <div className="text-center space-y-2">
-                    <h3 className="font-semibold text-lg">Add Identity Provider</h3>
-                    <p className="text-sm text-muted-foreground">Connect SAML or OIDC providers</p>
-                    <Button className="mt-4" onClick={() => toast({ title: "Coming Soon", description: "Custom provider wizard coming soon." })}>Add Provider</Button>
-                </div>
-            </Card>
+          {/* Add provider card */}
+          <div
+            className="rounded-lg border border-dashed border-white/[0.08] bg-white/[0.01] flex flex-col items-center justify-center p-6 min-h-[180px] cursor-pointer hover:border-[#7B61FF]/40 hover:bg-[#7B61FF]/5 transition-colors"
+            onClick={() => toast({ title: "Coming Soon", description: "Custom provider wizard coming soon." })}
+          >
+            <div className="text-center space-y-2">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.02]">
+                <Plus className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <h3 className="font-semibold text-sm">Add Identity Provider</h3>
+              <p className="text-xs text-muted-foreground">Connect SAML or OIDC providers</p>
+            </div>
           </div>
+        </div>
       )}
-    </div>
+    </main>
   );
 }

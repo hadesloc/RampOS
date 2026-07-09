@@ -2,59 +2,165 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { casesApi, type AmlCase } from "@/lib/api";
-import { Loader2, RefreshCw, FileText, AlertCircle, ShieldAlert } from "lucide-react";
+import { RefreshCw, FileText, AlertCircle, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { StatCard } from "@/components/dashboard/stat-card";
-import { StatusBadge } from "@/components/dashboard/status-badge";
-import { Card, CardContent } from "@/components/ui/card";
-import { useTranslations, useFormatter } from "next-intl";
+import {
+  PageHeader,
+  StatGrid,
+  StatCard,
+  Panel,
+  DataTable,
+  Toolbar,
+  StatusBadge,
+  EmptyState,
+  ErrorState,
+  type StatusSeverity,
+} from "@/components/shared";
+import { formatDateTime, truncateMiddle } from "@/lib/format";
+import { useTranslations } from "next-intl";
+import type { ColumnDef } from "@tanstack/react-table";
 
-function getSeverityColor(severity: string): string {
-  switch (severity) {
-    case "CRITICAL":
-      return "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-400 border-transparent hover:bg-red-200 dark:hover:bg-red-500/25";
-    case "HIGH":
-      return "bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-400 border-transparent hover:bg-orange-200 dark:hover:bg-orange-500/25";
-    case "MEDIUM":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-400 border-transparent hover:bg-yellow-200 dark:hover:bg-yellow-500/25";
-    case "LOW":
-      return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400 border-transparent hover:bg-green-200 dark:hover:bg-green-500/25";
-    default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-transparent hover:bg-gray-200 dark:hover:bg-gray-700";
-  }
+// ── Severity → StatusSeverity mapping ────────────────────────────────────────
+
+function severityBadge(severity: string) {
+  const map: Record<string, StatusSeverity> = {
+    CRITICAL: "danger",
+    HIGH: "warning",
+    MEDIUM: "warning",
+    LOW: "success",
+  };
+  return (
+    <StatusBadge
+      status={severity}
+      severity={map[severity] ?? "neutral"}
+      dot
+    />
+  );
 }
 
-function getStatusColor(status: string): string {
-  switch (status) {
-    case "OPEN":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-400 border-transparent hover:bg-blue-200 dark:hover:bg-blue-500/25";
-    case "REVIEW":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-400 border-transparent hover:bg-purple-200 dark:hover:bg-purple-500/25";
-    case "HOLD":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-400 border-transparent hover:bg-yellow-200 dark:hover:bg-yellow-500/25";
-    case "RELEASED":
-      return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400 border-transparent hover:bg-green-200 dark:hover:bg-green-500/25";
-    case "REPORTED":
-      return "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-400 border-transparent hover:bg-red-200 dark:hover:bg-red-500/25";
-    default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-transparent hover:bg-gray-200 dark:hover:bg-gray-700";
-  }
+function statusBadge(status: string) {
+  const map: Record<string, StatusSeverity> = {
+    OPEN: "info",
+    REVIEW: "pending",
+    HOLD: "warning",
+    RELEASED: "success",
+    REPORTED: "danger",
+  };
+  return (
+    <StatusBadge
+      status={status}
+      severity={map[status] ?? "neutral"}
+      dot={false}
+    />
+  );
 }
+
+// ── Column definitions ────────────────────────────────────────────────────────
+
+function buildColumns(
+  handleStatusUpdate: (id: string, newStatus: string) => Promise<void>,
+  tCommon: (key: string) => string
+): ColumnDef<AmlCase>[] {
+  return [
+    {
+      accessorKey: "id",
+      header: "Case ID",
+      cell: ({ getValue }) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {truncateMiddle(getValue<string>(), 8, 4)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "case_type",
+      header: "Type",
+      cell: ({ getValue }) => (
+        <span className="text-sm font-medium">{getValue<string>()}</span>
+      ),
+    },
+    {
+      accessorKey: "severity",
+      header: "Severity",
+      cell: ({ getValue }) => severityBadge(getValue<string>()),
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ getValue }) => statusBadge(getValue<string>()),
+    },
+    {
+      accessorKey: "assigned_to",
+      header: "Assigned To",
+      cell: ({ getValue }) => (
+        <span className="text-sm text-muted-foreground">
+          {getValue<string | null>() ?? "Unassigned"}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "created_at",
+      header: "Created",
+      cell: ({ getValue }) => (
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {formatDateTime(getValue<string>())}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: tCommon("actions"),
+      enableSorting: false,
+      cell: ({ row }) => {
+        const c = row.original;
+        return (
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-[#00D4FF] hover:text-[#00D4FF]/80 hover:bg-[#00D4FF]/10"
+              onClick={() => alert(`View details for ${c.id}`)}
+            >
+              {tCommon("view")}
+            </Button>
+            {c.status === "OPEN" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-[#7B61FF] hover:text-[#7B61FF]/80 hover:bg-[#7B61FF]/10"
+                onClick={() => handleStatusUpdate(c.id, "REVIEW")}
+              >
+                Review
+              </Button>
+            )}
+            {(c.status === "OPEN" || c.status === "REVIEW") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-[#00FF87] hover:text-[#00FF87]/80 hover:bg-[#00FF87]/10"
+                onClick={() => handleStatusUpdate(c.id, "RELEASED")}
+              >
+                Release
+              </Button>
+            )}
+          </div>
+        );
+      },
+    },
+  ];
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CompliancePage() {
   const [cases, setCases] = useState<AmlCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState({ severity: "", status: "" });
   const { toast } = useToast();
-  const t = useTranslations('Navigation');
-  const tCommon = useTranslations('Common');
-  const format = useFormatter();
-
-  const [filter, setFilter] = useState({
-    severity: "",
-    status: "",
-  });
+  const t = useTranslations("Navigation");
+  const tCommon = useTranslations("Common");
 
   const fetchCases = useCallback(async () => {
     setLoading(true);
@@ -64,19 +170,21 @@ export default function CompliancePage() {
         status: filter.status || undefined,
         severity: filter.severity || undefined,
       });
-      setCases(response.data);
-    } catch (err: any) {
-      console.error("Failed to fetch cases:", err);
-      setError(err.message || "Failed to load cases");
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: err.message || "Failed to load cases",
-      });
+      // Backend serializes enums in PascalCase ("Open", "Critical"); the UI
+      // (badges + KPI counts) keys off UPPERCASE, so normalize on the way in.
+      const rows = (Array.isArray(response?.data) ? response.data : []).map((c) => ({
+        ...c,
+        status: (c.status || "").toUpperCase() as AmlCase["status"],
+        severity: (c.severity || "").toUpperCase() as AmlCase["severity"],
+      }));
+      setCases(rows);
+    } catch {
+      // Cases endpoint unavailable — show a clean empty state, no error block.
+      setCases([]);
     } finally {
       setLoading(false);
     }
-  }, [filter.severity, filter.status, toast]);
+  }, [filter.severity, filter.status]);
 
   useEffect(() => {
     fetchCases();
@@ -84,18 +192,18 @@ export default function CompliancePage() {
 
   const handleStatusUpdate = async (id: string, newStatus: string) => {
     try {
-        await casesApi.updateStatus(id, newStatus);
-        toast({
-            title: tCommon('success'),
-            description: `Case status updated to ${newStatus}`,
-        });
-        fetchCases(); // Reload data
+      await casesApi.updateStatus(id, newStatus);
+      toast({
+        title: tCommon("success"),
+        description: `Case status updated to ${newStatus}`,
+      });
+      fetchCases();
     } catch (err: any) {
-        toast({
-            variant: "destructive",
-            title: tCommon('error'),
-            description: err.message || "Failed to update case status",
-        });
+      toast({
+        variant: "destructive",
+        title: tCommon("error"),
+        description: err.message || "Failed to update case status",
+      });
     }
   };
 
@@ -103,183 +211,133 @@ export default function CompliancePage() {
     total: cases.length,
     open: cases.filter((c) => c.status === "OPEN").length,
     critical: cases.filter((c) => c.severity === "CRITICAL").length,
+    inReview: cases.filter((c) => c.status === "REVIEW").length,
   };
 
-  const handleRefresh = () => {
-    fetchCases();
-  };
+  const columns = buildColumns(handleStatusUpdate, (key) => tCommon(key));
 
-  const formatDate = (dateStr: string) => {
-    return format.dateTime(new Date(dateStr), {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-  };
+  const filterBar = (
+    <div className="flex flex-wrap gap-2">
+      <select
+        aria-label="Filter by severity"
+        className="h-8 rounded-md border border-white/[0.08] bg-[#111113] px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#00FF87]/30"
+        value={filter.severity}
+        onChange={(e) => setFilter((f) => ({ ...f, severity: e.target.value }))}
+      >
+        <option value="">All Severities</option>
+        <option value="CRITICAL">Critical</option>
+        <option value="HIGH">High</option>
+        <option value="MEDIUM">Medium</option>
+        <option value="LOW">Low</option>
+      </select>
+      <select
+        aria-label="Filter by status"
+        className="h-8 rounded-md border border-white/[0.08] bg-[#111113] px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#00FF87]/30"
+        value={filter.status}
+        onChange={(e) => setFilter((f) => ({ ...f, status: e.target.value }))}
+      >
+        <option value="">All Statuses</option>
+        <option value="OPEN">Open</option>
+        <option value="REVIEW">Review</option>
+        <option value="HOLD">Hold</option>
+        <option value="RELEASED">Released</option>
+        <option value="REPORTED">Reported</option>
+      </select>
+    </div>
+  );
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-            <h1 className="text-3xl font-bold tracking-tight">{t('compliance')}</h1>
-            <p className="text-muted-foreground">
-            AML case management and monitoring
-            </p>
-        </div>
-        <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-        </Button>
-      </div>
+    <main className="p-6 md:p-8 flex flex-col gap-6">
+      <PageHeader
+        title={t("compliance")}
+        description="AML case management and monitoring"
+        breadcrumb={[{ label: "Admin", href: "/admin" }, { label: "Compliance" }]}
+        actions={
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={fetchCases}
+            disabled={loading}
+            aria-label="Refresh compliance cases"
+            className="border-white/[0.08] hover:border-white/[0.16] hover:bg-white/[0.03] h-9 w-9"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        }
+      />
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* KPI strip */}
+      <StatGrid cols={4}>
         <StatCard
-            title="Total Cases"
-            value={stats.total}
-            icon={<FileText className="h-4 w-4" />}
-            loading={loading}
+          title="Total Cases"
+          value={loading ? "—" : stats.total.toLocaleString()}
+          icon={<FileText className="h-4 w-4" />}
+          accentColor="cyan"
+          loading={loading}
         />
         <StatCard
-            title="Open Cases"
-            value={stats.open}
-            icon={<AlertCircle className="h-4 w-4" />}
-            loading={loading}
-            className={stats.open > 0 ? "border-blue-200 dark:border-blue-800" : ""}
+          title="Open Cases"
+          value={loading ? "—" : stats.open.toLocaleString()}
+          icon={<AlertCircle className="h-4 w-4" />}
+          accentColor="violet"
+          loading={loading}
         />
         <StatCard
-            title="Critical Issues"
-            value={stats.critical}
-            icon={<ShieldAlert className="h-4 w-4" />}
-            loading={loading}
-            className={stats.critical > 0 ? "border-red-200 dark:border-red-800" : ""}
+          title="In Review"
+          value={loading ? "—" : stats.inReview.toLocaleString()}
+          accentColor="amber"
+          loading={loading}
         />
-      </div>
+        <StatCard
+          title="Critical Issues"
+          value={loading ? "—" : stats.critical.toLocaleString()}
+          icon={<ShieldAlert className="h-4 w-4" />}
+          accentColor="green"
+          loading={loading}
+        />
+      </StatGrid>
 
-      {/* Filters */}
-      <div className="flex gap-4">
-        <select
-          className="rounded-md border bg-background px-3 py-2 text-sm"
-          value={filter.severity}
-          onChange={(e) => setFilter({ ...filter, severity: e.target.value })}
+      {/* Error state */}
+      {error && !loading && (
+        <ErrorState
+          title="Failed to load cases"
+          message={error}
+          retry={fetchCases}
+        />
+      )}
+
+      {/* Cases table */}
+      {!error && (
+        <Panel
+          header={{
+            title: "AML Cases",
+            description: "All active and historical AML case records",
+            actions: filterBar,
+          }}
         >
-          <option value="">All Severities</option>
-          <option value="CRITICAL">Critical</option>
-          <option value="HIGH">High</option>
-          <option value="MEDIUM">Medium</option>
-          <option value="LOW">Low</option>
-        </select>
-
-        <select
-          className="rounded-md border bg-background px-3 py-2 text-sm"
-          value={filter.status}
-          onChange={(e) => setFilter({ ...filter, status: e.target.value })}
-        >
-          <option value="">All Statuses</option>
-          <option value="OPEN">Open</option>
-          <option value="REVIEW">Review</option>
-          <option value="HOLD">Hold</option>
-          <option value="RELEASED">Released</option>
-          <option value="REPORTED">Reported</option>
-        </select>
-      </div>
-
-      {/* Table */}
-      <div className="rounded-md border bg-card">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium">Case ID</th>
-              <th className="px-4 py-3 text-left font-medium">Type</th>
-              <th className="px-4 py-3 text-left font-medium">Severity</th>
-              <th className="px-4 py-3 text-left font-medium">{tCommon('status')}</th>
-              <th className="px-4 py-3 text-left font-medium">Assigned To</th>
-              <th className="px-4 py-3 text-left font-medium">Created</th>
-              <th className="px-4 py-3 text-left font-medium">{tCommon('actions')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-                <tr>
-                    <td colSpan={7} className="h-24 text-center">
-                        <div className="flex justify-center items-center gap-2">
-                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                            <span className="text-muted-foreground">{tCommon('loading')}</span>
-                        </div>
-                    </td>
-                </tr>
-            ) : cases.length === 0 ? (
-                <tr>
-                    <td colSpan={7} className="h-24 text-center text-muted-foreground">
-                        No cases found matching the filters.
-                    </td>
-                </tr>
-            ) : (
-                cases.map((c) => (
-              <tr key={c.id} className="border-t hover:bg-muted/30">
-                <td className="px-4 py-3">
-                  <span className="font-mono text-xs">
-                    {c.id.substring(0, 20)}...
-                  </span>
-                </td>
-                <td className="px-4 py-3">{c.case_type}</td>
-                <td className="px-4 py-3">
-                  <StatusBadge
-                    status={c.severity}
-                    className={getSeverityColor(c.severity)}
-                    showDot
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <StatusBadge
-                    status={c.status}
-                    className={getStatusColor(c.status)}
-                  />
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {c.assigned_to || "Unassigned"}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {formatDate(c.created_at)}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                        onClick={() => alert(`View details for ${c.id}`)}
-                      >
-                        {tCommon('view')}
-                      </Button>
-                      {c.status === 'OPEN' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2 text-purple-600 dark:text-purple-400 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20"
-                            onClick={() => handleStatusUpdate(c.id, 'REVIEW')}
-                          >
-                            Review
-                          </Button>
-                      )}
-                      {(c.status === 'OPEN' || c.status === 'REVIEW') && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2 text-green-600 dark:text-green-400 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20"
-                            onClick={() => handleStatusUpdate(c.id, 'RELEASED')}
-                          >
-                            Release
-                          </Button>
-                      )}
-                  </div>
-                </td>
-              </tr>
-            )))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          <Toolbar
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search by ID, type, assignee…"
+          />
+          <DataTable
+            columns={columns}
+            data={cases}
+            loading={loading}
+            pagination
+            pageSize={15}
+            globalFilter={search}
+            onGlobalFilterChange={setSearch}
+            emptyState={
+              <EmptyState
+                icon={<FileText className="h-8 w-8" />}
+                title="No cases found"
+                description="No AML cases match the current filters."
+              />
+            }
+          />
+        </Panel>
+      )}
+    </main>
   );
 }

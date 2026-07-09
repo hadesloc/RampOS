@@ -1,0 +1,85 @@
+[
+  {
+    "route": "/en/portal/login",
+    "file": "portal-login.png",
+    "errors": []
+  },
+  {
+    "route": "/en/portal",
+    "file": "portal.png",
+    "http": 200,
+    "redirectedToLogin": false,
+    "errors": []
+  },
+  {
+    "route": "/en/portal/deposit",
+    "file": "portal-deposit.png",
+    "http": 200,
+    "redirectedToLogin": false,
+    "errors": []
+  },
+  {
+    "route": "/en/portal/withdraw",
+    "file": "portal-withdraw.png",
+    "http": 200,
+    "redirectedToLogin": false,
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ]
+  },
+  {
+    "route": "/en/portal/assets",
+    "file": "portal-assets.png",
+    "http": 200,
+    "redirectedToLogin": false,
+    "errors": []
+  },
+  {
+    "route": "/en/portal/transactions",
+    "file": "portal-transactions.png",
+    "http": 200,
+    "redirectedToLogin": false,
+    "errors": []
+  },
+  {
+    "route": "/en/portal/kyc",
+    "file": "portal-kyc.png",
+    "http": 200,
+    "redirectedToLogin": false,
+    "errors": []
+  },
+  {
+    "route": "/en/portal/kyc/passport",
+    "file": "portal-kyc-passport.png",
+    "http": 200,
+    "redirectedToLogin": false,
+    "errors": []
+  },
+  {
+    "route": "/en/portal/settings",
+    "file": "portal-settings.png",
+    "http": 200,
+    "redirectedToLogin": false,
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ]
+  },
+  {
+    "route": "/en/portal/venues",
+    "file": "portal-venues.png",
+    "http": 200,
+    "redirectedToLogin": false,
+    "errors": []
+  },
+  {
+    "route": "/portal/offramp",
+    "file": "portal-offramp.png",
+    "http": 200,
+    "redirectedToLogin": false,
+    "errors": [
+      "A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n%s%s https://react.dev/link/hydration-mismatch \n\n  ...\n    <RenderFromTemplateContext>\n      <ScrollAndFocusHandler segmentPath={[...]}>\n        <InnerScrollAndFocusHandler segmentPath={[...]} focusAndScrollRef={{apply:false, ...}}>\n          <ErrorBoundary errorComponent={undefined} errorStyles={undefined} errorScripts={undefined}>\n            <LoadingBoundary loading={null}>\n              <HTTPAccessFallbackBoundary notFound={<SegmentViewNode>} forbidden={undefined} unauthorized={undefined}>\n                <HTTPAccessFallbackErrorBoundary pathname=\"/portal/of...\" notFound={<SegmentViewNode>} ...>\n                  <RedirectBoundary>\n                    <RedirectErrorBoundary router={{...}}>\n                      <InnerLayoutRouter url=\"/portal/of...\" tree={[...]} cacheNode={{lazyData:null, ...}} ...>\n                        <SegmentViewNode type=\"layout\" pagePath=\"portal/lay...\">\n                          <SegmentTrieNode>\n                          <link>\n                          <PortalLayout>\n                            <html\n                              lang=\"vi\"\n-                             className=\"dark\"\n-                             style={{color-scheme:\"dark\"}}\n                            >\n                      ...\n          ...\n    ...\n"
+    ]
+  }
+]

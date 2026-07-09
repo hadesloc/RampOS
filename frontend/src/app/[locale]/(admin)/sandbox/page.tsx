@@ -1,18 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, PlayCircle, RefreshCw, RotateCcw, Rocket } from "lucide-react";
-
+import { Loader2, PlayCircle, RefreshCw, RotateCcw, Rocket, Database, Tag, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  PageHeader,
+  StatGrid,
+  StatCard,
+  Panel,
+  SectionCard,
+  EmptyState,
+  ErrorState,
+} from "@/components/shared";
+import { formatDateTime } from "@/lib/format";
 
 type SandboxPreset = {
   code: string;
@@ -61,36 +63,23 @@ type SandboxReplayExport = {
 async function apiRequest<T>(endpoint: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/proxy${endpoint}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
+    headers: { "Content-Type": "application/json", ...init?.headers },
   });
-
   if (!response.ok) {
     let message = "Request failed";
     try {
       const payload = (await response.json()) as { message?: string };
       message = payload.message ?? message;
     } catch {
-      // Keep the default message when the response body is not JSON.
+      // keep default
     }
     throw new Error(message);
   }
-
   return response.json() as Promise<T>;
 }
 
-function formatTimestamp(value?: string | null): string {
-  if (!value) return "N/A";
-  return new Date(value).toLocaleString("vi-VN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const selectCls =
+  "w-full rounded-md border border-white/[0.08] bg-[#09090B] px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#00FF87]/40 transition-colors";
 
 export default function SandboxPage() {
   const [presets, setPresets] = useState<SandboxPreset[]>([]);
@@ -114,21 +103,20 @@ export default function SandboxPage() {
   const [replayError, setReplayError] = useState<string | null>(null);
 
   const selectedPreset = useMemo(
-    () => presets.find((preset) => preset.code === selectedPresetCode) ?? null,
-    [presets, selectedPresetCode],
+    () => presets.find((p) => p.code === selectedPresetCode) ?? null,
+    [presets, selectedPresetCode]
   );
 
   useEffect(() => {
     const loadPresets = async () => {
       setLoadingPresets(true);
       setPresetError(null);
-
       try {
         const data = await apiRequest<SandboxPreset[]>("/v1/admin/sandbox");
         setPresets(data);
         if (data.length > 0) {
-          setSelectedPresetCode((current) => current || data[0].code);
-          setScenarioCode((current) => current || data[0].defaultScenarios[0] || "");
+          setSelectedPresetCode((c) => c || data[0].code);
+          setScenarioCode((c) => c || data[0].defaultScenarios[0] || "");
         }
       } catch (error) {
         setPresetError(error instanceof Error ? error.message : "Failed to load presets");
@@ -136,7 +124,6 @@ export default function SandboxPage() {
         setLoadingPresets(false);
       }
     };
-
     void loadPresets();
   }, []);
 
@@ -149,10 +136,8 @@ export default function SandboxPage() {
 
   const handleSeedTenant = async () => {
     if (!selectedPreset) return;
-
     setSeeding(true);
     setSeedError(null);
-
     try {
       const result = await apiRequest<SandboxSeedResponse>("/v1/admin/sandbox/seed", {
         method: "POST",
@@ -177,7 +162,6 @@ export default function SandboxPage() {
       setResetState("Seed a sandbox tenant first, then request a bounded reset.");
       return;
     }
-
     try {
       await apiRequest("/v1/admin/sandbox/reset", {
         method: "POST",
@@ -196,10 +180,9 @@ export default function SandboxPage() {
   const handleLoadReplay = async () => {
     setLoadingReplay(true);
     setReplayError(null);
-
     try {
       const bundle = await apiRequest<SandboxReplayBundle>(
-        `/v1/admin/sandbox/replay/${encodeURIComponent(journeyId)}`,
+        `/v1/admin/sandbox/replay/${encodeURIComponent(journeyId)}`
       );
       setReplayBundle(bundle);
     } catch (error) {
@@ -212,10 +195,9 @@ export default function SandboxPage() {
   const handleExportReplay = async () => {
     setLoadingReplay(true);
     setReplayError(null);
-
     try {
       const exportPayload = await apiRequest<SandboxReplayExport>(
-        `/v1/admin/sandbox/replay/${encodeURIComponent(journeyId)}/export`,
+        `/v1/admin/sandbox/replay/${encodeURIComponent(journeyId)}/export`
       );
       setReplayExport(exportPayload);
     } catch (error) {
@@ -226,74 +208,69 @@ export default function SandboxPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Sandbox Control Room</h1>
-          <p className="text-muted-foreground">
-            Seed bounded sandbox tenants, inspect replay bundles, and prepare operator drills.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => window.location.reload()}
-          aria-label="Refresh sandbox page"
-        >
-          <RefreshCw className="h-4 w-4" />
-        </Button>
-      </div>
+    <main className="p-page flex flex-col gap-section">
+      <PageHeader
+        title="Sandbox Control Room"
+        description="Seed bounded sandbox tenants, inspect replay bundles, and prepare operator drills."
+        actions={
+          <Button variant="outline" size="icon" onClick={() => window.location.reload()}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        }
+      />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Preset catalog</CardDescription>
-            <CardTitle>{presets.length}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Seeded tenant</CardDescription>
-            <CardTitle>{seedResult?.tenantId ?? "Not seeded"}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Replay status</CardDescription>
-            <CardTitle>{replayBundle?.entries[0]?.status ?? "Awaiting replay load"}</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+      <StatGrid cols={3}>
+        <StatCard
+          title="Preset Catalog"
+          value={loadingPresets ? "…" : presets.length}
+          icon={<Database className="h-4 w-4" />}
+          accentColor="cyan"
+          loading={loadingPresets}
+        />
+        <StatCard
+          title="Seeded Tenant"
+          value={seedResult?.tenantId ?? "Not seeded"}
+          icon={<Tag className="h-4 w-4" />}
+          accentColor="violet"
+        />
+        <StatCard
+          title="Replay Status"
+          value={replayBundle?.entries[0]?.status ?? "Awaiting"}
+          icon={<Activity className="h-4 w-4" />}
+          accentColor="green"
+        />
+      </StatGrid>
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Preset selection</CardTitle>
-              <CardDescription>
-                Pick a sandbox preset and keep the scenario scope bounded to the currently exposed
-                contract.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+      <div className="grid gap-section xl:grid-cols-[1.1fr,0.9fr]">
+        {/* Left column */}
+        <div className="flex flex-col gap-section">
+          {/* Preset Selection */}
+          <Panel
+            header={{
+              title: "Preset Selection",
+              description: "Pick a sandbox preset and keep the scenario scope bounded to the current contract.",
+            }}
+            variant="glass"
+          >
+            <div className="space-y-4">
               {loadingPresets ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading sandbox presets...
                 </div>
               ) : presetError ? (
-                <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {presetError}
-                </p>
+                <ErrorState message={presetError} retry={() => window.location.reload()} />
+              ) : presets.length === 0 ? (
+                <EmptyState title="No presets" description="No sandbox presets are available." />
               ) : (
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="preset-code">Preset</Label>
                     <select
                       id="preset-code"
-                      className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                      className={selectCls}
                       value={selectedPresetCode}
-                      onChange={(event) => setSelectedPresetCode(event.target.value)}
+                      onChange={(e) => setSelectedPresetCode(e.target.value)}
                     >
                       {presets.map((preset) => (
                         <option key={preset.code} value={preset.code}>
@@ -304,16 +281,16 @@ export default function SandboxPage() {
                   </div>
 
                   {selectedPreset && (
-                    <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                    <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4 text-sm">
                       <div className="font-medium">{selectedPreset.name}</div>
-                      <div className="mt-2 text-muted-foreground">
-                        Package {selectedPreset.seedPackageVersion} - {selectedPreset.resetStrategy}
+                      <div className="mt-1 text-muted-foreground text-xs">
+                        Package {selectedPreset.seedPackageVersion} — {selectedPreset.resetStrategy}
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {selectedPreset.defaultScenarios.map((scenario) => (
                           <span
                             key={scenario}
-                            className="rounded-full border px-2 py-1 text-xs font-medium"
+                            className="rounded-full border border-white/[0.08] px-2 py-0.5 text-xs font-medium text-muted-foreground"
                           >
                             {scenario}
                           </span>
@@ -323,23 +300,25 @@ export default function SandboxPage() {
                   )}
                 </>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </Panel>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Seed tenant</CardTitle>
-              <CardDescription>
-                This path is live. Reset workflow stays bounded until a later W1 slice lands.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          {/* Seed Tenant */}
+          <Panel
+            header={{
+              title: "Seed Tenant",
+              description: "This path is live. Reset workflow stays bounded until a later slice lands.",
+            }}
+            variant="glass"
+          >
+            <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="tenant-name">Tenant name</Label>
                 <Input
                   id="tenant-name"
                   value={tenantName}
-                  onChange={(event) => setTenantName(event.target.value)}
+                  onChange={(e) => setTenantName(e.target.value)}
+                  className="border-white/[0.08] bg-[#09090B]"
                 />
               </div>
 
@@ -347,9 +326,9 @@ export default function SandboxPage() {
                 <Label htmlFor="scenario-code">Scenario</Label>
                 <select
                   id="scenario-code"
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  className={selectCls}
                   value={scenarioCode}
-                  onChange={(event) => setScenarioCode(event.target.value)}
+                  onChange={(e) => setScenarioCode(e.target.value)}
                   disabled={!selectedPreset || selectedPreset.defaultScenarios.length === 0}
                 >
                   {(selectedPreset?.defaultScenarios ?? []).map((scenario) => (
@@ -381,67 +360,70 @@ export default function SandboxPage() {
               </div>
 
               {seedError && (
-                <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <p className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400">
                   {seedError}
                 </p>
               )}
 
               {resetState && (
-                <p className="rounded-md border border-muted px-3 py-2 text-sm text-muted-foreground">
+                <p className="rounded-md border border-white/[0.06] px-3 py-2 text-sm text-muted-foreground">
                   {resetState}
                 </p>
               )}
 
               {seedResult && (
-                <div className="rounded-lg border bg-card p-4 text-sm">
-                  <div className="font-medium">{seedResult.tenantName}</div>
-                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4 text-sm">
+                  <div className="font-medium text-[#00FF87]">{seedResult.tenantName}</div>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2 text-xs">
                     <div>
                       <span className="text-muted-foreground">Tenant ID</span>
-                      <div>{seedResult.tenantId}</div>
+                      <div className="font-mono mt-0.5">{seedResult.tenantId}</div>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Created</span>
-                      <div>{formatTimestamp(seedResult.createdAt)}</div>
+                      <div className="mt-0.5 tabular-nums">{formatDateTime(seedResult.createdAt)}</div>
                     </div>
                   </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </Panel>
         </div>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Scenario execution</CardTitle>
-              <CardDescription>
-                Scenario execution will land in a later W1 slice; keep operators on seed and replay
-                until then.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+        {/* Right column */}
+        <div className="flex flex-col gap-section">
+          {/* Scenario Execution */}
+          <Panel
+            header={{
+              title: "Scenario Execution",
+              description: "Scenario execution lands in a later slice — keep operators on seed and replay until then.",
+            }}
+            variant="glass"
+          >
+            <div>
               <Button variant="outline" disabled>
                 <PlayCircle className="mr-2 h-4 w-4" />
                 Run scenario
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </Panel>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Replay launch</CardTitle>
-              <CardDescription>
-                Load or export the redacted replay bundle contract that the backend exposes today.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          {/* Replay Launch */}
+          <Panel
+            header={{
+              title: "Replay Launch",
+              description: "Load or export the redacted replay bundle the backend exposes today.",
+            }}
+            variant="glass"
+          >
+            <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="journey-id">Journey ID</Label>
                 <Input
                   id="journey-id"
                   value={journeyId}
-                  onChange={(event) => setJourneyId(event.target.value)}
+                  onChange={(e) => setJourneyId(e.target.value)}
+                  className="border-white/[0.08] bg-[#09090B] font-mono"
                 />
               </div>
 
@@ -462,35 +444,38 @@ export default function SandboxPage() {
               </div>
 
               {replayError && (
-                <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <p className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400">
                   {replayError}
                 </p>
               )}
 
               {replayBundle && (
-                <div className="space-y-3 rounded-lg border p-4">
+                <div className="space-y-3 rounded-lg border border-white/[0.06] p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="font-medium">{replayBundle.journeyId}</div>
-                      <div className="text-sm text-muted-foreground">
-                        Generated {formatTimestamp(replayBundle.generatedAt)}
+                      <div className="font-medium text-sm font-mono">{replayBundle.journeyId}</div>
+                      <div className="text-xs text-muted-foreground tabular-nums mt-0.5">
+                        Generated {formatDateTime(replayBundle.generatedAt)}
                       </div>
                     </div>
-                    <span className="rounded-full border px-2 py-1 text-xs font-medium">
-                      {replayBundle.redactionApplied ? "Redaction applied" : "Raw payload"}
+                    <span className="rounded-full border border-white/[0.08] px-2 py-0.5 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      {replayBundle.redactionApplied ? "Redacted" : "Raw payload"}
                     </span>
                   </div>
 
                   {replayBundle.entries.map((entry) => (
-                    <div key={`${entry.referenceId}-${entry.sequence}`} className="rounded-md border bg-muted/20 p-3">
+                    <div
+                      key={`${entry.referenceId}-${entry.sequence}`}
+                      className="rounded-md border border-white/[0.06] bg-white/[0.02] p-3"
+                    >
                       <div className="flex items-center justify-between gap-3">
-                        <div className="font-medium">{entry.label}</div>
+                        <div className="font-medium text-sm">{entry.label}</div>
                         <div className="text-xs uppercase text-muted-foreground">{entry.status}</div>
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        {entry.source} - {entry.referenceId} - {formatTimestamp(entry.occurredAt)}
+                        {entry.source} — {entry.referenceId} — {formatDateTime(entry.occurredAt)}
                       </div>
-                      <pre className="mt-3 overflow-x-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
+                      <pre className="mt-3 overflow-x-auto rounded-md bg-black/60 p-3 text-xs text-slate-300 border border-white/[0.04]">
                         {JSON.stringify(entry.payload, null, 2)}
                       </pre>
                     </div>
@@ -499,17 +484,17 @@ export default function SandboxPage() {
               )}
 
               {replayExport && (
-                <div className="rounded-md border bg-muted/20 p-3 text-sm">
-                  <div className="font-medium">{replayExport.fileName}</div>
-                  <div className="text-muted-foreground">
-                    {replayExport.contentType} - {replayExport.redactionApplied ? "redacted" : "raw"}
+                <div className="rounded-md border border-white/[0.06] bg-white/[0.02] p-3 text-sm">
+                  <div className="font-medium font-mono">{replayExport.fileName}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {replayExport.contentType} — {replayExport.redactionApplied ? "redacted" : "raw"}
                   </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </Panel>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

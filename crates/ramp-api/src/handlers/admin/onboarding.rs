@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::{HeaderMap, StatusCode},
     Json,
 };
@@ -11,6 +11,7 @@ use tracing::info;
 use crate::dto::{CreateTenantRequest, SuspendTenantRequest, UpdateTenantRequest};
 use crate::error::ApiError;
 use crate::extract::ValidatedJson;
+use crate::middleware::tenant::TenantContext;
 use ramp_core::service::onboarding::{ApiCredentials, OnboardingService, TenantBootstrapRequest};
 
 // ============================================================================
@@ -25,6 +26,20 @@ pub struct TenantResponse {
     pub status: String,
     pub webhook_url: Option<String>,
     pub created_at: String,
+}
+
+/// Safe tenant representation for admin list — secrets omitted.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdminTenantListItem {
+    pub id: String,
+    pub name: String,
+    /// First 8 chars of the api_key_hash, safe to expose as a visual prefix.
+    pub api_key_prefix: String,
+    pub status: String,
+    pub config: serde_json::Value,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 // ============================================================================
@@ -142,6 +157,46 @@ pub async fn update_tenant(
     Ok(StatusCode::OK)
 }
 
+/// GET /v1/admin/tenants - List all tenants (safe fields only, no secrets)
+pub async fn list_tenants(
+    headers: HeaderMap,
+    Extension(_tenant_ctx): Extension<TenantContext>,
+    State(app_state): State<crate::router::AppState>,
+) -> Result<Json<Vec<AdminTenantListItem>>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
+    info!("Listing tenants");
+
+    let ids = app_state
+        .tenant_repo
+        .list_ids()
+        .await
+        .map_err(ApiError::from)?;
+
+    let mut items = Vec::with_capacity(ids.len());
+    for id in &ids {
+        if let Some(row) = app_state
+            .tenant_repo
+            .get_by_id(id)
+            .await
+            .map_err(ApiError::from)?
+        {
+            // Expose only the first 8 chars of the hash as a visual prefix; never the hash itself
+            let api_key_prefix = row.api_key_hash.chars().take(8).collect::<String>();
+            items.push(AdminTenantListItem {
+                id: row.id,
+                name: row.name,
+                api_key_prefix,
+                status: row.status,
+                config: row.config,
+                created_at: row.created_at.to_rfc3339(),
+                updated_at: row.updated_at.to_rfc3339(),
+            });
+        }
+    }
+
+    Ok(Json(items))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,11 +207,11 @@ mod tests {
         test_utils::{MockLedgerRepository, MockTenantRepository},
     };
     use rust_decimal_macros::dec;
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::Mutex;
 
     fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
+        // Single process-wide lock shared by all admin env-mutating tests.
+        crate::handlers::admin::admin_env_lock()
     }
 
     #[tokio::test]

@@ -15,35 +15,38 @@ interface OfframpStatusProps {
 }
 
 const STATUS_STEPS: TOfframpStatus[] = [
-  "PENDING",
-  "PROCESSING",
-  "SENDING",
+  "QUOTE_CREATED",
+  "CRYPTO_PENDING",
+  "CRYPTO_RECEIVED",
+  "VND_TRANSFERRING",
   "COMPLETED",
 ];
 
 const STATUS_LABELS: Record<TOfframpStatus, string> = {
-  PENDING: "Pending",
-  PROCESSING: "Processing",
-  SENDING: "Sending to Bank",
+  QUOTE_CREATED: "Quote Created",
+  CRYPTO_PENDING: "Crypto Pending",
+  CRYPTO_RECEIVED: "Crypto Received",
+  VND_TRANSFERRING: "VND Transferring",
   COMPLETED: "Completed",
   FAILED: "Failed",
-  CANCELLED: "Cancelled",
+  EXPIRED: "Expired",
 };
 
 const STATUS_VARIANTS: Record<
   TOfframpStatus,
   "default" | "secondary" | "destructive" | "success" | "warning" | "info"
 > = {
-  PENDING: "warning",
-  PROCESSING: "info",
-  SENDING: "info",
+  QUOTE_CREATED: "warning",
+  CRYPTO_PENDING: "warning",
+  CRYPTO_RECEIVED: "info",
+  VND_TRANSFERRING: "info",
   COMPLETED: "success",
   FAILED: "destructive",
-  CANCELLED: "secondary",
+  EXPIRED: "secondary",
 };
 
 function getStepIndex(status: TOfframpStatus): number {
-  if (status === "FAILED" || status === "CANCELLED") return -1;
+  if (status === "FAILED" || status === "EXPIRED") return -1;
   return STATUS_STEPS.indexOf(status);
 }
 
@@ -56,8 +59,11 @@ export function OfframpStatus({ intent, isLoading }: OfframpStatusProps) {
     return null;
   }
 
-  const currentStep = getStepIndex(intent.status);
-  const isFailed = intent.status === "FAILED" || intent.status === "CANCELLED";
+  const displayState = intent.state;
+  const cryptoAsset = intent.cryptoAsset ?? "";
+  const vndAmount = intent.netVndAmount ?? "";
+  const currentStep = getStepIndex(displayState);
+  const isFailed = displayState === "FAILED" || displayState === "EXPIRED";
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return null;
@@ -74,8 +80,8 @@ export function OfframpStatus({ intent, isLoading }: OfframpStatusProps) {
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <CardTitle className="text-base">Transaction Status</CardTitle>
-        <Badge variant={STATUS_VARIANTS[intent.status]} shape="pill">
-          {STATUS_LABELS[intent.status]}
+        <Badge variant={STATUS_VARIANTS[displayState]} shape="pill">
+          {STATUS_LABELS[displayState]}
         </Badge>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -138,13 +144,13 @@ export function OfframpStatus({ intent, isLoading }: OfframpStatusProps) {
           <div>
             <span className="text-muted-foreground">Amount</span>
             <p className="font-medium">
-              {intent.cryptoAmount} {intent.cryptoCurrency}
+              {intent.cryptoAmount} {cryptoAsset}
             </p>
           </div>
           <div>
             <span className="text-muted-foreground">Receive</span>
             <p className="font-medium text-green-600 dark:text-green-400">
-              {formatAmount(intent.fiatAmount)} VND
+              {formatAmount(vndAmount)} VND
             </p>
           </div>
           {intent.txHash && (
@@ -157,6 +163,30 @@ export function OfframpStatus({ intent, isLoading }: OfframpStatusProps) {
             <div className="col-span-2">
               <span className="text-muted-foreground">Bank Reference</span>
               <p className="font-mono text-xs">{intent.bankReference}</p>
+            </div>
+          )}
+          {intent.linkedRfqId && (
+            <div>
+              <span className="text-muted-foreground">Linked RFQ</span>
+              <p className="font-mono text-xs">{intent.linkedRfqId}</p>
+            </div>
+          )}
+          {intent.winningLpId && (
+            <div>
+              <span className="text-muted-foreground">Winning LP</span>
+              <p className="font-mono text-xs">{intent.winningLpId}</p>
+            </div>
+          )}
+          {intent.matchedRate && (
+            <div>
+              <span className="text-muted-foreground">Matched Rate</span>
+              <p className="font-mono text-xs">{intent.matchedRate}</p>
+            </div>
+          )}
+          {intent.settlementId && (
+            <div>
+              <span className="text-muted-foreground">Settlement</span>
+              <p className="font-mono text-xs">{intent.settlementId}</p>
             </div>
           )}
           <div>

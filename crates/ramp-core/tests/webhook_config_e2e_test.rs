@@ -506,9 +506,11 @@ async fn test_webhook_batch_delivery() {
 
     assert_eq!(repo.count_by_status("PENDING"), 15);
 
-    // Process batch of 5 (without http-client, events stay PENDING but are "processed")
+    // Process batch of 5. Without the `http-client` feature, delivery fails closed
+    // (GAP-001): deliver_event returns an error per event, so none are counted as
+    // delivered and all events remain PENDING for an http-client-enabled deliverer.
     let processed_5 = service.process_pending_events(5).await.unwrap();
-    assert_eq!(processed_5, 5);
+    assert_eq!(processed_5, 0);
 
     // Simulate delivery for those 5 to move them out of pending
     for i in 0..5 {
@@ -516,9 +518,9 @@ async fn test_webhook_batch_delivery() {
     }
     assert_eq!(repo.count_by_status("DELIVERED"), 5);
 
-    // Process remaining 10
+    // Process remaining 10 (still fail-closed without http-client)
     let processed_10 = service.process_pending_events(10).await.unwrap();
-    assert_eq!(processed_10, 10);
+    assert_eq!(processed_10, 0);
 
     // Simulate delivery for remaining 10
     for i in 5..15 {
@@ -1084,8 +1086,11 @@ async fn test_webhook_disabled_skipped_during_delivery() {
     assert_eq!(pending.len(), 1, "Only 1 event should be pending");
     assert_eq!(pending[0].id, event_ids[1].0);
 
+    // Without the `http-client` feature, delivery fails closed (GAP-001): the single
+    // enabled event is attempted but not counted delivered, and stays PENDING. The
+    // point of this test is that the two FAILED events are never re-queued.
     let processed = service.process_pending_events(10).await.unwrap();
-    assert_eq!(processed, 1, "Only enabled event should be processed");
+    assert_eq!(processed, 0, "Fail-closed without http-client: nothing counted delivered");
 
     // Simulate delivery for the processed event to move it out of pending
     repo.simulate_delivery(&event_ids[1].0, 200);

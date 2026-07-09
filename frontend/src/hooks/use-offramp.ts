@@ -2,69 +2,70 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
 
 // Off-ramp types
-export type OfframpCurrency = "USDT" | "USDC";
+export type OfframpCurrency = "USDT" | "USDC" | "ETH" | "BNB" | "MATIC" | "SOL" | "BTC";
 
 export type OfframpStatus =
-  | "PENDING"
-  | "PROCESSING"
-  | "SENDING"
+  | "QUOTE_CREATED"
+  | "CRYPTO_PENDING"
+  | "CRYPTO_RECEIVED"
+  | "VND_TRANSFERRING"
   | "COMPLETED"
   | "FAILED"
-  | "CANCELLED";
+  | "EXPIRED";
+
+export interface OfframpQuoteRequest {
+  cryptoAsset: OfframpCurrency | string;
+  amount: string;
+  bankCode: string;
+  accountNumber: string;
+  accountName: string;
+}
+
+export interface OfframpQuoteResponse {
+  quoteId: string;
+  cryptoAsset: OfframpCurrency | string;
+  cryptoAmount: string;
+  exchangeRate: string;
+  grossVndAmount: string;
+  netVndAmount: string;
+  feeTotal: string;
+  expiresAt: string;
+}
+
+export interface CreateOfframpFromQuoteInput {
+  quoteId: string;
+  chainId?: number;
+}
+
+export interface ConfirmCryptoReceivedInput {
+  txHash: string;
+  chainId: number;
+  fromAddress: string;
+  toAddress: string;
+  blockNumber?: number;
+  confirmations?: number;
+  rawPayload?: unknown;
+}
 
 export interface OfframpIntent {
   id: string;
-  userId: string;
+  state: OfframpStatus;
+  cryptoAsset: OfframpCurrency | string;
   cryptoAmount: string;
-  cryptoCurrency: OfframpCurrency;
-  fiatAmount: string;
-  fiatCurrency: string;
   exchangeRate: string;
-  networkFee: string;
-  serviceFee: string;
-  totalFee: string;
-  status: OfframpStatus;
-  bankAccountId: string;
-  bankName?: string;
-  bankAccountNumber?: string;
+  netVndAmount: string;
+  grossVndAmount: string;
+  depositAddress?: string;
+  chainId?: number;
   txHash?: string;
   bankReference?: string;
+  linkedRfqId?: string;
+  winningLpId?: string;
+  matchedRate?: string;
+  settlementId?: string;
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
-}
-
-export interface ExchangeRate {
-  fromCurrency: OfframpCurrency;
-  toCurrency: string;
-  rate: string;
-  networkFee: string;
-  serviceFeePercent: string;
-  minAmount: string;
-  maxAmount: string;
-  updatedAt: string;
-}
-
-export interface BankAccount {
-  id: string;
-  bankName: string;
-  accountNumber: string;
-  accountName: string;
-  isDefault: boolean;
-}
-
-export interface CreateOfframpRequest {
-  amount: string;
-  currency: OfframpCurrency;
-  bankAccountId: string;
-}
-
-export interface OfframpListResponse {
-  data: OfframpIntent[];
-  total: number;
-  page: number;
-  perPage: number;
-  totalPages: number;
 }
 
 function getApiBaseUrl(): string {
@@ -75,7 +76,8 @@ function getApiBaseUrl(): string {
   if (process.env.NODE_ENV?.trim().toLowerCase() === "production") {
     throw new Error("Missing required production environment variable: NEXT_PUBLIC_API_URL");
   }
-  return "http://localhost:3000";
+  // Dev default: same-origin '/api' (CSP-safe, proxied via next.config rewrites).
+  return "/api";
 }
 
 async function offrampRequest<T>(
@@ -113,112 +115,86 @@ async function offrampRequest<T>(
 
 // API functions
 const offrampApi = {
-  getExchangeRate: (currency: OfframpCurrency): Promise<ExchangeRate> =>
-    offrampRequest<ExchangeRate>(
-      `/v1/portal/offramp/rate?currency=${currency}`
-    ),
+  createQuote: (data: OfframpQuoteRequest): Promise<OfframpQuoteResponse> =>
+    offrampRequest<OfframpQuoteResponse>("/v1/portal/offramp/quote", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 
-  getBankAccounts: (): Promise<BankAccount[]> =>
-    offrampRequest<BankAccount[]>("/v1/portal/offramp/bank-accounts"),
-
-  createIntent: (data: CreateOfframpRequest): Promise<OfframpIntent> =>
-    offrampRequest<OfframpIntent>("/v1/portal/offramp/intents", {
+  createOfframp: (data: CreateOfframpFromQuoteInput): Promise<OfframpIntent> =>
+    offrampRequest<OfframpIntent>("/v1/portal/offramp/create", {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
   getIntent: (intentId: string): Promise<OfframpIntent> =>
-    offrampRequest<OfframpIntent>(`/v1/portal/offramp/intents/${intentId}`),
+    offrampRequest<OfframpIntent>(`/v1/portal/offramp/${intentId}/status`),
 
-  listIntents: (
-    page?: number,
-    status?: OfframpStatus
-  ): Promise<OfframpListResponse> => {
-    const params = new URLSearchParams();
-    if (page) params.set("page", page.toString());
-    if (status) params.set("status", status);
-    const query = params.toString();
-    return offrampRequest<OfframpListResponse>(
-      `/v1/portal/offramp/intents${query ? `?${query}` : ""}`
-    );
-  },
+  confirmIntent: (intentId: string): Promise<OfframpIntent> =>
+    offrampRequest<OfframpIntent>(`/v1/portal/offramp/${intentId}/confirm`, {
+      method: "POST",
+    }),
 
-  cancelIntent: (intentId: string): Promise<OfframpIntent> =>
-    offrampRequest<OfframpIntent>(
-      `/v1/portal/offramp/intents/${intentId}/cancel`,
-      { method: "POST" }
-    ),
+  markCryptoReceived: (
+    intentId: string,
+    data: ConfirmCryptoReceivedInput
+  ): Promise<OfframpIntent> =>
+    offrampRequest<OfframpIntent>(`/v1/portal/offramp/${intentId}/crypto-received`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 export { offrampApi };
 
-// Hook: exchange rate
-export function useExchangeRate(currency: OfframpCurrency) {
-  return useQuery<ExchangeRate>({
-    queryKey: ["offramp-rate", currency],
-    queryFn: () => offrampApi.getExchangeRate(currency),
-    refetchInterval: 30000, // refresh every 30s
+export function useCreateOfframpQuote() {
+  return useMutation({
+    mutationFn: (data: OfframpQuoteRequest) => offrampApi.createQuote(data),
   });
 }
 
-// Hook: bank accounts
-export function useBankAccounts() {
-  return useQuery<BankAccount[]>({
-    queryKey: ["offramp-bank-accounts"],
-    queryFn: () => offrampApi.getBankAccounts(),
-  });
-}
-
-// Hook: create offramp intent
 export function useCreateOfframp() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: CreateOfframpRequest) => offrampApi.createIntent(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["offramp-intents"] });
+    mutationFn: (data: CreateOfframpFromQuoteInput) => offrampApi.createOfframp(data),
+    onSuccess: (intent) => {
+      queryClient.invalidateQueries({ queryKey: ["offramp-intent", intent.id] });
     },
   });
 }
 
-// Hook: get single intent status
 export function useOfframpIntent(intentId: string | null) {
   return useQuery<OfframpIntent>({
     queryKey: ["offramp-intent", intentId],
     queryFn: () => offrampApi.getIntent(intentId!),
     enabled: !!intentId,
     refetchInterval: (query) => {
-      const data = query.state.data;
-      if (
-        data &&
-        (data.status === "COMPLETED" ||
-          data.status === "FAILED" ||
-          data.status === "CANCELLED")
-      ) {
+      const state = query.state.data?.state;
+      if (state && ["COMPLETED", "FAILED", "EXPIRED"].includes(state)) {
         return false;
       }
-      return 5000; // poll every 5s while in progress
+      return 5000;
     },
   });
 }
 
-// Hook: list intents
-export function useOfframpIntents(params?: {
-  page?: number;
-  status?: OfframpStatus;
-}) {
-  return useQuery<OfframpListResponse>({
-    queryKey: ["offramp-intents", params],
-    queryFn: () => offrampApi.listIntents(params?.page, params?.status),
+export function useConfirmOfframp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (intentId: string) => offrampApi.confirmIntent(intentId),
+    onSuccess: (intent) => {
+      queryClient.invalidateQueries({ queryKey: ["offramp-intent", intent.id] });
+    },
   });
 }
 
-// Hook: cancel intent
-export function useCancelOfframp() {
+export function useMarkCryptoReceived() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (intentId: string) => offrampApi.cancelIntent(intentId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["offramp-intents"] });
+    mutationFn: ({ intentId, data }: { intentId: string; data: ConfirmCryptoReceivedInput }) =>
+      offrampApi.markCryptoReceived(intentId, data),
+    onSuccess: (intent) => {
+      queryClient.invalidateQueries({ queryKey: ["offramp-intent", intent.id] });
     },
   });
 }
@@ -228,36 +204,34 @@ export function useOfframp() {
   const [selectedCurrency, setSelectedCurrency] =
     useState<OfframpCurrency>("USDT");
   const [currentIntentId, setCurrentIntentId] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
+  const [currentQuote, setCurrentQuote] = useState<OfframpQuoteResponse | null>(null);
 
-  const exchangeRate = useExchangeRate(selectedCurrency);
-  const bankAccounts = useBankAccounts();
   const currentIntent = useOfframpIntent(currentIntentId);
-  const intents = useOfframpIntents({ page });
+  const createQuote = useCreateOfframpQuote();
   const createOfframp = useCreateOfframp();
-  const cancelOfframp = useCancelOfframp();
 
-  const handleCreateIntent = useCallback(
-    async (amount: string, currency: OfframpCurrency, bankAccountId: string) => {
+  const handleCreateQuote = useCallback(
+    async (data: OfframpQuoteRequest) => {
+      const quote = await createQuote.mutateAsync(data);
+      setCurrentQuote(quote);
+      return quote;
+    },
+    [createQuote]
+  );
+
+  const handleCreateOfframp = useCallback(
+    async (data?: { chainId?: number }) => {
+      if (!currentQuote) {
+        throw new Error("Create a quote before creating an off-ramp intent");
+      }
       const result = await createOfframp.mutateAsync({
-        amount,
-        currency,
-        bankAccountId,
+        quoteId: currentQuote.quoteId,
+        chainId: data?.chainId,
       });
       setCurrentIntentId(result.id);
       return result;
     },
-    [createOfframp]
-  );
-
-  const handleCancelIntent = useCallback(
-    async (intentId: string) => {
-      await cancelOfframp.mutateAsync(intentId);
-      if (currentIntentId === intentId) {
-        setCurrentIntentId(null);
-      }
-    },
-    [cancelOfframp, currentIntentId]
+    [createOfframp, currentQuote]
   );
 
   return {
@@ -265,15 +239,12 @@ export function useOfframp() {
     setSelectedCurrency,
     currentIntentId,
     setCurrentIntentId,
-    page,
-    setPage,
-    exchangeRate,
-    bankAccounts,
+    currentQuote,
+    setCurrentQuote,
     currentIntent,
-    intents,
-    createIntent: handleCreateIntent,
-    cancelIntent: handleCancelIntent,
+    createQuote: handleCreateQuote,
+    createOfframp: handleCreateOfframp,
+    isCreatingQuote: createQuote.isPending,
     isCreating: createOfframp.isPending,
-    isCancelling: cancelOfframp.isPending,
   };
 }

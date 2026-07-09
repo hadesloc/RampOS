@@ -34,9 +34,10 @@ describe("ExtensionsPage", () => {
     render(<ExtensionsPage />);
 
     expect(await screen.findByText(/apply branding bundle/i)).toBeInTheDocument();
-    expect(screen.getByText(/enabled: yes/i)).toBeInTheDocument();
-    expect(screen.getByText(/approval required: yes/i)).toBeInTheDocument();
-    expect(screen.getByText(/source: fallback/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/status: enabled/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/status: approval required/i)).toBeInTheDocument();
+    expect(screen.getByText(/source/i)).toBeInTheDocument();
+    expect(screen.getByText(/fallback/i)).toBeInTheDocument();
   });
 
   it("renders unknown approval state when the backend omits the field", async () => {
@@ -58,6 +59,6 @@ describe("ExtensionsPage", () => {
     render(<ExtensionsPage />);
 
     expect(await screen.findByText(/sync webhook preferences/i)).toBeInTheDocument();
-    expect(screen.getByText(/approval required: unknown/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/status: approval unknown/i)).toBeInTheDocument();
   });
 });

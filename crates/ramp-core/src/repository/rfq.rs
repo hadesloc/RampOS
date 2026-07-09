@@ -141,16 +141,18 @@ pub trait RfqRepository: Send + Sync {
     /// Create a bid for an RFQ
     async fn create_bid(&self, bid: &RfqBidRow) -> Result<()>;
 
-    /// List all bids for an RFQ (any state)
+    /// List all bids for an RFQ (any state) in stable display order.
     async fn list_bids_for_request(
         &self,
         tenant_id: &TenantId,
         rfq_id: &str,
     ) -> Result<Vec<RfqBidRow>>;
 
-    /// Get the best PENDING bid for an RFQ.
-    /// For OFFRAMP: highest exchange_rate wins (LP pays most VND).
-    /// For ONRAMP:  lowest exchange_rate wins (LP sells cheapest).
+    /// Get the best PENDING bid for an RFQ using raw price ordering only.
+    /// This is a deterministic display/query helper, not the settlement-authoritative
+    /// scorer when policy inputs such as LP reliability are required.
+    /// For OFFRAMP: highest exchange_rate wins (LP pays most VND), then higher VND.
+    /// For ONRAMP:  lowest exchange_rate wins (LP sells cheapest), then lower VND.
     async fn get_best_bid(
         &self,
         tenant_id: &TenantId,
@@ -344,7 +346,7 @@ impl RfqRepository for PgRfqRepository {
             .await
             .map_err(|e| Error::Database(e.to_string()))?;
 
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             UPDATE rfq_requests
             SET state = $1, winning_bid_id = $2, winning_lp_id = $3,
@@ -361,6 +363,16 @@ impl RfqRepository for PgRfqRepository {
         .execute(&mut *tx)
         .await
         .map_err(|e| Error::Database(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            tx.rollback()
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+            return Err(Error::NotFound(format!(
+                "RFQ request {} not found for tenant {}",
+                req.id, req.tenant_id
+            )));
+        }
 
         tx.commit()
             .await
@@ -426,7 +438,7 @@ impl RfqRepository for PgRfqRepository {
             r#"
             SELECT * FROM rfq_bids
             WHERE tenant_id = $1 AND rfq_id = $2
-            ORDER BY exchange_rate DESC, created_at ASC
+            ORDER BY created_at ASC, id ASC
             "#,
         )
         .bind(&tenant_id.0)
@@ -457,15 +469,17 @@ impl RfqRepository for PgRfqRepository {
             .await
             .map_err(|e| Error::Database(e.to_string()))?;
 
-        // OFFRAMP: highest rate wins (LP pays most VND to user)
-        // ONRAMP:  lowest rate wins  (LP sells cheapest to user)
+        // Raw-price display/query helper only; settlement must use the service scorer
+        // when policy inputs such as LP reliability are required.
+        // OFFRAMP: highest rate wins (LP pays most VND to user), then higher VND.
+        // ONRAMP:  lowest rate wins  (LP sells cheapest to user), then lower VND.
         let row = if direction == "ONRAMP" {
             sqlx::query_as::<_, RfqBidRow>(
                 r#"
                 SELECT * FROM rfq_bids
                 WHERE tenant_id = $1 AND rfq_id = $2 AND state = 'PENDING'
                   AND valid_until > NOW()
-                ORDER BY exchange_rate ASC
+                ORDER BY exchange_rate ASC, vnd_amount ASC, created_at ASC, id ASC
                 LIMIT 1
                 "#,
             )
@@ -481,7 +495,7 @@ impl RfqRepository for PgRfqRepository {
                 SELECT * FROM rfq_bids
                 WHERE tenant_id = $1 AND rfq_id = $2 AND state = 'PENDING'
                   AND valid_until > NOW()
-                ORDER BY exchange_rate DESC
+                ORDER BY exchange_rate DESC, vnd_amount DESC, created_at ASC, id ASC
                 LIMIT 1
                 "#,
             )
@@ -514,7 +528,7 @@ impl RfqRepository for PgRfqRepository {
             .await
             .map_err(|e| Error::Database(e.to_string()))?;
 
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             UPDATE rfq_bids
             SET state = $1
@@ -527,6 +541,16 @@ impl RfqRepository for PgRfqRepository {
         .execute(&mut *tx)
         .await
         .map_err(|e| Error::Database(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            tx.rollback()
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+            return Err(Error::NotFound(format!(
+                "RFQ bid {} not found for tenant {}",
+                bid_id, tenant_id.0
+            )));
+        }
 
         tx.commit()
             .await
@@ -740,13 +764,13 @@ impl RfqRepository for InMemoryRfqRepository {
         Ok(())
     }
 
-    async fn get_request(&self, _tenant_id: &TenantId, id: &str) -> Result<Option<RfqRequestRow>> {
+    async fn get_request(&self, tenant_id: &TenantId, id: &str) -> Result<Option<RfqRequestRow>> {
         Ok(self
             .requests
             .read()
             .await
             .iter()
-            .find(|r| r.id == id)
+            .find(|r| r.tenant_id == tenant_id.0 && r.id == id)
             .cloned())
     }
 
@@ -757,7 +781,7 @@ impl RfqRepository for InMemoryRfqRepository {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<RfqRequestRow>> {
-        let rows: Vec<_> = self
+        let mut rows: Vec<_> = self
             .requests
             .read()
             .await
@@ -767,19 +791,34 @@ impl RfqRepository for InMemoryRfqRepository {
                     && r.state == "OPEN"
                     && direction.map_or(true, |d| r.direction == d)
             })
-            .skip(offset as usize)
-            .take(limit as usize)
             .cloned()
             .collect();
-        Ok(rows)
+        rows.sort_by(|a, b| {
+            b.created_at
+                .cmp(&a.created_at)
+                .then_with(|| a.id.cmp(&b.id))
+        });
+        Ok(rows
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect())
     }
 
     async fn update_request(&self, req: &RfqRequestRow) -> Result<()> {
         let mut store = self.requests.write().await;
-        if let Some(existing) = store.iter_mut().find(|r| r.id == req.id) {
+        if let Some(existing) = store
+            .iter_mut()
+            .find(|r| r.id == req.id && r.tenant_id == req.tenant_id)
+        {
             *existing = req.clone();
+            Ok(())
+        } else {
+            Err(Error::NotFound(format!(
+                "RFQ request {} not found for tenant {}",
+                req.id, req.tenant_id
+            )))
         }
-        Ok(())
     }
 
     async fn create_bid(&self, bid: &RfqBidRow) -> Result<()> {
@@ -797,10 +836,14 @@ impl RfqRepository for InMemoryRfqRepository {
             .read()
             .await
             .iter()
-            .filter(|b| b.rfq_id == rfq_id)
+            .filter(|b| b.tenant_id == _tenant_id.0 && b.rfq_id == rfq_id)
             .cloned()
             .collect();
-        rows.sort_by(|a, b| b.exchange_rate.cmp(&a.exchange_rate));
+        rows.sort_by(|a, b| {
+            a.created_at
+                .cmp(&b.created_at)
+                .then_with(|| a.id.cmp(&b.id))
+        });
         Ok(rows)
     }
 
@@ -820,9 +863,21 @@ impl RfqRepository for InMemoryRfqRepository {
             .cloned()
             .collect();
         if direction == "ONRAMP" {
-            bids.sort_by(|a, b| a.exchange_rate.cmp(&b.exchange_rate));
+            bids.sort_by(|a, b| {
+                a.exchange_rate
+                    .cmp(&b.exchange_rate)
+                    .then_with(|| a.vnd_amount.cmp(&b.vnd_amount))
+                    .then_with(|| a.created_at.cmp(&b.created_at))
+                    .then_with(|| a.id.cmp(&b.id))
+            });
         } else {
-            bids.sort_by(|a, b| b.exchange_rate.cmp(&a.exchange_rate));
+            bids.sort_by(|a, b| {
+                b.exchange_rate
+                    .cmp(&a.exchange_rate)
+                    .then_with(|| b.vnd_amount.cmp(&a.vnd_amount))
+                    .then_with(|| a.created_at.cmp(&b.created_at))
+                    .then_with(|| a.id.cmp(&b.id))
+            });
         }
         Ok(bids.into_iter().next())
     }
@@ -834,10 +889,18 @@ impl RfqRepository for InMemoryRfqRepository {
         state: &str,
     ) -> Result<()> {
         let mut store = self.bids.write().await;
-        if let Some(bid) = store.iter_mut().find(|b| b.id == bid_id) {
+        if let Some(bid) = store
+            .iter_mut()
+            .find(|b| b.id == bid_id && b.tenant_id == _tenant_id.0)
+        {
             bid.state = state.to_string();
+            Ok(())
+        } else {
+            Err(Error::NotFound(format!(
+                "RFQ bid {} not found for tenant {}",
+                bid_id, _tenant_id.0
+            )))
         }
-        Ok(())
     }
 
     async fn upsert_reliability_snapshot(&self, snapshot: &LpReliabilitySnapshotRow) -> Result<()> {
@@ -909,6 +972,7 @@ impl RfqRepository for InMemoryRfqRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
     use rust_decimal::Decimal;
 
     fn mock_rfq(id: &str, direction: &str) -> RfqRequestRow {
@@ -945,6 +1009,27 @@ mod tests {
             valid_until: now + chrono::Duration::minutes(5),
             state: "PENDING".to_string(),
             created_at: now,
+        }
+    }
+
+    fn mock_bid_with_details(
+        id: &str,
+        rfq_id: &str,
+        rate: i64,
+        vnd_amount: i64,
+        created_at: DateTime<Utc>,
+    ) -> RfqBidRow {
+        RfqBidRow {
+            id: id.to_string(),
+            rfq_id: rfq_id.to_string(),
+            tenant_id: "tenant_test".to_string(),
+            lp_id: format!("lp_{}", id),
+            lp_name: Some(format!("LP {}", id)),
+            exchange_rate: Decimal::new(rate, 0),
+            vnd_amount: Decimal::new(vnd_amount, 0),
+            valid_until: Utc::now() + chrono::Duration::minutes(5),
+            state: "PENDING".to_string(),
+            created_at,
         }
     }
 
@@ -1023,6 +1108,178 @@ mod tests {
             .unwrap();
         assert!(best.is_some());
         assert_eq!(best.unwrap().exchange_rate, Decimal::new(25_200, 0));
+    }
+
+    #[tokio::test]
+    async fn test_update_request_missing_row_errors() {
+        let repo = InMemoryRfqRepository::new();
+        let missing = mock_rfq("missing_rfq", "OFFRAMP");
+
+        let err = repo.update_request(&missing).await.unwrap_err();
+        assert!(
+            matches!(err, Error::NotFound(message) if message.contains("missing_rfq") && message.contains("tenant_test"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_update_bid_state_missing_row_errors() {
+        let repo = InMemoryRfqRepository::new();
+        let tenant = TenantId("tenant_test".to_string());
+
+        let err = repo
+            .update_bid_state(&tenant, "missing_bid", "REJECTED")
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, Error::NotFound(message) if message.contains("missing_bid") && message.contains("tenant_test"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_bids_for_request_orders_by_created_at_then_id() {
+        let repo = InMemoryRfqRepository::new();
+        let tenant = TenantId("tenant_test".to_string());
+        let base = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+
+        repo.create_bid(&mock_bid_with_details(
+            "bid_c",
+            "rfq_list_order",
+            30_000,
+            3_000_000,
+            base + chrono::Duration::seconds(10),
+        ))
+        .await
+        .unwrap();
+        repo.create_bid(&mock_bid_with_details(
+            "bid_b",
+            "rfq_list_order",
+            31_000,
+            3_100_000,
+            base,
+        ))
+        .await
+        .unwrap();
+        repo.create_bid(&mock_bid_with_details(
+            "bid_a",
+            "rfq_list_order",
+            29_000,
+            2_900_000,
+            base,
+        ))
+        .await
+        .unwrap();
+
+        let bids = repo
+            .list_bids_for_request(&tenant, "rfq_list_order")
+            .await
+            .unwrap();
+        let ids: Vec<_> = bids.into_iter().map(|bid| bid.id).collect();
+
+        assert_eq!(ids, vec!["bid_a", "bid_b", "bid_c"]);
+    }
+
+    #[tokio::test]
+    async fn test_offramp_best_bid_tie_breaks_by_vnd_created_at_then_id() {
+        let repo = InMemoryRfqRepository::new();
+        let tenant = TenantId("tenant_test".to_string());
+        let base = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+
+        repo.create_bid(&mock_bid_with_details(
+            "bid_later_high_vnd",
+            "rfq_offramp_tie",
+            26_000,
+            2_700_000,
+            base + chrono::Duration::seconds(5),
+        ))
+        .await
+        .unwrap();
+        repo.create_bid(&mock_bid_with_details(
+            "bid_earliest_high_vnd_b",
+            "rfq_offramp_tie",
+            26_000,
+            2_700_000,
+            base,
+        ))
+        .await
+        .unwrap();
+        repo.create_bid(&mock_bid_with_details(
+            "bid_earliest_high_vnd_a",
+            "rfq_offramp_tie",
+            26_000,
+            2_700_000,
+            base,
+        ))
+        .await
+        .unwrap();
+        repo.create_bid(&mock_bid_with_details(
+            "bid_low_vnd",
+            "rfq_offramp_tie",
+            26_000,
+            2_600_000,
+            base - chrono::Duration::seconds(5),
+        ))
+        .await
+        .unwrap();
+
+        let best = repo
+            .get_best_bid(&tenant, "rfq_offramp_tie", "OFFRAMP")
+            .await
+            .unwrap()
+            .expect("best bid should exist");
+
+        assert_eq!(best.id, "bid_earliest_high_vnd_a");
+    }
+
+    #[tokio::test]
+    async fn test_onramp_best_bid_tie_breaks_by_vnd_created_at_then_id() {
+        let repo = InMemoryRfqRepository::new();
+        let tenant = TenantId("tenant_test".to_string());
+        let base = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+
+        repo.create_bid(&mock_bid_with_details(
+            "bid_later_low_vnd",
+            "rfq_onramp_tie",
+            25_000,
+            2_400_000,
+            base + chrono::Duration::seconds(5),
+        ))
+        .await
+        .unwrap();
+        repo.create_bid(&mock_bid_with_details(
+            "bid_earliest_low_vnd_b",
+            "rfq_onramp_tie",
+            25_000,
+            2_400_000,
+            base,
+        ))
+        .await
+        .unwrap();
+        repo.create_bid(&mock_bid_with_details(
+            "bid_earliest_low_vnd_a",
+            "rfq_onramp_tie",
+            25_000,
+            2_400_000,
+            base,
+        ))
+        .await
+        .unwrap();
+        repo.create_bid(&mock_bid_with_details(
+            "bid_high_vnd",
+            "rfq_onramp_tie",
+            25_000,
+            2_500_000,
+            base - chrono::Duration::seconds(5),
+        ))
+        .await
+        .unwrap();
+
+        let best = repo
+            .get_best_bid(&tenant, "rfq_onramp_tie", "ONRAMP")
+            .await
+            .unwrap()
+            .expect("best bid should exist");
+
+        assert_eq!(best.id, "bid_earliest_low_vnd_a");
     }
 
     #[tokio::test]

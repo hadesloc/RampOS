@@ -399,6 +399,168 @@ pub async fn submit_fraud_review(
     }))
 }
 
+// ============================================================================
+// Fraud Checks endpoint (maps fraud/cases → FraudCheck shape expected by UI)
+// ============================================================================
+
+/// Shape the frontend fraud page expects for each check entry.
+/// Fields: id, userId, intentId, score, level, action, triggeredRules, checkedAt.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FraudCheckResponse {
+    pub id: String,
+    pub user_id: String,
+    pub intent_id: String,
+    pub score: u8,
+    pub level: String,
+    pub action: String,
+    pub triggered_rules: Vec<String>,
+    pub checked_at: String,
+}
+
+/// Shape the frontend fraud page expects for each rule entry.
+/// Fields: id, name, description, enabled, weight, category.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FraudRuleResponse {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub enabled: bool,
+    pub weight: u8,
+    pub category: String,
+}
+
+fn score_to_level(score: u8) -> String {
+    match score {
+        80..=u8::MAX => "CRITICAL".to_string(),
+        60..=79 => "HIGH".to_string(),
+        40..=59 => "MEDIUM".to_string(),
+        _ => "LOW".to_string(),
+    }
+}
+
+fn map_fraud_check_response(case: ramp_compliance::case::AmlCase) -> FraudCheckResponse {
+    let decision = map_decision(&case);
+    let score = extract_score(&case.detection_data);
+    let level = score_to_level(score);
+
+    // Collect rule names from risk_factors array in detection_data
+    let triggered_rules = map_risk_factors(&case.detection_data)
+        .into_iter()
+        .map(|f| f.rule_name)
+        .collect();
+
+    // Map decision → UI action string
+    let action = match decision.to_uppercase().as_str() {
+        "BLOCK" => "BLOCK",
+        "REVIEW" => "REVIEW",
+        _ => "ALLOW",
+    }
+    .to_string();
+
+    FraudCheckResponse {
+        id: case.id,
+        user_id: case.user_id.map(|id| id.0).unwrap_or_default(),
+        intent_id: case.intent_id.map(|id| id.0).unwrap_or_default(),
+        score,
+        level,
+        action,
+        triggered_rules,
+        checked_at: case.created_at.to_rfc3339(),
+    }
+}
+
+/// GET /v1/admin/fraud/checks
+/// Returns fraud check results (derived from fraud-type AML cases).
+pub async fn list_fraud_checks(
+    headers: HeaderMap,
+    tenant_ctx: Option<Extension<TenantContext>>,
+    State(app_state): State<AppState>,
+) -> Result<Json<Vec<FraudCheckResponse>>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
+
+    let tenant_ctx = tenant_ctx.map(|Extension(ctx)| ctx).ok_or_else(|| {
+        ApiError::Internal("Tenant context unavailable for fraud/checks".to_string())
+    })?;
+
+    info!(tenant = %tenant_ctx.tenant_id.0, "Listing fraud checks");
+
+    let mut cases = app_state
+        .case_manager
+        .list_cases(&tenant_ctx.tenant_id, None, None, None, None, 500, 0)
+        .await
+        .map_err(ApiError::from)?;
+
+    cases.retain(is_fraud_case);
+    cases.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+    let data = cases.into_iter().map(map_fraud_check_response).collect();
+    Ok(Json(data))
+}
+
+/// GET /v1/admin/fraud/rules
+/// Returns fraud detection rules from the compliance rule manager.
+pub async fn list_fraud_rules(
+    headers: HeaderMap,
+    tenant_ctx: Option<Extension<TenantContext>>,
+    State(app_state): State<AppState>,
+) -> Result<Json<Vec<FraudRuleResponse>>, ApiError> {
+    super::tier::check_admin_key(&headers)?;
+
+    let tenant_ctx = tenant_ctx.map(|Extension(ctx)| ctx).ok_or_else(|| {
+        ApiError::Internal("Tenant context unavailable for fraud/rules".to_string())
+    })?;
+
+    info!(tenant = %tenant_ctx.tenant_id.0, "Listing fraud rules");
+
+    let rules = if let Some(rule_manager) = &app_state.rule_manager {
+        rule_manager
+            .get_rule_definitions(&tenant_ctx.tenant_id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+    } else {
+        vec![]
+    };
+
+    let data = rules
+        .into_iter()
+        .map(|rule| {
+            // Derive weight + category from rule parameters when present;
+            // fall back to sensible defaults so the UI always gets valid numbers.
+            let weight = rule
+                .parameters
+                .get("weight")
+                .and_then(|v| v.as_f64())
+                .map(|v| v.clamp(0.0, 255.0) as u8)
+                .or_else(|| {
+                    rule.score_impact
+                        .map(|s| s.clamp(0, 100) as u8)
+                })
+                .unwrap_or(10u8);
+            let category = rule
+                .parameters
+                .get("category")
+                .and_then(|v| v.as_str())
+                .or_else(|| {
+                    rule.tags.first().map(|s| s.as_str())
+                })
+                .unwrap_or("VELOCITY")
+                .to_string();
+            FraudRuleResponse {
+                id: rule.id.clone(),
+                name: rule.name.clone(),
+                description: rule.description.clone().unwrap_or_default(),
+                enabled: rule.enabled,
+                weight,
+                category,
+            }
+        })
+        .collect();
+
+    Ok(Json(data))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

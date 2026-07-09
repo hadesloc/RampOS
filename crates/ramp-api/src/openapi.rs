@@ -331,6 +331,7 @@ impl utoipa::Modify for SecurityAddon {
         attach_manual_reconciliation_paths(openapi);
         attach_manual_treasury_paths(openapi);
         attach_manual_settlement_paths(openapi);
+        attach_manual_rfq_offramp_paths(openapi);
         attach_manual_liquidity_paths(openapi);
         attach_manual_audit_paths(openapi);
         attach_manual_passport_paths(openapi);
@@ -1516,6 +1517,267 @@ fn attach_manual_settlement_paths(openapi: &mut utoipa::openapi::OpenApi) {
                     }
                 }
             }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/settlement/{id}/outcome",
+        json!({
+            "post": {
+                "tags": ["admin"],
+                "operationId": "applySettlementOutcome",
+                "summary": "Apply linked off-ramp settlement outcome",
+                "description": "Idempotently applies a bounded settlement outcome for an OFFRAMP-linked RFQ settlement. `COMPLETED` moves the linked off-ramp intent to COMPLETED; `FAILED` moves it to FAILED and may store an error message. This records outcome state only and does not imply automatic custody or bank execution.",
+                "parameters": [
+                    { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["outcome"],
+                                "properties": {
+                                    "outcome": { "type": "string", "enum": ["COMPLETED", "FAILED"] },
+                                    "errorMessage": { "type": "string", "nullable": true }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Settlement outcome applied",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["settlementId", "offrampIntentId", "status"],
+                                    "properties": {
+                                        "settlementId": { "type": "string" },
+                                        "offrampIntentId": { "type": "string" },
+                                        "status": { "type": "string", "enum": ["PENDING", "COMPLETED", "FAILED"] },
+                                        "rfqId": { "type": "string", "nullable": true },
+                                        "lpId": { "type": "string", "nullable": true },
+                                        "finalRate": { "type": "string", "nullable": true }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }),
+    );
+}
+
+fn attach_manual_rfq_offramp_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    let rfq_response_schema = json!({
+        "type": "object",
+        "required": ["id", "direction", "cryptoAsset", "cryptoAmount", "state", "expiresAt", "createdAt"],
+        "properties": {
+            "id": { "type": "string" },
+            "direction": { "type": "string", "enum": ["OFFRAMP", "ONRAMP"] },
+            "cryptoAsset": { "type": "string" },
+            "cryptoAmount": { "type": "string" },
+            "vndAmount": { "type": "string", "nullable": true },
+            "state": { "type": "string", "enum": ["OPEN", "MATCHED", "CANCELLED", "EXPIRED"] },
+            "expiresAt": { "type": "string", "format": "date-time" },
+            "winningLpId": { "type": "string", "nullable": true },
+            "finalRate": { "type": "string", "nullable": true },
+            "createdAt": { "type": "string", "format": "date-time" }
+        }
+    });
+    let bid_response_schema = json!({
+        "type": "object",
+        "required": ["id", "rfqId", "lpId", "exchangeRate", "vndAmount", "validUntil", "state"],
+        "properties": {
+            "id": { "type": "string" },
+            "rfqId": { "type": "string" },
+            "lpId": { "type": "string" },
+            "lpName": { "type": "string", "nullable": true },
+            "exchangeRate": { "type": "string" },
+            "vndAmount": { "type": "string" },
+            "validUntil": { "type": "string", "format": "date-time" },
+            "state": { "type": "string", "enum": ["PENDING", "ACCEPTED", "REJECTED", "EXPIRED"] }
+        }
+    });
+    let offramp_intent_schema = json!({
+        "type": "object",
+        "required": ["id", "state", "cryptoAsset", "cryptoAmount", "exchangeRate", "netVndAmount", "grossVndAmount", "createdAt", "updatedAt"],
+        "properties": {
+            "id": { "type": "string" },
+            "state": { "type": "string", "enum": ["QUOTE_CREATED", "CRYPTO_PENDING", "CRYPTO_RECEIVED", "VND_TRANSFERRING", "COMPLETED", "FAILED", "EXPIRED"] },
+            "cryptoAsset": { "type": "string" },
+            "cryptoAmount": { "type": "string" },
+            "exchangeRate": { "type": "string" },
+            "netVndAmount": { "type": "string" },
+            "grossVndAmount": { "type": "string" },
+            "depositAddress": { "type": "string", "nullable": true },
+            "chainId": { "type": "integer", "format": "int64", "nullable": true },
+            "txHash": { "type": "string", "nullable": true },
+            "bankReference": { "type": "string", "nullable": true },
+            "linkedRfqId": { "type": "string", "nullable": true },
+            "winningLpId": { "type": "string", "nullable": true },
+            "matchedRate": { "type": "string", "nullable": true },
+            "settlementId": { "type": "string", "nullable": true },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "updatedAt": { "type": "string", "format": "date-time" }
+        }
+    });
+    let admin_offramp_schema = json!({
+        "type": "object",
+        "required": ["id", "userId", "state", "cryptoAsset", "cryptoAmount", "exchangeRate", "netVndAmount", "grossVndAmount", "createdAt", "updatedAt"],
+        "properties": {
+            "id": { "type": "string" },
+            "userId": { "type": "string" },
+            "state": { "type": "string", "enum": ["QUOTE_CREATED", "CRYPTO_PENDING", "CRYPTO_RECEIVED", "VND_TRANSFERRING", "COMPLETED", "FAILED", "EXPIRED"] },
+            "cryptoAsset": { "type": "string" },
+            "cryptoAmount": { "type": "string" },
+            "exchangeRate": { "type": "string" },
+            "netVndAmount": { "type": "string" },
+            "grossVndAmount": { "type": "string" },
+            "depositAddress": { "type": "string", "nullable": true },
+            "txHash": { "type": "string", "nullable": true },
+            "bankReference": { "type": "string", "nullable": true },
+            "linkedRfqId": { "type": "string", "nullable": true },
+            "winningLpId": { "type": "string", "nullable": true },
+            "matchedRate": { "type": "string", "nullable": true },
+            "settlementId": { "type": "string", "nullable": true },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "updatedAt": { "type": "string", "format": "date-time" }
+        }
+    });
+
+    insert_manual_path(
+        openapi,
+        "/v1/portal/rfq",
+        json!({
+            "post": {
+                "tags": ["portal"],
+                "operationId": "createPortalRfq",
+                "summary": "Create a portal RFQ",
+                "description": "Creates a standalone ONRAMP/OFFRAMP RFQ or an OFFRAMP-linked RFQ when `offrampId` is supplied. Linked RFQs bind to an existing off-ramp intent; finalization records the winning LP, matched rate, linked RFQ, and settlement reference on that off-ramp intent.",
+                "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["direction", "cryptoAsset", "cryptoAmount"], "properties": { "direction": { "type": "string", "enum": ["OFFRAMP", "ONRAMP"] }, "cryptoAsset": { "type": "string" }, "cryptoAmount": { "type": "string" }, "vndAmount": { "type": "string", "nullable": true }, "offrampId": { "type": "string", "nullable": true, "description": "Existing off-ramp intent ID. Only valid for OFFRAMP RFQs." }, "ttlMinutes": { "type": "integer", "format": "int64", "minimum": 1, "maximum": 60 } } } } } },
+                "responses": { "200": { "description": "RFQ created", "content": { "application/json": { "schema": rfq_response_schema.clone() } } } }
+            }
+        }),
+    );
+    insert_manual_path(
+        openapi,
+        "/v1/portal/rfq/{id}",
+        json!({
+            "get": {
+                "tags": ["portal"], "operationId": "getPortalRfq", "summary": "Get portal RFQ with bids",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "responses": { "200": { "description": "RFQ detail", "content": { "application/json": { "schema": { "type": "object", "required": ["rfq", "bids", "bidCount"], "properties": { "rfq": rfq_response_schema.clone(), "bids": { "type": "array", "items": bid_response_schema.clone() }, "bestRate": { "type": "string", "nullable": true }, "bidCount": { "type": "integer" } } } } } } }
+            }
+        }),
+    );
+    insert_manual_path(
+        openapi,
+        "/v1/portal/rfq/{id}/accept",
+        json!({
+            "post": {
+                "tags": ["portal"], "operationId": "acceptPortalRfq", "summary": "Accept best RFQ bid",
+                "description": "Finalizes the RFQ using the same matching coordinator as admin finalize. For OFFRAMP-linked RFQs this creates or reuses the settlement kickoff and persists linkedRfqId, winningLpId, matchedRate, and settlementId on the off-ramp intent; it does not mark bank or custody execution complete.",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "responses": { "200": { "description": "Finalized RFQ detail", "content": { "application/json": { "schema": { "type": "object", "properties": { "rfq": rfq_response_schema.clone(), "bids": { "type": "array", "items": bid_response_schema.clone() }, "bestRate": { "type": "string", "nullable": true }, "bidCount": { "type": "integer" } } } } } } }
+            }
+        }),
+    );
+    insert_manual_path(
+        openapi,
+        "/v1/portal/rfq/{id}/cancel",
+        json!({
+            "post": { "tags": ["portal"], "operationId": "cancelPortalRfq", "summary": "Cancel open RFQ", "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Cancelled RFQ", "content": { "application/json": { "schema": rfq_response_schema.clone() } } } } }
+        }),
+    );
+    insert_manual_path(
+        openapi,
+        "/v1/lp/rfq/{rfq_id}/bid",
+        json!({
+            "post": { "tags": ["portal"], "operationId": "submitLpRfqBid", "summary": "Submit LP bid for RFQ", "parameters": [{ "name": "rfq_id", "in": "path", "required": true, "schema": { "type": "string" } }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["exchangeRate", "vndAmount"], "properties": { "exchangeRate": { "type": "string" }, "vndAmount": { "type": "string" }, "lpName": { "type": "string", "nullable": true }, "validMinutes": { "type": "integer", "format": "int64", "minimum": 1, "maximum": 30 } } } } } }, "responses": { "200": { "description": "Accepted LP bid", "content": { "application/json": { "schema": bid_response_schema.clone() } } } } }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/portal/offramp/quote",
+        json!({
+            "post": { "tags": ["portal"], "operationId": "createOfframpQuote", "summary": "Create off-ramp quote", "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["cryptoAsset", "amount", "bankCode", "accountNumber", "accountName"], "properties": { "cryptoAsset": { "type": "string" }, "amount": { "type": "string" }, "bankCode": { "type": "string" }, "accountNumber": { "type": "string" }, "accountName": { "type": "string" } } } } } }, "responses": { "200": { "description": "Off-ramp quote", "content": { "application/json": { "schema": { "type": "object", "required": ["quoteId", "cryptoAsset", "cryptoAmount", "exchangeRate", "grossVndAmount", "netVndAmount", "feeTotal", "expiresAt"], "properties": { "quoteId": { "type": "string" }, "cryptoAsset": { "type": "string" }, "cryptoAmount": { "type": "string" }, "exchangeRate": { "type": "string" }, "grossVndAmount": { "type": "string" }, "netVndAmount": { "type": "string" }, "feeTotal": { "type": "string" }, "expiresAt": { "type": "string", "format": "date-time" } } } } } } } }
+        }),
+    );
+    insert_manual_path(
+        openapi,
+        "/v1/portal/offramp/create",
+        json!({
+            "post": { "tags": ["portal"], "operationId": "createOfframpIntent", "summary": "Create off-ramp intent from quote", "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["quoteId"], "properties": { "quoteId": { "type": "string" }, "chainId": { "type": "integer", "format": "int64", "nullable": true } } } } } }, "responses": { "200": { "description": "Off-ramp intent", "content": { "application/json": { "schema": offramp_intent_schema.clone() } } } } }
+        }),
+    );
+    for (path, operation_id, summary, method) in [
+        (
+            "/v1/portal/offramp/{id}/status",
+            "getOfframpStatus",
+            "Get off-ramp status",
+            "get",
+        ),
+        (
+            "/v1/portal/offramp/{id}/confirm",
+            "confirmOfframp",
+            "Confirm off-ramp bank details",
+            "post",
+        ),
+    ] {
+        insert_manual_path(
+            openapi,
+            path,
+            json!({ method: { "tags": ["portal"], "operationId": operation_id, "summary": summary, "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Off-ramp intent", "content": { "application/json": { "schema": offramp_intent_schema.clone() } } } } } }),
+        );
+    }
+    insert_manual_path(
+        openapi,
+        "/v1/portal/offramp/{id}/crypto-received",
+        json!({
+            "post": { "tags": ["portal"], "operationId": "markOfframpCryptoReceived", "summary": "Persist submitted off-ramp chain facts", "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["txHash", "chainId", "fromAddress", "toAddress"], "properties": { "txHash": { "type": "string" }, "chainId": { "type": "integer", "format": "int64" }, "fromAddress": { "type": "string" }, "toAddress": { "type": "string" }, "blockNumber": { "type": "integer", "format": "int64", "nullable": true }, "confirmations": { "type": "integer", "nullable": true }, "rawPayload": { "type": "object", "nullable": true } } } } } }, "responses": { "200": { "description": "Updated off-ramp intent", "content": { "application/json": { "schema": offramp_intent_schema.clone() } } } } }
+        }),
+    );
+
+    insert_manual_path(
+        openapi,
+        "/v1/admin/rfq/open",
+        json!({
+            "get": { "tags": ["admin"], "operationId": "listOpenRfqs", "summary": "List open RFQs", "parameters": [{ "name": "direction", "in": "query", "required": false, "schema": { "type": "string", "enum": ["OFFRAMP", "ONRAMP"] } }, { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "format": "int64", "default": 20 } }, { "name": "offset", "in": "query", "required": false, "schema": { "type": "integer", "format": "int64", "default": 0 } }], "responses": { "200": { "description": "Open RFQ page", "content": { "application/json": { "schema": { "type": "object", "required": ["data", "total", "limit", "offset"], "properties": { "data": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "userId": { "type": "string" }, "direction": { "type": "string" }, "cryptoAsset": { "type": "string" }, "cryptoAmount": { "type": "string" }, "vndAmount": { "type": "string", "nullable": true }, "state": { "type": "string" }, "bidCount": { "type": "integer", "format": "int64" }, "bestRate": { "type": "string", "nullable": true }, "expiresAt": { "type": "string", "format": "date-time" }, "createdAt": { "type": "string", "format": "date-time" } } } }, "total": { "type": "integer", "format": "int64" }, "limit": { "type": "integer", "format": "int64" }, "offset": { "type": "integer", "format": "int64" } } } } } } } }
+        }),
+    );
+    insert_manual_path(
+        openapi,
+        "/v1/admin/rfq/{id}/finalize",
+        json!({
+            "post": { "tags": ["admin"], "operationId": "finalizeRfq", "summary": "Admin finalize RFQ", "description": "Finalizes an RFQ through the linked off-ramp execution coordinator. Linked OFFRAMP RFQs persist rfqId/lpId/finalRate into the settlement kickoff and linkedRfqId/winningLpId/matchedRate/settlementId onto the off-ramp intent.", "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Finalized RFQ", "content": { "application/json": { "schema": { "type": "object", "required": ["rfqId", "state", "winningLpId", "finalRate"], "properties": { "rfqId": { "type": "string" }, "state": { "type": "string" }, "winningLpId": { "type": "string" }, "finalRate": { "type": "string" } } } } } } } }
+        }),
+    );
+    insert_manual_path(
+        openapi,
+        "/v1/admin/offramp/pending",
+        json!({
+            "get": { "tags": ["admin"], "operationId": "listPendingOfframps", "summary": "List pending off-ramp intents", "parameters": [{ "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "format": "int64", "default": 20 } }, { "name": "offset", "in": "query", "required": false, "schema": { "type": "integer", "format": "int64", "default": 0 } }], "responses": { "200": { "description": "Pending off-ramp page", "content": { "application/json": { "schema": { "type": "object", "required": ["data", "total", "limit", "offset"], "properties": { "data": { "type": "array", "items": admin_offramp_schema.clone() }, "total": { "type": "integer", "format": "int64" }, "limit": { "type": "integer", "format": "int64" }, "offset": { "type": "integer", "format": "int64" } } } } } } } }
+        }),
+    );
+    insert_manual_path(
+        openapi,
+        "/v1/admin/offramp/{id}/approve",
+        json!({
+            "post": { "tags": ["admin"], "operationId": "approveOfframp", "summary": "Approve off-ramp transfer initiation", "description": "Moves a CRYPTO_RECEIVED off-ramp to VND_TRANSFERRING and records a bank reference. This is an operator step and does not claim bank settlement completion.", "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Updated off-ramp intent", "content": { "application/json": { "schema": admin_offramp_schema.clone() } } } } }
+        }),
+    );
+    insert_manual_path(
+        openapi,
+        "/v1/admin/offramp/{id}/reject",
+        json!({
+            "post": { "tags": ["admin"], "operationId": "rejectOfframp", "summary": "Reject off-ramp intent", "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["reason"], "properties": { "reason": { "type": "string" } } } } } }, "responses": { "200": { "description": "Rejected off-ramp intent", "content": { "application/json": { "schema": admin_offramp_schema.clone() } } } } }
         }),
     );
 }

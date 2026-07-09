@@ -4,6 +4,9 @@ import { UserService } from './services/user.service';
 import { LedgerService } from './services/ledger.service';
 import { AAService } from './services/aa.service';
 import { PasskeyWalletService } from './services/passkey.service';
+import { RfqService } from './services/rfq.service';
+import { OfframpService } from './services/offramp.service';
+import { SettlementService } from './services/settlement.service';
 import { MultichainProvider } from './multichain/provider';
 import { WebhookVerifier } from './utils/webhook';
 import { signRequest } from './utils/crypto';
@@ -39,6 +42,9 @@ export class RampOSClient {
   public readonly ledger: LedgerService;
   public readonly aa: AAService;
   public readonly passkey: PasskeyWalletService;
+  public readonly rfq: RfqService;
+  public readonly offramp: OfframpService;
+  public readonly settlement: SettlementService;
   public readonly webhooks: WebhookVerifier;
 
   constructor(config: RampOSConfig) {
@@ -124,6 +130,9 @@ export class RampOSClient {
     this.ledger = new LedgerService(this.httpClient);
     this.aa = new AAService(this.httpClient);
     this.passkey = new PasskeyWalletService(this.httpClient);
+    this.rfq = new RfqService(this.httpClient);
+    this.offramp = new OfframpService(this.httpClient);
+    this.settlement = new SettlementService(this.httpClient);
     this.webhooks = new WebhookVerifier();
   }
 

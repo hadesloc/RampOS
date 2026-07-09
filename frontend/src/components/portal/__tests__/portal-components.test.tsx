@@ -18,7 +18,7 @@ describe('Portal Components', () => {
   describe('WalletCard', () => {
     it('renders address and status correctly', () => {
       render(<WalletCard address="0x1234567890abcdef" deployed={true} />)
-      expect(screen.getByText(/0x1234...cdef/)).toBeInTheDocument()
+      expect(screen.getByText(/0x1234…cdef/)).toBeInTheDocument()
       expect(screen.getByText('Deployed')).toBeInTheDocument()
     })
 

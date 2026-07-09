@@ -64,53 +64,65 @@ The **on/off ramp** is the critical bridge between traditional finance and crypt
 
 ## Screenshots
 
+> Captured live against the running stack with seeded demo data — admin dashboard (`:3000`), marketing site (`:3002`), and the wallet portal. Every screen is backed by the real API, not mockups.
+
 ### Landing Page
-> Marketing site with hero, feature cards, how-it-works flow, and developer API showcase.
+> Marketing site — hero, the full "Ramp Stack" feature grid, and developer-facing stats.
 
 <p align="center">
-  <img src="docs/screenshots/landing-hero.png" alt="Landing Page Hero" width="800">
+  <img src="docs/screenshots/landing-hero.png" alt="Landing — Hero" width="800">
 </p>
 <p align="center">
-  <img src="docs/screenshots/landing-features.png" alt="Landing Page Features" width="800">
+  <img src="docs/screenshots/landing-features.png" alt="Landing — Feature Grid" width="800">
 </p>
 
 ### Admin Dashboard
-> Real-time operations center with beautiful SVG data visualizations for transaction volume and revenue breakdown.
+> Real-time operations center — pay-in volume, success rate, active LPs, the transaction-volume trend, and a revenue-breakdown donut by transaction type.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Admin Dashboard" width="800">
 </p>
 
+### Operations
+> Manage the full intent lifecycle, users & KYC tiers, off-ramp withdrawals awaiting settlement, and the live RFQ auction market.
+
+<p align="center">
+  <img src="docs/screenshots/intents.png" alt="Intent Management" width="49%">
+  <img src="docs/screenshots/users.png" alt="Users & KYC" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/offramp.png" alt="Off-Ramp Management" width="49%">
+  <img src="docs/screenshots/rfq.png" alt="RFQ Auctions" width="49%">
+</p>
+
+### Compliance
+> AML case management — KYC/KYT cases by type, severity, and status, with the reviewer workflow.
+
+<p align="center">
+  <img src="docs/screenshots/compliance.png" alt="Compliance — AML Cases" width="800">
+</p>
+
+### Finance & Treasury
+> Financial-grade double-entry ledger, the treasury control tower, the LP liquidity scorecard, and automated yield strategies.
+
+<p align="center">
+  <img src="docs/screenshots/ledger.png" alt="Double-Entry Ledger" width="49%">
+  <img src="docs/screenshots/treasury.png" alt="Treasury Control Tower" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/liquidity.png" alt="Liquidity Scorecard" width="49%">
+  <img src="docs/screenshots/yield.png" alt="Yield Strategies" width="49%">
+</p>
+
 ### User Portal
-> Self-service portal for end users with deposit, withdraw, asset management, and transaction history.
+> Self-service wallet portal — SIWE sign-in provisions an ERC-4337 smart account; deposit, withdraw, assets, and transaction history.
 
 <p align="center">
   <img src="docs/screenshots/portal.png" alt="User Portal" width="800">
 </p>
 
-### Operations — Intent Management
-> Search, filter, and manage all payment intents (pay-in, pay-out, trade) by type and state.
-
-<p align="center">
-  <img src="docs/screenshots/intents.png" alt="Intent Management" width="800">
-</p>
-
-### Compliance Dashboard
-> KYC/AML case management — review flagged transactions, manage compliance cases.
-
-<p align="center">
-  <img src="docs/screenshots/compliance.png" alt="Compliance Dashboard" width="800">
-</p>
-
-### Double-Entry Ledger
-> Real-time accounting view with complete audit trail for every transaction.
-
-<p align="center">
-  <img src="docs/screenshots/ledger.png" alt="Ledger" width="800">
-</p>
-
 ### Admin Login
-> Secure admin key authentication for dashboard access.
+> Secure admin authentication for the operations dashboard.
 
 <p align="center">
   <img src="docs/screenshots/admin-login.png" alt="Admin Login" width="600">

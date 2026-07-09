@@ -73,6 +73,17 @@ pub trait OfframpIntentRepository: Send + Sync {
         ))
     }
 
+    async fn bind_active_rfq(
+        &self,
+        _tenant_id: &TenantId,
+        _id: &str,
+        _linked_rfq_id: &str,
+    ) -> Result<()> {
+        Err(Error::Internal(
+            "Offramp active RFQ binding is not supported by this repository".to_string(),
+        ))
+    }
+
     /// List intents for a tenant
     async fn list_by_tenant(
         &self,
@@ -216,7 +227,7 @@ impl OfframpIntentRepository for PgOfframpIntentRepository {
             .await
             .map_err(|e| Error::Database(e.to_string()))?;
 
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             UPDATE offramp_intents
             SET state = $1, state_history = $2, updated_at = NOW()
@@ -230,6 +241,16 @@ impl OfframpIntentRepository for PgOfframpIntentRepository {
         .execute(&mut *tx)
         .await
         .map_err(|e| Error::Database(e.to_string()))?;
+
+        if result.rows_affected() != 1 {
+            tx.rollback()
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+            return Err(Error::NotFound(format!(
+                "Off-ramp intent {} was not updated for tenant {}",
+                id, tenant_id.0
+            )));
+        }
 
         tx.commit()
             .await
@@ -248,7 +269,7 @@ impl OfframpIntentRepository for PgOfframpIntentRepository {
             .await
             .map_err(|e| Error::Database(e.to_string()))?;
 
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             UPDATE offramp_intents
             SET locked_rate_id = $1, deposit_address = $2, tx_hash = $3,
@@ -275,6 +296,16 @@ impl OfframpIntentRepository for PgOfframpIntentRepository {
         .await
         .map_err(|e| Error::Database(e.to_string()))?;
 
+        if result.rows_affected() != 1 {
+            tx.rollback()
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+            return Err(Error::NotFound(format!(
+                "Off-ramp intent {} was not updated for tenant {}",
+                intent.id, intent.tenant_id
+            )));
+        }
+
         tx.commit()
             .await
             .map_err(|e| Error::Database(e.to_string()))?;
@@ -300,7 +331,7 @@ impl OfframpIntentRepository for PgOfframpIntentRepository {
             .await
             .map_err(|e| Error::Database(e.to_string()))?;
 
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             UPDATE offramp_intents
             SET linked_rfq_id = COALESCE($1, linked_rfq_id),
@@ -320,6 +351,67 @@ impl OfframpIntentRepository for PgOfframpIntentRepository {
         .execute(&mut *tx)
         .await
         .map_err(|e| Error::Database(e.to_string()))?;
+
+        if result.rows_affected() != 1 {
+            tx.rollback()
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+            return Err(Error::NotFound(format!(
+                "Off-ramp intent {} was not linked for tenant {}",
+                id, tenant_id.0
+            )));
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    #[instrument(skip(self), fields(tenant_id = %tenant_id.0, intent_id = %id, linked_rfq_id = %linked_rfq_id))]
+    async fn bind_active_rfq(
+        &self,
+        tenant_id: &TenantId,
+        id: &str,
+        linked_rfq_id: &str,
+    ) -> Result<()> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+        set_rls_context(&mut tx, tenant_id)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+        let result = sqlx::query(
+            r#"
+            UPDATE offramp_intents
+            SET linked_rfq_id = $1,
+                updated_at = NOW()
+            WHERE id = $2
+              AND tenant_id = $3
+              AND state IN ('QUOTE_CREATED', 'CRYPTO_PENDING', 'CRYPTO_RECEIVED')
+              AND quote_expires_at > NOW()
+              AND (linked_rfq_id IS NULL OR linked_rfq_id = $1)
+            "#,
+        )
+        .bind(linked_rfq_id)
+        .bind(id)
+        .bind(&tenant_id.0)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| Error::Database(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            tx.rollback()
+                .await
+                .map_err(|e| Error::Database(e.to_string()))?;
+            return Err(Error::Conflict(format!(
+                "Off-ramp intent {} is not eligible for RFQ binding or is already linked to another RFQ",
+                id
+            )));
+        }
 
         tx.commit()
             .await

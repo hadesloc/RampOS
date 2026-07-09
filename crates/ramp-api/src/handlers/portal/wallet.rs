@@ -120,7 +120,7 @@ pub async fn create_account(
     portal_user: PortalUser,
 ) -> Result<Json<SmartAccount>, ApiError> {
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         tenant_id = %portal_user.tenant_id,
         "Create smart account requested"
     );
@@ -131,9 +131,9 @@ pub async fn create_account(
         .ok_or_else(|| ApiError::Internal("Smart account service not configured".to_string()))?;
 
     let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
-    let user_id = UserId::new(&portal_user.user_id.to_string());
+    let user_id = UserId::new(&portal_user.financial_user_id.to_string());
 
-    let owner_hash = keccak256(portal_user.user_id.as_bytes());
+    let owner_hash = keccak256(portal_user.financial_user_id.as_bytes());
     let owner = Address::from_slice(&owner_hash[12..]);
 
     let account = aa_service
@@ -148,7 +148,7 @@ pub async fn create_account(
     if let Some(ref repo) = aa_service.smart_account_repo {
         let create_req = CreateSmartAccountRequest {
             tenant_id: portal_user.tenant_id.to_string(),
-            user_id: portal_user.user_id.to_string(),
+            user_id: portal_user.financial_user_id.to_string(),
             address: format!("{:?}", account.address),
             owner_address: format!("{:?}", account.owner),
             account_type: format!("{:?}", account.account_type),
@@ -179,7 +179,7 @@ pub async fn get_account(
     portal_user: PortalUser,
 ) -> Result<Json<SmartAccount>, ApiError> {
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         tenant_id = %portal_user.tenant_id,
         "Get smart account requested"
     );
@@ -196,7 +196,7 @@ pub async fn get_account(
 
     let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
     let accounts = repo
-        .get_by_user(&tenant_id, &portal_user.user_id.to_string())
+        .get_by_user(&tenant_id, &portal_user.financial_user_id.to_string())
         .await
         .map_err(|e| {
             warn!(error = %e, "Failed to fetch smart account");
@@ -226,13 +226,13 @@ pub async fn get_balances(
     portal_user: PortalUser,
 ) -> Result<Json<Vec<Balance>>, ApiError> {
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         tenant_id = %portal_user.tenant_id,
         "Get balances requested"
     );
 
     let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
-    let user_id = UserId::new(&portal_user.user_id.to_string());
+    let user_id = UserId::new(&portal_user.financial_user_id.to_string());
 
     // Query real balances from ledger service
     let balance_rows = app_state
@@ -369,7 +369,7 @@ pub async fn create_session_key(
     Json(req): Json<CreateSessionKeyRequest>,
 ) -> Result<Json<SessionKey>, ApiError> {
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         tenant_id = %portal_user.tenant_id,
         permissions = ?req.permissions,
         duration_hours = req.duration_hours,
@@ -394,7 +394,7 @@ pub async fn create_session_key(
 
     let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
     let accounts = repo
-        .get_by_user(&tenant_id, &portal_user.user_id.to_string())
+        .get_by_user(&tenant_id, &portal_user.financial_user_id.to_string())
         .await
         .map_err(|e| {
             warn!(error = %e, "Failed to verify smart account before session key creation");
@@ -412,7 +412,7 @@ pub async fn create_session_key(
     let key_hash = keccak256(
         format!(
             "{}:{}:{}:{}",
-            portal_user.user_id,
+            portal_user.financial_user_id,
             portal_user.tenant_id,
             now.timestamp(),
             req.duration_hours
@@ -440,7 +440,7 @@ pub async fn get_deposit_info(
     Query(query): Query<DepositInfoQuery>,
 ) -> Result<Json<DepositInfo>, ApiError> {
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         tenant_id = %portal_user.tenant_id,
         method = %query.method,
         "Get deposit info requested"
@@ -464,7 +464,7 @@ pub async fn get_deposit_info(
 
     let tenant_id = TenantId::new(&portal_user.tenant_id.to_string());
     let accounts = repo
-        .get_by_user(&tenant_id, &portal_user.user_id.to_string())
+        .get_by_user(&tenant_id, &portal_user.financial_user_id.to_string())
         .await
         .map_err(|e| {
             warn!(error = %e, "Failed to fetch smart account for deposit info");

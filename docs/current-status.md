@@ -1,6 +1,6 @@
 # RampOS Current Status
 
-_Last updated: 2026-06-12_
+_Last updated: 2026-06-14_
 
 This file is the codebase-first status normalization point for the current workspace.
 Legacy RC signoff orchestration packets were removed from the active workflow on `2026-04-18`. Keep using preserved technical evidence only as historical reference, not as a live execution board.
@@ -14,7 +14,8 @@ Legacy RC signoff orchestration packets were removed from the active workflow on
 
 ## Current Verdict
 
-- The latest implementation milestone is **OFFRAMP RFQ Match -> Settlement linkage**, implemented in the working tree and locally verified on `2026-05-13`.
+- The latest committed implementation milestone is **OFFRAMP RFQ Match -> Settlement linkage** (`0f2e2cf20 chore: consolidate OFFRAMP wave + commercial-readiness remediation`), locally verified on `2026-05-13`.
+- RFQ/off-ramp/settlement contract-surface W1-W5 is locally verified across Rust API/core, SDK, frontend, and docs/status. It remains working-tree-local until committed.
 - The repo contains JWT admin authentication, secrets abstraction, PostgreSQL-backed passkey persistence, readiness gating, and RFQ/admin/webhook replay coverage.
 - OFFRAMP execution linkage now follows `docs/superpowers/plans/2026-04-10-offramp-rfq-settlement-kickoff.md`.
 - `BL-T-UW-008-01` is historical / backlog-only context and is not the active forward implementation pointer.
@@ -22,14 +23,13 @@ Legacy RC signoff orchestration packets were removed from the active workflow on
 
 ## What Is Implemented in the Working Tree
 
-- March 2026 implementation work is materially implemented in the working tree (uncommitted as of 2026-06-12).
-- Later hardening follow-up is implemented in the working tree (uncommitted as of 2026-06-12):
+- March 2026 implementation and later hardening follow-up are now committed in git history (`0f2e2cf20`):
   - JWT admin authentication
   - secrets abstraction
   - PostgreSQL-backed passkey persistence
   - readiness gate
   - RFQ/admin auth/webhook replay E2E coverage
-- OFFRAMP RFQ Match -> Settlement linkage is implemented for the documented bounded paths:
+- OFFRAMP RFQ Match -> Settlement linkage is committed and implemented for the documented bounded paths:
   - migration `064_offramp_rfq_settlement_linkage.sql`
   - `LinkedOfframpExecutionService`
   - linked RFQ/LP/rate/settlement persistence on off-ramp intents and settlements
@@ -43,19 +43,19 @@ Legacy RC signoff orchestration packets were removed from the active workflow on
 - Foundry build/test output still includes non-failing dependency revision mismatch warnings and Solidity lint warnings (`block.timestamp`, unchecked test ERC20 transfers, unsafe test typecasts).
 - Docker Compose config now renders when required env is supplied for smoke validation.
 - Kubernetes render smoke now passes for `k8s`, `k8s/overlays/dev`, `k8s/overlays/staging`, and `k8s/overlays/prod` without deprecation warnings.
-- Workflow runtime behavior is still transitional: `TEMPORAL_URL` selects a Temporal adapter, but some degraded paths still depend on in-process execution and local status tracking.
-- Treasury default-read truth still needs consistent evidence-backed wording across admin UI, CLI, and operator docs.
-- Reconciliation default-read and lineage truth still need consistent wording across admin UI, CLI, and operator docs.
+- Workflow runtime remains transitional by design and is documented in `docs/architecture/workflow-runtime-contract.md`; operators must not treat `TEMPORAL_URL` as full durable Temporal control-plane proof.
+- Treasury/reconciliation operator surfaces now explicitly distinguish sample/synthetic snapshots from evidence-backed imports; reconciliation remains caller-supplied comparison only.
 - OFFRAMP runtime truth is still bounded, not general-purpose custody allocation:
   - live detect lanes currently include EVM `USDT/USDC`, native `ETH`, native `BNB`, and native `MATIC`
   - governed-first deposit-address issuance is currently implemented and verified only for Solana (`101`), BNB (`56`), Polygon (`137`), Avalanche (`43114`), and Ethereum (`1`)
   - broader authoritative monitor coverage remains incomplete outside those bounded lanes
+- RFQ/off-ramp/settlement contract-surface W1-W5 is locally verified across OpenAPI/API docs, TypeScript SDK services/types, frontend/admin/portal consumers, Rust API/core money paths, and docs/status truthfulness; it remains uncommitted until the user requests a commit.
 
 ## 2026-06-13 — Commercial-readiness status (authoritative)
 
 **See `.workflow/commercial-readiness/final-report.md` for the definitive commercial-readiness certification.**
 
-This repo is **REPO_READY_WITH_ACCEPTED_RISKS** (code-side), but **BLOCKED_BY_EXTERNAL_REQUIREMENTS** (commercial launch). All critical/high gaps are closed with adversarial review; remaining items are MED/LOW (docs, one trait footgun, display/compute reviews). External blockers (staging validation, external security review, bank/chain credentials, licensing) must be handled outside the repo.
+This repo is **REPO_READY_WITH_ACCEPTED_RISKS** (code-side for the certified commercial-readiness remediation), but **BLOCKED_BY_EXTERNAL_REQUIREMENTS** (commercial launch). Critical/high remediation from the certified wave is closed or accepted with explicit limits; RFQ/off-ramp/settlement W1-W5 is locally verified. External blockers (staging validation, external security review, bank/chain credentials, licensing) must be handled outside the repo.
 
 The active evidence ledger for this remediation wave is `.workflow/commercial-readiness/evidence.md`.
 As of `2026-06-13`, Tier-1 CRIT/HIGH remediation work recorded there includes:
@@ -76,4 +76,4 @@ Treat that directory as historical technical evidence for the old RC review wind
 
 ## Recommended Next Move
 
-Treat the remaining items as hardening follow-ups rather than current command blockers: Foundry lint/dependency warnings and broader product-scope truth wording for transitional runtime areas. The Rust, Docker-backed OFFRAMP, contract, Docker Compose config, K8s render, frontend, SDK, widget, Python, Go, and RustSec gates listed in `docs/COMPLETION_STATUS.md` have current local evidence from `2026-05-13`.
+Treat the remaining items as hardening follow-ups rather than current command blockers: Foundry lint/dependency warnings, broader product-scope decisions such as magic link/rate-limit alerting, and external Ledger B validation. RFQ/off-ramp/settlement W1-W5 has local verification evidence in `.claude/handoffs/RFQ-W5-VERIFY.md`; commit it only when the user requests a commit.

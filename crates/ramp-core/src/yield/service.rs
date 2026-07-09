@@ -266,14 +266,34 @@ impl YieldService {
                 continue;
             }
 
-            let apy = protocol.current_apy(token).await.unwrap_or(0.0);
-            let balance = protocol.balance(token).await.unwrap_or_default();
+            let protocol_id = protocol.protocol_id();
+            let apy = protocol.current_apy(token).await.map_err(|e| {
+                Error::ExternalService {
+                    service: format!("yield APY for {}", protocol_id),
+                    message: format!(
+                        "rebalance requires live APY for every candidate protocol; hardcoded fallback disabled: {}",
+                        e
+                    ),
+                }
+            })?;
+            let balance = protocol.balance(token).await.map_err(|e| {
+                Error::ExternalService {
+                    service: format!("yield balance for {}", protocol_id),
+                    message: format!(
+                        "rebalance requires live balance for every candidate protocol; silent default disabled: {}",
+                        e
+                    ),
+                }
+            })?;
 
-            protocol_apys.push((protocol.protocol_id(), apy, balance));
+            protocol_apys.push((protocol_id, apy, balance));
         }
 
         if protocol_apys.len() < 2 {
-            return Ok(transactions);
+            return Err(Error::Business(
+                "Yield rebalance requires at least two protocols with successful live APY and balance reads"
+                    .to_string(),
+            ));
         }
 
         // Sort by APY descending
@@ -560,7 +580,7 @@ impl YieldService {
 
     async fn check_allocation_limit(&self, protocol_id: ProtocolId, amount: U256) -> Result<()> {
         let allocations = self.allocations.read().await;
-        let current = allocations.get(&protocol_id).copied().unwrap_or_default();
+        let current = allocations.get(&protocol_id).copied().unwrap_or(U256::ZERO);
         let new_total = current.saturating_add(amount);
 
         if new_total > self.config.max_per_protocol {

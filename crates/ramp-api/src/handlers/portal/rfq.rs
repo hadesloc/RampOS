@@ -11,16 +11,18 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use chrono::Utc;
 use ramp_common::types::TenantId;
 use ramp_core::repository::{
-    PgOfframpIntentRepository, PgRfqRepository, PgSettlementRepository, RfqRepository,
+    OfframpIntentRepository, PgOfframpIntentRepository, PgRfqRepository, PgSettlementRepository,
+    RfqRepository,
 };
 use ramp_core::service::rfq::{CreateRfqRequest, RfqService};
 use ramp_core::service::LinkedOfframpExecutionService;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{error, info, warn};
 use validator::Validate;
 
 use crate::error::ApiError;
@@ -150,6 +152,57 @@ fn sort_bids_for_direction(bids: &mut [ramp_core::repository::RfqBidRow], direct
     });
 }
 
+fn is_rfq_eligible_offramp_state(state: &str) -> bool {
+    matches!(
+        state,
+        "QUOTE_CREATED" | "CRYPTO_PENDING" | "CRYPTO_RECEIVED"
+    )
+}
+
+async fn create_bound_offramp_rfq_or_compensate(
+    svc: &RfqService,
+    offramp_repo: &PgOfframpIntentRepository,
+    tenant_id: &TenantId,
+    create_req: CreateRfqRequest,
+) -> Result<ramp_core::repository::RfqRequestRow, ApiError> {
+    let rfq = svc.create_rfq(create_req).await.map_err(ApiError::from)?;
+
+    if let Some(offramp_id) = rfq.offramp_id.as_deref() {
+        if let Err(bind_err) = offramp_repo
+            .bind_active_rfq(tenant_id, offramp_id, &rfq.id)
+            .await
+        {
+            warn!(
+                rfq_id = %rfq.id,
+                offramp_id = %offramp_id,
+                error = %bind_err,
+                "Portal: linked OFFRAMP RFQ bind failed after rfq_created event; attempting cancellation compensation"
+            );
+
+            if let Err(cancel_err) = svc.cancel_rfq(tenant_id, &rfq.id).await {
+                error!(
+                    rfq_id = %rfq.id,
+                    offramp_id = %offramp_id,
+                    original_bind_error = %bind_err,
+                    compensation_error = %cancel_err,
+                    "Portal: failed to compensate unbound linked OFFRAMP RFQ after bind failure"
+                );
+            } else {
+                warn!(
+                    rfq_id = %rfq.id,
+                    offramp_id = %offramp_id,
+                    original_bind_error = %bind_err,
+                    "Portal: compensated unbound linked OFFRAMP RFQ by cancelling it after bind failure"
+                );
+            }
+
+            return Err(ApiError::from(bind_err));
+        }
+    }
+
+    Ok(rfq)
+}
+
 // ============================================================================
 // Handlers
 // ============================================================================
@@ -164,7 +217,7 @@ pub async fn create_rfq(
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
     let pool = ensure_pool(&app_state)?.clone();
-    let svc = make_rfq_service(pool, &app_state);
+    let svc = make_rfq_service(pool.clone(), &app_state);
 
     let direction = req.direction.to_uppercase();
     if direction != "OFFRAMP" && direction != "ONRAMP" {
@@ -200,23 +253,90 @@ pub async fn create_rfq(
         ));
     }
 
-    let rfq = svc
-        .create_rfq(CreateRfqRequest {
-            tenant_id: TenantId(portal_user.tenant_id.to_string()),
-            user_id: portal_user.user_id.to_string(),
+    let crypto_asset = req.crypto_asset.to_uppercase();
+    let tenant_id = TenantId(portal_user.tenant_id.to_string());
+    let offramp_repo = PgOfframpIntentRepository::new(pool.clone());
+
+    if let Some(offramp_id) = req.offramp_id.as_deref() {
+        if direction != "OFFRAMP" {
+            return Err(ApiError::Validation(
+                "offramp_id can only be supplied for OFFRAMP RFQs".to_string(),
+            ));
+        }
+
+        let intent = offramp_repo
+            .get_intent(&tenant_id, offramp_id)
+            .await?
+            .ok_or_else(|| ApiError::NotFound("Off-ramp intent not found".to_string()))?;
+
+        if intent.user_id != portal_user.financial_user_id.to_string() {
+            return Err(ApiError::NotFound("Off-ramp intent not found".to_string()));
+        }
+        if !is_rfq_eligible_offramp_state(&intent.state) {
+            return Err(ApiError::Conflict(format!(
+                "Off-ramp intent {} is not RFQ-eligible from state {}",
+                offramp_id, intent.state
+            )));
+        }
+        if Utc::now() >= intent.quote_expires_at {
+            return Err(ApiError::Gone(format!(
+                "Off-ramp intent {} quote has expired and cannot be linked to an RFQ",
+                offramp_id
+            )));
+        }
+        if intent.crypto_asset.to_uppercase() != crypto_asset {
+            return Err(ApiError::Validation(format!(
+                "offramp_id asset mismatch: intent asset {} does not match RFQ asset {}",
+                intent.crypto_asset, crypto_asset
+            )));
+        }
+        if intent.crypto_amount != crypto_amount {
+            return Err(ApiError::Validation(format!(
+                "offramp_id amount mismatch: intent amount {} does not match RFQ amount {}",
+                intent.crypto_amount, crypto_amount
+            )));
+        }
+
+        if let Some(existing_rfq_id) = intent.linked_rfq_id.as_deref() {
+            let existing = PgRfqRepository::new(pool.clone())
+                .get_request(&tenant_id, existing_rfq_id)
+                .await?;
+            if let Some(existing) = existing {
+                if !matches!(existing.state.as_str(), "CANCELLED" | "EXPIRED") {
+                    return Err(ApiError::Conflict(format!(
+                        "Off-ramp intent {} is already linked to active RFQ {}",
+                        offramp_id, existing_rfq_id
+                    )));
+                }
+            } else {
+                return Err(ApiError::Conflict(format!(
+                    "Off-ramp intent {} has stale linked RFQ {} and cannot be rebound automatically",
+                    offramp_id, existing_rfq_id
+                )));
+            }
+        }
+    }
+
+    let rfq = create_bound_offramp_rfq_or_compensate(
+        &svc,
+        &offramp_repo,
+        &tenant_id,
+        CreateRfqRequest {
+            tenant_id: tenant_id.clone(),
+            user_id: portal_user.financial_user_id.to_string(),
             direction: direction.clone(),
-            offramp_id: req.offramp_id,
-            crypto_asset: req.crypto_asset.to_uppercase(),
+            offramp_id: req.offramp_id.clone(),
+            crypto_asset: crypto_asset.clone(),
             crypto_amount,
             vnd_amount,
             ttl_minutes: req.ttl_minutes.unwrap_or(5).clamp(1, 60),
-        })
-        .await
-        .map_err(ApiError::from)?;
+        },
+    )
+    .await?;
 
     info!(
         rfq_id = %rfq.id,
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         direction = %direction,
         "Portal: RFQ created"
     );
@@ -242,7 +362,7 @@ pub async fn get_rfq(
         .ok_or_else(|| ApiError::NotFound("RFQ not found".to_string()))?;
 
     // Ownership check
-    if rfq.user_id != portal_user.user_id.to_string() {
+    if rfq.user_id != portal_user.financial_user_id.to_string() {
         return Err(ApiError::NotFound("RFQ not found".to_string()));
     }
 
@@ -303,8 +423,24 @@ pub async fn accept_rfq(
         .map_err(ApiError::from)?
         .ok_or_else(|| ApiError::NotFound("RFQ not found".to_string()))?;
 
-    if rfq.user_id != portal_user.user_id.to_string() {
+    if rfq.user_id != portal_user.financial_user_id.to_string() {
         return Err(ApiError::NotFound("RFQ not found".to_string()));
+    }
+
+    if let Some(offramp_id) = rfq.offramp_id.as_deref() {
+        let offramp_repo = PgOfframpIntentRepository::new(pool.clone());
+        let intent = offramp_repo
+            .get_intent(&tenant_id, offramp_id)
+            .await?
+            .ok_or_else(|| ApiError::Conflict("Linked off-ramp intent is missing".to_string()))?;
+        if intent.user_id != portal_user.financial_user_id.to_string()
+            || intent.linked_rfq_id.as_deref() != Some(rfq.id.as_str())
+        {
+            return Err(ApiError::Conflict(format!(
+                "RFQ {} is not durably bound to off-ramp intent {}",
+                rfq.id, offramp_id
+            )));
+        }
     }
 
     // Finalize via linked execution coordinator so OFFRAMP matches kick settlement.
@@ -316,7 +452,7 @@ pub async fn accept_rfq(
 
     info!(
         rfq_id = %id,
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         winning_lp = %result.winning_bid.lp_id,
         final_rate = %result.winning_bid.exchange_rate,
         "Portal: RFQ accepted"
@@ -366,7 +502,7 @@ pub async fn cancel_rfq(
         .map_err(ApiError::from)?
         .ok_or_else(|| ApiError::NotFound("RFQ not found".to_string()))?;
 
-    if rfq.user_id != portal_user.user_id.to_string() {
+    if rfq.user_id != portal_user.financial_user_id.to_string() {
         return Err(ApiError::NotFound("RFQ not found".to_string()));
     }
 
@@ -376,7 +512,11 @@ pub async fn cancel_rfq(
         .await
         .map_err(ApiError::from)?;
 
-    info!(rfq_id = %id, user_id = %portal_user.user_id, "Portal: RFQ cancelled");
+    info!(
+        rfq_id = %id,
+        financial_user_id = %portal_user.financial_user_id,
+        "Portal: RFQ cancelled"
+    );
 
     Ok(Json(map_rfq_response(&cancelled)))
 }

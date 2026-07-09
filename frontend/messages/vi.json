@@ -286,9 +286,11 @@
       "kyc_rejected": "Xác minh danh tính không thành công.",
       "kyc_none": "Hoàn tất xác minh danh tính để mở khóa tính năng.",
       "verify_now": "Xác minh ngay",
-      "quick_actions": "Thao tác nhanh"
+      "quick_actions": "Thao tác nhanh",
+      "verified": "Đã xác minh"
     },
     "wallet": {
+      "smart_account": "Ví thông minh",
       "no_wallet": "Chưa có ví",
       "create_text": "Tạo ví thông minh để bắt đầu sử dụng RampOS",
       "create_btn": "Tạo ví",
@@ -332,7 +334,12 @@
       "amount": "Số tiền",
       "date": "Ngày",
       "reference": "Tham chiếu",
-      "export": "Xuất CSV"
+      "export": "Xuất CSV",
+      "completed": "Hoàn thành",
+      "pending": "Đang chờ",
+      "failed": "Thất bại",
+      "processing": "Đang xử lý",
+      "cancelled": "Đã hủy"
     },
     "settings": {
       "title": "Cài đặt",
@@ -365,10 +372,17 @@
         "or": "HOẶC",
         "continue_email": "Tiếp tục với Email",
         "email_input_label": "Email",
+        "password_label": "Mật khẩu",
+        "sign_in": "Đăng nhập",
         "send_magic_link": "Gửi liên kết đăng nhập",
         "back_to_passkey": "Quay lại đăng nhập Passkey",
         "no_account": "Chưa có tài khoản?",
-        "create_account": "Tạo tài khoản"
+        "create_account": "Tạo tài khoản",
+        "connect_wallet": "Kết nối ví",
+        "connecting_wallet": "Đang kết nối ví...",
+        "wallet_hint": "Đăng nhập bằng MetaMask hoặc ví EIP-1193",
+        "other_methods_unavailable": "Các phương thức đăng nhập khác (passkey, magic link) chưa được kích hoạt.",
+        "wallet_owner": "Ví kết nối (chủ sở hữu)"
       },
       "register": {
         "browser_unsupported": "Trình duyệt không hỗ trợ",
@@ -376,22 +390,49 @@
         "browser_unsupported_alert": "Vui lòng sử dụng trình duyệt hiện đại như Chrome, Safari, Firefox hoặc Edge để đăng ký bằng passkey. Hoặc đăng nhập bằng magic link nếu đã có tài khoản.",
         "go_to_login": "Đi tới Đăng nhập",
         "title": "Tạo tài khoản",
-        "subtitle": "Thiết lập tài khoản với passkey bảo mật",
+        "subtitle": "Tạo tài khoản cổng RampOS",
         "why_passkeys": "Tại sao dùng passkey?",
         "benefit_secure": "An toàn hơn mật khẩu - không thể bị giả mạo (phishing)",
         "benefit_biometric": "Sử dụng Touch ID, Face ID hoặc Windows Hello",
         "benefit_easy": "Nhanh chóng và dễ dàng - không cần nhớ mật khẩu",
         "email_label": "Email",
+        "name_label": "Họ tên (không bắt buộc)",
+        "password_label": "Mật khẩu",
+        "password_hint": "Sử dụng từ 12 đến 128 ký tự.",
         "terms_agree": "Tôi đồng ý với",
         "terms_of_service": "Điều khoản dịch vụ",
         "and": "và",
         "privacy_policy": "Chính sách bảo mật",
         "setting_up": "Đang thiết lập passkey...",
-        "create_btn": "Tạo Passkey & Đăng ký",
+        "create_btn": "Tạo tài khoản",
         "biometric_prompt": "Bạn sẽ được nhắc sử dụng sinh trắc học hoặc khóa bảo mật",
         "already_have_account": "Đã có tài khoản?",
         "sign_in": "Đăng nhập"
       }
+    },
+    "kyc": {
+      "title": "Xác minh danh tính",
+      "description": "Hoàn tất xác minh KYC để mở khóa hạn mức cao hơn và toàn bộ tính năng.",
+      "step_1": "Thông tin cá nhân",
+      "step_1_desc": "Nhập họ tên hợp pháp, ngày sinh và địa chỉ thường trú.",
+      "step_2": "Giấy tờ tùy thân",
+      "step_3": "Xác minh khuôn mặt",
+      "step_3_desc": "Tải lên ảnh chân dung rõ nét để đối chiếu với giấy tờ tùy thân.",
+      "step_4": "Xem lại & Gửi",
+      "step_4_desc": "Kiểm tra lại thông tin và gửi đi để xác minh.",
+      "first_name": "Tên",
+      "last_name": "Họ",
+      "dob": "Ngày sinh",
+      "address": "Địa chỉ thường trú",
+      "id_type": "Loại giấy tờ",
+      "id_front": "Mặt trước giấy tờ",
+      "id_back": "Mặt sau giấy tờ",
+      "upload_front": "Tải mặt trước",
+      "upload_back": "Tải mặt sau",
+      "upload_selfie": "Tải ảnh chân dung",
+      "pending": "Đang chờ xác minh",
+      "verified": "Đã xác minh",
+      "failed": "Xác minh thất bại"
     }
   }
 }

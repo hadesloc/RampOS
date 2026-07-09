@@ -1,22 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Radar, Search, Waves } from "lucide-react";
+import { Loader2, Radar, Search, Waves, ActivitySquare } from "lucide-react";
 
 import IncidentTimeline, {
   IncidentSearchResult,
   IncidentTimelineResponse,
 } from "@/components/incidents/IncidentTimeline";
-import { Button } from "@/components/ui/button";
+
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  PageHeader,
+  StatGrid,
+  StatCard,
+  Panel,
+  EmptyState,
+  ErrorState,
+} from "@/components/shared";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+// ── API helper ─────────────────────────────────────────────────────────────────
 
 type LookupState = {
   intentId: string;
@@ -27,18 +31,18 @@ type LookupState = {
 
 async function apiRequest<T>(endpoint: string): Promise<T> {
   const response = await fetch(`/api/proxy${endpoint}`);
-
   if (!response.ok) {
     let message = "Request failed";
     try {
-      const payload = (await response.json()) as { error?: { message?: string } };
+      const payload = (await response.json()) as {
+        error?: { message?: string };
+      };
       message = payload.error?.message ?? message;
     } catch {
-      // Keep the default message when the body is not JSON.
+      /* keep default */
     }
     throw new Error(message);
   }
-
   return response.json() as Promise<T>;
 }
 
@@ -50,6 +54,8 @@ function buildQueryString(lookup: LookupState): string {
   if (lookup.rfqId) params.set("rfqId", lookup.rfqId);
   return params.toString();
 }
+
+// ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function IncidentsPage() {
   const [lookup, setLookup] = useState<LookupState>({
@@ -75,155 +81,191 @@ export default function IncidentsPage() {
 
     try {
       const [searchPayload, timelinePayload] = await Promise.all([
-        apiRequest<{ data: IncidentSearchResult[] }>(`/v1/admin/incidents/search?${queryString}`),
-        apiRequest<IncidentTimelineResponse>(`/v1/admin/incidents/timeline?${queryString}`),
+        apiRequest<{ data: IncidentSearchResult[] }>(
+          `/v1/admin/incidents/search?${queryString}`
+        ),
+        apiRequest<IncidentTimelineResponse>(
+          `/v1/admin/incidents/timeline?${queryString}`
+        ),
       ]);
 
       setSummary(searchPayload.data[0] ?? null);
       setTimeline(timelinePayload);
     } catch (requestError) {
       setError(
-        requestError instanceof Error ? requestError.message : "Failed to load incident data",
+        requestError instanceof Error
+          ? requestError.message
+          : "Failed to load incident data"
       );
     } finally {
       setLoading(false);
     }
   };
 
+  const hasResult = summary !== null && timeline !== null;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Incident Timeline</h1>
-          <p className="text-muted-foreground">
-            Search correlated webhook, settlement, RFQ, and reconciliation evidence without leaving
-            the bounded operator surface.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 rounded-full border bg-muted/30 px-3 py-1 text-sm text-muted-foreground">
-          <Waves className="h-4 w-4" />
-          Realtime path active
-        </div>
-      </div>
+    <main className="p-page flex flex-col gap-section">
+      <PageHeader
+        title="Incident Timeline"
+        description="Search correlated webhook, settlement, RFQ, and reconciliation evidence without leaving the bounded operator surface."
+        breadcrumb={[
+          { label: "Admin", href: "/admin" },
+          { label: "Incidents" },
+        ]}
+        actions={
+          <div className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-[#00D4FF]/5 px-3 py-1.5 text-xs text-[#00D4FF]">
+            <Waves className="h-3.5 w-3.5" />
+            <span>Realtime path active</span>
+          </div>
+        }
+      />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Lookup lanes</CardDescription>
-            <CardTitle>4</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Loaded incident</CardDescription>
-            <CardTitle>{summary?.incidentId ?? "Not loaded"}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Action mode</CardDescription>
-            <CardTitle>{timeline?.actionMode ?? "Recommendation-only"}</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+      {/* Context stats */}
+      <StatGrid cols={3}>
+        <StatCard
+          title="Lookup Lanes"
+          value="4"
+          icon={<Radar className="h-4 w-4" />}
+          accentColor="cyan"
+          subtitle="intent · bank ref · webhook · RFQ"
+        />
+        <StatCard
+          title="Loaded Incident"
+          value={summary?.incidentId ?? "Not loaded"}
+          icon={<ActivitySquare className="h-4 w-4" />}
+          accentColor={hasResult ? "green" : "violet"}
+          subtitle={hasResult ? `${summary?.entryCount} entries` : "Run a search first"}
+        />
+        <StatCard
+          title="Action Mode"
+          value={timeline?.actionMode ?? "Recommendation-only"}
+          icon={<Waves className="h-4 w-4" />}
+          accentColor="amber"
+        />
+      </StatGrid>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Incident search</CardTitle>
-          <CardDescription>
-            Query by intent ID, bank reference, webhook ID, or RFQ ID. Multiple fields can be used
-            together for tighter correlation.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      {/* Search panel */}
+      <Panel
+        header={{
+          title: "Incident Search",
+          description:
+            "Query by intent ID, bank reference, webhook ID, or RFQ ID. Multiple fields can be used together for tighter correlation.",
+        }}
+      >
+        <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-2">
-              <Label htmlFor="intent-id">Intent ID</Label>
+              <Label htmlFor="intent-id" className="text-xs text-muted-foreground">
+                Intent ID
+              </Label>
               <Input
                 id="intent-id"
                 aria-label="Intent ID"
                 value={lookup.intentId}
-                onChange={(event) => setLookup((current) => ({ ...current, intentId: event.target.value }))}
+                onChange={(e) =>
+                  setLookup((c) => ({ ...c, intentId: e.target.value }))
+                }
                 placeholder="intent_..."
+                className="border-white/[0.08] bg-white/[0.02] focus:border-[#00D4FF]/40"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="bank-reference">Bank reference</Label>
+              <Label
+                htmlFor="bank-reference"
+                className="text-xs text-muted-foreground"
+              >
+                Bank Reference
+              </Label>
               <Input
                 id="bank-reference"
                 aria-label="Bank reference"
                 value={lookup.bankReference}
-                onChange={(event) =>
-                  setLookup((current) => ({ ...current, bankReference: event.target.value }))
+                onChange={(e) =>
+                  setLookup((c) => ({ ...c, bankReference: e.target.value }))
                 }
                 placeholder="RAMP-..."
+                className="border-white/[0.08] bg-white/[0.02] focus:border-[#00D4FF]/40"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="webhook-id">Webhook ID</Label>
+              <Label htmlFor="webhook-id" className="text-xs text-muted-foreground">
+                Webhook ID
+              </Label>
               <Input
                 id="webhook-id"
                 aria-label="Webhook ID"
                 value={lookup.webhookId}
-                onChange={(event) =>
-                  setLookup((current) => ({ ...current, webhookId: event.target.value }))
+                onChange={(e) =>
+                  setLookup((c) => ({ ...c, webhookId: e.target.value }))
                 }
                 placeholder="evt_..."
+                className="border-white/[0.08] bg-white/[0.02] focus:border-[#00D4FF]/40"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="rfq-id">RFQ ID</Label>
+              <Label htmlFor="rfq-id" className="text-xs text-muted-foreground">
+                RFQ ID
+              </Label>
               <Input
                 id="rfq-id"
                 aria-label="RFQ ID"
                 value={lookup.rfqId}
-                onChange={(event) => setLookup((current) => ({ ...current, rfqId: event.target.value }))}
+                onChange={(e) =>
+                  setLookup((c) => ({ ...c, rfqId: e.target.value }))
+                }
                 placeholder="rfq_..."
+                className="border-white/[0.08] bg-white/[0.02] focus:border-[#00D4FF]/40"
               />
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={handleLookup} disabled={loading}>
+            <Button
+              onClick={handleLookup}
+              disabled={loading}
+              className="bg-[#00FF87] text-black font-semibold hover:bg-[#00FF87]/90 min-w-[140px]"
+            >
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Loading incidents
+                  Loading…
                 </>
               ) : (
                 <>
                   <Search className="mr-2 h-4 w-4" />
-                  Load incident
+                  Load Incident
                 </>
               )}
             </Button>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Radar className="h-4 w-4" />
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Radar className="h-3.5 w-3.5 text-[#7B61FF]" />
               Recommendation visibility stays audited and non-destructive.
             </div>
           </div>
 
           {error && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
-            </div>
+            <ErrorState
+              title="Lookup failed"
+              message={error}
+              retry={handleLookup}
+            />
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </Panel>
 
-      {summary && timeline ? (
+      {/* Results */}
+      {hasResult ? (
         <IncidentTimeline summary={summary} timeline={timeline} />
       ) : (
-        <Card className="border-dashed">
-          <CardHeader>
-            <CardTitle>Awaiting search</CardTitle>
-            <CardDescription>
-              Load an incident to render summary, recommendations, and the correlated event
-              timeline.
-            </CardDescription>
-          </CardHeader>
-        </Card>
+        <Panel>
+          <EmptyState
+            icon={<ActivitySquare className="h-10 w-10" />}
+            title="Awaiting search"
+            description="Load an incident to render summary, recommendations, and the correlated event timeline."
+          />
+        </Panel>
       )}
-    </div>
+    </main>
   );
 }

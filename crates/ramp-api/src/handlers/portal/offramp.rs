@@ -374,7 +374,7 @@ pub async fn create_quote(
     let intent = OfframpIntentRow {
         id: quote_id.clone(),
         tenant_id: portal_user.tenant_id.to_string(),
-        user_id: portal_user.user_id.to_string(),
+        user_id: portal_user.financial_user_id.to_string(),
         chain_id: None,
         crypto_asset: symbol.to_string(),
         crypto_amount: amount,
@@ -413,7 +413,7 @@ pub async fn create_quote(
     repo.create_intent(&intent).await?;
 
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         quote_id = %quote_id,
         crypto_asset = %symbol,
         amount = %amount,
@@ -450,7 +450,7 @@ pub async fn create_offramp(
         .await?
         .ok_or_else(|| ApiError::NotFound("Off-ramp quote not found".to_string()))?;
 
-    if intent.user_id != portal_user.user_id.to_string() {
+    if intent.user_id != portal_user.financial_user_id.to_string() {
         return Err(ApiError::NotFound("Off-ramp quote not found".to_string()));
     }
 
@@ -505,7 +505,7 @@ pub async fn create_offramp(
     repo.update_intent(&intent).await?;
 
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         intent_id = %intent.id,
         "Off-ramp intent moved to CRYPTO_PENDING"
     );
@@ -534,12 +534,12 @@ pub async fn get_offramp_status(
         .await?
         .ok_or_else(|| ApiError::NotFound("Off-ramp intent not found".to_string()))?;
 
-    if intent.user_id != portal_user.user_id.to_string() {
+    if intent.user_id != portal_user.financial_user_id.to_string() {
         return Err(ApiError::NotFound("Off-ramp intent not found".to_string()));
     }
 
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         intent_id = %id,
         state = %intent.state,
         "Off-ramp status requested"
@@ -569,7 +569,7 @@ pub async fn confirm_offramp(
         .await?
         .ok_or_else(|| ApiError::NotFound("Off-ramp intent not found".to_string()))?;
 
-    if intent.user_id != portal_user.user_id.to_string() {
+    if intent.user_id != portal_user.financial_user_id.to_string() {
         return Err(ApiError::NotFound("Off-ramp intent not found".to_string()));
     }
 
@@ -608,7 +608,7 @@ pub async fn confirm_offramp(
     }
 
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         intent_id = %id,
         state = %intent.state,
         "Off-ramp confirm requested"
@@ -643,7 +643,7 @@ pub async fn mark_offramp_crypto_received(
         .await?
         .ok_or_else(|| ApiError::NotFound("Off-ramp intent not found".to_string()))?;
 
-    if intent.user_id != portal_user.user_id.to_string() {
+    if intent.user_id != portal_user.financial_user_id.to_string() {
         return Err(ApiError::NotFound("Off-ramp intent not found".to_string()));
     }
 
@@ -690,7 +690,7 @@ pub async fn mark_offramp_crypto_received(
     }
 
     info!(
-        user_id = %portal_user.user_id,
+        financial_user_id = %portal_user.financial_user_id,
         intent_id = %id,
         tx_hash = %req.tx_hash,
         chain_id = req.chain_id,
@@ -753,6 +753,12 @@ mod tests {
 
     #[test]
     fn test_issue_portal_deposit_address_is_chain_aware() {
+        // `issue()` fails closed for EVM placeholders when `is_production()` is true.
+        // Other tests in this binary toggle RUST_ENV/RAMPOS_ENV to "production" under
+        // the shared env lock, so hold that lock and clear the vars to avoid a race.
+        let _env = ramp_common::onchain_gate::test_env_lock();
+        std::env::remove_var("RUST_ENV");
+        std::env::remove_var("RAMPOS_ENV");
         let allocator = OfframpDepositAddressAllocator::new();
         let evm_address = allocator
             .issue(&OfframpDepositAddressRequest {

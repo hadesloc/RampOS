@@ -1,14 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,7 +10,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -29,14 +21,13 @@ import {
 import {
   Download,
   Eye,
-  Loader2,
   ChevronLeft,
   ChevronRight,
   RefreshCw,
   ExternalLink,
+  CreditCard,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import { TransactionRow } from "@/components/portal/transaction-row";
 import { PageHeader } from "@/components/layout/page-header";
 import { PageContainer } from "@/components/layout/page-container";
 import { useRouter } from "@/navigation";
@@ -46,23 +37,8 @@ import {
   PaginatedResponse,
   transactionApi,
 } from "@/lib/portal-api";
+import { DataTable, EmptyState, Panel, StatCard, StatGrid, StatusBadge } from "@/components/shared";
 import { useTranslations, useFormatter } from "next-intl";
-
-// Helper Functions - Now inside the component or using hooks
-function getStatusColor(status: string): string {
-  switch (status) {
-    case "COMPLETED":
-      return "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400";
-    case "PENDING":
-    case "PROCESSING":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-400";
-    case "FAILED":
-    case "CANCELLED":
-      return "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-400";
-    default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
-  }
-}
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -90,7 +66,7 @@ export default function TransactionsPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
 
-  function formatCurrency(amount: string, currency: string): string {
+  const formatCurrency = useCallback((amount: string, currency: string): string => {
     const num = parseFloat(amount);
     if (currency === "VND") {
       return format.number(num, {
@@ -106,9 +82,9 @@ export default function TransactionsPage() {
         maximumFractionDigits: 8,
       }) + ` ${currency}`
     );
-  }
+  }, [format]);
 
-  function formatDate(dateStr: string): string {
+  const formatDate = useCallback((dateStr: string): string => {
     return format.dateTime(new Date(dateStr), {
       day: "2-digit",
       month: "2-digit",
@@ -116,12 +92,12 @@ export default function TransactionsPage() {
       hour: "2-digit",
       minute: "2-digit",
     });
-  }
+  }, [format]);
 
-  function getTypeLabel(type: string): string {
+  const getTypeLabel = useCallback((type: string): string => {
     switch (type) {
       case "DEPOSIT":
-        return tIntents("payin"); // Using mapped keys from Intents
+        return tIntents("payin");
       case "WITHDRAW":
         return tIntents("payout");
       case "TRADE":
@@ -129,16 +105,14 @@ export default function TransactionsPage() {
       default:
         return type;
     }
-  }
+  }, [tIntents]);
 
-  // Redirect if not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push("/portal/login");
     }
   }, [authLoading, isAuthenticated, router]);
 
-  // Fetch transactions
   const fetchTransactions = useCallback(
     async (showRefreshing = false) => {
       if (showRefreshing) {
@@ -177,7 +151,6 @@ export default function TransactionsPage() {
     }
   }, [isAuthenticated, fetchTransactions]);
 
-  // Filter transactions by search (client-side for reference field)
   const filteredTransactions = transactions.filter((tx) => {
     if (search) {
       return (
@@ -187,6 +160,58 @@ export default function TransactionsPage() {
     }
     return true;
   });
+
+  const completedCount = transactions.filter((tx) => tx.status === "COMPLETED").length;
+  const pendingCount = transactions.filter((tx) => tx.status === "PENDING" || tx.status === "PROCESSING").length;
+  const failedCount = transactions.filter((tx) => tx.status === "FAILED" || tx.status === "CANCELLED").length;
+
+  const columns = useMemo<ColumnDef<Transaction>[]>(
+    () => [
+      {
+        accessorKey: "type",
+        header: t('type'),
+        cell: ({ row }) => (
+          <button
+            type="button"
+            className="flex flex-col text-left transition-colors hover:text-[#00D4FF]"
+            onClick={() => setSelectedTx(row.original)}
+          >
+            <span className="font-medium text-foreground">{getTypeLabel(row.original.type)}</span>
+            <span className="font-mono text-xs text-muted-foreground">{row.original.reference}</span>
+          </button>
+        ),
+      },
+      {
+        accessorKey: "createdAt",
+        header: t('date'),
+        cell: ({ row }) => <span className="text-muted-foreground">{formatDate(row.original.createdAt)}</span>,
+      },
+      {
+        accessorKey: "amount",
+        header: tCommon('amount'),
+        cell: ({ row }) => (
+          <span className="font-mono font-semibold text-foreground">
+            {formatCurrency(row.original.amount, row.original.currency)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "status",
+        header: tCommon('status'),
+        cell: ({ row }) => <StatusBadge status={row.original.status} />,
+      },
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) => (
+          <Button variant="ghost" size="icon" onClick={() => setSelectedTx(row.original)}>
+            <Eye className="h-4 w-4" />
+          </Button>
+        ),
+      },
+    ],
+    [t, tCommon, formatCurrency, formatDate, getTypeLabel]
+  );
 
   const handlePageChange = (newPage: number) => {
     setPagination((prev) => ({ ...prev, page: newPage }));
@@ -236,17 +261,6 @@ export default function TransactionsPage() {
     document.body.removeChild(link);
   };
 
-  // Show loading state
-  // if (authLoading) {
-  //   return (
-  //     <div className="space-y-6 p-6">
-  //       <div className="flex items-center justify-center py-20">
-  //         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
   return (
     <PageContainer>
       <PageHeader
@@ -254,12 +268,39 @@ export default function TransactionsPage() {
         description={t('description')}
       />
 
-      {/* Controls & Filters */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-card p-4 rounded-lg border">
-        <div className="flex flex-1 flex-col gap-4 md:flex-row md:items-center">
+      <StatGrid cols={3}>
+        <StatCard title={t('completed')} value={completedCount} icon={<CreditCard className="h-4 w-4" />} accentColor="green" loading={authLoading || isLoading} />
+        <StatCard title={t('pending')} value={pendingCount} icon={<RefreshCw className="h-4 w-4" />} accentColor="amber" loading={authLoading || isLoading} />
+        <StatCard title={t('failed')} value={failedCount} icon={<CreditCard className="h-4 w-4" />} accentColor="violet" loading={authLoading || isLoading} />
+      </StatGrid>
+
+      <Panel
+        header={{
+          title: t('title'),
+          description: `${filteredTransactions.length} / ${pagination.total} ${t('title').toLowerCase()}`,
+          actions: (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => fetchTransactions(true)}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              </Button>
+              <Button variant="outline" onClick={handleExport}>
+                <Download className="mr-2 h-4 w-4" />
+                {t('export')}
+              </Button>
+            </div>
+          ),
+        }}
+        contentClassName="space-y-4"
+      >
+        <div className="flex flex-col gap-4 md:flex-row md:items-center">
           <Input
             placeholder={tIntents('search_placeholder')}
-            className="w-full md:w-[250px]"
+            className="w-full border-white/[0.08] bg-[#09090B] md:w-[250px]"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -268,7 +309,7 @@ export default function TransactionsPage() {
             value={filters.type || "ALL"}
             onValueChange={(value) => handleFilterChange("type", value)}
           >
-            <SelectTrigger className="w-full md:w-[150px]">
+            <SelectTrigger className="w-full border-white/[0.08] bg-[#09090B] md:w-[150px]">
               <SelectValue placeholder={tIntents('type')} />
             </SelectTrigger>
             <SelectContent>
@@ -283,7 +324,7 @@ export default function TransactionsPage() {
             value={filters.status || "ALL"}
             onValueChange={(value) => handleFilterChange("status", value)}
           >
-            <SelectTrigger className="w-full md:w-[150px]">
+            <SelectTrigger className="w-full border-white/[0.08] bg-[#09090B] md:w-[150px]">
               <SelectValue placeholder={tCommon('status')} />
             </SelectTrigger>
             <SelectContent>
@@ -298,193 +339,98 @@ export default function TransactionsPage() {
 
           <Input
             type="date"
-            className="w-full md:w-[150px]"
+            className="w-full border-white/[0.08] bg-[#09090B] md:w-[150px]"
             value={filters.startDate || ""}
             onChange={(e) => handleFilterChange("startDate", e.target.value)}
             placeholder={tCommon('date')}
           />
         </div>
 
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => fetchTransactions(true)}
-            disabled={isRefreshing}
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+        <DataTable
+          columns={columns}
+          data={filteredTransactions}
+          loading={isLoading}
+          skeletonRows={5}
+          emptyState={
+            <EmptyState
+              icon={<CreditCard className="h-10 w-10" />}
+              title={t('title')}
+              description={t('description')}
             />
-          </Button>
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="mr-2 h-4 w-4" />
-            {t('export')}
-          </Button>
-        </div>
-      </div>
+          }
+        />
+      </Panel>
 
-      {/* Transaction Table */}
-      <div className="rounded-md border bg-card">
-          <div className="flex flex-col">
-            <div className="grid grid-cols-12 gap-4 p-4 border-b bg-muted/40 font-medium text-sm text-muted-foreground hidden md:grid">
-                <div className="col-span-4">{t('type')} & {tCommon('date')}</div>
-                <div className="col-span-4 text-right">{tCommon('amount')}</div>
-                <div className="col-span-4 text-right">{tCommon('status')}</div>
-            </div>
-
-            {isLoading && filteredTransactions.length === 0 ? (
-                 <div className="flex flex-col gap-2 p-4">
-                    <div className="h-16 w-full animate-pulse rounded-lg bg-muted/50" />
-                    <div className="h-16 w-full animate-pulse rounded-lg bg-muted/50" />
-                    <div className="h-16 w-full animate-pulse rounded-lg bg-muted/50" />
-                 </div>
-            ) : filteredTransactions.length > 0 ? (
-              filteredTransactions.map((tx) => (
-                <TransactionRow
-                    key={tx.id}
-                    id={tx.id}
-                    type={tx.type}
-                    amount={tx.amount}
-                    currency={tx.currency}
-                    status={tx.status}
-                    createdAt={tx.createdAt}
-                    onClick={() => setSelectedTx(tx)}
-                />
-              ))
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                  <p>{tCommon('error')}</p>
-              </div>
-            )}
-          </div>
-      </div>
-
-      {/* Detail Dialog */}
       <Dialog open={!!selectedTx} onOpenChange={(open) => !open && setSelectedTx(null)}>
-         <DialogContent>
-             <DialogHeader>
-                 <DialogTitle>Transaction Details</DialogTitle>
-                 <DialogDescription>
-                     Detailed information about this transaction.
-                 </DialogDescription>
-             </DialogHeader>
-             {selectedTx && (
-                          <div className="grid gap-4 py-4">
-                            <div className="grid grid-cols-4 items-center gap-4">
-                              <span className="text-sm font-medium text-muted-foreground text-right">
-                                {t('reference')}
-                              </span>
-                              <span className="col-span-3 font-mono text-sm">
-                                {selectedTx.reference}
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                              <span className="text-sm font-medium text-muted-foreground text-right">
-                                {t('date')}
-                              </span>
-                              <span className="col-span-3 text-sm">
-                                {formatDate(selectedTx.createdAt)}
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                              <span className="text-sm font-medium text-muted-foreground text-right">
-                                {t('type')}
-                              </span>
-                              <span className="col-span-3 text-sm font-medium">
-                                {getTypeLabel(selectedTx.type)}
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                              <span className="text-sm font-medium text-muted-foreground text-right">
-                                {t('amount')}
-                              </span>
-                              <span className="col-span-3 font-mono text-sm font-bold">
-                                {formatCurrency(
-                                  selectedTx.amount,
-                                  selectedTx.currency
-                                )}
-                              </span>
-                            </div>
-                            {selectedTx.fee && (
-                              <div className="grid grid-cols-4 items-center gap-4">
-                                <span className="text-sm font-medium text-muted-foreground text-right">
-                                  Fee
-                                </span>
-                                <span className="col-span-3 font-mono text-sm">
-                                  {formatCurrency(
-                                    selectedTx.fee,
-                                    selectedTx.currency
-                                  )}
-                                </span>
-                              </div>
-                            )}
-                            <div className="grid grid-cols-4 items-center gap-4">
-                              <span className="text-sm font-medium text-muted-foreground text-right">
-                                {t('status')}
-                              </span>
-                              <span className="col-span-3">
-                                <span
-                                  className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(
-                                    selectedTx.status
-                                  )}`}
-                                >
-                                  {selectedTx.status}
-                                </span>
-                              </span>
-                            </div>
-                            {selectedTx.details && (
-                              <div className="grid grid-cols-4 items-center gap-4">
-                                <span className="text-sm font-medium text-muted-foreground text-right">
-                                  Details
-                                </span>
-                                <span className="col-span-3 text-sm">
-                                  {selectedTx.details}
-                                </span>
-                              </div>
-                            )}
-                            {selectedTx.txHash && (
-                              <div className="grid grid-cols-4 items-center gap-4">
-                                <span className="text-sm font-medium text-muted-foreground text-right">
-                                  Tx Hash
-                                </span>
-                                <span className="col-span-3 flex items-center gap-2">
-                                  <span className="font-mono text-xs text-muted-foreground truncate max-w-[200px]">
-                                    {selectedTx.txHash}
-                                  </span>
-                                  <a
-                                    href={`https://tronscan.org/#/transaction/${selectedTx.txHash}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-primary hover:underline"
-                                  >
-                                    <ExternalLink className="h-4 w-4" />
-                                  </a>
-                                </span>
-                              </div>
-                            )}
-                            <div className="grid grid-cols-4 items-center gap-4">
-                              <span className="text-sm font-medium text-muted-foreground text-right">
-                                ID
-                              </span>
-                              <span className="col-span-3 font-mono text-xs text-muted-foreground">
-                                {selectedTx.id}
-                              </span>
-                            </div>
-                          </div>
-             )}
-         </DialogContent>
+        <DialogContent className="border-white/[0.08] bg-[#111113]">
+          <DialogHeader>
+            <DialogTitle>Transaction Details</DialogTitle>
+            <DialogDescription>
+              Detailed information about this transaction.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedTx && (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <span className="text-right text-sm font-medium text-muted-foreground">{t('reference')}</span>
+                <span className="col-span-3 font-mono text-sm">{selectedTx.reference}</span>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <span className="text-right text-sm font-medium text-muted-foreground">{t('date')}</span>
+                <span className="col-span-3 text-sm">{formatDate(selectedTx.createdAt)}</span>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <span className="text-right text-sm font-medium text-muted-foreground">{t('type')}</span>
+                <span className="col-span-3 text-sm font-medium">{getTypeLabel(selectedTx.type)}</span>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <span className="text-right text-sm font-medium text-muted-foreground">{t('amount')}</span>
+                <span className="col-span-3 font-mono text-sm font-bold">{formatCurrency(selectedTx.amount, selectedTx.currency)}</span>
+              </div>
+              {selectedTx.fee && (
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <span className="text-right text-sm font-medium text-muted-foreground">Fee</span>
+                  <span className="col-span-3 font-mono text-sm">{formatCurrency(selectedTx.fee, selectedTx.currency)}</span>
+                </div>
+              )}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <span className="text-right text-sm font-medium text-muted-foreground">{t('status')}</span>
+                <span className="col-span-3"><StatusBadge status={selectedTx.status} /></span>
+              </div>
+              {selectedTx.details && (
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <span className="text-right text-sm font-medium text-muted-foreground">Details</span>
+                  <span className="col-span-3 text-sm">{selectedTx.details}</span>
+                </div>
+              )}
+              {selectedTx.txHash && (
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <span className="text-right text-sm font-medium text-muted-foreground">Tx Hash</span>
+                  <span className="col-span-3 flex items-center gap-2">
+                    <span className="max-w-[200px] truncate font-mono text-xs text-muted-foreground">{selectedTx.txHash}</span>
+                    <a
+                      href={`https://tronscan.org/#/transaction/${selectedTx.txHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#00D4FF] hover:underline"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </span>
+                </div>
+              )}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <span className="text-right text-sm font-medium text-muted-foreground">ID</span>
+                <span className="col-span-3 font-mono text-xs text-muted-foreground">{selectedTx.id}</span>
+              </div>
+            </div>
+          )}
+        </DialogContent>
       </Dialog>
 
-      {/* Pagination */}
       <div className="flex items-center justify-between py-4">
         <p className="text-sm text-muted-foreground">
-          Showing{" "}
-          {Math.min(
-            (pagination.page - 1) * pagination.perPage + 1,
-            pagination.total
-          )}{" "}
-          to {Math.min(pagination.page * pagination.perPage, pagination.total)}{" "}
-          of {pagination.total} transactions
+          Showing {Math.min((pagination.page - 1) * pagination.perPage + 1, pagination.total)} to {Math.min(pagination.page * pagination.perPage, pagination.total)} of {pagination.total} transactions
         </p>
         <div className="flex items-center space-x-2">
           <Button

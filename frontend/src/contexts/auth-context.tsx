@@ -1,10 +1,11 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/navigation";
 import {
   authApi,
   walletApi,
+  walletAuthApi,
   AuthUser,
   SmartAccount,
   PortalApiError,
@@ -17,10 +18,13 @@ interface AuthContextType {
   isAuthenticated: boolean;
   error: string | null;
   // Auth methods
-  loginWithPasskey: (email?: string) => Promise<void>;
-  registerWithPasskey: (email: string) => Promise<void>;
-  loginWithMagicLink: (email: string) => Promise<void>;
-  verifyMagicLink: (token: string) => Promise<void>;
+  loginWithPassword: (email: string, password: string) => Promise<void>;
+  registerWithPassword: (
+    email: string,
+    password: string,
+    fullName?: string,
+  ) => Promise<void>;
+  loginWithWallet: () => Promise<void>;
   logout: () => Promise<void>;
   // Wallet methods
   refreshWallet: () => Promise<void>;
@@ -30,11 +34,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const PASSKEY_UNAVAILABLE_MESSAGE =
-  "Passkey sign-in is not available until the backend WebAuthn completion flow is verified.";
-const MAGIC_LINK_UNAVAILABLE_MESSAGE =
-  "Magic link sign-in is not available until token verification and session issuance are enabled.";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -64,11 +63,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsAuthenticated(false);
         }
       } catch (err) {
+        // The initial session probe is a background check: any failure (401,
+        // network error, or a 5xx because the backend is unreachable) simply
+        // means the visitor is not authenticated yet. Fail closed quietly — the
+        // login screen already communicates availability, so a probe failure
+        // must not surface an alarming error banner to users.
         setUser(null);
         setWallet(null);
         setIsAuthenticated(false);
-        if (!(err instanceof PortalApiError && err.status === 401)) {
-          setError(err instanceof Error ? err.message : "Failed to load session");
+        if (process.env.NODE_ENV !== "production") {
+          console.debug("Portal session probe failed (treating as logged out):", err);
         }
       } finally {
         setIsLoading(false);
@@ -76,73 +80,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     void initSession();
-  }, []);
-
-  const loginWithPasskey = useCallback(async (_email?: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      throw new Error(PASSKEY_UNAVAILABLE_MESSAGE);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Passkey login failed";
-      setIsAuthenticated(false);
-      setUser(null);
-      setWallet(null);
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const registerWithPasskey = useCallback(async (_email: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      throw new Error(PASSKEY_UNAVAILABLE_MESSAGE);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Passkey registration failed";
-      setIsAuthenticated(false);
-      setUser(null);
-      setWallet(null);
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const loginWithMagicLink = useCallback(async (email: string) => {
-    void email;
-    setIsLoading(true);
-    setError(null);
-    try {
-      throw new Error(MAGIC_LINK_UNAVAILABLE_MESSAGE);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Magic link request failed";
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const verifyMagicLink = useCallback(async (token: string) => {
-    void token;
-    setIsLoading(true);
-    setError(null);
-    try {
-      throw new Error(MAGIC_LINK_UNAVAILABLE_MESSAGE);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Magic link verification failed";
-      setIsAuthenticated(false);
-      setUser(null);
-      setWallet(null);
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
   }, []);
 
   const logout = useCallback(async () => {
@@ -165,6 +102,121 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Wallet refresh failed silently
     }
   }, []);
+
+  const loginWithPassword = useCallback(
+    async (email: string, password: string) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await authApi.login(email, password);
+        setUser(response.user);
+        setIsAuthenticated(true);
+        await refreshWallet();
+        router.push("/portal");
+      } catch (err) {
+        const message =
+          err instanceof PortalApiError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "Email sign-in failed.";
+        setError(message);
+        setIsAuthenticated(false);
+        setUser(null);
+        setWallet(null);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [refreshWallet, router],
+  );
+
+  const registerWithPassword = useCallback(
+    async (email: string, password: string, fullName?: string) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await authApi.register(email, password, fullName);
+        setUser(response.user);
+        setIsAuthenticated(true);
+        router.push("/portal");
+      } catch (err) {
+        const message =
+          err instanceof PortalApiError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "Account registration failed.";
+        setError(message);
+        setIsAuthenticated(false);
+        setUser(null);
+        setWallet(null);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [router],
+  );
+
+  const loginWithWallet = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      if (!window.ethereum) {
+        throw new Error(
+          "No Ethereum wallet detected. Install MetaMask to sign in with your wallet."
+        );
+      }
+
+      // 1. Request account access
+      const accounts = (await window.ethereum.request({
+        method: "eth_requestAccounts",
+      })) as string[];
+      const address = accounts[0];
+      if (!address) {
+        throw new Error("No account returned from wallet.");
+      }
+
+      // 2. Get nonce + EIP-4361 message from backend
+      const { message } = await walletAuthApi.getNonce(address);
+
+      // 3. Sign the exact message string — do NOT modify it
+      const signature = (await window.ethereum.request({
+        method: "personal_sign",
+        params: [message, address],
+      })) as string;
+
+      // 4. Verify signature with backend → receive session cookies + user
+      const res = await walletAuthApi.verify(message, signature);
+      setUser(res.user);
+      setIsAuthenticated(true);
+
+      // 5. Load smart account provisioned during verify
+      await refreshWallet();
+
+      router.push("/portal");
+    } catch (err) {
+      // EIP-1193 user rejection
+      const code = (err as { code?: number }).code;
+      const message =
+        code === 4001
+          ? "Wallet sign-in cancelled."
+          : err instanceof PortalApiError
+          ? err.message
+          : err instanceof Error
+          ? err.message
+          : "Wallet sign-in failed.";
+      setError(message);
+      setIsAuthenticated(false);
+      setUser(null);
+      setWallet(null);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [router, refreshWallet]);
 
   const createWallet = useCallback(async () => {
     setIsLoading(true);
@@ -195,10 +247,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isLoading,
     isAuthenticated,
     error,
-    loginWithPasskey,
-    registerWithPasskey,
-    loginWithMagicLink,
-    verifyMagicLink,
+    loginWithPassword,
+    registerWithPassword,
+    loginWithWallet,
     logout,
     refreshWallet,
     createWallet,

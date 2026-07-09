@@ -9,12 +9,7 @@ import LpScorecard, {
   type LiquidityScorecardRow,
 } from "@/components/liquidity/LpScorecard";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardHeader,
-  CardDescription,
-  CardTitle,
-} from "@/components/ui/card";
+import { PageHeader, StatGrid, StatCard, Panel } from "@/components/shared";
 
 const DEFAULT_FILTERS: LiquidityFilters = {
   lpId: "",
@@ -183,94 +178,87 @@ export default function LiquidityPage() {
     }
   };
 
-  const rowCountLabel = scorecardLoading ? "Loading..." : `${scorecardRows.length}`;
   const activePolicyLabel = policyLoading
-    ? "Loading..."
+    ? "Loading…"
     : policyCompare?.activeVersion ?? "Not loaded";
   const compareDirectionLabel = policyLoading
-    ? "Loading..."
+    ? "Loading…"
     : policyCompare?.requestedDirection ?? getPolicyDirection(filters.direction);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Liquidity Scorecard</h1>
-          <p className="text-muted-foreground">
-            Review LP reliability snapshots, compare bounded policy versions, and activate the
-            operator-selected catalog entry.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={handleRefresh}
-          disabled={scorecardLoading || policyLoading}
-          aria-label="Refresh liquidity page"
-        >
-          {scorecardLoading || policyLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Visible rows</CardDescription>
-            <CardTitle>{rowCountLabel}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Active policy</CardDescription>
-            <CardTitle className="break-all">{activePolicyLabel}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Compare direction</CardDescription>
-            <CardTitle className="flex items-center gap-2">
-              {compareDirectionLabel}
-              <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-            </CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
-
-      <Card className="border-dashed">
-        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-          <div className="space-y-1">
-            <CardTitle className="text-base">Bounded operator surface</CardTitle>
-            <CardDescription>
-              Filtering hits the scorecard endpoint only. Policy compare stays direction-scoped and
-              activation is limited to the backend catalog.
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <SlidersHorizontal className="h-4 w-4" />
-            No broad admin refactor
-          </div>
-        </CardHeader>
-      </Card>
-
-      <LpScorecard
-        filters={filters}
-        onFilterChange={handleFilterChange}
-        onApplyFilters={handleApplyFilters}
-        onResetFilters={handleResetFilters}
-        scorecardRows={scorecardRows}
-        scorecardLoading={scorecardLoading}
-        scorecardError={scorecardError}
-        policyCompare={policyCompare}
-        policyLoading={policyLoading}
-        policyError={policyError}
-        activatingVersion={activatingVersion}
-        activationNotice={activationNotice}
-        onActivatePolicy={handleActivatePolicy}
+    <main className="p-page flex flex-col gap-section">
+      <PageHeader
+        title="Liquidity Scorecard"
+        description="Review LP reliability snapshots, compare bounded policy versions, and activate the operator-selected catalog entry."
+        actions={
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleRefresh}
+            disabled={scorecardLoading || policyLoading}
+            aria-label="Refresh liquidity page"
+          >
+            {scorecardLoading || policyLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+          </Button>
+        }
       />
-    </div>
+
+      <StatGrid cols={3}>
+        <StatCard
+          title="Visible rows"
+          value={scorecardRows.length}
+          accentColor="cyan"
+          loading={scorecardLoading}
+        />
+        <StatCard
+          title="Active policy"
+          value={activePolicyLabel}
+          accentColor="green"
+          loading={policyLoading}
+        />
+        <StatCard
+          title="Compare direction"
+          value={compareDirectionLabel}
+          icon={<ShieldCheck className="h-4 w-4" />}
+          accentColor="violet"
+          loading={policyLoading}
+        />
+      </StatGrid>
+
+      <Panel
+        variant="solid"
+        header={{
+          title: "Bounded operator surface",
+          description:
+            "Filtering hits the scorecard endpoint only. Policy compare stays direction-scoped and activation is limited to the backend catalog.",
+          actions: (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <SlidersHorizontal className="h-4 w-4" />
+              No broad admin refactor
+            </div>
+          ),
+        }}
+      >
+        <LpScorecard
+          filters={filters}
+          onFilterChange={handleFilterChange}
+          onApplyFilters={handleApplyFilters}
+          onResetFilters={handleResetFilters}
+          scorecardRows={scorecardRows}
+          scorecardLoading={scorecardLoading}
+          scorecardError={scorecardError}
+          policyCompare={policyCompare}
+          policyLoading={policyLoading}
+          policyError={policyError}
+          activatingVersion={activatingVersion}
+          activationNotice={activationNotice}
+          onActivatePolicy={handleActivatePolicy}
+        />
+      </Panel>
+    </main>
   );
 }

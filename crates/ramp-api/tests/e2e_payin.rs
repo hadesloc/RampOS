@@ -3,6 +3,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use chrono::Utc;
+use hmac::{Hmac, Mac};
 use ramp_api::middleware::PortalAuthConfig;
 use ramp_api::{create_router, AppState};
 use ramp_compliance::{case::CaseManager, InMemoryCaseStore};
@@ -34,6 +35,37 @@ use tokio::time::sleep;
 use tower::ServiceExt; // for oneshot
 use uuid::Uuid;
 
+mod common;
+
+fn signed_request(
+    method: &str,
+    path: &str,
+    api_key: &str,
+    api_secret: &str,
+    body: String,
+    internal_secret: Option<&str>,
+) -> Request<Body> {
+    let timestamp = Utc::now().timestamp().to_string();
+    let message = format!("{method}\n{path}\n{timestamp}\n{body}");
+    let mut mac = Hmac::<Sha256>::new_from_slice(api_secret.as_bytes()).unwrap();
+    mac.update(message.as_bytes());
+    let mut builder = Request::builder()
+        .uri(path)
+        .method(method)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .header("X-Timestamp", timestamp)
+        .header("X-Signature", hex::encode(mac.finalize().into_bytes()));
+
+    if !body.is_empty() {
+        builder = builder.header("Content-Type", "application/json");
+    }
+    if let Some(secret) = internal_secret {
+        builder = builder.header("X-Internal-Secret", secret);
+    }
+
+    builder.body(Body::from(body)).unwrap()
+}
+
 #[tokio::test]
 async fn test_e2e_payin_flow_via_api() {
     // 1. Setup Database Container
@@ -52,11 +84,21 @@ async fn test_e2e_payin_flow_via_api() {
         .await
         .expect("Failed to connect to DB");
 
-    // Run migrations (path relative to crate root where tests run)
-    sqlx::migrate!("../../migrations")
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations");
+    sqlx::query(
+        r#"
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'rampos') THEN
+                CREATE ROLE rampos;
+            END IF;
+        END $$;
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to ensure role 'rampos' exists");
+
+    common::run_test_migrations(&pool).await;
 
     // 3. Setup Repositories
     let intent_repo = Arc::new(PgIntentRepository::new(pool.clone()));
@@ -70,6 +112,7 @@ async fn test_e2e_payin_flow_via_api() {
     // 4. Setup Seed Data
     let tenant_id = "tenant_e2e_api_1";
     let api_key = "secret_api_key_2";
+    let api_secret = "secret_api_secret_2";
     let mut hasher = Sha256::new();
     hasher.update(api_key.as_bytes());
     let api_key_hash = hex::encode(hasher.finalize());
@@ -81,7 +124,7 @@ async fn test_e2e_payin_flow_via_api() {
             name: "E2E API Test Tenant".to_string(),
             status: "ACTIVE".to_string(),
             api_key_hash: api_key_hash,
-            api_secret_encrypted: None,
+            api_secret_encrypted: Some(api_secret.as_bytes().to_vec()),
             webhook_secret_hash: "secret".to_string(),
             webhook_secret_encrypted: None,
             webhook_url: Some("http://localhost/webhook".to_string()),
@@ -244,16 +287,19 @@ async fn test_e2e_payin_flow_via_api() {
         "metadata": { "test": "e2e_api" }
     });
 
-    let req = Request::builder()
-        .uri("/v1/intents/payin")
-        .method("POST")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .header("Content-Type", "application/json")
-        .body(Body::from(create_payload.to_string()))
-        .unwrap();
+    let req = signed_request(
+        "POST",
+        "/v1/intents/payin",
+        api_key,
+        api_secret,
+        create_payload.to_string(),
+        None,
+    );
 
     let response = app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert!(
+        response.status() == StatusCode::CREATED || response.status() == StatusCode::OK
+    );
 
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
@@ -282,14 +328,14 @@ async fn test_e2e_payin_flow_via_api() {
     // Set internal secret for auth
     std::env::set_var("INTERNAL_SERVICE_SECRET", "test-internal-secret");
 
-    let req = Request::builder()
-        .uri("/v1/intents/payin/confirm")
-        .method("POST")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .header("Content-Type", "application/json")
-        .header("X-Internal-Secret", "test-internal-secret")
-        .body(Body::from(confirm_payload.to_string()))
-        .unwrap();
+    let req = signed_request(
+        "POST",
+        "/v1/intents/payin/confirm",
+        api_key,
+        api_secret,
+        confirm_payload.to_string(),
+        Some("test-internal-secret"),
+    );
 
     let response = app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -305,12 +351,8 @@ async fn test_e2e_payin_flow_via_api() {
     // Step 3: Poll Intent Status (Simulating client polling)
     let mut poll_status = String::new();
     for _ in 0..5 {
-        let req = Request::builder()
-            .uri(format!("/v1/intents/{}", intent_id))
-            .method("GET")
-            .header("Authorization", format!("Bearer {}", api_key))
-            .body(Body::empty())
-            .unwrap();
+        let path = format!("/v1/intents/{intent_id}");
+        let req = signed_request("GET", &path, api_key, api_secret, String::new(), None);
 
         let response = app.clone().oneshot(req).await.unwrap();
         if response.status() == StatusCode::OK {
@@ -318,7 +360,7 @@ async fn test_e2e_payin_flow_via_api() {
                 .await
                 .unwrap();
             let resp_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-            poll_status = resp_json["status"].as_str().unwrap().to_string();
+            poll_status = resp_json["state"].as_str().unwrap().to_string();
 
             if poll_status == "COMPLETED" {
                 break;
@@ -332,12 +374,8 @@ async fn test_e2e_payin_flow_via_api() {
     );
 
     // Step 4: Check Balance via API
-    let req = Request::builder()
-        .uri(format!("/v1/balance/{}", user_id))
-        .method("GET")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .body(Body::empty())
-        .unwrap();
+    let path = format!("/v1/balance/{user_id}");
+    let req = signed_request("GET", &path, api_key, api_secret, String::new(), None);
 
     let response = app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -345,12 +383,15 @@ async fn test_e2e_payin_flow_via_api() {
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let balances: Vec<serde_json::Value> = serde_json::from_slice(&body_bytes).unwrap();
+    let balance_response: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+    let balances = balance_response["balances"]
+        .as_array()
+        .expect("balance response should contain an array");
 
     // Find VND balance
     let vnd_balance = balances.iter().find(|b| {
         b["currency"].as_str() == Some("VND")
-            && b["accountType"].as_str().unwrap_or("").contains("USER")
+            && b["accountType"].as_str().unwrap_or("").contains("User")
     });
 
     assert!(vnd_balance.is_some(), "Should have VND balance");
@@ -368,8 +409,8 @@ async fn test_e2e_payin_flow_via_api() {
         Decimal::ZERO
     };
 
-    // Note: 500,000 should match
-    assert_eq!(balance_decimal, Decimal::from(amount));
+    // Ledger balances are signed: a credit to a liability account is negative.
+    assert_eq!(balance_decimal, -Decimal::from(amount));
 
     println!("E2E Payin Test (API Driven) Passed!");
 }

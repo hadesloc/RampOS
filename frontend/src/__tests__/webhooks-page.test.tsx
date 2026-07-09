@@ -67,8 +67,8 @@ describe("WebhooksPage", () => {
     render(<WebhooksPage />);
 
     expect(await screen.findByText(/webhook sla guardian/i)).toBeInTheDocument();
-    expect(screen.getByText(/1 failed needs review inside 15 min/i)).toBeInTheDocument();
-    expect(screen.getByText(/recommend endpoint health review before any replay/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/review endpoint health inside 15 min before replay/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
     expect(retryMock).not.toHaveBeenCalled();
   });

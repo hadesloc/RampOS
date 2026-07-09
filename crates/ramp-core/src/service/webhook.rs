@@ -222,18 +222,39 @@ impl WebhookService {
             .await?
             .ok_or_else(|| ramp_common::Error::TenantNotFound(event.tenant_id.clone()))?;
 
-        let webhook_url = tenant
-            .webhook_url
-            .ok_or_else(|| ramp_common::Error::Internal("No webhook URL configured".into()))?;
+        // A missing webhook URL or secret is a PERMANENT misconfiguration: the event
+        // can never be delivered, so mark it permanently failed instead of returning
+        // an error that leaves it PENDING and re-queues it forever every poll cycle.
+        let webhook_url = match tenant.webhook_url {
+            Some(url) => url,
+            None => {
+                self.webhook_repo
+                    .mark_permanently_failed(
+                        &EventId(event.id.clone()),
+                        "No webhook URL configured",
+                    )
+                    .await?;
+                warn!(event_id = %event.id, "Webhook permanently failed: tenant has no webhook URL");
+                return Ok(());
+            }
+        };
         crate::service::onboarding::validate_webhook_url(&webhook_url)?;
 
         // SECURITY FIX: Use the encrypted webhook secret, not the hash
         // The hash should only be used for verification, not for HMAC signing
-        let webhook_secret_encrypted = tenant
-            .webhook_secret_encrypted
-            .ok_or_else(|| ramp_common::Error::Internal(
-                "Webhook secret not configured. Please update tenant with encrypted webhook secret.".into()
-            ))?;
+        let webhook_secret_encrypted = match tenant.webhook_secret_encrypted {
+            Some(secret) => secret,
+            None => {
+                self.webhook_repo
+                    .mark_permanently_failed(
+                        &EventId(event.id.clone()),
+                        "No webhook secret configured",
+                    )
+                    .await?;
+                warn!(event_id = %event.id, "Webhook permanently failed: tenant has no webhook secret");
+                return Ok(());
+            }
+        };
 
         let webhook_secret = crate::service::crypto::decode_secret_from_storage(
             &webhook_secret_encrypted,

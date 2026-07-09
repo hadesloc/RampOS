@@ -200,6 +200,7 @@ pub fn create_router(state: AppState) -> Router {
 
     // Report routes
     let report_routes: Router = Router::new()
+        .route("/", get(handlers::admin::dashboard_reads::list_reports))
         .route("/aml", get(handlers::admin::reports::generate_aml_report))
         .route(
             "/aml/export",
@@ -235,7 +236,22 @@ pub fn create_router(state: AppState) -> Router {
     let admin_general_routes = Router::new()
         // Dashboard
         .route("/dashboard", get(handlers::get_dashboard))
+        // Tenants (read-only list — create/update/activate/suspend are in tenant_routes)
+        .route("/tenants", get(handlers::admin::list_tenants))
+        // KYC documents list
+        .route("/documents", get(handlers::admin::list_kyc_documents))
+        // Fraud detection
+        .route(
+            "/fraud/checks",
+            get(handlers::admin::fraud::list_fraud_checks),
+        )
+        .route(
+            "/fraud/rules",
+            get(handlers::admin::fraud::list_fraud_rules),
+        )
         // Intents
+        .route("/intents", get(handlers::admin::admin_list_intents))
+        .route("/intents/:id", get(handlers::admin::admin_get_intent))
         .route("/intents/:id/cancel", post(handlers::admin::cancel_intent))
         .route("/intents/:id/retry", post(handlers::admin::retry_intent))
         // Rules
@@ -315,6 +331,39 @@ pub fn create_router(state: AppState) -> Router {
             get(handlers::admin::get_user_limit_status)
                 .put(handlers::admin::set_user_limits)
                 .delete(handlers::admin::remove_user_limits),
+        )
+        // Dashboard read endpoints (risk / billing / treasury txns / events / tier limits)
+        .route(
+            "/limits",
+            get(handlers::admin::dashboard_reads::list_tier_limits),
+        )
+        .route(
+            "/risk/stats",
+            get(handlers::admin::dashboard_reads::risk_stats),
+        )
+        .route(
+            "/risk/alerts",
+            get(handlers::admin::dashboard_reads::risk_alerts),
+        )
+        .route(
+            "/risk/concentration",
+            get(handlers::admin::dashboard_reads::risk_concentration),
+        )
+        .route(
+            "/billing/subscription",
+            get(handlers::admin::dashboard_reads::billing_subscription),
+        )
+        .route(
+            "/billing/invoices",
+            get(handlers::admin::dashboard_reads::billing_invoices),
+        )
+        .route(
+            "/treasury/transactions",
+            get(handlers::admin::dashboard_reads::treasury_transactions),
+        )
+        .route(
+            "/events",
+            get(handlers::admin::dashboard_reads::events_catalog),
         )
         // Off-ramp management
         .route(
@@ -660,6 +709,22 @@ pub fn create_router(state: AppState) -> Router {
             .with_state(licensing_repo.clone())
     } else {
         Router::new()
+            .route(
+                "/licensing/status",
+                get(handlers::admin::dashboard_reads::licensing_status_fallback),
+            )
+            .route(
+                "/licensing/requirements",
+                get(handlers::admin::dashboard_reads::licensing_requirements_fallback),
+            )
+            .route(
+                "/licensing/submissions",
+                get(handlers::admin::dashboard_reads::licensing_submissions_fallback),
+            )
+            .route(
+                "/licensing/deadlines",
+                get(handlers::admin::dashboard_reads::licensing_deadlines_fallback),
+            )
     };
 
     // Compliance Audit routes
@@ -796,11 +861,13 @@ pub fn create_router(state: AppState) -> Router {
     // These routes are for the end-user portal application
     // Auth routes are excluded from JWT middleware (login/register don't need auth)
     let mut portal_protected_routes = Router::new()
+        .nest("/auth", handlers::portal::auth::protected_router())
         .nest("/kyc", handlers::portal::kyc::router())
         .nest("/wallet", handlers::portal::wallet::router())
         .nest("/transactions", handlers::portal::transactions::router())
         .nest("/intents", handlers::portal::intents::router())
         .nest("/offramp", handlers::portal::offramp::router())
+        .nest("/settings", handlers::portal::settings::router())
         .nest("/venue-cashout", handlers::portal::venue_cashout::router())
         .nest("/venue-funding", handlers::portal::venue_funding::router())
         .merge(handlers::portal::rfq::router())
@@ -813,17 +880,19 @@ pub fn create_router(state: AppState) -> Router {
         ));
     }
 
-    portal_protected_routes = portal_protected_routes.layer(middleware::from_fn_with_state(
-        state.portal_auth_config.clone(),
-        portal_auth_middleware,
-    ));
-
     if let Some(ref limiter) = state.rate_limiter {
         portal_protected_routes = portal_protected_routes.layer(middleware::from_fn_with_state(
             limiter.clone(),
             rate_limit_middleware,
         ));
     }
+
+    // JWT authentication must run first so rate limiting and idempotency can
+    // scope requests by portal tenant and user.
+    portal_protected_routes = portal_protected_routes.layer(middleware::from_fn_with_state(
+        state.portal_auth_config.clone(),
+        portal_auth_middleware,
+    ));
 
     // Chain routes (auth required)
     let chain_routes = Router::new()
@@ -866,10 +935,6 @@ pub fn create_router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(
             state.clone(),
             usage_metering_middleware,
-        ))
-        .layer(middleware::from_fn_with_state(
-            state.tenant_repo.clone(),
-            auth_middleware,
         ));
 
     // Add rate limiting if available
@@ -889,6 +954,13 @@ pub fn create_router(state: AppState) -> Router {
             idempotency_middleware,
         ));
     }
+
+    // Authentication must be the outer layer so tenant-scoped middleware
+    // receives TenantContext before applying limits or idempotency keys.
+    api_v1 = api_v1.layer(middleware::from_fn_with_state(
+        state.tenant_repo.clone(),
+        auth_middleware,
+    ));
 
     // Bank webhook routes (no tenant auth required - uses provider-specific signature verification)
     // POST /v1/webhooks/bank/:provider - receives bank confirmations for pay-ins

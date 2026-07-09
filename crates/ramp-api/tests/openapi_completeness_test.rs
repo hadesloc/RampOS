@@ -674,6 +674,11 @@ fn spec_post_operations_have_request_body() {
     let action_endpoints: Vec<&str> = vec![
         "/v1/admin/domains/{domain_id}/verify-dns",
         "/v1/admin/domains/{domain_id}/provision-ssl",
+        "/v1/admin/offramp/{id}/approve",
+        "/v1/admin/rfq/{id}/finalize",
+        "/v1/portal/offramp/{id}/confirm",
+        "/v1/portal/rfq/{id}/accept",
+        "/v1/portal/rfq/{id}/cancel",
     ];
 
     for (path, path_item) in paths {

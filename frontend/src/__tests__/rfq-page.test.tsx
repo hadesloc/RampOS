@@ -62,6 +62,7 @@ describe("RfqAdminPage", () => {
     expect(screen.getAllByText(/26[,.]100/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/1[,.]250[,.]000/i)).toBeInTheDocument();
     expect(screen.getAllByText("OPEN").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("columnheader", { name: /settlement/i })).not.toBeInTheDocument();
   });
 
   it("finalizes an open RFQ and refreshes the list", async () => {
@@ -98,6 +99,7 @@ describe("RfqAdminPage", () => {
     });
 
     expect(mockFetch.mock.calls[1]?.[0]).toBe("/api/proxy/v1/admin/rfq/rfq_open_001/finalize");
+    expect(screen.getByText(/rfq matched/i).textContent?.toLowerCase()).not.toContain("settlement");
   });
 
   it("renders a recoverable load failure", async () => {

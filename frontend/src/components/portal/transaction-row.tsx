@@ -1,98 +1,131 @@
-import { Badge } from "@/components/ui/badge"
+import { JSX } from "react"
 import { ArrowDownToLine, ArrowUpFromLine, RefreshCw, ArrowRightLeft } from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
 import { cn } from "@/lib/utils"
+import { StatusBadge } from "@/components/shared"
+import { formatRelativeTime, toLabel } from "@/lib/format"
 
 interface TransactionRowProps {
-  id: string;
-  type: 'PAYIN_VND' | 'PAYOUT_VND' | 'TRADE_EXECUTED' | string;
-  amount: string;
-  currency: string;
-  status: string;
-  createdAt: string;
-  onClick?: () => void;
+  id: string
+  type: "PAYIN_VND" | "PAYOUT_VND" | "TRADE_EXECUTED" | "DEPOSIT" | "WITHDRAW" | "TRADE" | string
+  amount: string
+  currency: string
+  status: string
+  createdAt: string
+  onClick?: () => void
 }
 
-export function TransactionRow({ id, type, amount, currency, status, createdAt, onClick }: TransactionRowProps) {
-    const getIcon = () => {
-        if (type.includes('PAYIN')) return <ArrowDownToLine className="h-4 w-4 text-green-500" />;
-        if (type.includes('PAYOUT')) return <ArrowUpFromLine className="h-4 w-4 text-red-500" />;
-        if (type.includes('TRADE')) return <ArrowRightLeft className="h-4 w-4 text-blue-500" />;
-        return <RefreshCw className="h-4 w-4 text-muted-foreground" />;
-    };
+function formatAmount(val: string, currency: string): string {
+  const num = parseFloat(val)
+  if (isNaN(num)) return val
+  if (currency === "VND") {
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
+      maximumFractionDigits: 0,
+    }).format(num)
+  }
+  const safeCurrency = currency === "USDT" ? "USD" : currency
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: safeCurrency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6,
+  }).format(num)
+}
 
-    const getStatusColor = (status: string) => {
-        switch (status.toLowerCase()) {
-            case 'completed':
-            case 'success':
-                return "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20";
-            case 'pending':
-            case 'processing':
-                return "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20";
-            case 'failed':
-            case 'rejected':
-            case 'cancelled':
-                return "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20";
-            default:
-                return "bg-muted text-muted-foreground";
-        }
-    };
-
-    const formatAmount = (val: string, cur: string) => {
-        const num = parseFloat(val);
-        if (isNaN(num)) return val;
-        const safeCurrency = cur === 'USDT' ? 'USD' : cur;
-        return new Intl.NumberFormat(cur === 'VND' ? 'vi-VN' : 'en-US', {
-            style: 'currency',
-            currency: safeCurrency,
-            maximumFractionDigits: cur === 'VND' ? 0 : 2
-        }).format(num);
-    };
-
-    let dateObj: Date;
-    try {
-        dateObj = new Date(createdAt);
-        if (isNaN(dateObj.getTime())) {
-             dateObj = new Date();
-        }
-    } catch (e) {
-        dateObj = new Date();
-    }
-
+function typeIcon(type: string): JSX.Element {
+  if (type.includes("PAYIN") || type === "DEPOSIT") {
     return (
-        <div
-            className={cn(
-                "flex items-center justify-between p-4 rounded-lg border bg-card/50 hover:bg-accent/50 transition-colors",
-                onClick ? "cursor-pointer" : "cursor-default"
-            )}
-            onClick={onClick}
-        >
-            <div className="flex items-center gap-4">
-                <div className={cn("p-2.5 rounded-full bg-background border shadow-sm")}>
-                    {getIcon()}
-                </div>
-                <div>
-                    <div className="font-medium text-sm">
-                        {type.replace(/_/g, ' ')}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(dateObj, { addSuffix: true })}
-                    </div>
-                </div>
-            </div>
-
-            <div className="flex flex-col items-end gap-1">
-                <span className={cn(
-                    "font-semibold text-sm",
-                    type.includes('PAYIN') ? "text-green-600 dark:text-green-400" : "text-foreground"
-                )}>
-                    {type.includes('PAYIN') ? '+' : type.includes('PAYOUT') ? '-' : ''}
-                    {formatAmount(amount, currency)}
-                </span>
-                <Badge variant="outline" className={cn("text-[10px] h-5 px-1.5 font-normal", getStatusColor(status))}>
-                    {status}
-                </Badge>
-            </div>
-        </div>
+      <div className="p-2.5 rounded-xl bg-[#00FF87]/10 border border-[#00FF87]/20">
+        <ArrowDownToLine className="h-4 w-4 text-[#00FF87]" />
+      </div>
     )
+  }
+  if (type.includes("PAYOUT") || type === "WITHDRAW") {
+    return (
+      <div className="p-2.5 rounded-xl bg-[#FFB800]/10 border border-[#FFB800]/20">
+        <ArrowUpFromLine className="h-4 w-4 text-[#FFB800]" />
+      </div>
+    )
+  }
+  if (type.includes("TRADE")) {
+    return (
+      <div className="p-2.5 rounded-xl bg-[#7B61FF]/10 border border-[#7B61FF]/20">
+        <ArrowRightLeft className="h-4 w-4 text-[#7B61FF]" />
+      </div>
+    )
+  }
+  return (
+    <div className="p-2.5 rounded-xl bg-white/5 border border-white/[0.06]">
+      <RefreshCw className="h-4 w-4 text-muted-foreground" />
+    </div>
+  )
+}
+
+function amountColor(type: string): string {
+  if (type.includes("PAYIN") || type === "DEPOSIT") return "text-[#00FF87]"
+  if (type.includes("PAYOUT") || type === "WITHDRAW") return "text-[#FFB800]"
+  return "text-foreground"
+}
+
+function amountPrefix(type: string): string {
+  if (type.includes("PAYIN") || type === "DEPOSIT") return "+"
+  if (type.includes("PAYOUT") || type === "WITHDRAW") return "-"
+  return ""
+}
+
+function safeRelativeTime(date: string): string {
+  try {
+    const d = new Date(date)
+    if (isNaN(d.getTime())) return "—"
+    return formatRelativeTime(d)
+  } catch {
+    return "—"
+  }
+}
+
+export function TransactionRow({
+  type,
+  amount,
+  currency,
+  status,
+  createdAt,
+  onClick,
+}: TransactionRowProps) {
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between p-4 rounded-xl border border-white/[0.06] bg-[#111113]/60 backdrop-blur-sm transition-all duration-200",
+        onClick
+          ? "cursor-pointer hover:border-white/[0.12] hover:bg-[#111113]/90"
+          : "cursor-default"
+      )}
+      onClick={onClick}
+    >
+      <div className="flex items-center gap-4">
+        {typeIcon(type)}
+        <div>
+          <div className="font-semibold text-sm text-foreground">
+            {toLabel(type)}
+          </div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            {safeRelativeTime(createdAt)}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col items-end gap-1.5">
+        <span
+          className={cn(
+            "font-bold text-sm tabular-nums",
+            amountColor(type)
+          )}
+        >
+          {amountPrefix(type)}
+          {formatAmount(amount, currency)}
+        </span>
+        <StatusBadge status={status} />
+      </div>
+    </div>
+  )
 }

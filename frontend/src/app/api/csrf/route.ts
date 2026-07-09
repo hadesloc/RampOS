@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { randomUUID } from "crypto";
+import { shouldUseSecureCookies } from "@/lib/admin-auth";
 
 export async function GET() {
   const token = randomUUID();
@@ -9,7 +10,7 @@ export async function GET() {
     value: token,
     httpOnly: false,
     sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureCookies(),
     path: "/",
   });
   return NextResponse.json(

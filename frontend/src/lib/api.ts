@@ -756,10 +756,57 @@ async function apiRequest<T>(
   return response.json();
 }
 
+/**
+ * Recursively convert object keys from camelCase to snake_case.
+ *
+ * The backend serializes JSON in camelCase, while several frontend types in
+ * this module are snake_case. This normalizer is idempotent for already
+ * snake_case payloads (no uppercase letters to convert), so it is safe to
+ * apply to both real backend responses and snake_case test fixtures.
+ */
+function snakeizeKeys<T = unknown>(input: unknown): T {
+  if (Array.isArray(input)) {
+    return input.map((item) => snakeizeKeys(item)) as unknown as T;
+  }
+  if (input && typeof input === 'object') {
+    return Object.fromEntries(
+      Object.entries(input as Record<string, unknown>).map(([key, value]) => [
+        key.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`),
+        snakeizeKeys(value),
+      ])
+    ) as T;
+  }
+  return input as T;
+}
+
+/**
+ * Normalize a backend list envelope into the frontend `PaginatedResponse`
+ * shape. The backend returns `{ data, total, limit, offset }`; the frontend
+ * expects `{ data, total, page, per_page, total_pages }`.
+ */
+function normalizePage<T>(raw: Record<string, unknown>, mapItem: (item: unknown) => T): PaginatedResponse<T> {
+  const items = Array.isArray(raw?.data) ? (raw.data as unknown[]) : [];
+  const data = items.map(mapItem);
+  const total = typeof raw?.total === 'number' ? raw.total : data.length;
+  const perPage =
+    (typeof raw?.per_page === 'number' && raw.per_page) ||
+    (typeof raw?.limit === 'number' && raw.limit) ||
+    data.length ||
+    1;
+  const offset = typeof raw?.offset === 'number' ? raw.offset : undefined;
+  const page =
+    (typeof raw?.page === 'number' && raw.page) ||
+    (offset != null && perPage ? Math.floor(offset / perPage) + 1 : 1);
+  const totalPages =
+    (typeof raw?.total_pages === 'number' && raw.total_pages) ||
+    (perPage ? Math.ceil(total / perPage) : 1);
+  return { data, total, page, per_page: perPage, total_pages: totalPages };
+}
+
 // Dashboard API
 export const dashboardApi = {
   getStats: async (): Promise<DashboardStats> => {
-    return apiRequest<DashboardStats>('/v1/admin/dashboard/stats');
+    return apiRequest<DashboardStats>('/v1/admin/dashboard');
   },
 };
 
@@ -778,11 +825,21 @@ export const intentsApi = {
     if (params?.intent_type) searchParams.set('intent_type', params.intent_type);
 
     const query = searchParams.toString();
-    return apiRequest<PaginatedResponse<Intent>>(`/v1/admin/intents${query ? `?${query}` : ''}`);
+    // Backend serializes camelCase; downstream consumers (intents page + dashboard
+    // recent-intents) read snake_case, so normalize here per the per-endpoint
+    // convention. Accept either a bare array or a {data,...} wrapper.
+    const raw = await apiRequest<unknown>(`/v1/admin/intents${query ? `?${query}` : ''}`);
+    if (Array.isArray(raw)) {
+      return normalizePage<Intent>({ data: raw }, (item) => snakeizeKeys<Intent>(item));
+    }
+    return normalizePage<Intent>(raw as Record<string, unknown>, (item) =>
+      snakeizeKeys<Intent>(item)
+    );
   },
 
   get: async (id: string): Promise<Intent> => {
-    return apiRequest<Intent>(`/v1/admin/intents/${id}`);
+    const raw = await apiRequest<unknown>(`/v1/admin/intents/${id}`);
+    return snakeizeKeys<Intent>(raw);
   },
 
   cancel: async (id: string): Promise<Intent> => {
@@ -813,11 +870,12 @@ export const usersApi = {
     if (params?.kyc_status) searchParams.set('kyc_status', params.kyc_status);
 
     const query = searchParams.toString();
-    return apiRequest<PaginatedResponse<User>>(`/v1/admin/users${query ? `?${query}` : ''}`);
+    const raw = await apiRequest<Record<string, unknown>>(`/v1/admin/users${query ? `?${query}` : ''}`);
+    return normalizePage<User>(raw, (item) => snakeizeKeys<User>(item));
   },
 
   get: async (id: string): Promise<User> => {
-    return apiRequest<User>(`/v1/admin/users/${id}`);
+    return snakeizeKeys<User>(await apiRequest<unknown>(`/v1/admin/users/${id}`));
   },
 
   updateStatus: async (id: string, status: string): Promise<User> => {
@@ -859,11 +917,12 @@ export const casesApi = {
     if (params?.severity) searchParams.set('severity', params.severity);
 
     const query = searchParams.toString();
-    return apiRequest<PaginatedResponse<AmlCase>>(`/v1/admin/cases${query ? `?${query}` : ''}`);
+    const raw = await apiRequest<Record<string, unknown>>(`/v1/admin/cases${query ? `?${query}` : ''}`);
+    return normalizePage<AmlCase>(raw, (item) => snakeizeKeys<AmlCase>(item));
   },
 
   get: async (id: string): Promise<AmlCase> => {
-    return apiRequest<AmlCase>(`/v1/admin/cases/${id}`);
+    return snakeizeKeys<AmlCase>(await apiRequest<unknown>(`/v1/admin/cases/${id}`));
   },
 
   updateStatus: async (id: string, status: string, resolution?: string): Promise<AmlCase> => {
@@ -1105,11 +1164,15 @@ export const webhooksApi = {
     if (params?.event_type) searchParams.set('event_type', params.event_type);
 
     const query = searchParams.toString();
-    return apiRequest<PaginatedResponse<WebhookEvent>>(`/v1/admin/webhooks${query ? `?${query}` : ''}`);
+    // The backend returns a bare array for this endpoint; wrap it so the page
+    // gets the `PaginatedResponse` envelope it expects.
+    const raw = await apiRequest<unknown>(`/v1/admin/webhooks${query ? `?${query}` : ''}`);
+    const envelope = Array.isArray(raw) ? { data: raw } : (raw as Record<string, unknown>);
+    return normalizePage<WebhookEvent>(envelope, (item) => snakeizeKeys<WebhookEvent>(item));
   },
 
   get: async (id: string): Promise<WebhookEvent> => {
-    return apiRequest<WebhookEvent>(`/v1/admin/webhooks/${id}`);
+    return snakeizeKeys<WebhookEvent>(await apiRequest<unknown>(`/v1/admin/webhooks/${id}`));
   },
 
   retry: async (id: string): Promise<WebhookEvent> => {

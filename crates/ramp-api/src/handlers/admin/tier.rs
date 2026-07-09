@@ -521,8 +521,18 @@ pub async fn get_user_limits(
 mod tests {
     use super::*;
 
+    /// Hold the single process-wide admin-env lock for the duration of a test.
+    /// These tests mutate `RAMPOS_ADMIN_KEY`/`RAMPOS_ADMIN_ROLE`/`RAMPOS_ADMIN_JWT_SECRET`,
+    /// which are process-global and shared with admin tests in sibling modules.
+    fn lock_admin_env() -> std::sync::MutexGuard<'static, ()> {
+        crate::handlers::admin::admin_env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     #[test]
     fn test_check_admin_key_valid() {
+        let _env = lock_admin_env();
         std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
         let mut headers = HeaderMap::new();
         headers.insert("X-Admin-Key", "admin-secret-key".parse().unwrap());
@@ -531,6 +541,7 @@ mod tests {
 
     #[test]
     fn test_check_admin_key_invalid() {
+        let _env = lock_admin_env();
         std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
         let mut headers = HeaderMap::new();
         headers.insert("X-Admin-Key", "wrong-key".parse().unwrap());
@@ -539,6 +550,7 @@ mod tests {
 
     #[test]
     fn test_check_admin_key_missing() {
+        let _env = lock_admin_env();
         std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
         let headers = HeaderMap::new();
         assert!(check_admin_key(&headers).is_err());
@@ -546,6 +558,7 @@ mod tests {
 
     #[test]
     fn test_check_admin_key_suffix_cannot_escalate_configured_viewer_role() {
+        let _env = lock_admin_env();
         std::env::set_var("RAMPOS_ADMIN_KEY", "admin-secret-key");
         std::env::set_var("RAMPOS_ADMIN_ROLE", "viewer");
 
@@ -568,6 +581,7 @@ mod tests {
         // JWT auth should work when a valid Bearer token is provided
         // (This test requires a real JWT; in practice, integration tests cover this.)
         // For now, verify that missing both JWT and X-Admin-Key returns appropriate error.
+        let _env = lock_admin_env();
         std::env::remove_var("RAMPOS_ADMIN_KEY");
         let headers = HeaderMap::new();
         let result = check_admin_key(&headers);
@@ -579,6 +593,7 @@ mod tests {
         use chrono::Utc;
         use jsonwebtoken::{encode, EncodingKey, Header};
 
+        let _env = lock_admin_env();
         std::env::set_var("RAMPOS_ADMIN_JWT_SECRET", "jwt-priority-test-secret");
         std::env::set_var("RAMPOS_ADMIN_KEY", "wrong-legacy-key");
 

@@ -11,7 +11,6 @@ import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { LPLeaderboard } from "@/components/dashboard/lp-leaderboard";
 import { TimeRangeSelector } from "@/components/dashboard/time-range-selector";
 import { PageHeader } from "@/components/layout/page-header";
-import { useRealtimeDashboard } from "@/hooks/use-websocket";
 
 import { VolumeChart } from "@/components/dashboard/volume-chart";
 import { DonutChart } from "@/components/dashboard/donut-chart";
@@ -108,18 +107,21 @@ export default function DashboardPage() {
   const tCommon = useTranslations('Common');
   const format = useFormatter();
 
-  const { isConnected, lastUpdate } = useRealtimeDashboard();
-
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [statsData, intentsData] = await Promise.all([
-        api.dashboard.getStats(),
-        api.intents.list({ page: 1, per_page: 5 })
-      ]);
+      const statsData = await api.dashboard.getStats();
       setStats(statsData);
-      setRecentIntents(intentsData.data);
       setIsDemo(false);
+      // Recent intents is best-effort: there is no system-wide admin intents
+      // list endpoint yet (the backend list is per-user), so a failure here
+      // must not drag the whole dashboard back into demo mode.
+      try {
+        const intentsData = await api.intents.list({ page: 1, per_page: 5 });
+        setRecentIntents(intentsData.data);
+      } catch {
+        setRecentIntents([]);
+      }
     } catch (err: any) {
       console.warn("API unavailable, using demo data:", err.message);
       setStats(DEMO_STATS);
@@ -133,11 +135,13 @@ export default function DashboardPage() {
     fetchData();
   }, [fetchData]);
 
+  // Auto-refresh: poll the backend every 30s so the dashboard stays current.
   useEffect(() => {
-    if (lastUpdate) {
+    const id = setInterval(() => {
       fetchData();
-    }
-  }, [lastUpdate, fetchData]);
+    }, 30000);
+    return () => clearInterval(id);
+  }, [fetchData]);
 
   // Use current stats (always populated - either real or demo)
   const displayStats = stats;
@@ -182,12 +186,12 @@ export default function DashboardPage() {
   // Recent activity
   const recentActivityData = isDemo ? DEMO_ACTIVITY : recentIntents.map(intent => ({
     id: intent.id,
-    description: `${intent.intent_type.replace('_', ' ')}`,
+    description: `${(intent.intent_type ?? "").replace('_', ' ')}`,
     amount: parseInt(intent.amount),
     currency: intent.currency,
     status: intent.state,
     timestamp: intent.created_at,
-    type: intent.intent_type,
+    type: intent.intent_type ?? "",
     user: { name: intent.user_id, email: intent.user_id }
   }));
 
@@ -217,7 +221,7 @@ export default function DashboardPage() {
                 Demo
               </div>
             )}
-            {isConnected && (
+            {!isDemo && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#00FF87]/8 text-[#00FF87] text-xs font-medium border border-[#00FF87]/20">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00FF87] opacity-75"></span>

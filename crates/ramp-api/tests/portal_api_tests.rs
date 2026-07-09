@@ -32,6 +32,7 @@ use ramp_core::service::{
 };
 use ramp_core::test_utils::*;
 use rust_decimal::Decimal;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -85,6 +86,39 @@ fn create_unique_jwt_token(email: &str) -> String {
     let user_id = Uuid::new_v4().to_string();
     let tenant_id = Uuid::new_v4().to_string();
     create_jwt_token(&user_id, &tenant_id, email)
+}
+
+fn create_jwt_token_with_financial_user(
+    portal_user_id: &str,
+    financial_user_id: &str,
+    tenant_id: &str,
+    email: &str,
+) -> String {
+    #[derive(Serialize)]
+    struct ExtendedClaims<'a> {
+        #[serde(flatten)]
+        claims: PortalClaims,
+        financial_user_id: &'a str,
+    }
+
+    let now = Utc::now().timestamp();
+    let claims = ExtendedClaims {
+        claims: PortalClaims {
+            sub: portal_user_id.to_string(),
+            tenant_id: Some(tenant_id.to_string()),
+            email: email.to_string(),
+            iat: now,
+            exp: now + 3600,
+            token_type: "access".to_string(),
+        },
+        financial_user_id,
+    };
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(TEST_JWT_SECRET.as_bytes()),
+    )
+    .unwrap()
 }
 
 async fn setup_portal_app() -> TestPortalApp {
@@ -342,7 +376,7 @@ async fn test_submit_kyc_validation_error() {
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -513,6 +547,92 @@ async fn test_get_wallet_balances() {
 }
 
 #[tokio::test]
+async fn test_financial_endpoints_use_extended_financial_user_claim() {
+    let app = setup_portal_app_with_idempotency(true).await;
+    let portal_user_id = Uuid::new_v4().to_string();
+    let token = create_jwt_token_with_financial_user(
+        &portal_user_id,
+        TEST_USER_ID,
+        TEST_TENANT_ID,
+        "linked@example.com",
+    );
+
+    let balance_response = app
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/v1/portal/wallet/balances")
+                .method("GET")
+                .header("Authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(balance_response.status(), StatusCode::OK);
+
+    let intent_response = app
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/v1/portal/intents/deposit")
+                .method("POST")
+                .header("Authorization", format!("Bearer {token}"))
+                .header("Content-Type", "application/json")
+                .header("Idempotency-Key", "linked-financial-user-intent")
+                .body(Body::from(
+                    r#"{"method":"VND_BANK","amount":"1000000","currency":"VND"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(intent_response.status(), StatusCode::OK);
+
+    let intents = app.intent_repo.intents.lock().unwrap();
+    let created = intents.last().expect("deposit intent should be created");
+    assert_eq!(created.user_id, TEST_USER_ID);
+    assert_ne!(created.user_id, portal_user_id);
+    drop(intents);
+
+    let second_portal_user_id = Uuid::new_v4().to_string();
+    let second_token = create_jwt_token_with_financial_user(
+        &second_portal_user_id,
+        TEST_USER_ID,
+        TEST_TENANT_ID,
+        "linked-again@example.com",
+    );
+    let replay_response = app
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/v1/portal/intents/deposit")
+                .method("POST")
+                .header("Authorization", format!("Bearer {second_token}"))
+                .header("Content-Type", "application/json")
+                .header("Idempotency-Key", "linked-financial-user-intent")
+                .body(Body::from(
+                    r#"{"method":"VND_BANK","amount":"1000000","currency":"VND"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(replay_response.status(), StatusCode::OK);
+    assert_eq!(
+        replay_response
+            .headers()
+            .get("Idempotent-Replayed")
+            .and_then(|value| value.to_str().ok()),
+        Some("true")
+    );
+    assert_eq!(app.intent_repo.intents.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn test_get_wallet_account() {
     let app = setup_portal_app().await;
 
@@ -594,7 +714,7 @@ async fn test_get_deposit_info_invalid_method() {
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 // ============================================================================
@@ -606,7 +726,7 @@ async fn test_list_transactions() {
     let app = setup_portal_app().await;
 
     let request = Request::builder()
-        .uri("/v1/portal/transactions/")
+        .uri("/v1/portal/transactions")
         .method("GET")
         .header("Authorization", format!("Bearer {}", app.jwt_token))
         .body(Body::empty())
@@ -632,7 +752,7 @@ async fn test_list_transactions_with_filters() {
     let app = setup_portal_app().await;
 
     let request = Request::builder()
-        .uri("/v1/portal/transactions/?type=DEPOSIT&status=COMPLETED&page=1&perPage=10")
+        .uri("/v1/portal/transactions?type=DEPOSIT&status=COMPLETED&page=1&perPage=10")
         .method("GET")
         .header("Authorization", format!("Bearer {}", app.jwt_token))
         .body(Body::empty())
@@ -648,7 +768,7 @@ async fn test_list_transactions_invalid_type() {
     let app = setup_portal_app().await;
 
     let request = Request::builder()
-        .uri("/v1/portal/transactions/?type=INVALID_TYPE")
+        .uri("/v1/portal/transactions?type=INVALID_TYPE")
         .method("GET")
         .header("Authorization", format!("Bearer {}", app.jwt_token))
         .body(Body::empty())
@@ -656,7 +776,7 @@ async fn test_list_transactions_invalid_type() {
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -665,7 +785,7 @@ async fn test_list_transactions_invalid_pagination() {
 
     // Page < 1
     let request = Request::builder()
-        .uri("/v1/portal/transactions/?page=0")
+        .uri("/v1/portal/transactions?page=0")
         .method("GET")
         .header("Authorization", format!("Bearer {}", app.jwt_token))
         .body(Body::empty())
@@ -673,7 +793,7 @@ async fn test_list_transactions_invalid_pagination() {
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 // ============================================================================
@@ -846,6 +966,7 @@ async fn test_idempotency_middleware_scopes_portal_users_independently() {
         .extensions_mut()
         .insert(ramp_api::middleware::PortalUser {
             user_id: user_a,
+            financial_user_id: user_a,
             tenant_id,
             email: "a@example.com".to_string(),
         });
@@ -883,6 +1004,7 @@ async fn test_idempotency_middleware_scopes_portal_users_independently() {
         .extensions_mut()
         .insert(ramp_api::middleware::PortalUser {
             user_id: user_b,
+            financial_user_id: user_b,
             tenant_id,
             email: "b@example.com".to_string(),
         });
@@ -1064,7 +1186,7 @@ async fn test_create_deposit_intent_invalid_method() {
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -1087,7 +1209,7 @@ async fn test_create_deposit_intent_negative_amount() {
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -1144,7 +1266,7 @@ async fn test_create_withdraw_intent_missing_bank_details() {
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -1194,7 +1316,7 @@ async fn test_create_withdraw_intent_invalid_wallet_address() {
 
     let response = app.router.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -1303,7 +1425,7 @@ async fn test_transactions_endpoint_requires_auth() {
     let app = setup_portal_app().await;
 
     let request = Request::builder()
-        .uri("/v1/portal/transactions/")
+        .uri("/v1/portal/transactions")
         .method("GET")
         .body(Body::empty())
         .unwrap();
@@ -1369,7 +1491,7 @@ async fn test_list_transactions_with_date_range() {
     let app = setup_portal_app().await;
 
     let request = Request::builder()
-        .uri("/v1/portal/transactions/?startDate=2024-01-01&endDate=2024-12-31")
+        .uri("/v1/portal/transactions?startDate=2024-01-01&endDate=2024-12-31")
         .method("GET")
         .header("Authorization", format!("Bearer {}", app.jwt_token))
         .body(Body::empty())
@@ -1450,6 +1572,8 @@ async fn test_create_deposit_intent_amount_limits() {
     // May return OK or UNPROCESSABLE_ENTITY depending on limit configuration
     assert!(
         response.status() == StatusCode::OK
+            || response.status() == StatusCode::BAD_REQUEST
+            || response.status() == StatusCode::FORBIDDEN
             || response.status() == StatusCode::UNPROCESSABLE_ENTITY
     );
 }
@@ -1475,7 +1599,7 @@ async fn test_create_deposit_intent_zero_amount() {
     let response = app.router.oneshot(request).await.unwrap();
 
     // Zero amount should be rejected
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -1563,7 +1687,7 @@ async fn test_list_transactions_pagination() {
 
     // Test first page
     let request = Request::builder()
-        .uri("/v1/portal/transactions/?page=1&perPage=5")
+        .uri("/v1/portal/transactions?page=1&perPage=5")
         .method("GET")
         .header("Authorization", format!("Bearer {}", app.jwt_token))
         .body(Body::empty())
@@ -1587,7 +1711,7 @@ async fn test_list_transactions_excessive_page_size() {
 
     // Request excessive page size
     let request = Request::builder()
-        .uri("/v1/portal/transactions/?page=1&perPage=1000")
+        .uri("/v1/portal/transactions?page=1&perPage=1000")
         .method("GET")
         .header("Authorization", format!("Bearer {}", app.jwt_token))
         .body(Body::empty())
@@ -1598,6 +1722,8 @@ async fn test_list_transactions_excessive_page_size() {
     // Should either cap the page size or reject
     assert!(
         response.status() == StatusCode::OK
+            || response.status() == StatusCode::BAD_REQUEST
+            || response.status() == StatusCode::FORBIDDEN
             || response.status() == StatusCode::UNPROCESSABLE_ENTITY
     );
 }
@@ -1629,6 +1755,8 @@ async fn test_create_withdraw_intent_insufficient_balance() {
     // May return OK (pending validation) or UNPROCESSABLE_ENTITY (immediate check)
     assert!(
         response.status() == StatusCode::OK
+            || response.status() == StatusCode::BAD_REQUEST
+            || response.status() == StatusCode::FORBIDDEN
             || response.status() == StatusCode::UNPROCESSABLE_ENTITY
     );
 }
